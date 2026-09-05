@@ -39,6 +39,8 @@ public:
     const SeekTuple& lower() const { return _lower; }
     const SeekTuple& upper() const { return _upper; }
 
+    bool all_range() const { return _lower.empty() && _upper.empty(); }
+
     void convert_to(SeekRange* dst, const std::vector<LogicalType>& new_types) const {
         dst->_inc_lower = _inc_lower;
         dst->_inc_upper = _inc_upper;

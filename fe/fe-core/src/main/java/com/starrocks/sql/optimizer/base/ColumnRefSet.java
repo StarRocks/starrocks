@@ -47,7 +47,15 @@ public class ColumnRefSet implements Cloneable {
 
     public static ColumnRefSet createByIds(Collection<Integer> colIds) {
         ColumnRefSet columnRefSet = new ColumnRefSet();
-        colIds.stream().forEach(columnRefSet::union);
+        colIds.forEach(columnRefSet::union);
+        return columnRefSet;
+    }
+
+    public static ColumnRefSet of(ColumnRefOperator... columnRefs) {
+        ColumnRefSet columnRefSet = new ColumnRefSet();
+        for (ColumnRefOperator colRef : columnRefs) {
+            columnRefSet.union(colRef);
+        }
         return columnRefSet;
     }
 
@@ -188,7 +196,7 @@ public class ColumnRefSet implements Cloneable {
         return rhs.stream().anyMatch(this::contains);
     }
 
-    public boolean containsAll(List<Integer> rhs) {
+    public boolean containsAll(Collection<Integer> rhs) {
         return rhs.stream().allMatch(id -> bitSet.contains(id));
     }
 

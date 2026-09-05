@@ -12,45 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/descriptors.h
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 #pragma once
 
+#include <fmt/format.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/common.h>
 
-#include <ostream>
+#include <cstdint>
+#include <memory_resource>
+#include <optional>
+#include <ranges>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
 #include "common/global_types.h"
-#include "common/status.h"
-#include "gen_cpp/Descriptors_types.h"     // for TTupleId
-#include "gen_cpp/FrontendService_types.h" // for TTupleId
+#include "common/logging.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
 class ObjectPool;
+class Status;
 class TDescriptorTable;
 class TSlotDescriptor;
 class TTupleDescriptor;
@@ -58,38 +44,15 @@ class Expr;
 class ExprContext;
 class RuntimeState;
 class SchemaScanner;
-class IcebergDeleteFileMeta;
 class OlapTableSchemaParam;
 class PTupleDescriptor;
 class PSlotDescriptor;
-
-// Location information for null indicator bit for particular slot.
-// For non-nullable slots, the byte_offset will be 0 and the bit_mask will be 0.
-// This allows us to do the NullIndicatorOffset operations (tuple + byte_offset &/|
-// bit_mask) regardless of whether the slot is nullable or not.
-// This is more efficient than branching to check if the slot is non-nullable.
-struct NullIndicatorOffset {
-    int byte_offset;
-    uint8_t bit_mask;   // to extract null indicator
-    uint8_t bit_offset; // only used to serialize, from 1 to 8
-
-    NullIndicatorOffset(int byte_offset, int bit_offset_)
-            : byte_offset(byte_offset),
-              bit_mask(bit_offset_ == -1 ? 0 : 1 << (7 - bit_offset_)),
-              bit_offset(bit_offset_) {}
-
-    bool equals(const NullIndicatorOffset& o) const {
-        return this->byte_offset == o.byte_offset && this->bit_mask == o.bit_mask;
-    }
-
-    std::string debug_string() const;
-};
-
-std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indicator);
+class RowPositionDescriptor;
 
 class SlotDescriptor {
 public:
-    SlotDescriptor(SlotId id, std::string name, TypeDescriptor type);
+    SlotDescriptor(SlotId id, std::string name, TypeDescriptor type,
+                   std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
@@ -97,33 +60,34 @@ public:
     TupleId parent() const { return _parent; }
     bool is_materialized() const { return _is_materialized; }
     bool is_output_column() const { return _is_output_column; }
-    bool is_nullable() const { return _null_indicator_offset.bit_mask != 0; }
+    bool is_nullable() const { return _is_nullable; }
+    bool is_virtual() const { return _is_virtual; }
 
     int slot_size() const { return _slot_size; }
 
-    const std::string& col_name() const { return _col_name; }
+    std::string_view col_name() const { return _col_name; }
 
     void to_protobuf(PSlotDescriptor* pslot) const;
 
     std::string debug_string() const;
 
     int32_t col_unique_id() const { return _col_unique_id; }
+    std::string_view col_physical_name() const { return _col_physical_name; }
 
-    SlotDescriptor(const TSlotDescriptor& tdesc);
+    SlotDescriptor(const TSlotDescriptor& tdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 
 private:
     friend class DescriptorTbl;
     friend class TupleDescriptor;
     friend class SchemaScanner;
     friend class OlapTableSchemaParam;
-    friend class IcebergDeleteFileMeta;
 
     const SlotId _id;
     TypeDescriptor _type;
     const TupleId _parent;
-    const NullIndicatorOffset _null_indicator_offset;
-    const std::string _col_name;
+    const std::pmr::string _col_name;
     const int32_t _col_unique_id;
+    const std::pmr::string _col_physical_name;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -135,260 +99,49 @@ private:
     const bool _is_materialized;
     const bool _is_output_column;
 
-    // @todo: replace _null_indicator_offset when remove _null_indicator_offset
     const bool _is_nullable;
 
-    SlotDescriptor(const PSlotDescriptor& pdesc);
+    const bool _is_virtual;
+
+    SlotDescriptor(const PSlotDescriptor& pdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 };
 
 // Base class for table descriptors.
 class TableDescriptor {
 public:
-    TableDescriptor(const TTableDescriptor& tdesc);
+    TableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
     virtual ~TableDescriptor() = default;
     TableId table_id() const { return _id; }
     virtual std::string debug_string() const;
 
-    const std::string& name() const { return _name; }
-    const std::string& database() const { return _database; }
+    std::string_view name() const { return _name; }
+    std::string_view database() const { return _database; }
 
 private:
-    std::string _name;
-    std::string _database;
+    std::pmr::string _name;
+    std::pmr::string _database;
     TableId _id;
-};
-
-// ============== HDFS Table Descriptor ============
-
-class HdfsPartitionDescriptor {
-public:
-    HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const TIcebergTable& thrift_table, const THdfsPartition& thrift_partition);
-
-    int64_t id() const { return _id; }
-    THdfsFileFormat::type file_format() { return _file_format; }
-    std::string& location() { return _location; }
-    // ExprContext is constant/literal for sure
-    // such as hdfs://path/x=1/y=2/zzz, then
-    // partition slots would be [x, y]
-    // partition key values wold be [1, 2]
-    std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
-    Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size);
-
-private:
-    int64_t _id = 0;
-    THdfsFileFormat::type _file_format;
-    std::string _location;
-
-    const std::vector<TExpr>& _thrift_partition_key_exprs;
-    std::vector<ExprContext*> _partition_key_value_evals;
-};
-
-class HiveTableDescriptor : public TableDescriptor {
-public:
-    HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
-    virtual bool has_partition() const = 0;
-    virtual bool is_partition_col(const SlotDescriptor* slot) const;
-    virtual int get_partition_col_index(const SlotDescriptor* slot) const;
-    virtual HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
-    virtual bool has_base_path() const { return false; }
-    virtual const std::string& get_base_path() const { return _table_location; }
-
-    Status create_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
-        for (auto& part : _partition_id_to_desc_map) {
-            RETURN_IF_ERROR(part.second->create_part_key_exprs(state, pool, chunk_size));
-        }
-        return Status::OK();
-    }
-
-    StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
-                                                       ObjectPool* pool);
-
-protected:
-    std::string _hdfs_base_path;
-    std::vector<TColumn> _columns;
-    std::vector<TColumn> _partition_columns;
-    std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
-    std::string _table_location;
-};
-
-class HdfsTableDescriptor : public HiveTableDescriptor {
-public:
-    HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
-    ~HdfsTableDescriptor() override = default;
-    bool has_partition() const override { return true; }
-    const std::string& get_hive_column_names() const;
-    const std::string& get_hive_column_types() const;
-    const std::string& get_input_format() const;
-    const std::string& get_serde_lib() const;
-
-private:
-    std::string _serde_lib;
-    std::string _input_format;
-    std::string _hive_column_names;
-    std::string _hive_column_types;
-};
-
-class IcebergTableDescriptor : public HiveTableDescriptor {
-public:
-    IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
-    ~IcebergTableDescriptor() override = default;
-    bool has_partition() const override { return false; }
-    const TIcebergSchema* get_iceberg_schema() const { return &_t_iceberg_schema; }
-    bool is_unpartitioned_table() { return _partition_column_names.empty(); }
-    const std::vector<std::string>& partition_column_names() { return _partition_column_names; }
-    const std::vector<std::string> full_column_names();
-    std::vector<int32_t> partition_index_in_schema();
-    bool has_base_path() const override { return true; }
-
-    Status set_partition_desc_map(const TIcebergTable& thrift_table, ObjectPool* pool);
-
-private:
-    TIcebergSchema _t_iceberg_schema;
-    std::vector<std::string> _partition_column_names;
-};
-
-class FileTableDescriptor : public HiveTableDescriptor {
-public:
-    FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
-    ~FileTableDescriptor() override = default;
-    bool has_partition() const override { return false; }
-    const std::string& get_table_locations() const;
-    const std::string& get_hive_column_names() const;
-    const std::string& get_hive_column_types() const;
-    const std::string& get_input_format() const;
-    const std::string& get_serde_lib() const;
-
-private:
-    std::string _serde_lib;
-    std::string _input_format;
-    std::string _hive_column_names;
-    std::string _hive_column_types;
-};
-
-class DeltaLakeTableDescriptor : public HiveTableDescriptor {
-public:
-    DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
-    ~DeltaLakeTableDescriptor() override = default;
-    bool has_partition() const override { return true; }
-};
-
-class HudiTableDescriptor : public HiveTableDescriptor {
-public:
-    HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
-    ~HudiTableDescriptor() override = default;
-    bool has_partition() const override { return true; }
-    const std::string& get_instant_time() const;
-    const std::string& get_hive_column_names() const;
-    const std::string& get_hive_column_types() const;
-    const std::string& get_input_format() const;
-    const std::string& get_serde_lib() const;
-
-private:
-    std::string _hudi_instant_time;
-    std::string _hive_column_names;
-    std::string _hive_column_types;
-    std::string _input_format;
-    std::string _serde_lib;
-};
-
-class PaimonTableDescriptor : public HiveTableDescriptor {
-public:
-    PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
-    ~PaimonTableDescriptor() override = default;
-    bool has_partition() const override { return false; }
-    const std::string& get_database_name() const;
-    const std::string& get_table_name() const;
-    const std::string& get_paimon_options() const;
-
-private:
-    std::string _database_name;
-    std::string _table_name;
-    std::string _paimon_options;
-};
-
-// ===========================================
-
-class OlapTableDescriptor : public TableDescriptor {
-public:
-    OlapTableDescriptor(const TTableDescriptor& tdesc);
-    std::string debug_string() const override;
-};
-
-class SchemaTableDescriptor : public TableDescriptor {
-public:
-    SchemaTableDescriptor(const TTableDescriptor& tdesc);
-    ~SchemaTableDescriptor() override;
-    std::string debug_string() const override;
-    TSchemaTableType::type schema_table_type() const { return _schema_table_type; }
-
-private:
-    TSchemaTableType::type _schema_table_type;
-};
-
-class BrokerTableDescriptor : public TableDescriptor {
-public:
-    BrokerTableDescriptor(const TTableDescriptor& tdesc);
-    ~BrokerTableDescriptor() override;
-    std::string debug_string() const override;
-
-private:
-};
-
-class EsTableDescriptor : public TableDescriptor {
-public:
-    EsTableDescriptor(const TTableDescriptor& tdesc);
-    ~EsTableDescriptor() override;
-    std::string debug_string() const override;
-
-private:
 };
 
 class MySQLTableDescriptor : public TableDescriptor {
 public:
-    MySQLTableDescriptor(const TTableDescriptor& tdesc);
+    MySQLTableDescriptor(const TTableDescriptor& tdesc,
+                         std::pmr::memory_resource* mr = std::pmr::get_default_resource());
     std::string debug_string() const override;
-    const std::string mysql_db() const { return _mysql_db; }
-    const std::string mysql_table() const { return _mysql_table; }
-    const std::string host() const { return _host; }
-    const std::string port() const { return _port; }
-    const std::string user() const { return _user; }
-    const std::string passwd() const { return _passwd; }
+    std::string_view mysql_db() const { return _mysql_db; }
+    std::string_view mysql_table() const { return _mysql_table; }
+    std::string_view host() const { return _host; }
+    std::string_view port() const { return _port; }
+    std::string_view user() const { return _user; }
+    std::string_view passwd() const { return _passwd; }
 
 private:
-    std::string _mysql_db;
-    std::string _mysql_table;
-    std::string _host;
-    std::string _port;
-    std::string _user;
-    std::string _passwd;
-};
-
-class JDBCTableDescriptor : public TableDescriptor {
-public:
-    JDBCTableDescriptor(const TTableDescriptor& tdesc);
-    std::string debug_string() const override;
-    const std::string jdbc_driver_name() const { return _jdbc_driver_name; }
-    const std::string jdbc_driver_url() const { return _jdbc_driver_url; }
-    const std::string jdbc_driver_checksum() const { return _jdbc_driver_checksum; }
-    const std::string jdbc_driver_class() const { return _jdbc_driver_class; }
-    const std::string jdbc_url() const { return _jdbc_url; }
-    const std::string jdbc_table() const { return _jdbc_table; }
-    const std::string jdbc_user() const { return _jdbc_user; }
-    const std::string jdbc_passwd() const { return _jdbc_passwd; }
-
-private:
-    std::string _jdbc_driver_name;
-    std::string _jdbc_driver_url;
-    std::string _jdbc_driver_checksum;
-    std::string _jdbc_driver_class;
-
-    std::string _jdbc_url;
-    std::string _jdbc_table;
-    std::string _jdbc_user;
-    std::string _jdbc_passwd;
+    std::pmr::string _mysql_db;
+    std::pmr::string _mysql_table;
+    std::pmr::string _host;
+    std::pmr::string _port;
+    std::pmr::string _user;
+    std::pmr::string _passwd;
 };
 
 class TupleDescriptor {
@@ -401,6 +154,15 @@ public:
     const TableDescriptor* table_desc() const { return _table_desc; }
     void set_table_desc(TableDescriptor* table_desc) { _table_desc = table_desc; }
 
+    SlotDescriptor* get_slot_by_id(SlotId id) const {
+        for (auto s : _slots) {
+            if (s->id() == id) {
+                return s;
+            }
+        }
+        return nullptr;
+    }
+
     TupleId id() const { return _id; }
 
     std::string debug_string() const;
@@ -410,6 +172,7 @@ public:
 private:
     friend class DescriptorTbl;
     friend class OlapTableSchemaParam;
+    friend class ObjectPool;
 
     const TupleId _id;
     TableDescriptor* _table_desc;
@@ -441,72 +204,90 @@ public:
     std::string debug_string() const;
 
 private:
-    typedef std::unordered_map<TableId, TableDescriptor*> TableDescriptorMap;
-    typedef std::unordered_map<TupleId, TupleDescriptor*> TupleDescriptorMap;
-    typedef std::unordered_map<SlotId, SlotDescriptor*> SlotDescriptorMap;
+    using TableDescriptorMap = std::pmr::unordered_map<TableId, TableDescriptor*>;
+    using TupleDescriptorMap = std::pmr::unordered_map<TupleId, TupleDescriptor*>;
+    using SlotDescriptorMap = std::pmr::unordered_map<SlotId, SlotDescriptor*>;
+
+    std::pmr::memory_resource* _mr;
 
     TableDescriptorMap _tbl_desc_map;
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
 
-    DescriptorTbl() = default;
+    DescriptorTbl()
+            : _mr(std::pmr::get_default_resource()), _tbl_desc_map(_mr), _tuple_desc_map(_mr), _slot_desc_map(_mr) {}
+
+    explicit DescriptorTbl(std::pmr::memory_resource* mr)
+            : _mr(mr), _tbl_desc_map(_mr), _tuple_desc_map(_mr), _slot_desc_map(_mr) {}
+
+    friend class ObjectPool;
 };
 
-// Records positions of tuples within row produced by ExecNode.
-// TODO: this needs to differentiate between tuples contained in row
-// and tuples produced by ExecNode (parallel to PlanNode.rowTupleIds and
-// PlanNode.tupleIds); right now, we conflate the two (and distinguish based on
-// context; for instance, HdfsScanNode uses these tids to create row batches, ie, the
-// first case, whereas TopNNode uses these tids to copy output rows, ie, the second
-// case)
-class RowDescriptor {
+// Describes the record produced by an ExecNode.
+//
+// It does not expose how the record is split into tuples: consumers only care about the
+// slots the record carries, so they are presented as a single flat sequence and the tuple
+// boundaries are invisible.
+class RecordDescriptor {
 public:
-    RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& row_tuples,
-                  const std::vector<bool>& nullable_tuples);
+    RecordDescriptor() = default;
+    RecordDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& tuple_ids);
+    explicit RecordDescriptor(TupleDescriptor* tuple_desc) : _tuple_descs(1, tuple_desc) {}
 
-    // standard copy c'tor, made explicit here
-    RowDescriptor(const RowDescriptor& desc)
+    // All the slots of the record, in order of appearance.
+    auto slots() const {
+        return _tuple_descs | std::ranges::views::transform([](const TupleDescriptor* tuple) -> const auto& {
+                   return tuple->slots();
+               }) |
+               std::ranges::views::join;
+    }
 
-            = default;
-
-    RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable);
-
-    // dummy descriptor, needed for the JNI EvalPredicate() function
-    RowDescriptor() = default;
-
-    static const int INVALID_IDX;
-
-    // Returns INVALID_IDX if id not part of this row.
-    int get_tuple_idx(TupleId id) const;
-
-    // Return descriptors for all tuples in this row, in order of appearance.
-    const std::vector<TupleDescriptor*>& tuple_descriptors() const { return _tuple_desc_map; }
-
-    // Populate row_tuple_ids with our ids.
-    void to_thrift(std::vector<TTupleId>* row_tuple_ids);
-    void to_protobuf(google::protobuf::RepeatedField<google::protobuf::int32>* row_tuple_ids);
-
-    // Return true if the tuple ids of this descriptor are a prefix
-    // of the tuple ids of other_desc.
-    bool is_prefix_of(const RowDescriptor& other_desc) const;
-
-    // Return true if the tuple ids of this descriptor match tuple ids of other desc.
-    bool equals(const RowDescriptor& other_desc) const;
+    size_t num_slots() const;
 
     std::string debug_string() const;
 
 private:
-    // Initializes tupleIdxMap during c'tor using the _tuple_desc_map.
-    void init_tuple_idx_map();
+    std::vector<TupleDescriptor*> _tuple_descs;
+};
 
-    // map from position of tuple w/in row to its descriptor
-    std::vector<TupleDescriptor*> _tuple_desc_map;
+// used to describe row position, only used in global late materialization
+class RowPositionDescriptor {
+public:
+    enum Type : uint8_t { ICEBERG_V3 = 0, OLAP_SCAN = 1, LAKE_SCAN = 2 };
+    RowPositionDescriptor(Type type, int64_t scan_node_id, SlotId row_source_slot_id,
+                          std::vector<SlotId> fetch_ref_slot_ids, std::vector<SlotId> lookup_ref_slot_ids)
+            : _type(type),
+              _scan_node_id(scan_node_id),
+              _row_source_slot_id(row_source_slot_id),
+              _fetch_ref_slot_ids(std::move(fetch_ref_slot_ids)),
+              _lookup_ref_slot_ids(std::move(lookup_ref_slot_ids)) {}
 
-    // _tuple_idx_nullable_map[i] is true if tuple i can be null
-    std::vector<bool> _tuple_idx_nullable_map;
+    virtual ~RowPositionDescriptor() = default;
 
-    // map from TupleId to position of tuple w/in row
-    std::vector<int> _tuple_idx_map;
+    Type type() const { return _type; }
+
+    SlotId get_row_source_slot_id() const { return _row_source_slot_id; }
+
+    int64_t get_scan_node_id() const { return _scan_node_id; }
+
+    const std::vector<SlotId>& get_fetch_ref_slot_ids() const { return _fetch_ref_slot_ids; }
+    const std::vector<SlotId>& get_lookup_ref_slot_ids() const { return _lookup_ref_slot_ids; }
+    std::string debug_string() const;
+
+    static RowPositionDescriptor* from_thrift(const TRowPositionDescriptor& t_desc, ObjectPool* pool);
+
+protected:
+    Type _type;
+    int64_t _scan_node_id;
+    SlotId _row_source_slot_id;
+    std::vector<SlotId> _fetch_ref_slot_ids;
+    std::vector<SlotId> _lookup_ref_slot_ids;
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::RowPositionDescriptor::Type>
+        : formatter<std::underlying_type_t<starrocks::RowPositionDescriptor::Type>> {
+    auto format(starrocks::RowPositionDescriptor::Type value, format_context& ctx) const -> format_context::iterator;
+};

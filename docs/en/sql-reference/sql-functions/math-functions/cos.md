@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Computes the cosine of the argument."
 ---
 
 # cos
 
-## Description
+
 
 Computes the cosine of the argument.
 

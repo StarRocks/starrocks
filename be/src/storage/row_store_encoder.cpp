@@ -21,10 +21,10 @@
 #include "gutil/endian.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder_util.h"
 #include "storage/tablet_schema.h"
-#include "types/date_value.hpp"
+#include "storage_primitive/primary_key_encoder.h"
+#include "types/date_value.h"
 
 namespace starrocks {
 
@@ -45,9 +45,15 @@ bool RowStoreEncoder::is_field_supported(const Field& f) {
     case TYPE_DECIMAL128:
     case TYPE_TIME:
     case TYPE_DECIMALV2:
-    case TYPE_PERCENTILE:
     case TYPE_FLOAT:
     case TYPE_DOUBLE:
+    case TYPE_JSON:
+    case TYPE_HLL:
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+    case TYPE_ARRAY:
+    case TYPE_STRUCT:
+    case TYPE_MAP:
         return true;
     default:
         return false;

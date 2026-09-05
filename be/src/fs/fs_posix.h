@@ -22,4 +22,12 @@ namespace starrocks {
 
 std::unique_ptr<FileSystem> new_fs_posix();
 
-}
+namespace fs {
+
+struct FileSystemProvider;
+
+FileSystemProvider new_posix_file_system_provider(int priority = 0);
+
+} // namespace fs
+
+} // namespace starrocks

@@ -20,9 +20,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -38,21 +41,37 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public abstract class PhysicalScanOperator extends PhysicalOperator {
-    protected final Table table;
+    protected Table table;
     protected List<ColumnRefOperator> outputColumns;
     /**
      * ColumnRefMap is the map from column reference to starrocks column in meta
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
-    protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
-    protected ScanOptimzeOption scanOptimzeOption;
+    protected ScanOptimizeOption scanOptimizeOption;
+    protected TvrVersionRange tvrVersionRange;
+    protected DataCacheOptions dataCacheOptions = null;
+    protected boolean enableGlobalLateMaterialization = false;
+
+    protected PhysicalScanOperator(OperatorType type) {
+        super(type);
+    }
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                 long limit,
                                 ScalarOperator predicate,
                                 Projection projection) {
+        this(type, table, colRefToColumnMetaMap, limit, predicate, projection, TvrTableSnapshot.empty());
+    }
+
+    public PhysicalScanOperator(OperatorType type, Table table,
+                                Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                long limit,
+                                ScalarOperator predicate,
+                                Projection projection,
+                                TvrVersionRange tvrVersionRange) {
         super(type);
         this.table = Objects.requireNonNull(table, "table is null");
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
@@ -60,8 +79,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.predicate = predicate;
         this.projection = projection;
         this.columnAccessPaths = ImmutableList.of();
-        this.scanOptimzeOption = new ScanOptimzeOption();
+        this.scanOptimizeOption = new ScanOptimizeOption();
+        this.tvrVersionRange = tvrVersionRange;
 
+        updateOutputColumns();
+    }
+
+    protected void updateOutputColumns() {
         if (this.projection != null) {
             ColumnRefSet usedColumns = new ColumnRefSet();
             for (ScalarOperator scalarOperator : this.projection.getColumnRefMap().values()) {
@@ -85,8 +109,9 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
         this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
-                scanOperator.getPredicate(), scanOperator.getProjection());
-        this.scanOptimzeOption = scanOperator.getScanOptimzeOption().copy();
+                scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTvrVersionRange());
+        this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
+        this.columnAccessPaths = ImmutableList.copyOf(scanOperator.getColumnAccessPaths());
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -105,12 +130,24 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return colRefToColumnMetaMap;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
     }
 
-    public void setScanOptimzeOption(ScanOptimzeOption opt) {
-        this.scanOptimzeOption = opt.copy();
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
+    }
+
+    public TvrVersionRange getTvrVersionRange() {
+        return tvrVersionRange;
+    }
+
+    public boolean isEnableGlobalLateMaterialization() {
+        return enableGlobalLateMaterialization;
+    }
+
+    public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+        this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
 
     public Table getTable() {
@@ -131,6 +168,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public List<ColumnAccessPath> getColumnAccessPaths() {
         return columnAccessPaths;
+    }
+
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public DataCacheOptions getDataCacheOptions() {
+        return dataCacheOptions;
     }
 
     @Override
@@ -164,5 +209,51 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
+    }
+
+    public abstract static class Builder<O extends PhysicalScanOperator, B extends PhysicalScanOperator.Builder>
+            extends PhysicalOperator.Builder<O, B> {
+        @Override
+        public B withOperator(O operator) {
+            super.withOperator(operator);
+            builder.table = operator.table;
+            builder.outputColumns = operator.outputColumns;
+            builder.colRefToColumnMetaMap = operator.colRefToColumnMetaMap;
+            builder.columnAccessPaths = operator.columnAccessPaths;
+            builder.scanOptimizeOption = operator.scanOptimizeOption;
+            builder.tvrVersionRange = operator.tvrVersionRange;
+            builder.enableGlobalLateMaterialization = operator.enableGlobalLateMaterialization;
+            return (B) this;
+        }
+
+        public B setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+            builder.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+            return (B) this;
+        }
+
+        public B setColumnAccessPath(List<ColumnAccessPath> accessPaths) {
+            builder.setColumnAccessPaths(accessPaths);
+            return (B) this;
+        }
+
+        public B addColumnAccessPaths(List<ColumnAccessPath> accessPaths) {
+            ImmutableList.Builder<ColumnAccessPath> builder = ImmutableList.<ColumnAccessPath>builder()
+                    .addAll(this.builder.columnAccessPaths)
+                    .addAll(accessPaths);
+            this.builder.setColumnAccessPaths(builder.build());
+            return (B) this;
+        }
+
+        public B setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+            builder.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
+            return (B) this;
+        }
+
+        @Override
+        public O build() {
+            O op = super.build();
+            op.updateOutputColumns();
+            return op;
+        }
     }
 }

@@ -15,23 +15,37 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.catalog.Type;
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
 public class DictMappingOperator extends ScalarOperator {
-
+    // use dict id
     private ColumnRefOperator dictColumn;
+    // dict expression
     private ScalarOperator originScalaOperator;
+    // input string expression
+    private ScalarOperator stringProvideOperator;
 
     public DictMappingOperator(ColumnRefOperator dictColumn, ScalarOperator originScalaOperator, Type retType) {
         super(OperatorType.DICT_MAPPING, retType);
         this.dictColumn = dictColumn;
         this.originScalaOperator = originScalaOperator;
+        incrDepth(originScalaOperator);
+    }
+
+    public DictMappingOperator(Type type, ColumnRefOperator dictColumn, ScalarOperator originScalaOperator,
+                               ScalarOperator stringScalarOperator) {
+        super(OperatorType.DICT_MAPPING, type);
+        this.dictColumn = dictColumn;
+        this.originScalaOperator = originScalaOperator;
+        this.stringProvideOperator = stringScalarOperator;
+        incrDepth(originScalaOperator, stringScalarOperator);
     }
 
     public ColumnRefOperator getDictColumn() {
@@ -42,6 +56,10 @@ public class DictMappingOperator extends ScalarOperator {
         return originScalaOperator;
     }
 
+    public ScalarOperator getStringProvideOperator() {
+        return stringProvideOperator;
+    }
+
     @Override
     public boolean isNullable() {
         return originScalaOperator.isNullable();
@@ -49,52 +67,81 @@ public class DictMappingOperator extends ScalarOperator {
 
     @Override
     public List<ScalarOperator> getChildren() {
-        return Collections.emptyList();
+        return stringProvideOperator == null ? Collections.emptyList() : List.of(stringProvideOperator);
     }
 
     @Override
     public ScalarOperator getChild(int index) {
-        return null;
+        return index == 0 && stringProvideOperator != null ? stringProvideOperator : null;
     }
 
     @Override
     public void setChild(int index, ScalarOperator child) {
+        Preconditions.checkState(index == 0);
+        stringProvideOperator = child;
     }
 
     @Override
-    public String toString() {
-        return "DictMapping(" + dictColumn + "{" + originScalaOperator + "}" + ")";
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(getType(), dictColumn, originScalaOperator);
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (other == null) {
-            return false;
-        }
-        if (this == other) {
-            return true;
-        }
-        if (other instanceof DictMappingOperator) {
-            final DictMappingOperator mapping = (DictMappingOperator) other;
-            return mapping.getType().equals(getType()) && mapping.originScalaOperator.equals(originScalaOperator) &&
-                    mapping.dictColumn.equals(dictColumn);
-        }
+    public boolean isConstant() {
         return false;
     }
 
     @Override
+    public boolean isVariable() {
+        return true;
+    }
+
+    @Override
+    public String toString() {
+        String stringOperator = stringProvideOperator == null ? "" : ", " + stringProvideOperator;
+        return "DictMapping(" + dictColumn + ", " + originScalaOperator + stringOperator + ")";
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(getType(), dictColumn, originScalaOperator);
+    }
+
+    @Override
+    public boolean equalsSelf(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        DictMappingOperator that = (DictMappingOperator) o;
+        return Objects.equals(getType(), that.getType()) &&
+                Objects.equals(dictColumn, that.dictColumn) &&
+                Objects.equals(originScalaOperator, that.originScalaOperator) &&
+                Objects.equals(stringProvideOperator, that.stringProvideOperator);
+    }
+
+    @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitDictMappingOperator(this, context);
+        return  visitor.visitDictMappingOperator(this, context);
     }
 
     @Override
     public ColumnRefSet getUsedColumns() {
-        return dictColumn.getUsedColumns();
+        if (stringProvideOperator != null) {
+            // When stringProviderOperator is set, dictColumn and originScalaOperator are meta columns, only columns
+            // in stringProviderOperator are used in eval.
+            return stringProvideOperator.getUsedColumns();
+        } else {
+            return dictColumn.getUsedColumns();
+        }
+    }
+
+    @Override
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        dictColumn.getColumnRefs(columns);
+        if (stringProvideOperator != null) {
+            stringProvideOperator.getColumnRefs(columns);
+        } else {
+            originScalaOperator.getColumnRefs(columns);
+        }
     }
 
     @Override
@@ -102,6 +149,9 @@ public class DictMappingOperator extends ScalarOperator {
         DictMappingOperator clone = (DictMappingOperator) super.clone();
         clone.dictColumn = (ColumnRefOperator) this.dictColumn.clone();
         clone.originScalaOperator = this.originScalaOperator.clone();
+        if (this.stringProvideOperator != null) {
+            clone.stringProvideOperator = this.stringProvideOperator.clone();
+        }
         return clone;
     }
 }

@@ -15,10 +15,12 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.catalog.Type;
+import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,6 +28,10 @@ import java.util.List;
 
 public class ValuesRelation extends QueryRelation {
     private final List<List<Expr>> rows;
+
+    // for list files
+    // rows may be empty, and can not get output column type from rows.
+    private final List<Type> outputColumnTypes;
 
     /*
         isNullValues means a statement without from or from dual, add a single row of null values here,
@@ -41,7 +47,7 @@ public class ValuesRelation extends QueryRelation {
 
     public static ValuesRelation newDualRelation(NodePosition pos) {
         ImmutableList.Builder<Expr> row = ImmutableList.builder();
-        row.add(NullLiteral.create(Type.NULL));
+        row.add(NullLiteral.create(NullType.NULL));
         ImmutableList.Builder<List<Expr>> rows = ImmutableList.builder();
         rows.add(row.build());
         ValuesRelation valuesRelation = new ValuesRelation(rows.build(), Collections.singletonList(""), pos);
@@ -57,6 +63,14 @@ public class ValuesRelation extends QueryRelation {
         super(pos);
         this.rows = new ArrayList<>(rows);
         this.explicitColumnNames = explicitColumnNames;
+        this.outputColumnTypes = Lists.newArrayList();
+    }
+
+    public ValuesRelation(List<List<Expr>> rows, List<String> explicitColumnNames, List<Type> outputColumnTypes) {
+        super(NodePosition.ZERO);
+        this.rows = new ArrayList<>(rows);
+        this.explicitColumnNames = explicitColumnNames;
+        this.outputColumnTypes = outputColumnTypes;
     }
 
     public void addRow(ArrayList<Expr> row) {
@@ -76,6 +90,10 @@ public class ValuesRelation extends QueryRelation {
         return rows.get(0);
     }
 
+    public List<Type> getOutputColumnTypes() {
+        return outputColumnTypes;
+    }
+
     public void setNullValues(boolean nullValues) {
         isNullValues = nullValues;
     }
@@ -86,7 +104,7 @@ public class ValuesRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitValues(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitValues(this, context);
     }
 
     @Override

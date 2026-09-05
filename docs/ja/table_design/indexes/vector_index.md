@@ -1,0 +1,627 @@
+---
+displayed_sidebar: docs
+description: "StarRocks v3.4 以降は IVFPQ、HNSW ベクターインデックスで高次元ベクターデータの近似最近傍探索をサポートします。"
+sidebar_position: 60
+---
+
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# ベクターインデックス
+
+<Beta />
+
+このトピックでは、StarRocks のベクターインデックス機能とそれを使用した近似最近傍探索 (ANNS) の方法について紹介します。
+
+## 概要
+
+現在、StarRocks はセグメントファイルレベルでのベクターインデックスをサポートしています。インデックスは各検索項目をセグメントファイル内の行 ID にマッピングし、ベクトル距離の計算を行わずに対応するデータ行を直接特定することで高速なデータ取得を可能にします。システムは現在、Inverted File with Product Quantization (IVFPQ) と Hierarchical Navigable Small World (HNSW) の 2 種類のベクターインデックスを提供しており、それぞれ独自の組織構造を持っています。
+
+### Inverted File with Product Quantization (IVFPQ)
+
+Inverted File with Product Quantization (IVFPQ) は、大規模な高次元ベクトルにおける近似最近傍探索の手法であり、ディープラーニングや機械学習のベクトル検索タスクで一般的に使用されます。IVFPQ は、インバーテッドファイルとプロダクト量子化の 2 つの主要なコンポーネントで構成されています。
+
+- **インバーテッドファイル**: これはインデックス作成方法です。データセットを複数のクラスタ（またはボロノイセル）に分割し、各クラスタにセントロイド（シードポイント）を持たせ、各データポイント（ベクトル）を最も近いクラスタセンターに割り当てます。ベクトル検索では、IVFPQ は最も近いクラスタのみを検索するため、検索範囲と複雑さが大幅に削減されます。
+- **プロダクト量子化**: これはデータ圧縮技術です。高次元ベクトルをサブベクトルに分割し、各サブベクトルを量子化して、事前定義されたセット内の最も近いポイントにマッピングします。これにより、ストレージと計算コストを削減しつつ、高精度を維持します。
+
+インバーテッドファイルとプロダクト量子化を組み合わせることで、IVFPQ は大規模で高次元のデータセットにおける効率的な近似最近傍探索を可能にします。
+
+### Hierarchical Navigable Small World (HNSW)
+
+Hierarchical Navigable Small World (HNSW) は、高次元最近傍探索のためのグラフベースのアルゴリズムであり、ベクトル検索タスクでも広く使用されています。
+
+HNSW は階層的なグラフ構造を構築し、各層がナビゲーブルスモールワールド (NSW) グラフです。グラフ内では、各頂点がデータポイントを表し、エッジが頂点間の類似性を示します。グラフの上位層は少ない頂点と疎な接続を持ち、迅速なグローバル検索を可能にし、下位層はすべての頂点と密な接続を持ち、正確なローカル検索を可能にします。
+
+ベクトル検索では、HNSW は最初に最上層で検索を行い、近似最近傍領域を迅速に特定し、その後層を下っていき、最下層で正確な最近傍を見つけます。
+
+HNSW は効率性と精度の両方を提供し、さまざまなデータとクエリの分布に適応します。
+
+### IVFPQ と HNSW の比較
+
+- **データ圧縮率**: IVFPQ はより高い圧縮率（約 1:0.15）を持ちます。インデックス計算は、PQ がベクトルを圧縮するため、粗いランク付けの後に予備的なソート結果を提供するだけです。最終的なソート結果には追加の詳細なランク付けが必要であり、計算と遅延が増加します。HNSW はより低い圧縮率（約 1:0.8）を持ち、追加の処理なしで正確なランク付けを提供し、計算コストと遅延が低く、ストレージコストが高くなります。
+- **リコール調整**: 両方のインデックスは、パラメータ調整を通じてリコール率の調整をサポートしていますが、IVFPQ は同様のリコール率でより高い計算コストがかかります。
+- **キャッシング戦略**: IVFPQ はインデックスブロックのキャッシュ割合を調整することでメモリコストと計算遅延をバランスさせることができますが、HNSW は現在、フルファイルキャッシングのみをサポートしています。
+
+## 使用方法
+
+### 前提条件
+
+- 各テーブルは 1 つのベクターインデックスのみをサポートします。
+- インデックス対象の列は、`ARRAY<FLOAT> NOT NULL`でなければなりません。
+- ネイティブの DUPLICATE KEY および PRIMARY KEY テーブルのみが、ベクトルインデックスをサポートします。
+
+### ベクターインデックスの作成
+
+このチュートリアルでは、テーブルを作成しながらベクターインデックスを作成します。既存のテーブルにベクターインデックスを追加することもできます。詳細な手順については、[ベクターインデックスの追加](#ベクターインデックスの追加) を参照してください。
+
+- 次の例では、テーブル `hnsw` のカラム `vector` に HNSW ベクターインデックス `hnsw_vector` を作成します。
+
+    ```SQL
+    CREATE TABLE hnsw (
+        id     BIGINT(20)   NOT NULL COMMENT "",
+        vector ARRAY<FLOAT> NOT NULL COMMENT "",
+        INDEX hnsw_vector (vector) USING VECTOR (
+            "index_type" = "hnsw", 
+            "dim"="5", 
+            "metric_type" = "l2_distance", 
+            "is_vector_normed" = "false", 
+            "M" = "16", 
+            "efconstruction" = "40"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id) BUCKETS 1;
+    ```
+- 次の例では、テーブル `ivfpq` のカラム `vector` に IVFPQ ベクターインデックス `ivfpq_vector` を作成します。
+
+    ```SQL
+    CREATE TABLE ivfpq (
+        id     BIGINT(20)   NOT NULL COMMENT "",
+        vector ARRAY<FLOAT> NOT NULL COMMENT "",
+        INDEX ivfpq_vector (vector) USING VECTOR (
+            "index_type" = "ivfpq", 
+            "dim"="5", 
+            "metric_type" = "l2_distance", 
+            "is_vector_normed" = "false", 
+            "nbits" = "8",
+            "nlist" = "40",
+            "M_IVFPQ" = "1"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id) BUCKETS 1;
+    ```
+
+- 以下の例では、`async` ビルドモードを使用して、共有データクラスタ内のクラウドネイティブテーブルに HNSW ベクトルインデックスを作成します。
+
+    ```SQL
+    CREATE TABLE hnsw_async (
+        id BIGINT NOT NULL,
+        vector ARRAY<FLOAT> NOT NULL,
+        INDEX hnsw_vector (vector) USING VECTOR (
+            "index_type" = "hnsw",
+            "dim" = "768",
+            "metric_type" = "cosine_similarity",
+            "is_vector_normed" = "true",
+            "index_build_mode" = "async"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id);
+    ```
+
+    `information_schema.partitions_meta` をクエリすることで、非同期ビルドの進行状況を確認できます。
+
+    ```SQL
+    SELECT
+        TABLE_NAME,
+        PARTITION_NAME,
+        VISIBLE_VERSION,
+        MIN_VI_BUILT_VERSION,
+        MAX_VI_BUILT_VERSION
+    FROM information_schema.partitions_meta
+    WHERE TABLE_NAME = 'hnsw_async';
+    ```
+
+    - `MIN_VI_BUILT_VERSION` が `VISIBLE_VERSION` と等しい場合、パーティション内のすべてのタブレットのインデックスが可視バージョンに達していることを示します。
+    - `MIN_VI_BUILT_VERSION` が `VISIBLE_VERSION` より小さい場合、少なくとも 1 つのインデックスが構築中であることを示します。このようなセグメントを含むクエリは、ブルートフォーススキャンに切り替わります。
+    - `MIN_VI_BUILT_VERSION` が `MAX_VI_BUILT_VERSION` より小さい場合、タブレットごとにインデックスの構築進捗状況が異なることを示しています。
+
+#### インデックス構築パラメータ
+
+##### USING VECTOR
+
+- **デフォルト**: N/A
+- **必須**: はい
+- **説明**: ベクターインデックスを作成します。
+
+##### index_type
+
+- **デフォルト**: N/A
+- **必須**: はい
+- **説明**: ベクターインデックスタイプ。 有効な値: `hnsw` と `ivfpq`。
+
+##### dim
+
+- **デフォルト**: N/A
+- **必須**: はい
+- **説明**: インデックスの次元。インデックスが構築された後、次元要件を満たさないベクトルはベースカラムへのロードが拒否されます。`1` 以上の整数である必要があります。
+
+##### metric_type
+
+- **デフォルト**: N/A
+- **必須**: はい
+- **説明**: ベクターインデックスのメトリックタイプ（測定関数）。有効な値:
+  - `l2_distance`: ユークリッド距離。値が小さいほど、類似性が高くなります。
+  - `cosine_similarity`: コサイン類似度。値が大きいほど、類似性が高くなります。
+  - `inner_product`: 内積。値が大きいほど類似性が高くなります。コサイン類似度とは異なり、内積はベクトルの大きさを保持します。正確な計算には `inner_product`、ベクターインデックスによる top-k または範囲クエリには `approx_inner_product` を使用します。
+
+##### is_vector_normed
+
+- **デフォルト**: false
+- **必須**: いいえ
+- **説明**: ベクトルが正規化されているかどうか。 有効な値は `true` と `false` です。`metric_type` が `cosine_similarity` の場合にのみ有効です。ベクトルが正規化されている場合、計算された距離の値は [-1, 1] の範囲内になります。ベクトルは平方和が `1` である必要があります。そうでない場合、エラーが返されます。
+
+##### index_build_threshold
+
+- **デフォルト**: 10000（BE 設定項目 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) により決定）
+- **必須**: いいえ
+- **説明**: ベクトルインデックスの構築をトリガーする行数のしきい値。書き込まれた行数がこのしきい値未満の場合、インデックスは構築されず、検索はブルートフォーススキャンにフォールバックします。`1` 以上の整数である必要があります。IVFPQ インデックスの場合、IVFPQ の k-means 学習には少なくとも `nlist` 件のベクトルが必要なため、この値は `nlist` 以上である必要もあります。この制約に違反する DDL 文は拒否されます。
+
+##### index_build_mode
+
+- **デフォルト**: `sync`
+- **必須**: いいえ
+- **説明**: 共有データクラスタでのインデックス構築方式です。有効な値：
+  - `sync`：データ書き込み時に同期してインデックスを構築します。クエリはすぐにインデックスを使用できますが、ロード遅延が増加します。
+  - `async`：書き込み完了後にバックグラウンドでインデックスを構築します。構築が完了するまで、該当 Segment のクエリは自動的にブルートフォース検索へフォールバックします。[`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) で構築 Warehouse を選択し、[`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) でロード末尾のディスパッチ遅延を制御できます。
+
+##### M
+
+- **デフォルト**: 16
+- **必須**: いいえ
+- **説明**: HNSW 固有のパラメータ。グラフ構築中に新しい要素ごとに作成される双方向接続の数。`2` 以上の整数である必要があります。`M` の値は、グラフ構築と検索の効率と精度に直接影響します。グラフ構築中、各頂点は最も近い `M` 個の頂点との接続を確立しようとします。頂点がすでに `M` 個の接続を持っている場合でも、より近い頂点が見つかった場合、最も遠い接続が削除され、より近い頂点との新しい接続が確立されます。ベクトル検索はエントリーポイントから開始し、それに接続された頂点に沿って最も近い隣接点を見つけます。したがって、`M` の値が大きいほど、各頂点の検索範囲が広がり、検索効率が向上しますが、グラフ構築とストレージのコストも増加します。
+
+##### efconstruction
+
+- **デフォルト**: 40
+- **必須**: いいえ
+- **説明**: HNSW 固有のパラメータ。最も近い隣接点を含む候補リストのサイズ。`1` 以上の整数である必要があります。グラフ構築プロセス中の検索深度を制御するために使用されます。具体的には、`efconstruction` はグラフ構築プロセス中の各頂点の検索リスト（候補リストとも呼ばれる）のサイズを定義します。この候補リストは、現在の頂点の隣接候補を格納するために使用され、リストのサイズは `efconstruction` です。`efconstruction` の値が大きいほど、グラフ構築プロセス中に頂点の隣接候補として考慮される候補が増え、その結果、グラフの品質（接続性の向上など）が向上しますが、グラフ構築の時間消費と計算の複雑さも増加します。
+
+##### efsearch
+
+- **デフォルト**: 40
+- **必須**: いいえ
+- **説明**:  HNSW 固有のパラメータ。精度と速度のトレードオフを制御するパラメータ。階層的なグラフ構造の検索中に、このパラメータは検索中の候補リストのサイズを制御します。`efsearch` の値が大きいほど、精度が高くなりますが、速度が低下します。このパラメータはインデックス作成時に指定できます。クエリ内の `ann_params` にこのパラメータが含まれていない場合、システムはこの値に基づいて適応的なスケーリングを実行します。明示的に指定されたクエリレベルの値が優先され、適応的なスケーリングはバイパスされます。
+
+##### quantizer
+
+- **デフォルト**: `flat`（量子化なし）
+- **必須**: いいえ
+- **説明**: HNSW 固有のパラメータです。内部の HNSW ストレージの前段にスカラー量子化または積量子化を適用し、再現率（recall）を一部犠牲にする代わりに、ディスクおよびメモリ使用量を削減します。指定可能な値は以下のとおりです。
+
+  - `flat` — 量子化なし（デフォルト）。このプロパティを省略した場合と同等であり、quantizer 導入以前に作成されたインデックスとの後方互換性を維持します。
+  - `sq4` — 4 ビットのスカラー量子化。最小のフットプリントを実現しますが、`sq8` よりも再現率の低下が大きくなります。
+  - `sq8` — 8 ビットのスカラー量子化。サイズ削減の初期設定として推奨され、`ef_search` が高い場合は再現率の低下は一般的に小さくなります。
+  - `pq` — 積量子化（Product Quantization）。`m_pq` の指定が必要であり、ストレージサイズはベクトルあたり `m_pq * nbits_pq` ビットに比例します。
+
+##### m_pq
+
+- **必須**: `quantizer = pq` の場合に必須。それ以外では指定不可。
+- **説明**: HNSW 固有のパラメータ（PQ 量子化専用）。積量子化におけるサブ量子化器の数を指定します。元のベクトルは `m_pq` 個の等長サブベクトルに分割されるため、`m_pq` は `dim` を割り切る必要があります。`m_pq` を大きくすると再現率は向上しますが、ベクトルあたりの使用バイト数も増加します。一般的な値は `dim` に応じて 4～32 の範囲です。
+
+##### nbits_pq
+
+- **デフォルト**: 8
+- **必須**: いいえ（`quantizer = pq` の場合のみ指定可能。それ以外では指定不可）
+- **説明**: HNSW 固有のパラメータ（PQ 量子化専用）。各 PQ サブ量子化器に割り当てるビット数を指定します。指定可能な範囲は 4～16 ビットです。
+
+##### nbits
+
+- **デフォルト**: 8
+- **必須**: いいえ
+- **説明**: IVFPQ 固有のパラメータ。プロダクト量子化 (PQ) で使用するビット数です。現在は `8` のみサポートされています。
+
+##### nlist
+
+- **デフォルト**: 16
+- **必須**: いいえ
+- **説明**: IVFPQ 固有のパラメータ。クラスタの数、またはインバーテッドリストの数。`1` 以上の整数である必要があります。IVFPQ では、データセットがクラスタに分割され、各クラスタのセントロイドがインバーテッドリストに対応します。ベクトル検索は、最初にデータポイントに最も近いクラスタセントロイドを見つけ、その後、対応するインバーテッドリスト内で最も近い隣接点を取得します。したがって、`nlist` の値は検索の精度と効率に影響を与えます。`nlist` の値が大きいほど、クラスタリングの粒度が細かくなり、検索精度が向上しますが、検索の複雑さも増加します。
+
+##### M_IVFPQ
+
+- **デフォルト**: N/A
+- **必須**: はい
+- **説明**: IVFPQ 固有のパラメータ。元のベクトルが分割されるサブベクトルの数。IVFPQ インデックスは、`dim` 次元のベクトルを `M_IVFPQ` 個の等長サブベクトルに分割するため、`M_IVFPQ` は `dim` を割り切る必要があります。SQL プロパティ名は `M_IVFPQ` です。`M` は HNSW 専用の別のプロパティです。
+
+#### ベクターインデックスの追加
+
+既存のテーブルにベクターインデックスを追加するには、[CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md) または [ALTER TABLE ADD INDEX](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) を使用します。
+
+:::note
+共有データクラスタ内のクラウドネイティブテーブルの場合、ALTER TABLE ADD INDEX ステートメントは既存のデータを書き換え、そのデータに基づいてインデックスを構築します。`index_build_mode` が `async` に設定されている場合でも、システムはスキーマ変更が完了する前にインデックスの構築を完了させます。
+:::
+
+例:
+
+```SQL
+CREATE INDEX ivfpq_vector 
+ON ivfpq (vector) 
+USING VECTOR (
+    "index_type" = "ivfpq",
+    "metric_type" = "l2_distance", 
+    "is_vector_normed" = "false",  
+    "dim"="5", 
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
+);
+
+ALTER TABLE ivfpq 
+ADD INDEX ivfpq_vector (vector) 
+USING VECTOR (
+    "index_type" = "ivfpq",
+    "metric_type" = "l2_distance", 
+    "is_vector_normed" = "false", 
+    "dim"="5", 
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
+);
+```
+
+### ベクターインデックスの管理
+
+#### ベクターインデックスの表示
+
+[SHOW CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) ステートメントを使用して、ベクターインデックスの定義を表示できます。
+
+例:
+
+```SQL
+mysql> SHOW CREATE TABLE hnsw \G
+*************************** 1. row ***************************
+       Table: hnsw
+Create Table: CREATE TABLE hnsw (
+  id bigint(20) NOT NULL COMMENT "",
+  vector array<float> NOT NULL COMMENT "",
+  INDEX index_vector (vector) USING VECTOR("dim" = "5", "efconstruction" = "40", "index_type" = "hnsw", "is_vector_normed" = "false", "M" = "512", "metric_type" = "l2_distance") COMMENT ''
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "3"
+);
+1 row in set (0.00 sec)
+```
+
+#### ベクターインデックスの削除
+
+[DROP INDEX](../../sql-reference/sql-statements/table_bucket_part_index/DROP_INDEX.md) または [ALTER TABLE DROP INDEX](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) を使用してベクターインデックスを削除できます。
+
+```SQL
+DROP INDEX ivfpq_vector ON ivfpq;
+ALTER TABLE ivfpq DROP INDEX ivfpq_vector;
+```
+
+### ベクターインデックスを使用した ANNS の実行
+
+#### ベクターインデックスベースのクエリの要件
+
+```SQL
+SELECT *, <vector_index_distance_func>(v1, [1,2,3]) as dis
+FROM table_name
+WHERE <vector_index_distance_func>(v1, [1,2,3]) <= 10
+ORDER BY <vector_index_distance_func>(v1, [1,2,3]) 
+LIMIT 10
+```
+
+ベクターインデックスをクエリで使用するには、次のすべての要件を満たす必要があります。
+
+- **ORDER BY 要件:**
+  - ORDER BY 句の形式: `ORDER BY <vector_index_distance_func>(vector_column, constant_array)` の形式に従う必要があり、追加の ORDER BY カラムを含めることはできません。
+    - `<vector_index_distance_func>` の関数名要件:
+      - `metric_type` が `l2_distance` の場合、関数名は `approx_l2_distance` でなければなりません。
+      - `metric_type` が `cosine_similarity` の場合、関数名は `approx_cosine_similarity` でなければなりません。
+      - `metric_type` が `inner_product` の場合、関数名は `approx_inner_product` でなければなりません。
+    - `<vector_index_distance_func>` のパラメータ要件:
+      - カラムのうちの一つ `constant_array` は、ベクターインデックス `dim` と一致する次元を持つ定数 `ARRAY<FLOAT>` でなければなりません。
+      - もう一つのカラム `vector_column` は、ベクターインデックスに対応するカラムでなければなりません。
+  - ORDER の方向要件:
+    - `metric_type` が `l2_distance` の場合、順序は `ASC` でなければなりません。
+    - `metric_type` が `cosine_similarity` の場合、順序は `DESC` でなければなりません。
+    - `metric_type` が `inner_product` の場合、順序は `DESC` でなければなりません。
+  - `LIMIT N` 句が必要です。
+- **述語要件:**
+  - すべての述語は `<vector_index_distance_func>` 式でなければならず、`AND` と比較演算子（`>` または `<`）を使用して結合されます。比較演算子の方向は `ASC`/`DESC` の順序と一致している必要があります。具体的には:
+  - 要件 1:
+    - `metric_type` が `l2_distance` の場合: `col_ref <= constant`。
+    - `metric_type` が `cosine_similarity` の場合: `col_ref >= constant`。
+    - `metric_type` が `inner_product` の場合: `col_ref >= constant`。定数には負の値も指定できます。
+    - ここで、`col_ref` は `<vector_index_distance_func>(vector_column, constant_array)` の結果を指し、`FLOAT` または `DOUBLE` 型にキャストできます。例:
+      - `approx_l2_distance(v1, [1,2,3])`
+      - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`
+      - `CAST(approx_l2_distance(v1, [1,2,3]) AS DOUBLE)`
+  - 要件 2:
+    - 述語は `AND` を使用し、各子述語が要件 1 を満たす必要があります。
+
+#### 準備
+
+ベクターインデックスを持つテーブルを作成し、ベクターデータを挿入します。
+
+```SQL
+CREATE TABLE test_hnsw (
+    id     BIGINT(20)   NOT NULL COMMENT "",
+    vector ARRAY<FLOAT> NOT NULL COMMENT "",
+    INDEX index_vector (vector) USING VECTOR (
+        "index_type" = "hnsw",
+        "metric_type" = "l2_distance", 
+        "is_vector_normed" = "false", 
+        "M" = "512",
+        "dim" = "5",
+        "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+
+INSERT INTO test_hnsw VALUES
+    (1, [1,2,3,4,5]),
+    (2, [4,5,6,7,8]);
+    
+CREATE TABLE test_ivfpq (
+    id     BIGINT(20)   NOT NULL COMMENT "",
+    vector ARRAY<FLOAT> NOT NULL COMMENT "",
+    INDEX index_vector (vector) USING VECTOR (
+        "index_type" = "ivfpq",
+        "metric_type" = "l2_distance", 
+        "is_vector_normed" = "false", 
+        "nlist" = "1",
+        "nbits" = "8",
+        "dim" = "5",
+        "M_IVFPQ" = "1",
+        "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+
+INSERT INTO test_ivfpq VALUES
+    (1, [1,2,3,4,5]),
+    (2, [4,5,6,7,8]);
+```
+
+#### ベクター検索の実行
+
+##### 近似検索
+
+近似検索はベクターインデックスにヒットし、検索プロセスを加速します。
+
+次の例では、ベクトル `[1,1,1,1,1]` の最も近い近似最近傍を 1 つ検索します。
+
+```SQL
+SELECT id, approx_l2_distance([1,1,1,1,1], vector) 
+FROM test_hnsw 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+##### スカラーとベクターの結合検索
+
+スカラー検索とベクター検索を組み合わせることができます。
+
+```SQL
+SELECT id, approx_l2_distance([1,1,1,1,1], vector) 
+FROM test_hnsw 
+WHERE id = 1 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+##### 範囲検索
+
+ベクターデータに対して範囲検索を実行できます。
+
+次の例では、`score < 40` の条件をインデックスにプッシュダウンし、`score` の範囲でベクトルをフィルタリングします。
+
+```SQL
+SELECT * FROM (
+    SELECT id, approx_l2_distance([1,1,1,1,1], vector) score 
+    FROM test_hnsw
+) a 
+WHERE score < 40 
+ORDER BY score 
+LIMIT 1;
+```
+
+##### 正確な計算
+
+正確な計算はベクターインデックスを無視し、正確な結果を得るためにベクトル間の距離を直接計算します。
+
+```SQL
+SELECT id, l2_distance([1,1,1,1,1], vector) 
+FROM test_hnsw WHERE id = 1 
+ORDER BY l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+> **NOTE**
+>
+> 異なる距離メトリック関数は「類似性」を異なる方法で定義します。`l2_distance` では、値が小さいほど類似性が高くなり、`cosine_similarity` では、値が大きいほど類似性が高くなります。したがって、`topN` を計算する際には、メトリックの類似性方向に一致するソート（ORDER BY）方向を使用する必要があります。`l2_distance` には `ORDER BY ASC LIMIT x` を使用し、`cosine_similarity` には `ORDER BY DESC LIMIT x` を使用します。
+
+#### 検索のためのインデックスパラメータの微調整
+
+パラメータの調整はベクター検索において重要であり、パフォーマンスと精度の両方に影響を与えます。小さなデータセットで検索パラメータを調整し、期待されるリコールと遅延が達成された場合にのみ大規模なデータセットに移行することをお勧めします。
+
+検索パラメータは [`ann_params`](../../sql-reference/System_variable.md#ann_params) セッション変数、または SQL ステートメント内のヒントを通じて渡されます。
+
+##### HNSW インデックスの場合
+
+進む前に、ベクターカラムが HNSW インデックスで構築されていることを確認してください。
+
+```SQL
+SELECT 
+    /*+ SET_VAR (ann_params='{"efsearch":"256"}') */
+    id, approx_l2_distance([1,1,1,1,1], vector) 
+FROM test_hnsw 
+WHERE id = 1 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+**パラメータ**:
+
+###### efsearch
+
+- **デフォルト**: 40
+- **必須**: いいえ
+- **説明**: 精度と速度のトレードオフを制御するパラメータ。階層的なグラフ構造の検索中に、このパラメータは検索中の候補リストのサイズを制御します。`efsearch` の値が大きいほど、精度が高くなりますが、速度が低下します。
+
+##### IVFPQ インデックスの場合
+
+進む前に、ベクターカラムが IVFPQ インデックスで構築されていることを確認してください。
+
+```SQL
+SELECT 
+    /*+ SET_VAR (ann_params='{"nprobe":"256","max_codes":"0","scan_table_threshold":"0","polysemous_ht":"0","range_search_confidence":"0.1"}') */
+    id, approx_l2_distance([1,1,1,1,1], vector) 
+FROM test_ivfpq 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+**パラメータ**:
+
+###### nprobe
+
+- **デフォルト**: 1
+- **必須**: いいえ
+- **説明**: 検索中にチェックされるインバーテッドリストの数。`nprobe` の値が大きいほど、精度が高くなりますが、速度が低下します。
+
+###### max_codes
+
+- **デフォルト**: 0
+- **必須**: いいえ
+- **説明**: 各インバーテッドリストでチェックされる最大コード数。このパラメータも精度と速度に影響を与えます。
+
+###### scan_table_threshold
+
+- **デフォルト**: 0
+- **必須**: いいえ
+- **説明**: 多義ハッシュを制御するパラメータ。要素のハッシュと検索対象のベクトルのハッシュ間のハミング距離がこのしきい値を下回る場合、要素は候補リストに追加されます。
+
+###### polysemous_ht
+
+- **デフォルト**: 0
+- **必須**: いいえ
+- **説明**: 多義ハッシュを制御するパラメータ。要素のハッシュと検索対象のベクトルのハッシュ間のハミング距離がこのしきい値を下回る場合、要素は直接結果に追加されます。
+
+###### range_search_confidence
+
+- **デフォルト**: 0.1
+- **必須**: いいえ
+- **説明**: 近似範囲検索の信頼度。値の範囲: [0, 1]。`1` に設定すると、最も正確な結果が得られます。
+
+#### 候補数と結果のリファインを調整する
+
+次のセッション変数は、インデックスが返す候補数と、StarRocks が候補の正確な距離を再計算するかどうかを制御します。
+
+- [`k_factor`](../../sql-reference/System_variable.md#k_factor)、デフォルト `1`：`LIMIT` にこの値を掛け、各 Segment に要求する候補数を決定します。値を大きくすると、複数 Segment の結果をマージした後の再現率が向上する可能性がありますが、CPU、メモリ、および後続処理のコストが増加します。
+- [`enable_vector_index_refine`](../../sql-reference/System_variable.md#enable_vector_index_refine)、デフォルト `false`：IVFPQ、および `sq4`、`sq8`、`pq` 量子化器を使用する HNSW インデックスについて、元のベクトルから正確な距離を再計算し、候補を再順位付けします。量子化されていない HNSW インデックス（`quantizer = flat`）には影響しません。
+- [`pq_refine_factor`](../../sql-reference/System_variable.md#pq_refine_factor)、デフォルト `1`：正確な距離によるリファインを有効にした範囲検索で、`k_factor` の適用後に候補数をさらに増やします。
+
+例：
+
+```SQL
+SET enable_vector_index_refine = true;
+SET k_factor = 2;
+SET pq_refine_factor = 2;
+```
+
+候補倍率を大きくすると一般に再現率は向上しますが、インデックス検索、I/O、および距離計算のコストも増加します。`EXPLAIN` の `Refine: ON/OFF` で、正確な距離によるリファインが有効かどうかを確認できます。
+
+#### 近似リコールの計算
+
+近似リコールは、ブルートフォース検索からの `topK` 要素と近似検索からの要素を交差させることで計算できます: `Recall = TP / (TP + FN)`。
+
+```SQL
+-- 近似検索
+SELECT id 
+FROM test_hnsw 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector)
+LIMIT 5;
+8
+9
+7
+5
+1
+
+-- ブルートフォース検索
+SELECT id 
+FROM test_hnsw
+ORDER BY l2_distance([1,1,1,1,1], vector)
+LIMIT 5;
+8
+9
+5
+7
+10
+```
+
+上記の例では、近似検索は 8, 9, 7, 5 を返します。しかし、正しい結果は 8, 9, 5, 7, 10 です。この場合、リコールは 4/5=80% です。
+
+#### ベクターインデックスが有効かどうかの確認
+
+クエリステートメントに対して [EXPLAIN](../../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) を実行します。`OlapScanNode` プロパティが `VECTORINDEX: ON` を示している場合、ベクターインデックスが近似ベクトル検索に適用されていることを示します。
+
+例:
+
+```SQL
+> EXPLAIN SELECT id FROM t_test_vector_table ORDER BY approx_l2_distance([1,1,1,1,1], vector) LIMIT 5;
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Explain String                                                                                                                                      |
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| PLAN FRAGMENT 0                                                                                                                                     |
+|  OUTPUT EXPRS:1: id                                                                                                                                 |
+|   PARTITION: UNPARTITIONED                                                                                                                          |
+|                                                                                                                                                     |
+|   RESULT SINK                                                                                                                                       |
+|                                                                                                                                                     |
+|   4:Project                                                                                                                                         |
+|   |  <slot 1> : 1: id                                                                                                                               |
+|   |  limit: 5                                                                                                                                       |
+|   |                                                                                                                                                 |
+|   3:MERGING-EXCHANGE                                                                                                                                |
+|      limit: 5                                                                                                                                       |
+|                                                                                                                                                     |
+| PLAN FRAGMENT 1                                                                                                                                     |
+|  OUTPUT EXPRS:                                                                                                                                      |
+|   PARTITION: RANDOM                                                                                                                                 |
+|                                                                                                                                                     |
+|   STREAM DATA SINK                                                                                                                                  |
+|     EXCHANGE ID: 03                                                                                                                                 |
+|     UNPARTITIONED                                                                                                                                   |
+|                                                                                                                                                     |
+|   2:TOP-N                                                                                                                                           |
+|   |  order by: <slot 3> 3: approx_l2_distance ASC                                                                                                   |
+|   |  offset: 0                                                                                                                                      |
+|   |  limit: 5                                                                                                                                       |
+|   |                                                                                                                                                 |
+|   1:Project                                                                                                                                         |
+|   |  <slot 1> : 1: id                                                                                                                               |
+|   |  <slot 3> : 4: __vector_approx_l2_distance                                                                                                      |
+|   |                                                                                                                                                 |
+|   0:OlapScanNode                                                                                                                                    |
+|      TABLE: t_test_vector_table                                                                                                                     |
+|      VECTORINDEX: ON                                                                                                                                |
+|           IVFPQ: OFF, Distance Column: <4:__vector_approx_l2_distance>, LimitK: 5, Order: ASC, Query Vector: [1, 1, 1, 1, 1], Predicate Range: -1.0 |
+|      PREAGGREGATION: ON                                                                                                                             |
+|      partitions=1/1                                                                                                                                 |
+|      rollup: t_test_vector_table                                                                                                                    |
+|      tabletRatio=1/1                                                                                                                                |
+|      tabletList=11302                                                                                                                               |
+|      cardinality=2                                                                                                                                  |
+|      avgRowSize=4.0                                                                                                                                 |
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+```

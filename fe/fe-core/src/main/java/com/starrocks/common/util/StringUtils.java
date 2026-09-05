@@ -36,7 +36,9 @@ package com.starrocks.common.util;
 
 import com.starrocks.catalog.Table;
 
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Arrays;
 
 public class StringUtils {
     private static final String CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -79,5 +81,19 @@ public class StringUtils {
         }
 
         return columName.equalsIgnoreCase(toCheck);
+    }
+
+    /*
+     * Compare two strings by their UTF-8 bytes in UNSIGNED byte order, matching how BE
+     * orders VARCHAR (memcmp on the raw bytes; see be/src/base/string/memcmp.h) and
+     * therefore how BE routes rows into range-distributed tablets. Bytes are masked to
+     * 0..255 (Java byte is signed); on a common prefix the shorter string is smaller (no
+     * trailing-NUL special case). A CHAR value that embeds a NUL is a separate, out-of-scope
+     * edge: the BE CHAR load strips at the first NUL (be/src/column/datum_convert.cpp), which
+     * this raw-byte compare does not model.
+     */
+    public static int compareStringWithUTF8ByteArray(String s1, String s2) {
+        return Arrays.compareUnsigned(
+                s1.getBytes(StandardCharsets.UTF_8), s2.getBytes(StandardCharsets.UTF_8));
     }
 }

@@ -1,0 +1,56 @@
+-- name: test_array_map_2 @mac
+CREATE TABLE `array_map_test` (
+  `id` tinyint(4) NOT NULL COMMENT "",
+  `arr_str` array<string> NULL COMMENT "",
+  `arr_largeint` array<largeint> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into array_map_test values (1, array_repeat("abcdefghasdasdasirnqwrq", 20000), array_repeat(100, 20000));
+-- result:
+-- !result
+select count() from array_map_test where array_length(array_map((x,y)->(id+length(x)+y), arr_str, arr_largeint)) > 10 ;
+-- result:
+1
+-- !result
+select count(array_length(array_map((x,y)->(id+length(x)+y), arr_str, arr_largeint))) from array_map_test;
+-- result:
+1
+-- !result
+select count() from array_map_test where any_match(x->any_match(x->x<10, arr_largeint), arr_largeint);
+-- result:
+0
+-- !result
+select count(any_match(x->any_match(x->x<10, arr_largeint), arr_largeint)) from array_map_test;
+-- result:
+1
+-- !result
+select count(array_map(x->array_length(array_concat(arr_str,[])), arr_largeint)) from array_map_test;
+-- result:
+1
+-- !result
+set @arr=array_repeat("12345",1000000);
+-- result:
+-- !result
+select array_length(array_map((x,y)->x > y, @arr,@arr)) from table(generate_series(1,10,1));
+-- result:
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+-- !result
+select count(*) from array_map_test where array_map((a1) -> concat(split(id, 'd'), split(id, 'd')), arr_str) is not null;
+-- result:
+1
+-- !result

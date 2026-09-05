@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "从指定日期时间或日期减去指定年数。"
 ---
 
 # years_sub
 
-## 功能
+
 
 从指定日期时间或日期减去指定年数。
 

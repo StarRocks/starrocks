@@ -1,0 +1,15 @@
+-- name: test_expr_str2date_add_partition
+CREATE TABLE partition_str2date (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(str2date(create_time, '%Y-%m-%d'))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+)
+PROPERTIES (
+"replication_num" = "1"
+);
+alter table partition_str2date add partition p20231226 VALUES [("2023-12-26"), ("2023-12-27"));
+show create table partition_str2date;

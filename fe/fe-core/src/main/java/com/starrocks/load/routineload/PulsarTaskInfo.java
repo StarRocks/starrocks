@@ -22,19 +22,20 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PulsarUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TLoadSourceType;
-import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TPulsarLoadInfo;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class PulsarTaskInfo extends RoutineLoadTaskInfo {
@@ -43,16 +44,16 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     private List<String> partitions;
     private Map<String, Long> initialPositions = Maps.newHashMap();
 
-    public PulsarTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs, long timeToExecuteMs,
+    public PulsarTaskInfo(UUID id, RoutineLoadJob job, long taskScheduleIntervalMs, long timeToExecuteMs,
                           List<String> partitions, Map<String, Long> initialPositions, long tastTimeoutMs) {
-        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs, tastTimeoutMs);
+        super(id, job, taskScheduleIntervalMs, timeToExecuteMs, tastTimeoutMs);
         this.partitions = partitions;
         this.initialPositions.putAll(initialPositions);
     }
 
     public PulsarTaskInfo(long timeToExecuteMs, PulsarTaskInfo pulsarTaskInfo, Map<String, Long> initialPositions) {
-        super(UUID.randomUUID(), pulsarTaskInfo.getJobId(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
-                timeToExecuteMs, pulsarTaskInfo.getBeId());
+        super(UUIDUtil.genUUID(), pulsarTaskInfo.getJob(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
+                timeToExecuteMs, pulsarTaskInfo.getBeId(), pulsarTaskInfo.getTimeoutMs());
         this.partitions = pulsarTaskInfo.getPartitions();
         this.initialPositions.putAll(initialPositions);
     }
@@ -66,22 +67,17 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public boolean readyToExecute() throws UserException {
-        RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
-        if (routineLoadJob == null) {
-            return false;
-        }
-
+    public boolean readyToExecute() throws StarRocksException {
         // Got initialPositions, we need to execute even there's no backlogs
         if (!initialPositions.isEmpty()) {
             return true;
         }
 
-        PulsarRoutineLoadJob pulsarRoutineLoadJob = (PulsarRoutineLoadJob) routineLoadJob;
+        PulsarRoutineLoadJob pulsarRoutineLoadJob = (PulsarRoutineLoadJob) job;
         Map<String, Long> backlogNums = PulsarUtil.getBacklogNums(pulsarRoutineLoadJob.getServiceUrl(),
                 pulsarRoutineLoadJob.getTopic(), pulsarRoutineLoadJob.getSubscription(),
                 ImmutableMap.copyOf(pulsarRoutineLoadJob.getConvertedCustomProperties()),
-                partitions);
+                partitions, computeResource);
         for (String partition : partitions) {
             Long backlogNum = backlogNums.get(partition);
             if (backlogNum != null && backlogNum > 0) {
@@ -106,21 +102,21 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public TRoutineLoadTask createRoutineLoadTask() throws UserException {
-        PulsarRoutineLoadJob routineLoadJob = (PulsarRoutineLoadJob) routineLoadManager.getJob(jobId);
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+        PulsarRoutineLoadJob routineLoadJob = (PulsarRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
         TRoutineLoadTask tRoutineLoadTask = new TRoutineLoadTask();
         TUniqueId queryId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         tRoutineLoadTask.setId(queryId);
-        tRoutineLoadTask.setJob_id(jobId);
+        tRoutineLoadTask.setJob_id(routineLoadJob.getId());
         tRoutineLoadTask.setTxn_id(txnId);
-        Database database = GlobalStateMgr.getCurrentState().getDb(routineLoadJob.getDbId());
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(routineLoadJob.getDbId());
         if (database == null) {
             throw new MetaNotFoundException("database " + routineLoadJob.getDbId() + " does not exist");
         }
         tRoutineLoadTask.setDb(database.getFullName());
-        Table tbl = database.getTable(routineLoadJob.getTableId());
+        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), routineLoadJob.getTableId());
         if (tbl == null) {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }
@@ -136,6 +132,14 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
             tPulsarLoadInfo.setInitial_positions(getInitialPositions());
         }
         tPulsarLoadInfo.setProperties(routineLoadJob.getConvertedCustomProperties());
+        // Attach per-message source metadata only when the INCLUDE METADATA clause declares a column;
+        // otherwise the BE leaves the buffer metadata-free and reads every field from the payload.
+        // key/headers are gated more narrowly.
+        Set<RoutineLoadMetadata.StreamMetaKind> metaKinds = RoutineLoadMetadata.collectStreamMetaKinds(
+                routineLoadJob.getMetadata(), routineLoadJob.getDataSourceTypeName());
+        tPulsarLoadInfo.setNeed_source_metadata(!metaKinds.isEmpty());
+        tPulsarLoadInfo.setNeed_message_key(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.KEY));
+        tPulsarLoadInfo.setNeed_message_headers(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.HEADERS));
         tRoutineLoadTask.setPulsar_load_info(tPulsarLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.PULSAR);
         tRoutineLoadTask.setParams(plan(routineLoadJob));
@@ -167,16 +171,19 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+    String dataSourceType() {
+        return "pulsar";
+    }
+
+    @Override
     public String toString() {
         return "Task id: " + getId() + ", partitions: " + partitions + ", initial positions: " + initialPositions;
     }
 
-    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
-        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
-        TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
-        tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
+        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label, getBeId());
         return tExecPlanFragmentParams;
     }
 }

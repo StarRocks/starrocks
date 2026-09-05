@@ -14,16 +14,16 @@
 
 package com.starrocks.credential.hdfs;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.HDFSFileStoreInfo;
+import com.starrocks.connector.hadoop.HadoopExt;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
-
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 
 public class HDFSCloudCredential implements CloudCredential {
     public static final String SIMPLE_AUTH = "simple";
@@ -64,6 +64,13 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        if (hadoopConfiguration != null) {
+            for (Map.Entry<String, String> entry : hadoopConfiguration.entrySet()) {
+                if (!isReservedHadoopExtProperty(entry.getKey())) {
+                    configuration.set(entry.getKey(), entry.getValue());
+                }
+            }
+        }
     }
 
     @Override
@@ -83,6 +90,13 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public void toThrift(Map<String, String> properties) {
+        if (hadoopConfiguration != null) {
+            for (Map.Entry<String, String> entry : hadoopConfiguration.entrySet()) {
+                if (!isReservedHadoopExtProperty(entry.getKey())) {
+                    properties.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
     }
 
     @Override
@@ -103,7 +117,7 @@ public class HDFSCloudCredential implements CloudCredential {
         fileStore.setFsType(FileStoreType.HDFS);
         HDFSFileStoreInfo.Builder hdfsFileStoreInfo = HDFSFileStoreInfo.newBuilder();
         if (!authentication.isEmpty()) {
-            hdfsFileStoreInfo.putConfiguration(HDFS_AUTHENTICATION, authentication);
+            hdfsFileStoreInfo.putConfiguration(CloudConfigurationConstants.HDFS_AUTHENTICATION, authentication);
             if (authentication.equals(SIMPLE_AUTH) && !userName.isEmpty()) {
                 hdfsFileStoreInfo.setUsername(userName);
             }
@@ -111,5 +125,9 @@ public class HDFSCloudCredential implements CloudCredential {
         hdfsFileStoreInfo.putAllConfiguration(hadoopConfiguration);
         fileStore.setHdfsFsInfo(hdfsFileStoreInfo.build());
         return fileStore.build();
+    }
+
+    private boolean isReservedHadoopExtProperty(String key) {
+        return HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING.equals(key);
     }
 }

@@ -1,36 +1,3 @@
-[sql]
-select
-    c_name,
-    c_custkey,
-    o_orderkey,
-    o_orderdate,
-    o_totalprice,
-    sum(l_quantity)
-from
-    customer,
-    orders,
-    lineitem
-where
-        o_orderkey in (
-        select
-            l_orderkey
-        from
-            lineitem
-        group by
-            l_orderkey having
-                sum(l_quantity) > 315
-    )
-  and c_custkey = o_custkey
-  and o_orderkey = l_orderkey
-group by
-    c_name,
-    c_custkey,
-    o_orderkey,
-    o_orderdate,
-    o_totalprice
-order by
-    o_totalprice desc,
-    o_orderdate limit 100;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:2: C_NAME | 1: C_CUSTKEY | 10: O_ORDERKEY | 14: O_ORDERDATE | 13: O_TOTALPRICE | 56: sum
@@ -38,23 +5,43 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-17:MERGING-EXCHANGE
+20:MERGING-EXCHANGE
 limit: 100
 
 PLAN FRAGMENT 1
+OUTPUT EXPRS:
+PARTITION: HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
+
+STREAM DATA SINK
+EXCHANGE ID: 20
+UNPARTITIONED
+
+19:TOP-N
+|  order by: <slot 13> 13: O_TOTALPRICE DESC, <slot 14> 14: O_ORDERDATE ASC
+|  offset: 0
+|  limit: 100
+|
+18:AGGREGATE (merge finalize)
+|  output: sum(56: sum)
+|  group by: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
+|
+17:EXCHANGE
+
+PLAN FRAGMENT 2
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 17
-UNPARTITIONED
+HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 
 16:TOP-N
 |  order by: <slot 13> 13: O_TOTALPRICE DESC, <slot 14> 14: O_ORDERDATE ASC
 |  offset: 0
 |  limit: 100
 |
-15:AGGREGATE (update finalize)
+15:AGGREGATE (update serialize)
+|  STREAMING
 |  output: sum(24: L_QUANTITY)
 |  group by: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 |
@@ -82,7 +69,7 @@ tabletRatio=20/20
 cardinality=600000000
 avgRowSize=16.0
 
-PLAN FRAGMENT 2
+PLAN FRAGMENT 3
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
@@ -126,7 +113,7 @@ tabletRatio=10/10
 cardinality=150000000
 avgRowSize=28.0
 
-PLAN FRAGMENT 3
+PLAN FRAGMENT 4
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
@@ -143,7 +130,7 @@ tabletRatio=10/10
 cardinality=15000000
 avgRowSize=33.0
 
-PLAN FRAGMENT 4
+PLAN FRAGMENT 5
 OUTPUT EXPRS:
 PARTITION: RANDOM
 

@@ -1,0 +1,85 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.catalog.system.sys;
+
+import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemId;
+import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TFeMemoryItem;
+import com.starrocks.thrift.TFeMemoryReq;
+import com.starrocks.thrift.TFeMemoryRes;
+import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
+import org.apache.thrift.TException;
+
+
+public class SysFeMemoryUsage {
+    public static final String NAME = "fe_memory_usage";
+
+    public static SystemTable create() {
+        return new SystemTable(SystemId.MEMORY_USAGE_ID, NAME,
+                Table.TableType.SCHEMA,
+                SystemTable.builder()
+                        .column("module_name", TypeFactory.createVarcharType(256))
+                        .column("class_name", TypeFactory.createVarcharType(256))
+                        .column("current_consumption", IntegerType.BIGINT)
+                        .column("peak_consumption", IntegerType.BIGINT)
+                        .column("counter_info", TypeFactory.createVarcharType(65532))
+                        .build(),
+                TSchemaTableType.SYS_FE_MEMORY_USAGE);
+    }
+
+    public static TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
+        TAuthInfo auth = request.getAuth_info();
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+
+        TFeMemoryRes response = new TFeMemoryRes();
+
+        MemoryUsageTracker.MEMORY_USAGE.forEach((moduleName, module) -> {
+            if (module != null) {
+                module.forEach((className, memoryStat) -> {
+                    TFeMemoryItem item = new TFeMemoryItem();
+                    item.setModule_name(moduleName);
+                    item.setClass_name(className);
+                    item.setCurrent_consumption(memoryStat.getCurrentConsumption());
+                    item.setPeak_consumption(memoryStat.getPeakConsumption());
+                    item.setCounter_info(memoryStat.getCounterInfo());
+                    response.addToItems(item);
+                });
+            }
+        });
+
+        return response;
+    }
+
+}

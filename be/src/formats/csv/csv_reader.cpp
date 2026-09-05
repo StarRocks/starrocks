@@ -16,25 +16,11 @@
 
 #include <unordered_set>
 
+#include "base/string/trim.h"
+
 namespace starrocks {
 
 using Field = Slice;
-
-static std::pair<const char*, size_t> trim(const char* value, size_t len) {
-    size_t begin = 0;
-
-    while (begin < len && value[begin] == ' ') {
-        ++begin;
-    }
-
-    size_t end = len - 1;
-
-    while (end > begin && value[end] == ' ') {
-        --end;
-    }
-
-    return std::make_pair(value + begin, end - begin + 1);
-}
 
 inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
     if (LIKELY(_column_delimiter_length == 1)) {
@@ -58,6 +44,9 @@ inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
                 if (_buff.limit_offset() - p < 1) {
                     return false;
                 }
+                // readMore() may have expanded (reallocated) the buffer via _storage.resize(),
+                // freeing the storage base_ptr was taken from. Refresh it before the next read.
+                base_ptr = _buff.base_ptr();
             }
         }
         if (i == _column_delimiter_length) {
@@ -90,6 +79,9 @@ inline bool CSVReader::is_row_delimiter(bool expandBuffer) {
                 if (_buff.limit_offset() - p < 1) {
                     return false;
                 }
+                // readMore() may have expanded (reallocated) the buffer via _storage.resize(),
+                // freeing the storage base_ptr was taken from. Refresh it before the next read.
+                base_ptr = _buff.base_ptr();
             }
         }
         if (i == _row_delimiter_length) {
@@ -184,6 +176,11 @@ Status CSVReader::more_rows() {
     bool is_escape_column = false;
     bool notGetLine = true;
     bool reachBuffEnd = false;
+    // Tracks a stray '\r' that was consumed inside ENCLOSE state because
+    // the row delimiter is "\n" and the bytes after the closing enclose
+    // form a "\r\n" sequence. The length accounting in NEWROW must debit
+    // one additional byte when this is set. See issue #51725.
+    bool enclose_trailing_cr_consumed = false;
     _columns.clear();
     while (true) {
         // At the end of a row, or the end of a column, no new data is read.
@@ -229,33 +226,9 @@ Status CSVReader::more_rows() {
                 _buff.skip(1);
                 READ_MORE()
                 column_start = _buff.position_offset();
-                if (*(_buff.position()) != _parse_options.enclose) {
-                    curState = ENCLOSE;
-                    is_enclose_column = true;
-                    break;
-                } else {
-                    // ""something
-                    // We need to determine whether the column is empty or escaped.
-                    _buff.skip(1);
-                    READ_MORE_ENCLOSE()
-                    // ""rowseperator
-                    if (is_row_delimiter(notGetLine)) {
-                        is_enclose_column = true;
-                        curState = NEWROW;
-                        break;
-                    }
-
-                    // ""delimiter
-                    if (is_column_delimiter(notGetLine)) {
-                        is_enclose_column = true;
-                        curState = COLUMN_DELIMITER;
-                        break;
-                    }
-
-                    // ""ordinary characters
-                    curState = ORDINARY;
-                    break;
-                }
+                curState = ENCLOSE;
+                is_enclose_column = true;
+                break;
             }
             curState = ORDINARY;
             _buff.skip(1);
@@ -281,6 +254,25 @@ Status CSVReader::more_rows() {
                     curState = ENCLOSE_ESCAPE;
                     _escape_pos.insert(_buff.position_offset() - 1);
                 } else {
+                    // CRLF compatibility (issue #51725): when the row
+                    // delimiter is "\n" and the next two bytes are
+                    // "\r\n", consume the stray '\r' here so ORDINARY
+                    // does not retain it as column content.
+                    if (_row_delimiter_length == 1 && _parse_options.row_delimiter[0] == '\n' &&
+                        *(_buff.position()) == '\r') {
+                        if (_buff.available() < 2) {
+                            status = readMore(notGetLine);
+                            if (!status.ok()) { // LCOV_EXCL_START
+                                is_enclose_column = true;
+                                curState = NEWROW;
+                                goto newrow_label; // LCOV_EXCL_STOP
+                            }
+                        }
+                        if (_buff.available() >= 2 && *(_buff.position() + 1) == '\n') {
+                            _buff.skip(1);
+                            enclose_trailing_cr_consumed = true;
+                        }
+                    }
                     preState = curState;
                     curState = ORDINARY;
                 }
@@ -425,6 +417,7 @@ Status CSVReader::more_rows() {
                     curState = START;
                     is_enclose_column = false;
                     is_escape_column = false;
+                    enclose_trailing_cr_consumed = false;
                     if (status.is_end_of_file()) {
                         return status;
                     }
@@ -453,11 +446,14 @@ Status CSVReader::more_rows() {
                     }
 
                     if (UNLIKELY(is_enclose_column)) {
+                        // Remove the last enclose character, and the stray
+                        // '\r' that ENCLOSE consumed for CRLF inputs (issue
+                        // #51725).
+                        size_t extra = enclose_trailing_cr_consumed ? 1 : 0;
                         if (UNLIKELY(_parse_options.trim_space && white_space_start != std::string::npos)) {
-                            column_length = column_end - column_start - 1;
+                            column_length = column_end - column_start - 1 - extra;
                         } else {
-                            // Remove the last enclose character.
-                            column_length = column_end - _row_delimiter_length - column_start - 1;
+                            column_length = column_end - _row_delimiter_length - column_start - 1 - extra;
                         }
                     } else {
                         column_length = column_end - _row_delimiter_length - column_start;
@@ -479,6 +475,7 @@ Status CSVReader::more_rows() {
             curState = START;
             is_escape_column = false;
             is_enclose_column = false;
+            enclose_trailing_cr_consumed = false;
             white_space_start = std::string::npos;
             parsed_start = _buff.position_offset();
             if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
@@ -579,15 +576,41 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
     const size_t size = record.size;
 
     if (_column_delimiter_length == 1) {
-        for (size_t i = 0; i < size; ++i, ++ptr) {
-            if (*ptr == _parse_options.column_delimiter[0]) {
+        // Optimized: use memchr for SIMD-optimized character search
+        const char delimiter = _parse_options.column_delimiter[0];
+        const char* end = record.data + size;
+
+        // Handle empty string case
+        if (size == 0) {
+            columns->emplace_back("", 0);
+            return;
+        }
+
+        while (ptr <= end) {
+            const char* next_delimiter = nullptr;
+            if (ptr < end) {
+                next_delimiter = static_cast<const char*>(memchr(ptr, delimiter, end - ptr));
+            }
+
+            if (next_delimiter == nullptr) {
+                // No more delimiters found, add the remaining part
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-                    columns->emplace_back(newPos.first, newPos.second);
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(end - value)});
+                    columns->emplace_back(field.data(), field.size());
                 } else {
-                    columns->emplace_back(value, ptr - value);
+                    columns->emplace_back(value, end - value);
                 }
-                value = ptr + 1;
+                break;
+            } else {
+                // Found delimiter, add the field
+                if (_parse_options.trim_space) {
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(next_delimiter - value)});
+                    columns->emplace_back(field.data(), field.size());
+                } else {
+                    columns->emplace_back(value, next_delimiter - value);
+                }
+                value = next_delimiter + 1;
+                ptr = next_delimiter + 1;
             }
         }
     } else {
@@ -598,8 +621,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
                                             _column_delimiter_length));
             if (ptr != nullptr) {
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-                    columns->emplace_back(newPos.first, newPos.second);
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+                    columns->emplace_back(field.data(), field.size());
                 } else {
                     columns->emplace_back(value, ptr - value);
                 }
@@ -608,13 +631,19 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
         } while (ptr != nullptr);
 
         ptr = record.data + size;
+
+        // Add the last field for multi-character delimiter case
+        if (_parse_options.trim_space) {
+            std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+            columns->emplace_back(field.data(), field.size());
+        } else {
+            columns->emplace_back(value, ptr - value);
+        }
     }
-    if (_parse_options.trim_space) {
-        std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-        columns->emplace_back(newPos.first, newPos.second);
-    } else {
-        columns->emplace_back(value, ptr - value);
-    }
+}
+
+size_t CSVReader::buff_capacity() const {
+    return _buff.capacity();
 }
 
 } // namespace starrocks

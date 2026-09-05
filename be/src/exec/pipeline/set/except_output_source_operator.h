@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/set/except_context.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 
@@ -31,11 +31,16 @@ public:
         _except_ctx->ref();
     }
 
+    Status prepare(RuntimeState* state) override;
+
     bool has_output() const override { return _except_ctx->is_probe_finished() && !_except_ctx->is_output_finished(); }
 
     bool is_finished() const override { return _except_ctx->is_probe_finished() && _except_ctx->is_output_finished(); }
 
-    Status set_finished(RuntimeState* state) override { return _except_ctx->set_finished(); }
+    Status set_finished(RuntimeState* state) override {
+        auto notify = _except_ctx->observable().defer_notify_sink();
+        return _except_ctx->set_finished();
+    }
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -53,6 +58,7 @@ public:
             : SourceOperatorFactory(id, "except_output_source", plan_node_id),
               _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
               _dependency_index(dependency_index) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ExceptOutputSourceOperator>(this, _id, _plan_node_id, driver_sequence,

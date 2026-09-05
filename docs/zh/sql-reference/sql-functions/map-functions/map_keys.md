@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回 Map 中所有 Key 组成的数组。"
 ---
 
 # map_keys
 
-## 功能
+
 
 返回 Map 中所有 key 组成的数组。MAP 里保存的是键值对 (key-value pair)，比如 `{"a":1, "b":2}`。
 

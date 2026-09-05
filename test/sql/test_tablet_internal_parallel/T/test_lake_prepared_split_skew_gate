@@ -1,0 +1,67 @@
+-- name: test_lake_prepared_split_skew_gate @cloud @sequential
+-- The prepared-physical-split skew gate: a single oversized (skewed) lake tablet is split even when the
+-- scan-range count already reaches pipeline_dop -- the plain count gate would treat that as "enough
+-- parallelism, no split". The override is driven by the session variable
+-- lake_tablet_internal_parallel_skew_split_ratio, so with the tablet layout held fixed, toggling that
+-- ratio between "huge" and "small" flips whether the skewed tablet is split, isolating the gate.
+-- Runs @sequential: it flips split-tuning BE configs (update_be_config) that are global to the backend.
+-- The configs are restored at the end.
+function: update_be_config('tablet_internal_parallel_min_splitted_scan_rows', '2000')
+function: update_be_config('tablet_internal_parallel_max_splitted_scan_rows', '2000')
+function: update_be_config('lake_prepared_split_max_splitted_scan_rows', '2000')
+function: update_be_config('lake_tablet_rows_splitted_ratio', '1.0')
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- 4 buckets => up to 4 tablets; pipeline_dop is set to 4 below so the scan-range count reaches dop and the
+-- plain count gate says "no split". A single dominant key (0) creates one skewed big tablet; a spread of
+-- other keys keeps the remaining buckets non-empty so num_scan_ranges reaches pipeline_dop.
+create table t (
+    k int,
+    v bigint
+) duplicate key(k)
+distributed by hash(k) buckets 4
+properties('replication_num' = '1');
+
+-- ~40k rows all with k=0 => one dominant (skewed) tablet; ~4k rows over k=1..4000 => the other buckets.
+insert into t select 0, generate_series from table(generate_series(1, 40000));
+insert into t select generate_series, generate_series from table(generate_series(1, 4000));
+
+set enable_lake_prepared_physical_split_scan = true;
+set enable_lake_tablet_internal_parallel = true;
+set tablet_internal_parallel_mode = "auto";
+set pipeline_dop = 4;
+set enable_query_cache = false;
+set enable_profile = true;
+set enable_async_profile = false;
+
+-- (A) Huge skew ratio: the big tablet is not "skewed enough", so the count gate holds -> no prepared split
+-- (RefinedMorsels stays 0).
+set lake_tablet_internal_parallel_skew_split_ratio = 1000;
+[UC]select count(*), sum(v) from t;
+create table profile_no_skew properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(coalesce(max(cast(coalesce(nullif(regexp_extract(line, '.*- RefinedMorsels: ([0-9.]+).*', 1), ''), '0') as double)), 0) = 0)
+    from profile_no_skew where line like '%- RefinedMorsels:%';
+
+-- (B) Small skew ratio: the same big tablet now trips the skew gate -> it is split (RefinedMorsels > 0),
+-- even though the scan-range count already equals pipeline_dop.
+set lake_tablet_internal_parallel_skew_split_ratio = 1.0;
+[UC]select count(*), sum(v) from t;
+create table profile_skew properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- RefinedMorsels: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_skew where line like '%- RefinedMorsels:%';
+
+-- Results are identical regardless of the split decision.
+select count(*), sum(v) from t;
+select count(*) from t where k = 0;
+
+-- Restore the split-tuning BE configs to their defaults.
+function: update_be_config('tablet_internal_parallel_min_splitted_scan_rows', '16384')
+function: update_be_config('tablet_internal_parallel_max_splitted_scan_rows', '1048576')
+function: update_be_config('lake_prepared_split_max_splitted_scan_rows', '262144')
+function: update_be_config('lake_tablet_rows_splitted_ratio', '1.5')
+
+drop database db_${uuid0};

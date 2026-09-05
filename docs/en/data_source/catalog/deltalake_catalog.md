@@ -1,22 +1,16 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 60
+displayed_sidebar: docs
+toc_max_heading_level: 5
+description: "Query data directly from Delta Lake"
 ---
+import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
+import DatabricksMetaParams from '../../_assets/catalog/_databricks_meta_params.mdx'
+import DatabricksDataParams from '../../_assets/catalog/_databricks_data_params.mdx'
 
 # Delta Lake catalog
 
-A Delta Lake catalog is a kind of external catalog that enables you to query data from Delta Lake without ingestion.
-
-Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
-
-To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster needs to integrate with two important components:
-
-- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
-
-- Metastore like Hive metastore or AWS Glue
-
-  > **NOTE**
-  >
-  > If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+<Intro />
 
 ## Usage notes
 
@@ -39,28 +33,28 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
 
 ### HDFS
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
-- When you query Delta Lake data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
+- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE or CN processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE or the **cn/conf/hadoop_env.sh** file of each CN. After you set the username in these files, restart each FE and each BE or CN to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
+- When you query Delta Lake data, the FEs and BEs or CNs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
 
-  - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
-  - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
+  - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
+  - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
 
-> **NOTE**
->
-> If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+  :::note
+  If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+  :::
 
 ### Kerberos authentication
 
 If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
 
-- Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
-- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
+- Run the `kinit -kt keytab_path principal` command on each FE and each BE or CN to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
+- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE or the **$CN_HOME/conf/cn.conf** file of each CN. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
 
 ## Create a Delta Lake catalog
 
@@ -108,9 +102,9 @@ If you choose Hive metastore as the metastore of your data source, configure `Me
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
-> **NOTE**
->
-> Before querying Delta Lake data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+:::note
+Before querying Delta Lake data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+:::
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
@@ -161,7 +155,9 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+
+<DatabricksMetaParams />
 
 #### StorageCredentialParams
 
@@ -170,6 +166,8 @@ A set of parameters about how StarRocks integrates with your storage system. Thi
 If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
 
 If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
+
+<DatabricksDataParams />
 
 ##### AWS S3
 
@@ -209,7 +207,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
@@ -246,8 +244,8 @@ If you choose Blob Storage as storage for your Delta Lake cluster, take one of t
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
@@ -260,18 +258,84 @@ If you choose Blob Storage as storage for your Delta Lake cluster, take one of t
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**             | **Required** | **Description**                                              |
   | ------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.account_name   | Yes          | The username of your Blob Storage account.                   |
-  | azure.blob.container_name | Yes          | The name of the blob container that stores your data.        |
+  | azure.blob.storage_account| Yes          | The username of your Blob Storage account.                   |
+  | azure.blob.container      | Yes          | The name of the blob container that stores your data.        |
   | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
+
+###### Azure Data Lake Storage Gen2
+
+If you choose Data Lake Storage Gen2 as storage for your Delta Lake cluster, take one of the following actions:
+
+- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
+  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -305,56 +369,6 @@ If you choose Data Lake Storage Gen1 as storage for your Delta Lake cluster, tak
   | azure.adls1.oauth2_credential | Yes          | The value of the new client (application) secret created.    |
   | azure.adls1.oauth2_endpoint   | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
-###### Azure Data Lake Storage Gen2
-
-If you choose Data Lake Storage Gen2 as storage for your Delta Lake cluster, take one of the following actions:
-
-- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  The following table describes the parameters you need to configure in `StorageCredentialParams`.
-
-  | **Parameter**                           | **Required** | **Description**                                              |
-  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
-  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
-  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
-
-- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  The following table describes the parameters you need to configure in `StorageCredentialParams`.
-
-  | **Parameter**               | **Required** | **Description**                                              |
-  | --------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
-  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
-
-- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  The following table describes the parameters you need to configure `in StorageCredentialParams`.
-
-  | **Parameter**                      | **Required** | **Description**                                              |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
-  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
-  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
-
 ##### Google GCS
 
 Delta Lake catalogs support Google GCS from v3.0 onwards.
@@ -369,7 +383,7 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-  | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+  | **Parameter**                              | **Default value** | **Value example** | **Description**                                              |
   | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
   | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
 
@@ -383,9 +397,9 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+  | **Parameter**                          | **Default value** | **Value example**                                        | **Description**                                              |
   | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the service account. |
   | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
   | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
 
@@ -400,7 +414,7 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
     The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+    | **Parameter**                              | **Default value** | **Value example** | **Description**                                              |
     | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
     | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
     | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
@@ -416,9 +430,9 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
     The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+    | **Parameter**                          | **Default value** | **Value example**                                        | **Description**                                              |
     | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-    | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
@@ -427,24 +441,23 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
 A set of parameters about how StarRocks updates the cached metadata of Delta Lake. This parameter set is optional.
 
-StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
-
-In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
+From v3.3.3 onwards, Delta Lake Catalog supports [Metadata Local Cache and Retrieval](#appendix-metadata-local-cache-and-retrieval). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
 However, if the frequency of data updates in Delta Lake is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
 
-> **NOTE**
->
-> In most cases, if your Delta Lake data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
+:::note
+In most cases, if your Delta Lake data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
+:::
 
-| Parameter                              | Required | Description                                                  |
-|----------------------------------------| -------- | ------------------------------------------------------------ |
-| enable_metastore_cache                 | No       | Specifies whether StarRocks caches the metadata of Delta Lake tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-| enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Delta Lake tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-| metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
-| remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
-| metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
-| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
+| **Parameter**                                      | **Unit** | **Default** | **Description**                                                                    |
+|----------------------------------------------------| -------- | -------------|---------------------------------------------------------------------------------- |
+| enable_deltalake_table_cache                       | -        | true         | Whether to enable Table Cache in the metadata cache for Delta Lake. |
+| enable_deltalake_json_meta_cache                   | -        | true         | Whether to enable cache for Delta Log JSON files. |
+| deltalake_json_meta_cache_ttl_sec                  | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log JSON file cache. |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log JSON file cache. |
+| enable_deltalake_checkpoint_meta_cache             | -        | true         | Whether to enable cache for Delta Log Checkpoint files. |
+| deltalake_checkpoint_meta_cache_ttl_sec            | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log Checkpoint file cache.  |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log Checkpoint file cache. |
 
 ### Examples
 
@@ -460,7 +473,7 @@ PROPERTIES
 (
     "type" = "deltalake",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -476,7 +489,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
@@ -507,7 +520,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -541,7 +554,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
@@ -578,7 +591,7 @@ PROPERTIES
 (
     "type" = "deltalake",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -599,7 +612,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
   );
@@ -613,9 +626,9 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
@@ -630,7 +643,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
   ```
@@ -643,7 +656,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
       "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
@@ -660,7 +673,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
       "azure.adls2.oauth2_client_id" = "<service_client_id>"
@@ -675,7 +688,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
   );
@@ -689,10 +702,25 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+- If you choose the Workload Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
   );
   ```
 
@@ -706,7 +734,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
   ```
@@ -719,7 +747,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -736,7 +764,7 @@ PROPERTIES
     (
         "type" = "deltalake",
         "hive.metastore.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
@@ -750,7 +778,7 @@ PROPERTIES
     (
         "type" = "deltalake",
         "hive.metastore.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
@@ -760,13 +788,13 @@ PROPERTIES
 
 ## View Delta Lake catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Delta Lake catalog named `deltalake_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Delta Lake catalog named `deltalake_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG deltalake_catalog_glue;
@@ -776,7 +804,7 @@ SHOW CREATE CATALOG deltalake_catalog_glue;
 
 You can use one of the following methods to switch to a Delta Lake catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Delta Lake catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify a Delta Lake catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -785,7 +813,7 @@ You can use one of the following methods to switch to a Delta Lake catalog and a
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Delta Lake catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/Database/USE.md) to switch to a Delta Lake catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -793,7 +821,7 @@ You can use one of the following methods to switch to a Delta Lake catalog and a
 
 ## Drop a Delta Lake catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Delta Lake catalog named `deltalake_catalog_glue`:
 
@@ -819,7 +847,7 @@ You can use one of the following syntaxes to view the schema of a Delta Lake tab
 
 ## Query a Delta Lake table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Delta Lake cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Delta Lake cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -827,7 +855,7 @@ You can use one of the following syntaxes to view the schema of a Delta Lake tab
 
 2. [Switch to a Delta Lake Catalog and a database in it](#switch-to-a-delta-lake-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -841,109 +869,29 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
 
-## Manually or automatically update metadata cache
+## Configure metadata cache and update strategy
 
-### Manual update
+From v3.3.3 onwards, Delta Lake Catalog supports [Metadata Local Cache and Retrieval](#appendix-metadata-local-cache-and-retrieval).
 
-By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+You can configure the Delta Lake metadata cache refresh through the following FE parameters:
 
-```SQL
-REFRESH EXTERNAL TABLE <table_name>
-```
+| **Configuration item**                                       | **Default** | **Description**                                               |
+| ------------------------------------------------------------ | ----------- | ------------------------------------------------------------- |
+| enable_background_refresh_connector_metadata                 | `true`      | Whether to enable the periodic Delta Lake metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Delta Lake cluster, and refreshes the cached metadata of the frequently accessed Delta Lake catalogs to perceive data changes. `true` indicates to enable the Delta Lake metadata cache refresh, and `false` indicates to disable it. |
+| background_refresh_metadata_interval_millis                  | `600000`    | The interval between two consecutive Delta Lake metadata cache refreshes. Unit: millisecond. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400`     | The expiration time of a Delta Lake metadata cache refresh task. For the Delta Lake catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Delta Lake catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. |
 
-### Automatic incremental update
+## Appendix: Metadata Local Cache and Retrieval
 
-Unlike the automatic asynchronous update policy, the automatic incremental update policy enables the FEs in your StarRocks cluster to read events, such as adding columns, removing partitions, and updating data, from your Hive metastore. StarRocks can automatically update the metadata cached in the FEs based on these events. This means you do not need to manually update the metadata of your Delta Lake tables.
+Because the repeated decompression and parsing of metadata files can introduce unnecessary delays, StarRocks employs a new metadata cache strategy of caching deserialized memory objects. By storing these deserialized files in memory, the system can bypass the decompression and parsing stages for subsequent queries. This caching mechanism allows direct access to the required metadata, significantly reducing retrieval times. As a result, the system becomes more responsive and better suited to meet high query demands and materialized view rewriting needs.
 
-To enable automatic incremental update, follow these steps:
+You can configure this behavior through the Catalog property [MetadataUpdateParams](#metadataupdateparams) and [relevant configuration items](#configure-metadata-cache-and-update-strategy).
 
-#### Step 1: Configure event listener for your Hive metastore
+## Feature support
 
-Both Hive metastore v2.x and v3.x support configuring an event listener. This step uses the event listener configuration used for Hive metastore v3.1.2 as an example. Add the following configuration items to the **$HiveMetastore/conf/hive-site.xml** file, and then restart your Hive metastore:
+Currently, Delta Lake catalogs support the following table features:
 
-```XML
-<property>
-    <name>hive.metastore.event.db.notification.api.auth</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.notifications.add.thrift.objects</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.alter.notifications.basic</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.dml.events</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.transactional.event.listeners</name>
-    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
-</property>
-<property>
-    <name>hive.metastore.event.db.listener.timetolive</name>
-    <value>172800s</value>
-</property>
-<property>
-    <name>hive.metastore.server.max.message.size</name>
-    <value>858993459</value>
-</property>
-```
-
-You can search for `event id` in the FE log file to check whether the event listener is successfully configured. If the configuration fails, `event id` values are `0`.
-
-#### Step 2: Enable automatic incremental update on StarRocks
-
-You can enable automatic incremental update for a single Delta Lake catalog or for all Delta Lake catalogs in your StarRocks cluster.
-
-- To enable automatic incremental update for a single Delta Lake catalog, set the `enable_hms_events_incremental_sync` parameter to `true` in `PROPERTIES` like below when you create the Delta Lake catalog:
-
-  ```SQL
-  CREATE EXTERNAL CATALOG <catalog_name>
-  [COMMENT <comment>]
-  PROPERTIES
-  (
-      "type" = "deltalake",
-      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
-       ....
-      "enable_hms_events_incremental_sync" = "true"
-  );
-  ```
-
-- To enable automatic incremental update for all Delta Lake catalogs, add `"enable_hms_events_incremental_sync" = "true"` to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
-
-You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file of each FE based on your business requirements, and then restart each FE to make the parameter settings take effect.
-
-| Parameter                         | Description                                                  |
-| --------------------------------- | ------------------------------------------------------------ |
-| hms_events_polling_interval_ms    | The time interval at which StarRocks reads events from your Hive metastore. Default value: `5000`. Unit: milliseconds. |
-| hms_events_batch_size_per_rpc     | The maximum number of events that StarRocks can read at a time. Default value: `500`. |
-| enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
-| hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
-
-## Appendix: Understand metadata automatic asynchronous update
-
-Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Delta Lake catalogs.
-
-By default (namely, when the `enable_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Delta Lake table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
-
-For example, there is a Delta Lake table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
-
-- The time interval (specified by the `metastore_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of `p1` is 2 hours.
-- The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1` is 60 seconds.
-- The time interval (specified by the `metastore_cache_ttl_sec` parameter) to automatically discard the cached metadata of `p1` is 24 hours.
-- The time interval (specified by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the underlying data files of `p1` is 36 hours.
-
-The following figure shows the time intervals on a timeline for easier understanding.
-
-![Timeline for updating and discarding cached metadata](../../assets/catalog_timeline.png)
-
-Then StarRocks updates or discards the metadata in compliance with the following rules:
-
-- If another query hits `p1` again and the current time from the last update is less than 60 seconds, StarRocks does not update the cached metadata of `p1` or the cached metadata of the underlying data files of `p1`.
-- If another query hits `p1` again and the current time from the last update is more than 60 seconds, StarRocks updates the cached metadata of the underlying data files of `p1`.
-- If another query hits `p1` again and the current time from the last update is more than 2 hours, StarRocks updates the cached metadata of `p1`.
-- If `p1` has not been accessed within 24 hours from the last update, StarRocks discards the cached metadata of `p1`. The metadata will be cached at the next query.
-- If `p1` has not been accessed within 36 hours from the last update, StarRocks discards the cached metadata of the underlying data files of `p1`. The metadata will be cached at the next query.
+- V2 Checkpoint (From v3.3.0 onwards)
+- Timestamp without Timezone (From v3.3.1 onwards)
+- Column mapping (From v3.3.6 onwards)
+- Deletion Vector (From v3.4.1 onwards)

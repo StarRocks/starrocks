@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "min 返回表达式的最小值。"
 ---
 
-# MIN
+# min
 
-## 功能
+
 
 返回 expr 表达式的最小值。
 

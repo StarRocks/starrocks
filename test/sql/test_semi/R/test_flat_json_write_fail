@@ -1,0 +1,45 @@
+-- name: test_flat_json_write_fail @system @sequential
+CREATE TABLE `js1` (
+  `k1` bigint(20) NULL COMMENT "",
+  `j1` json NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+admin enable failpoint 'flat_json_write_column_fail';
+-- result:
+-- !result
+[UC] insert into js1 values
+  (1, parse_json('{"k1": "v11", "k2": "v12", "k3": "v13", "k4": "v14"}')),
+  (2, parse_json('{"k1": "v21", "k2": "v22", "k3": "v23", "k4": "v24"}')),
+  (3, parse_json('{"k1": "v31", "k2": "v32", "k3": "v33", "k4": "v34"}')),
+  (4, parse_json('{"k1": "v41", "k2": "v42", "k3": "v43", "k4": "v44"}')),
+  (5, parse_json('{"k1": "v51", "k2": "v52", "k3": "v53", "k4": "v54"}')),
+  (6, parse_json('{"k1": "v61", "k2": "v62", "k3": "v63", "k4": "v64"}')),
+  (7, parse_json('{"k1": "v71", "k2": "v72", "k3": "v73", "k4": "v74"}')),
+  (8, parse_json('{"k1": "v81", "k2": "v82", "k3": "v83", "k4": "v84"}'));
+admin disable failpoint 'flat_json_write_column_fail';
+-- result:
+-- !result
+select count(*) from js1;
+-- result:
+8
+-- !result
+insert into js1 values (9, parse_json('{"k1": "v91", "k2": "v92", "k3": "v93", "k4": "v94"}'));
+-- result:
+-- !result
+select count(*) from js1;
+-- result:
+9
+-- !result
+drop table js1;
+-- result:
+-- !result
+CLEANUP {
+  admin disable failpoint 'flat_json_write_column_fail';
+} END CLEANUP

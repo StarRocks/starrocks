@@ -1,0 +1,98 @@
+-- name: test_datacache_select
+create external catalog hive_datacache_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+set catalog hive_datacache_test_${uuid0};
+-- result:
+-- !result
+create database cache_select_db_${uuid0};
+-- result:
+-- !result
+use cache_select_db_${uuid0};
+-- result:
+-- !result
+create table t1 (c1 string, c2 string);
+-- result:
+-- !result
+insert into t1 values ("hello", "world"), ("smith", "blossom");
+-- result:
+-- !result
+create table t1_orc properties("file_format"="orc") as select * from t1;
+-- result:
+-- !result
+create table t1_textfile properties("file_format"="textfile") as select * from t1;
+-- result:
+-- !result
+submit task cache_select as cache select * from t1;
+-- result:
+cache_select	SUBMITTED
+-- !result
+submit task cache_select_where as cache select c1 from t1 where c1="hello";
+-- result:
+cache_select_where	SUBMITTED
+-- !result
+select TASK_NAME, `SCHEDULE`, DEFINITION from default_catalog.information_schema.tasks where CATALOG='hive_datacache_test_${uuid0}' and `DATABASE`='cache_select_db_${uuid0}' order by TASK_NAME;
+-- result:
+cache_select	MANUAL	cache select * from t1;
+cache_select_where	MANUAL	cache select c1 from t1 where c1="hello";
+-- !result
+select sleep(mod(second(now()), 5) + 1);
+-- result:
+1
+-- !result
+select TASK_NAME, DEFINITION from default_catalog.information_schema.task_runs where CATALOG='hive_datacache_test_${uuid0}' and `DATABASE`='cache_select_db_${uuid0}' order by TASK_NAME;
+-- result:
+cache_select	cache select * from t1;
+cache_select_where	cache select c1 from t1 where c1="hello";
+-- !result
+drop task cache_select;
+-- result:
+-- !result
+drop task cache_select_where;
+-- result:
+-- !result
+select * from default_catalog.information_schema.tasks where catalog='hive_datacache_test_${uuid0}' and `DATABASE`='cache_select_db_${uuid0}';
+-- result:
+-- !result
+function: assert_cache_select_is_success("cache select * from t1;")
+-- result:
+None
+-- !result
+function: assert_cache_select_is_success("cache select c2 from t1;")
+-- result:
+None
+-- !result
+function: assert_cache_select_is_success("cache select * from t1_orc;")
+-- result:
+None
+-- !result
+function: assert_cache_select_is_success("cache select c2 from t1_orc;")
+-- result:
+None
+-- !result
+function: assert_cache_select_is_success("cache select * from t1_textfile;")
+-- result:
+None
+-- !result
+function: assert_cache_select_is_success("cache select c2 from t1_textfile;")
+-- result:
+None
+-- !result
+drop table t1 force;
+-- result:
+-- !result
+drop table t1_orc force;
+-- result:
+-- !result
+drop table t1_textfile force;
+-- result:
+-- !result
+drop database cache_select_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog hive_datacache_test_${uuid0};
+-- result:
+-- !result

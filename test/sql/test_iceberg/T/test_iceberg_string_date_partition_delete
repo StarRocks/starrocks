@@ -1,0 +1,56 @@
+-- name: test_iceberg_string_date_partition_delete
+-- description: DELETE on an Iceberg table whose STRING date partition column is compared with a temporal value
+-- coerces to CAST(c2 AS DATETIME) <op> <ts>. Iceberg's native pushdown unwraps the cast and compares in the
+-- string domain (c2 = '2020-06-14 00:00:00'), which never matches a 'yyyy-MM-dd' partition value: an equality
+-- delete silently removes nothing, and a range delete removes the wrong partitions (e.g. '2020-06-15' is a
+-- lexicographic prefix of '2020-06-15 00:00:00', so c2 < '2020-06-15 00:00:00' wrongly drops '2020-06-15').
+-- StarRocks now evaluates such cast-on-string-partition conjuncts against each partition's real value in the
+-- DATETIME domain and metadata-deletes only the definitely-matching partitions.
+
+create external catalog ice_cat_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+create database ice_cat_${uuid0}.ice_db_${uuid0};
+set catalog ice_cat_${uuid0};
+use ice_cat_${uuid0}.ice_db_${uuid0};
+
+-- Case A: equality delete (previously a silent no-op).
+create table t_del_eq (
+    c1 int,
+    c2 string
+) partition by (c2)
+PROPERTIES ("format-version" = "2");
+
+insert into t_del_eq values (1, '2020-06-08'), (2, '2020-06-14'), (3, '2020-06-14'), (4, '2020-06-15'), (5, '2020-06-22');
+
+select c2, count(*) from t_del_eq group by c2 order by c2;
+
+-- CAST(c2 AS DATETIME) = '2020-06-14 00:00:00' -> must delete exactly partition 2020-06-14.
+delete from t_del_eq where c2 = cast('2020-06-15' as date) - interval 1 day;
+select c2, count(*) from t_del_eq group by c2 order by c2;
+
+-- date_sub form of the same value.
+delete from t_del_eq where c2 = date_sub(cast('2020-06-23' as date), interval 1 day);
+select c2, count(*) from t_del_eq group by c2 order by c2;
+
+-- control: bare 'yyyy-MM-dd' literal (no cast, always worked) deletes 2020-06-15.
+delete from t_del_eq where c2 = '2020-06-15';
+select c2, count(*) from t_del_eq group by c2 order by c2;
+
+drop table t_del_eq force;
+
+-- Case B: range delete (previously over-deleted 2020-06-15).
+create table t_del_rg (
+    c1 int,
+    c2 string
+) partition by (c2)
+PROPERTIES ("format-version" = "2");
+
+insert into t_del_rg values (1, '2020-06-08'), (2, '2020-06-14'), (3, '2020-06-15'), (4, '2020-06-22');
+
+-- CAST(c2 AS DATETIME) < '2020-06-15 00:00:00' -> delete only 2020-06-08 and 2020-06-14; keep 2020-06-15, 2020-06-22.
+delete from t_del_rg where c2 < cast('2020-06-15' as date);
+select c2, count(*) from t_del_rg group by c2 order by c2;
+
+drop table t_del_rg force;
+
+drop database ice_cat_${uuid0}.ice_db_${uuid0};
+drop catalog ice_cat_${uuid0};

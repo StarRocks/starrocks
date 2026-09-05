@@ -43,10 +43,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 
 import java.util.List;
 import java.util.Set;
@@ -77,24 +76,25 @@ public class IndexInfoProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             if (table.isNativeTableOrMaterializedView()) {
                 OlapTable olapTable = (OlapTable) table;
 
                 // indices order
                 List<Long> indices = Lists.newArrayList();
-                indices.add(olapTable.getBaseIndexId());
-                indices.addAll(olapTable.getIndexIdListExceptBaseIndex());
+                indices.add(olapTable.getBaseIndexMetaId());
+                indices.addAll(olapTable.getIndexMetaIdListExceptBaseIndex());
 
-                for (long indexId : indices) {
-                    MaterializedIndexMeta indexMeta = olapTable.getIndexIdToMeta().get(indexId);
+                for (long indexMetaId : indices) {
+                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
 
                     String type = olapTable.getKeysType().name();
                     StringBuilder builder = new StringBuilder();
                     builder.append(type).append("(");
                     List<String> columnNames = Lists.newArrayList();
-                    List<Column> columns = olapTable.getSchemaByIndexId(indexId);
+                    List<Column> columns = olapTable.getSchemaByIndexMetaId(indexMetaId);
                     for (Column column : columns) {
                         if (column.isKey()) {
                             columnNames.add(column.getName());
@@ -102,8 +102,8 @@ public class IndexInfoProcDir implements ProcDirInterface {
                     }
                     builder.append(Joiner.on(", ").join(columnNames)).append(")");
 
-                    result.addRow(Lists.newArrayList(String.valueOf(indexId),
-                            olapTable.getIndexNameById(indexId),
+                    result.addRow(Lists.newArrayList(String.valueOf(indexMetaId),
+                            olapTable.getIndexNameByMetaId(indexMetaId),
                             String.valueOf(indexMeta.getSchemaVersion()),
                             String.valueOf(indexMeta.getSchemaHash()),
                             String.valueOf(indexMeta.getShortKeyColumnCount()),
@@ -116,7 +116,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
             return result;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 
@@ -126,39 +126,52 @@ public class IndexInfoProcDir implements ProcDirInterface {
     }
 
     @Override
-    public ProcNodeInterface lookup(String idxIdStr) throws AnalysisException {
+    public ProcNodeInterface lookup(String idxMetaIdStr) throws AnalysisException {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
 
-        long idxId;
+        long idxMetaId;
         try {
-            idxId = Long.valueOf(idxIdStr);
+            idxMetaId = Long.valueOf(idxMetaIdStr);
         } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid index id format: " + idxIdStr);
+            throw new AnalysisException("Invalid index meta id format: " + idxMetaIdStr);
         }
 
+        // Take per-table READ: getSchemaByIndexMetaId reads OlapTable.indexMetaIdToMeta
+        // which is a plain HashMap, so a concurrent ALTER (IX + table WRITE) can race
+        // with this get and produce undefined behavior. The lock pins the table while
+        // we resolve the schema reference.
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
-            if (table.getType() == TableType.OLAP) {
+            // Cloud-native (lake) OLAP tables also carry per-index metadata and must resolve
+            // the schema by the requested index meta id. The old `getType() == OLAP` check
+            // excluded lake tables (whose type is CLOUD_NATIVE), so
+            // `SHOW PROC .../index_schema/<id>` fell into the else branch and returned the base
+            // index schema for every rollup on a shared-data table instead of that rollup's own
+            // declared columns. Keep materialized views on the getBaseSchema() path (as before):
+            // DESC on an async MV routes here with an index meta id that is not in the MV's own
+            // index-meta map, so getSchemaByIndexMetaId() would return an empty schema.
+            if (table.isOlapOrCloudNativeTable()) {
                 OlapTable olapTable = (OlapTable) table;
-                schema = olapTable.getSchemaByIndexId(idxId);
+                schema = olapTable.getSchemaByIndexMetaId(idxMetaId);
                 if (schema == null) {
-                    throw new AnalysisException("Index " + idxId + " does not exist");
+                    throw new AnalysisException("Index meta " + idxMetaId + " does not exist");
                 }
-                bfColumns = olapTable.getCopiedBfColumns();
+                bfColumns = olapTable.getBfColumnNames();
             } else {
                 schema = table.getBaseSchema();
             }
             IndexSchemaProcNode node = new IndexSchemaProcNode(schema, bfColumns);
-            if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+            if (table.isNativeTable() || table.isOlapExternalTable()) {
                 node.setHideAggregationType(true);
             }
             return node;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 

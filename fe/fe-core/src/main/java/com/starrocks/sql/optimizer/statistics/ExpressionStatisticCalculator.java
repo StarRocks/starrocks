@@ -12,51 +12,85 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
+import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigInteger;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.IsoFields;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
 
     public static final long DAYS_FROM_0_TO_1970 = 719528;
     public static final long DAYS_FROM_0_TO_9999 = 3652424;
+    private static final double UINT32_DOMAIN_CARDINALITY = 4294967296.0;
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
     }
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, double rowCount) {
+        if (Double.isNaN(rowCount)) {
+            LOG.debug("found a NaN row count when calculating column statistic for expr: {}", operator);
+            return ColumnStatistic.unknown();
+        }
         return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
+    }
+
+    private record NullableBooleanProbabilities(double pTrue, double pFalse, double pNull) {
     }
 
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
         private final Statistics inputStatistics;
         // Some functions estimate need plan node row count, such as COUNT
         private final double rowCount;
+
+        // Stats for lambda variables.
+        private final Map<ColumnRefOperator, ColumnStatistic> mappedStats = new HashMap<>();
 
         public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
             this.inputStatistics = statistics;
@@ -66,31 +100,284 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visit(ScalarOperator operator, Void context) {
             if (operator.getChildren().size() > 1) {
-                return operator.getChild(0).accept(this, context);
+                ColumnStatistic firstChildStat = operator.getChild(0).accept(this, context);
+                // Predicates without a dedicated visitor (IN, LIKE, BETWEEN, EXISTS, MULTI_IN, MATCH, ...)
+                // fall through to here. Returning the first operand's stats MCV for a boolean expression is potentially
+                // dangerous, so we are removing histograms here.
+                if (!firstChildStat.isUnknown() && firstChildStat.getHistogram() != null
+                        && isBooleanPredicate(operator)) {
+                    return ColumnStatistic.buildFrom(firstChildStat).setHistogram(null).build();
+                }
+                return firstChildStat;
             } else {
                 return ColumnStatistic.unknown();
             }
         }
 
+        private static boolean isBooleanPredicate(ScalarOperator operator) {
+            return operator instanceof PredicateOperator || operator instanceof MatchExprOperator;
+        }
+
+        @Override
+        public ColumnStatistic visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
+            return operator.getChild(0).accept(this, context);
+        }
+
         @Override
         public ColumnStatistic visitVariableReference(ColumnRefOperator operator, Void context) {
+            if (operator.getOpType() == OperatorType.LAMBDA_ARGUMENT) {
+                ColumnStatistic stat = mappedStats.get(operator);
+                return stat != null ? stat : ColumnStatistic.unknown();
+            }
             return inputStatistics.getColumnStatistic(operator);
         }
 
         @Override
         public ColumnStatistic visitConstant(ConstantOperator operator, Void context) {
             if (operator.isNull()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
+                // NULL has no distinct non-null values and is always null.
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0,
+                        operator.getType().getTypeSize(), 0);
             }
+
+            var builder = ColumnStatistic.builder() //
+                    .setNullsFraction(0) //
+                    .setAverageRowSize(operator.getType().getTypeSize()) //
+                    .setDistinctValuesCount(1);
+
+            operator.castTo(VarcharType.VARCHAR)
+                    .map(ConstantOperator::toString)
+                    .ifPresent(key -> {
+                        final var mcv = Collections.singletonMap(key, Math.round(rowCount));
+                        builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
+                    });
+
             OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
-                return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
-                        operator.getType().getTypeSize(), 1);
+                builder.setMinValue(value.getAsDouble()) //
+                        .setMaxValue(value.getAsDouble());
             } else if (operator.getType().isStringType()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
-                        operator.toString().length(), 1);
-            } else {
+                builder.setMinValue(Double.NEGATIVE_INFINITY) //
+                        .setMaxValue(Double.POSITIVE_INFINITY) //
+                        .setAverageRowSize(operator.toString().length());
+            }
+            return builder.build();
+        }
+
+        @Override
+        public ColumnStatistic visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
+            if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
                 return ColumnStatistic.unknown();
+            }
+
+            if (operator.isNot()) {
+                // not just swaps pTrue and pFalse, pNull stays the same.
+                return computeBooleanProbabilities(operator.getChild(0), context)
+                        .map(p -> buildCompoundResult(operator, p.pFalse(), p.pTrue(), p.pNull()))
+                        .orElseGet(ColumnStatistic::unknown);
+            }
+
+            var left = computeBooleanProbabilities(operator.getChild(0), context);
+            var right = computeBooleanProbabilities(operator.getChild(1), context);
+
+            if (left.isEmpty() || right.isEmpty()) {
+                return ColumnStatistic.unknown();
+            }
+
+            double pTrue;
+            double pFalse;
+            var l = left.get();
+            var r = right.get();
+            if (operator.isAnd()) {
+                pTrue = l.pTrue() * r.pTrue();
+                pFalse = (l.pFalse() + r.pFalse()) - (l.pFalse() * r.pFalse());
+            } else {
+                pTrue = (l.pTrue() + r.pTrue()) - (l.pTrue() * r.pTrue());
+                pFalse = l.pFalse() * r.pFalse();
+            }
+            double pNull = clampFraction(1.0 - pTrue - pFalse);
+
+            return buildCompoundResult(operator, pTrue, pFalse, pNull);
+        }
+
+        private Optional<NullableBooleanProbabilities> computeBooleanProbabilities(ScalarOperator child, Void context) {
+            ColumnStatistic childStat = child.accept(this, context);
+            double pNull = childStat.isUnknown() ? 0.0 : clampFraction(childStat.getNullsFraction());
+            double nonNullMass = 1.0 - pNull;
+
+            // Extract from boolean MCV histogram if available. This is the most accurate strategy since it reflects the actual
+            // boolean value distribution. The MCV's true/false counts are treated as the conditional distribution among
+            // non-null rows and scaled by (1 - pNull), so pTrue + pFalse + pNull == 1 by construction (independent of how
+            // the MCV counts relate to rowCount).
+
+            if (!childStat.isUnknown() && childStat.getHistogram() != null && child.getType().isBoolean()) {
+                Map<String, Long> mcv = childStat.getHistogram().getMCV();
+                if (!mcv.isEmpty()) {
+                    String trueKey = booleanToMcvValue(true);
+                    String falseKey = booleanToMcvValue(false);
+
+                    if (mcv.containsKey(trueKey) || mcv.containsKey(falseKey)) {
+                        long trueCount = mcv.getOrDefault(trueKey, 0L);
+                        long falseCount = mcv.getOrDefault(falseKey, 0L);
+                        long mcvTotal = trueCount + falseCount;
+                        double pTrue = mcvTotal > 0 ? nonNullMass * trueCount / mcvTotal : 0.0;
+                        double pFalse = mcvTotal > 0 ? nonNullMass - pTrue : 0.0;
+                        return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
+                    }
+                }
+            }
+
+            // Use PredicateStatisticsCalculator selectivity as a fallback. A predicate evaluates to UNKNOWN (not TRUE) on NULL
+            // inputs, so pTrue is capped at the non-null mass and pFalse takes the remainder, again keeping the sum at 1.
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(child, inputStatistics);
+            if (predicateStatistics != null && !Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                double inputStatisticsRows = inputStatistics.getOutputRowCount();
+                if (!Double.isNaN(inputStatisticsRows) && inputStatisticsRows > 0) {
+                    double pTrueRaw = clampFraction(predicateStatistics.getOutputRowCount() / inputStatisticsRows);
+                    double pTrue = Math.min(pTrueRaw, nonNullMass);
+                    double pFalse = nonNullMass - pTrue;
+                    return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
+                }
+            }
+
+            return Optional.empty();
+        }
+
+        private ColumnStatistic buildCompoundResult(CompoundPredicateOperator operator, double pTrue, double pFalse,
+                                                    double pNull) {
+            long trueRows = Math.round(rowCount * pTrue);
+            long falseRows = Math.round(rowCount * pFalse);
+
+            Map<String, Long> mcvs = new java.util.LinkedHashMap<>();
+            if (trueRows > 0) {
+                mcvs.put(booleanToMcvValue(true), trueRows);
+            }
+            if (falseRows > 0) {
+                mcvs.put(booleanToMcvValue(false), falseRows);
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1).setNullsFraction(pNull)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(2);
+
+            if (!mcvs.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
+        }
+
+        private static double clampFraction(double value) {
+            if (Double.isNaN(value)) {
+                return 0.0;
+            }
+            return Math.max(0.0, Math.min(1.0, value));
+        }
+
+        @Override
+        public ColumnStatistic visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
+            // Constant binary predicates can be introduced after the normal scalar constant-folding pass,
+            // for example `(SELECT 'season') > (SELECT 'a.season')` becomes `'season' > 'a.season'`
+            // when uncorrelated scalar subqueries are rewritten and merged into projections.
+            Optional<ConstantOperator> constantResult = evaluateConstantBinaryPredicate(operator);
+            if (constantResult.isPresent()) {
+                return constantResult.get().accept(this, context);
+            }
+
+            if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            ColumnStatistic leftStat = operator.getChild(0).accept(this, context);
+            ColumnStatistic rightStat = operator.getChild(1).accept(this, context);
+
+            // For non-null-safe predicates (=, <, >, <=, >=, !=), if either operand is NULL
+            // the result is NULL (SQL three-valued logic). Only <=> is guaranteed non-null.
+            // An unknown operand is treated as contributing no nulls so a known operand's null mass survives.
+            double nullsFraction = 0.0;
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL) {
+                double leftNullFrac = leftStat.isUnknown() ? 0.0 : leftStat.getNullsFraction();
+                double rightNullFrac = rightStat.isUnknown() ? 0.0 : rightStat.getNullsFraction();
+                // Probability that at least one operand is NULL
+                nullsFraction = 1.0 - (1.0 - leftNullFrac) * (1.0 - rightNullFrac);
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(2);
+
+            if (leftStat.isUnknown() || rightStat.isUnknown()) {
+                return builder.build();
+            }
+
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(operator, inputStatistics);
+            if (predicateStatistics == null || Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            long inputRows = Math.max(1L, Math.round(inputStatistics.getOutputRowCount()));
+            long nullRows = Math.round(inputRows * nullsFraction);
+            long nonNullRows = Math.max(0L, inputRows - nullRows);
+            long nonNullTrueRows = Math.min(inputRows, Math.round(predicateStatistics.getOutputRowCount()));
+            long trueRows = Math.min(Math.max(0L, nonNullTrueRows), nonNullRows);
+            long falseRows = nonNullRows - trueRows;
+            Map<String, Long> mcvs = new HashMap<>();
+            if (trueRows > 0) {
+                ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR)
+                        .ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
+            }
+            if (falseRows > 0) {
+                ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR)
+                        .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
+            }
+
+            if (!mcvs.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
+        }
+
+        private Optional<ConstantOperator> evaluateConstantBinaryPredicate(BinaryPredicateOperator operator) {
+            if (!operator.getChild(0).isConstantRef() || !operator.getChild(1).isConstantRef()) {
+                return Optional.empty();
+            }
+
+            ConstantOperator left = (ConstantOperator) operator.getChild(0);
+            ConstantOperator right = (ConstantOperator) operator.getChild(1);
+
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL && (left.isNull() || right.isNull())) {
+                return Optional.of(ConstantOperator.createNull(BooleanType.BOOLEAN));
+            }
+
+            switch (operator.getBinaryType()) {
+                case EQ:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) == 0));
+                case NE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) != 0));
+                case EQ_FOR_NULL:
+                    if (left.isNull() && right.isNull()) {
+                        return Optional.of(ConstantOperator.createBoolean(true));
+                    } else if (!left.isNull() && !right.isNull()) {
+                        return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) == 0));
+                    } else {
+                        return Optional.of(ConstantOperator.createBoolean(false));
+                    }
+                case GE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) >= 0));
+                case GT:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) > 0));
+                case LE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) <= 0));
+                case LT:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) < 0));
+                default:
+                    return Optional.empty();
             }
         }
 
@@ -104,17 +391,67 @@ public class ExpressionStatisticCalculator {
             }
             if (caseWhenOperator.hasElse()) {
                 childrenColumnStatistics.add(caseWhenOperator.getElseClause().accept(this, context));
+            } else {
+                // A missing ELSE is an implicit ELSE that returns NULL.
+                childrenColumnStatistics.add(ColumnStatistic.builder() //
+                        .setNullsFraction(1.0) //
+                        .setDistinctValuesCount(0) //
+                        .build());
             }
-            // 2. use sum of then clause and else clause's distinct values as column distinctValues
-            double distinctValues = childrenColumnStatistics.stream().mapToDouble(
-                    ColumnStatistic::getDistinctValuesCount).sum();
+            // 2. use sum of then clause and else clause's distinct values as column distinctValues.
+            // NULL branches should only contribute to nullsFraction, not to distinctValues.
+            double distinctValues = childrenColumnStatistics.stream()
+                    .mapToDouble(childStat -> childStat.getNullsFraction() >= 1.0 ? 0 : childStat.getDistinctValuesCount()) //
+                    .sum();
+            // 3. Use the average null fraction of all branches.
+            double nullFractions = childrenColumnStatistics.stream().mapToDouble(ColumnStatistic::getNullsFraction).sum()
+                    / childrenColumnStatistics.size();
             return ColumnStatistic.builder()
                     .setMinValue(Double.NEGATIVE_INFINITY)
                     .setMaxValue(Double.POSITIVE_INFINITY)
-                    .setNullsFraction(0)
+                    .setNullsFraction(nullFractions)
                     .setAverageRowSize(caseWhenOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
                     .build();
+        }
+
+        @Override
+        public ColumnStatistic visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
+            final var inputStat = operator.getChild(0).accept(this, context);
+
+            Map<String, Long> mcvs = new HashMap<>();
+            if (!inputStat.isUnknown()) {
+                double inputNullFraction = inputStat.isUnknown() ? 0.0 : inputStat.getNullsFraction();
+                // Calculate amount of rows satisfying / not satisfying the predicate
+                long nullRows = Math.round(rowCount * inputNullFraction);
+                long nonNullRows = Math.round(rowCount) - nullRows;
+
+                long trueRows = operator.isNotNull() ? nonNullRows : nullRows;
+                long falseRows = operator.isNotNull() ? nullRows : nonNullRows;
+                // Add MCV for each branch
+                if (trueRows > 0) {
+                    mcvs.put(booleanToMcvValue(true), trueRows);
+                }
+                if (falseRows > 0) {
+                    mcvs.put(booleanToMcvValue(false), falseRows);
+                }
+            }
+
+            final var builder = ColumnStatistic.builder() //
+                    .setMinValue(0) //
+                    .setMaxValue(1) //
+                    .setNullsFraction(0) //
+                    .setAverageRowSize(operator.getType().getTypeSize());
+
+            if (mcvs.isEmpty()) {
+                // True and false
+                builder.setDistinctValuesCount(2);
+            } else {
+                builder.setDistinctValuesCount(mcvs.size());
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
         }
 
         @Override
@@ -175,17 +512,22 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitCall(CallOperator call, Void context) {
+            mapVariableStatistics(call);
+
             List<ColumnStatistic> childrenColumnStatistics =
                     call.getChildren().stream().map(child -> child.accept(this, context)).collect(Collectors.toList());
             Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size(),
                     "column statistics missing for expr: %s. column statistics: %s",
                     call, childrenColumnStatistics);
+
             if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) ||
                     inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
-                return ColumnStatistic.unknown();
+                return deriveBasicColStats(call);
             }
 
-            if (call.getChildren().size() == 0) {
+            if (SPMFunctions.isSPMFunctions(call)) {
+                return SPMFunctions.getSPMFunctionStatistics(call, childrenColumnStatistics).get(0);
+            } else if (call.getChildren().isEmpty()) {
                 return nullaryExpressionCalculate(call);
             } else if (call.getChildren().size() == 1) {
                 return unaryExpressionCalculate(call, childrenColumnStatistics.get(0));
@@ -270,6 +612,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.MIN:
                 case FunctionSet.ANY_VALUE:
                 case FunctionSet.AVG:
+                case FunctionSet.CONCAT:
                     maxValue = columnStatistic.getMaxValue();
                     minValue = columnStatistic.getMinValue();
                     break;
@@ -316,10 +659,16 @@ public class ExpressionStatisticCalculator {
                     maxValue = 12;
                     distinctValue = 12;
                     break;
+                case FunctionSet.MONTHNAME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValue = 12;
+                    break;
                 case FunctionSet.WEEKOFYEAR:
+                case FunctionSet.WEEK_ISO:
                     minValue = 1;
-                    maxValue = 54;
-                    distinctValue = 54;
+                    maxValue = 53;
+                    distinctValue = 53;
                     break;
                 case FunctionSet.DAY:
                 case FunctionSet.DAYOFMONTH:
@@ -328,6 +677,7 @@ public class ExpressionStatisticCalculator {
                     distinctValue = 31;
                     break;
                 case FunctionSet.DAYOFWEEK:
+                case FunctionSet.DAYOFWEEK_ISO:
                     minValue = 1;
                     maxValue = 7;
                     distinctValue = 7;
@@ -348,7 +698,11 @@ public class ExpressionStatisticCalculator {
                     maxValue = 59;
                     distinctValue = 60;
                     break;
-                case FunctionSet.TO_DATE:
+                case FunctionSet.FROM_UNIXTIME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    break;
+                case FunctionSet.TO_DATE, FunctionSet.DATE:
                     if (minMaxValueInfinite) {
                         break;
                     }
@@ -391,7 +745,16 @@ public class ExpressionStatisticCalculator {
                         }
                     }
                     break;
+                case FunctionSet.DAYNAME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValue = 7;
+                    break;
                 case FunctionSet.TIMESTAMP:
+                    break;
+                case FunctionSet.TIME_TO_SEC:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
                     break;
                 case FunctionSet.ABS:
                     double absMinValue;
@@ -460,6 +823,30 @@ public class ExpressionStatisticCalculator {
                     maxValue = 4294967295.0;
                     distinctValue = rowCount;
                     break;
+                case FunctionSet.XX_HASH32:
+                    // xx_hash32's range is int32_t
+                    minValue = Integer.MIN_VALUE;
+                    maxValue = Integer.MAX_VALUE;
+                    distinctValue = Math.min(rowCount, UINT32_DOMAIN_CARDINALITY);
+                    break;
+                case FunctionSet.XX_HASH64:
+                    // xx_hash64's range is int64_t
+                    minValue = Long.MIN_VALUE;
+                    maxValue = Long.MAX_VALUE;
+                    distinctValue = rowCount;
+                    break;
+                case FunctionSet.XX_HASH3_64:
+                    // xx_hash3_64's range is int64_t
+                    minValue = Long.MIN_VALUE;
+                    maxValue = Long.MAX_VALUE;
+                    distinctValue = rowCount;
+                    break;
+                case FunctionSet.XX_HASH3_128:
+                    // xx_hash3_128's range is LARGE_INT
+                    minValue = LargeIntLiteral.LARGE_INT_MIN.doubleValue();
+                    maxValue = LargeIntLiteral.LARGE_INT_MAX.doubleValue();
+                    distinctValue = rowCount;
+                    break;
                 case FunctionSet.POSITIVE:
                 case FunctionSet.FLOOR:
                 case FunctionSet.DFLOOR:
@@ -469,6 +856,12 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.DROUND:
                 case FunctionSet.TRUNCATE:
                 case FunctionSet.UPPER:
+                case FunctionSet.LOWER:
+                case FunctionSet.LCASE:
+                case FunctionSet.TRIM:
+                case FunctionSet.LTRIM:
+                case FunctionSet.RTRIM:
+                case FunctionSet.REVERSE:
                     // Just use the input's statistics as output's statistics
                     break;
                 case FunctionSet.TO_BITMAP:
@@ -494,6 +887,7 @@ public class ExpressionStatisticCalculator {
                     .setNullsFraction(columnStatistic.getNullsFraction())
                     .setAverageRowSize(averageRowSize)
                     .setDistinctValuesCount(distinctValue)
+                    .setHistogram(transformHistogramForUnary(callOperator, columnStatistic).orElse(null))
                     .build();
         }
 
@@ -504,18 +898,27 @@ public class ExpressionStatisticCalculator {
             double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
             double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
             double averageRowSize = callOperator.getType().getTypeSize();
+            double collectionSize = ColumnStatistic.DEFAULT_COLLECTION_SIZE;
             long interval;
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
                 case FunctionSet.DATE_ADD:
+                case FunctionSet.DAYS_ADD:
                     minValue = left.getMinValue() + right.getMinValue();
                     maxValue = left.getMaxValue() + right.getMaxValue();
                     break;
                 case FunctionSet.SUBTRACT:
                 case FunctionSet.TIMEDIFF:
                 case FunctionSet.DATE_SUB:
+                case FunctionSet.DAYS_SUB:
+                case FunctionSet.SECONDS_DIFF:
                     minValue = left.getMinValue() - right.getMaxValue();
                     maxValue = left.getMaxValue() - right.getMinValue();
+                    break;
+                case FunctionSet.FROM_UNIXTIME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValues = left.getDistinctValuesCount();
                     break;
                 case FunctionSet.YEARS_DIFF:
                     interval = 3600L * 24L * 365L;
@@ -547,10 +950,6 @@ public class ExpressionStatisticCalculator {
                     interval = 60;
                     minValue = (left.getMinValue() - right.getMaxValue()) / interval;
                     maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
-                    break;
-                case FunctionSet.SECONDS_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
                     break;
                 case FunctionSet.MULTIPLY:
                     minValue = Math.min(Math.min(
@@ -589,29 +988,440 @@ public class ExpressionStatisticCalculator {
                     minValue = left.getMinValue();
                     maxValue = left.getMaxValue();
                     break;
+                case FunctionSet.COALESCE:
+                    return calcCoalesceStats(List.of(left, right), callOperator);
+                case FunctionSet.WEEK:
+                    minValue = 0;
+                    maxValue = 53;
+                    distinctValues = Math.min(calcDistinctValForWeek(left), distinctValues);
+                    break;
+                case FunctionSet.CONCAT:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValues = Math.min(rowCount, left.getDistinctValuesCount() + right.getDistinctValuesCount());
+                    averageRowSize = left.getAverageRowSize() + right.getAverageRowSize();
+                    break;
+                case FunctionSet.LEFT:
+                case FunctionSet.RIGHT:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    averageRowSize = Math.max(1, left.getAverageRowSize() - right.getAverageRowSize());
+                    distinctValues = left.getDistinctValuesCount() * averageRowSize / left.getAverageRowSize();
+                    break;
+                case FunctionSet.LIKE:
+                case FunctionSet.ILIKE:
+                    minValue = 0;
+                    maxValue = 1;
+                    distinctValues = 2;
+                    break;
+                case FunctionSet.ARRAY_MAP:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    final var arrayStats = getArrayMapFirstArrayStats(callOperator, List.of(left, right));
+                    if (arrayStats.isUnknown()) {
+                        return ColumnStatistic.unknown();
+                    }
+                    // Since only the content of the arrays changes, most of the stats from the input remain except NDVs.
+                    nullsFraction = arrayStats.getNullsFraction();
+                    averageRowSize = arrayStats.getAverageRowSize();
+                    collectionSize = arrayStats.getCollectionSize();
+                    distinctValues = calculateArrayMapNdv(callOperator, List.of(left, right));
+                    break;
+                case FunctionSet.DATE_TRUNC:
+                    return calculateDateTruncStats(callOperator, right);
+                case FunctionSet.LTRIM:
+                case FunctionSet.LTRIM_STRING:
+                case FunctionSet.RTRIM:
+                case FunctionSet.RTRIM_STRING:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    averageRowSize = left.getAverageRowSize();
+                    distinctValues = Math.min(rowCount, left.getDistinctValuesCount());
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
-            return ColumnStatistic.builder()
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
                     .setMinValue(minValue)
                     .setMaxValue(maxValue)
                     .setNullsFraction(nullsFraction)
                     .setAverageRowSize(averageRowSize)
                     .setDistinctValuesCount(distinctValues)
+                    .setCollectionSize(collectionSize);
+            transformHistogramForBinary(callOperator, left, right).ifPresent(builder::setHistogram);
+            return builder.build();
+
+        }
+
+        private ColumnStatistic calcConvertTzStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
+            ColumnStatistic childStat = inputs.get(0);
+            ColumnStatistic fromTzStat = inputs.get(1);
+            ColumnStatistic toTzStat = inputs.get(2);
+
+            Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
+            Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
+            // Invalid constant zones are not folded when the datetime is a column, but the BE
+            // returns NULL for every row (convert_tz_prepare sets is_valid=false).
+            if ((fromTz.isPresent() && !ConvertTzStatisticUtils.isValidTimeZone(fromTz.get()))
+                    || (toTz.isPresent() && !ConvertTzStatisticUtils.isValidTimeZone(toTz.get()))) {
+                return ColumnStatistic.builder()
+                        .setNullsFraction(1.0)
+                        .setAverageRowSize(callOperator.getType().getTypeSize())
+                        .setDistinctValuesCount(0)
+                        .build();
+            }
+
+            final double nullsFraction = 1.0
+                    - (1.0 - childStat.getNullsFraction())
+                    * (1.0 - fromTzStat.getNullsFraction())
+                    * (1.0 - toTzStat.getNullsFraction());
+            final double nonNullRowCount = rowCount * (1.0 - nullsFraction);
+
+            final double distinctValues = Math.min(nonNullRowCount,
+                    childStat.getDistinctValuesCount()
+                            * fromTzStat.getDistinctValuesCount()
+                            * toTzStat.getDistinctValuesCount());
+
+            double minValue = childStat.getMinValue() - ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
+            double maxValue = childStat.getMaxValue() + ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
+
+            if (fromTz.isPresent() && toTz.isPresent()
+                    && !childStat.hasNaNValue() && !childStat.isInfiniteRange()
+                    && !ConvertTzStatisticUtils.hasTimezoneOffsetDrift(childStat.getMinValue(), childStat.getMaxValue(),
+                            fromTz.get(), toTz.get())) {
+                OptionalDouble convertedMin =
+                        ConvertTzStatisticUtils.convertTzDateTime(childStat.getMinValue(), fromTz.get(), toTz.get());
+                OptionalDouble convertedMax =
+                        ConvertTzStatisticUtils.convertTzDateTime(childStat.getMaxValue(), fromTz.get(), toTz.get());
+                if (convertedMin.isPresent() && convertedMax.isPresent()) {
+                    minValue = Math.min(convertedMin.getAsDouble(), convertedMax.getAsDouble());
+                    maxValue = Math.max(convertedMin.getAsDouble(), convertedMax.getAsDouble());
+                }
+            }
+
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues)
+                    .setHistogram(ConvertTzStatisticUtils.transformHistogram(
+                            callOperator, childStat, minValue, maxValue, nonNullRowCount, fromTz, toTz)
+                            .orElse(null))
                     .build();
+        }
+
+        private ColumnStatistic calcCoalesceStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
+            double nullsFraction = inputs.stream()
+                    .mapToDouble(ColumnStatistic::getNullsFraction)
+                    .reduce(1.0, (accumulator, nullFraction) -> accumulator * nullFraction);
+            List<ColumnStatistic> reachableInputs = reachableCoalesceInputs(inputs);
+            double distinctValues = Math.min(rowCount,
+                    reachableInputs.stream()
+                            .mapToDouble(ColumnStatistic::getDistinctValuesCount)
+                            .sum());
+            double coalesceMin = Double.NEGATIVE_INFINITY;
+            double coalesceMax = Double.POSITIVE_INFINITY;
+            final Type resultType = callOperator.getType();
+            if (resultType.isNumericType() || resultType.isDateType() || resultType.isTime()) {
+                coalesceMin = reachableInputs.stream()
+                        .mapToDouble(ColumnStatistic::getMinValue).min().orElse(Double.NEGATIVE_INFINITY);
+                coalesceMax = reachableInputs.stream()
+                        .mapToDouble(ColumnStatistic::getMaxValue).max().orElse(Double.POSITIVE_INFINITY);
+            }
+            Map<String, Long> mcv = buildCoalesceMcv(inputs);
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(coalesceMin)
+                    .setMaxValue(coalesceMax)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues);
+
+            if (!mcv.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
+            }
+
+            return builder.build();
+        }
+
+        private List<ColumnStatistic> reachableCoalesceInputs(List<ColumnStatistic> inputs) {
+            List<ColumnStatistic> reachable = new ArrayList<>();
+            for (ColumnStatistic input : inputs) {
+                final double nullsFraction = input.getNullsFraction();
+                if (nullsFraction < 1.0) {
+                    reachable.add(input);
+                }
+                if (nullsFraction == 0) {
+                    break;
+                }
+            }
+            return reachable;
+        }
+
+        private Map<String, Long> buildCoalesceMcv(List<ColumnStatistic> inputs) {
+            Map<String, Long> coalesceMcv = new HashMap<>();
+            long maxRows = Math.round(rowCount);
+            List<Map.Entry<String, Double>> contributions = collectWeightedCoalesceMcv(inputs);
+            long mcvTotalRowsAccountedFor = 0;
+            for (int i = 0; i < contributions.size(); i++) {
+                final var contribution = contributions.get(i);
+                long scaled = Math.round(contribution.getValue());
+                if (scaled <= 0) {
+                    continue;
+                }
+                if (mcvTotalRowsAccountedFor + scaled >= maxRows) {
+                    scaleRemainingMcvs(contributions.subList(i, contributions.size()),
+                            maxRows - mcvTotalRowsAccountedFor, coalesceMcv);
+                    return coalesceMcv;
+                }
+                coalesceMcv.merge(contribution.getKey(), scaled, Long::sum);
+                mcvTotalRowsAccountedFor += scaled;
+            }
+
+            return coalesceMcv;
+        }
+
+        private List<Map.Entry<String, Double>> collectWeightedCoalesceMcv(List<ColumnStatistic> inputs) {
+            List<Map.Entry<String, Double>> contributions = new ArrayList<>();
+            double weight = 1.0;
+            for (ColumnStatistic input : inputs) {
+                final double nullsFraction = input.getNullsFraction();
+                final var histogram = input.getHistogram();
+                if (nullsFraction < 1 && histogram != null) {
+                    for (final var entry : histogram.getMCV().entrySet().stream()
+                            .sorted((a, b) -> {
+                                int cmp = Long.compare(b.getValue(), a.getValue());
+                                return cmp != 0 ? cmp : a.getKey().compareTo(b.getKey());
+                            })
+                            .collect(Collectors.toList())) {
+                        contributions.add(Map.entry(entry.getKey(), entry.getValue() * weight));
+                    }
+                }
+                // A never-null column means every later column is unreachable.
+                if (nullsFraction == 0) {
+                    break;
+                }
+                weight *= nullsFraction;
+            }
+            return contributions;
+        }
+
+        private void scaleRemainingMcvs(List<Map.Entry<String, Double>> remaining, long remainingBudget,
+                                        Map<String, Long> targetMcv) {
+            if (remainingBudget <= 0) {
+                return;
+            }
+            double totalWeighted = remaining.stream().mapToDouble(Map.Entry::getValue).sum();
+            if (totalWeighted <= 0) {
+                return;
+            }
+            for (final var entry : remaining) {
+                double scaled = Math.floor(remainingBudget * entry.getValue() / totalWeighted);
+                if (scaled > 0) {
+                    targetMcv.merge(entry.getKey(), (long) scaled, Long::sum);
+                }
+            }
+        }
+
+        private ColumnStatistic calculateDateTruncStats(CallOperator callOperator, ColumnStatistic dateStatistic) {
+            final var fmtArg = toConstantOperator(callOperator.getChild(0));
+            final var type = callOperator.getType();
+            double minValue = Double.NEGATIVE_INFINITY;
+            double maxValue = Double.POSITIVE_INFINITY;
+            double distinctValues = dateStatistic.getDistinctValuesCount();
+
+            Histogram transformedHistogram = null;
+            if (fmtArg.isPresent()) {
+                final var fmtString = fmtArg.get().getVarchar().toLowerCase();
+                final Optional<Long> estimatedNdv;
+                if (!dateStatistic.hasNaNValue() && dateStatistic.getMinValue() != Double.NEGATIVE_INFINITY
+                        && dateStatistic.getMaxValue() != Double.POSITIVE_INFINITY) {
+                    final var minDateTime = Utils.getDatetimeFromLong((long) dateStatistic.getMinValue());
+                    final var maxDateTime = Utils.getDatetimeFromLong((long) dateStatistic.getMaxValue());
+                    final var truncatedMinDateTime = truncateDateValue(fmtString, minDateTime, type);
+                    final var truncatedMaxDateTime = truncateDateValue(fmtString, maxDateTime, type);
+
+                    if (truncatedMinDateTime.isPresent() && truncatedMaxDateTime.isPresent()) {
+                        minValue = Utils.getLongFromDateTime(truncatedMinDateTime.get());
+                        maxValue = Utils.getLongFromDateTime(truncatedMaxDateTime.get());
+                        estimatedNdv = estimateDateTruncDistinctValues(fmtString, truncatedMinDateTime.get(),
+                                truncatedMaxDateTime.get());
+                    } else {
+                        // Fallback if we could not truncate the min or max value.
+                        estimatedNdv = estimateDateTruncDistinctValues(fmtString, type);
+                    }
+                } else {
+                    // Fallback if we do not have min/max stats.
+                    estimatedNdv = estimateDateTruncDistinctValues(fmtString, type);
+                }
+
+                if (estimatedNdv.isPresent()) {
+                    distinctValues = Math.min(dateStatistic.getDistinctValuesCount(), estimatedNdv.get());
+                }
+
+                transformedHistogram = transformHistogramForDateTrunc(fmtString, dateStatistic, callOperator.getType());
+            }
+
+            return ColumnStatistic.buildFrom(dateStatistic) //
+                    .setMinValue(minValue) //
+                    .setMaxValue(maxValue) //
+                    .setDistinctValuesCount(distinctValues) //
+                    .setHistogram(transformedHistogram) //
+                    .build();
+        }
+
+        private Histogram transformHistogramForDateTrunc(String fmtString, ColumnStatistic dateStatistic,
+                                                         Type resultType) {
+            final var histogram = dateStatistic.getHistogram();
+            if (histogram == null || histogram.getMCV().isEmpty()) {
+                return null;
+            }
+
+            Map<String, Long> newMcv = new HashMap<>();
+            for (final var entry : histogram.getMCV().entrySet()) {
+                // Parse MCV key string back to a date/datetime constant
+                final var parsedKey = ConstantOperator.createVarchar(entry.getKey()).castTo(resultType);
+                if (parsedKey.isEmpty() || parsedKey.get().isNull()) {
+                    return null;
+                }
+
+                // Apply date_trunc
+                final var truncatedKey = truncateDateValue(fmtString, parsedKey.get().getDatetime(), resultType);
+                if (truncatedKey.isEmpty()) {
+                    return null;
+                }
+
+                // Convert truncated value back to string key
+                final var truncatedKeyString = ConstantOperator.createDatetime(truncatedKey.get(), resultType)
+                        .castTo(VarcharType.VARCHAR);
+                if (truncatedKeyString.isEmpty()) {
+                    return null;
+                }
+
+                newMcv.merge(truncatedKeyString.get().getVarchar(), entry.getValue(), Long::sum);
+            }
+
+            return new Histogram(Collections.emptyList(), newMcv);
+        }
+
+        private Optional<LocalDateTime> truncateDateValue(String fmt, LocalDateTime value, Type resultType) {
+            try {
+                final var truncatedValue = ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar(fmt),
+                        ConstantOperator.createDatetime(value, resultType));
+                if (truncatedValue == null || truncatedValue.isNull()) {
+                    return Optional.empty();
+                }
+                return Optional.of(truncatedValue.getDatetime());
+            } catch (IllegalArgumentException e) {
+                return Optional.empty();
+            }
+        }
+
+        private Optional<Long> estimateDateTruncDistinctValues(String fmt, LocalDateTime minDateTime, LocalDateTime maxDateTime) {
+            Optional<Long> distinctValues = Optional.empty();
+            distinctValues = switch (fmt) {
+                case FunctionSet.YEAR ->
+                        Optional.of(ChronoUnit.YEARS.between(minDateTime.toLocalDate(), maxDateTime.toLocalDate()) + 1L);
+                case FunctionSet.QUARTER -> Optional.of(quarterOrdinal(maxDateTime) - quarterOrdinal(minDateTime) + 1L);
+                case FunctionSet.MONTH ->
+                        Optional.of(ChronoUnit.MONTHS.between(minDateTime.toLocalDate(), maxDateTime.toLocalDate()) + 1L);
+                case FunctionSet.WEEK ->
+                        Optional.of(ChronoUnit.WEEKS.between(minDateTime.toLocalDate(), maxDateTime.toLocalDate()) + 1L);
+                case FunctionSet.DAY ->
+                        Optional.of(ChronoUnit.DAYS.between(minDateTime.toLocalDate(), maxDateTime.toLocalDate()) + 1L);
+                case FunctionSet.HOUR -> Optional.of(ChronoUnit.HOURS.between(minDateTime, maxDateTime) + 1L);
+                case FunctionSet.MINUTE -> Optional.of(ChronoUnit.MINUTES.between(minDateTime, maxDateTime) + 1L);
+                case FunctionSet.SECOND -> Optional.of(ChronoUnit.SECONDS.between(minDateTime, maxDateTime) + 1L);
+                // Do not estimate for more precise truncations (below seconds), since the upper bound NDV would be very high.
+                default -> distinctValues;
+            };
+            return distinctValues;
+        }
+
+        private Optional<Long> estimateDateTruncDistinctValues(String fmt, Type resultType) {
+            final var truncatedMin = truncateDateValue(fmt, ConstantOperator.MIN_DATETIME, resultType);
+            final var truncatedMax = truncateDateValue(fmt, ConstantOperator.MAX_DATETIME, resultType);
+            if (truncatedMin.isPresent() && truncatedMax.isPresent()) {
+                return estimateDateTruncDistinctValues(fmt, truncatedMin.get(), truncatedMax.get());
+            }
+            return Optional.empty();
+        }
+
+        private long quarterOrdinal(LocalDateTime dateTime) {
+            return dateTime.getYear() * 4L + (dateTime.getMonthValue() - 1L) / 3L;
         }
 
         private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,
                                                             List<ColumnStatistic> childColumnStatisticList) {
+            double distinctValues;
+            double averageRowSize;
+            double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.CONVERT_TZ:
+                    return calcConvertTzStats(childColumnStatisticList, callOperator);
+                case FunctionSet.COALESCE:
+                    return calcCoalesceStats(childColumnStatisticList, callOperator);
                 case FunctionSet.IF:
-                    double distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
-                            childColumnStatisticList.get(2).getDistinctValuesCount();
-                    return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
-                            callOperator.getType().getTypeSize(), distinctValues);
+                    final var condStat = childColumnStatisticList.get(0);
+                    final var thenStat = childColumnStatisticList.get(1);
+                    final var elseStat = childColumnStatisticList.get(2);
+
+                    // As a base case, assume both branches are reachable and equally weighted.
+                    distinctValues = thenStat.getDistinctValuesCount() + elseStat.getDistinctValuesCount();
+                    double minValue = Math.min(thenStat.getMinValue(), elseStat.getMinValue());
+                    double maxValue = Math.max(thenStat.getMaxValue(), elseStat.getMaxValue());
+                    nullsFraction = (thenStat.getNullsFraction() + elseStat.getNullsFraction()) / 2;
+
+                    // If condition MCVs are available, use branch row weights and collapse
+                    // stats to the surviving branch when one side is unreachable.
+                    final var conditionHistogram = condStat.getHistogram();
+                    if (conditionHistogram != null) {
+                        final var conditionMcv = conditionHistogram.getMCV();
+                        final long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
+                        final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
+                        final long totalRows = trueRows + falseRows;
+                        if (totalRows > 0) {
+                            final double trueWeight = (double) trueRows / totalRows;
+                            final double falseWeight = (double) falseRows / totalRows;
+                            nullsFraction = thenStat.getNullsFraction() * trueWeight
+                                    + elseStat.getNullsFraction() * falseWeight;
+
+                            if (trueRows == 0) {
+                                // Only ELSE branch is reachable
+                                distinctValues = elseStat.getDistinctValuesCount();
+                                minValue = elseStat.getMinValue();
+                                maxValue = elseStat.getMaxValue();
+                            } else if (falseRows == 0) {
+                                // Only THEN branch is reachable
+                                distinctValues = thenStat.getDistinctValuesCount();
+                                minValue = thenStat.getMinValue();
+                                maxValue = thenStat.getMaxValue();
+                            }
+                        }
+                    }
+
+                    final var histogram = buildIfMcv(condStat, thenStat, elseStat);
+
+                    return ColumnStatistic.builder() //
+                            .setMinValue(minValue) //
+                            .setMaxValue(maxValue) //
+                            .setNullsFraction(nullsFraction) //
+                            .setAverageRowSize(callOperator.getType().getTypeSize()) //
+                            .setDistinctValuesCount(distinctValues) //
+                            .setHistogram(histogram) //
+                            .build();
                 // use child column statistics for now
                 case FunctionSet.SUBSTRING:
+                case FunctionSet.REGEXP_REPLACE:
                     return childColumnStatisticList.get(0);
+                case FunctionSet.CONCAT:
+                    distinctValues = Math.min(rowCount,
+                            childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getDistinctValuesCount).sum());
+                    averageRowSize = childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getAverageRowSize).sum();
+                    nullsFraction = 1 - childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getNullsFraction)
+                            .reduce(1.0, (accumulator, nullFraction) -> accumulator * (1 - nullFraction));
+                    return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                            nullsFraction, averageRowSize, distinctValues);
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -619,6 +1429,495 @@ public class ExpressionStatisticCalculator {
 
         private double divisorNotZero(double value) {
             return value == 0 ? 1.0 : value;
+        }
+
+        private static String booleanToMcvValue(boolean bool) {
+            final var op = ConstantOperator.createBoolean(bool).castTo(VarcharType.VARCHAR);
+
+            if (op.isEmpty()) {
+                throw new StarRocksPlannerException("Could not convert bool to string MCV key", ErrorType.INTERNAL_ERROR);
+            }
+            return op.get().toString();
+        }
+
+        private Histogram buildIfMcv(ColumnStatistic condStat,
+                                     ColumnStatistic thenStat,
+                                     ColumnStatistic elseStat) {
+            if (condStat.getHistogram() == null) {
+                return null;
+            }
+
+            final var conditionMcv = condStat.getHistogram().getMCV();
+
+            long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
+            long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
+
+            final boolean thenHasHist = thenStat.getHistogram() != null;
+            final boolean elseHasHist = elseStat.getHistogram() != null;
+
+            // If neither branch has a histogram, nothing to propagate.
+            if (!thenHasHist && !elseHasHist) {
+                return null;
+            }
+
+            // If one branch is unreachable, return the other branch MCV.
+            if (trueRows == 0 && elseHasHist) {
+                return elseStat.getHistogram();
+            } else if (falseRows == 0 && thenHasHist) {
+                return thenStat.getHistogram();
+            }
+
+            // Both branches are reachable; require both to have histograms for merging.
+            if (!thenHasHist || !elseHasHist) {
+                return null;
+            }
+
+            Map<String, Long> mcvs = new HashMap<>();
+            scaleBranchMcvAndMerge(thenStat.getHistogram().getMCV(), trueRows, mcvs);
+            scaleBranchMcvAndMerge(elseStat.getHistogram().getMCV(), falseRows, mcvs);
+
+            return mcvs.isEmpty() ? null : new Histogram(Collections.emptyList(), mcvs);
+        }
+
+        private void scaleBranchMcvAndMerge(Map<String, Long> branchMcv, long branchRows,
+                                            Map<String, Long> targetMcv) {
+            if (branchRows <= 0) {
+                return;
+            }
+            for (final var entry : branchMcv.entrySet()) {
+                // Scale the MCVs to be relative to the output row count. `branchRows` is the absolute count of rows in this
+                // branch which we have to scale to match the output count.
+                long scaled = Math.round((double) entry.getValue() * branchRows / rowCount);
+                if (scaled > 0) {
+                    targetMcv.merge(entry.getKey(), scaled, Long::sum);
+                }
+            }
+        }
+
+        private ColumnStatistic deriveBasicColStats(CallOperator call) {
+            List<ColumnRefOperator> usedCols = call.getColumnRefs();
+            if (usedCols.isEmpty()) {
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                        0, call.getType().getTypeSize(), 1);
+            } else if (usedCols.size() == 1 && !inputStatistics.getColumnStatistic(usedCols.get(0)).isUnknown()) {
+                ColumnStatistic usedStats = inputStatistics.getColumnStatistic(usedCols.get(0));
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, usedStats.getNullsFraction(),
+                        call.getType().getTypeSize(), usedStats.getDistinctValuesCount());
+            } else {
+                return ColumnStatistic.unknown();
+            }
+        }
+
+        private double calcDistinctValForWeek(ColumnStatistic col) {
+            if (col.hasNaNValue() || col.isInfiniteRange()) {
+                return 53;
+            }
+            LocalDateTime min = Utils.getDatetimeFromLong((long) col.getMinValue());
+            LocalDateTime max = Utils.getDatetimeFromLong((long) col.getMaxValue());
+
+            // the range is more than one year
+            if (min.plusYears(1).compareTo(max) <= 0) {
+                return 53;
+            } else if (min.getYear() < max.getYear()) {
+                // 54 = 53 + 1 to include startWeek itself in the count (inclusive)
+                return (54 - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)) + max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
+            } else {
+                return max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) + 1;
+            }
+        }
+
+        /**
+         * Only do histogram/MCV propagation when the transformation is definitely correct for value domain.
+         * <p>
+         * NOTE: This code path must be semantics-safe because MCV keys may be used as exact constant values
+         * (e.g. as IN-list values in skew join elimination v2). Therefore we only support a small whitelist of
+         * transformations that we can prove to be correct. If you need to support more functions in the future,
+         * add them here with strict guards and "fail closed" (return Optional.empty()) on any ambiguity.
+         * <p>
+         * Current supported cases:
+         * - POSITIVE(x): identity
+         * - NEGATIVE(x): exact -x, fixed-point only
+         * - ABS(x): exact abs(x), fixed-point only (with collision merge)
+         * <p>
+         * For unsupported functions we return empty to keep current behavior (no histogram for expression stats).
+         */
+        private Optional<Histogram> transformHistogramForUnary(CallOperator callOperator, ColumnStatistic childStats) {
+            Histogram childHist = childStats == null ? null : childStats.getHistogram();
+            if (childHist == null || childHist.getMCV().isEmpty()) {
+                return Optional.empty();
+            }
+
+            final String fn = callOperator.getFnName().toLowerCase();
+            final Type targetType = callOperator.getType();
+
+            if (!isSupportedIntegerMcvType(targetType)) {
+                return Optional.empty();
+            }
+
+            if (FunctionSet.POSITIVE.equalsIgnoreCase(fn)) {
+                return Optional.of(childHist);
+            }
+
+            if (!FunctionSet.NEGATIVE.equalsIgnoreCase(fn) && !FunctionSet.ABS.equalsIgnoreCase(fn)) {
+                return Optional.empty();
+            }
+
+            // Buckets transformation:
+            // - NEGATIVE(x): y = -x (monotonic decreasing) => [l,u] -> [-u,-l], reverse order
+            // - ABS(x): y = abs(x)
+            //     - if buckets are all >= 0: identity
+            //     - if buckets are all <= 0: y = -x (monotonic decreasing) => [l,u] -> [-u,-l], reverse order
+            //     - if buckets cross 0: non-monotonic => fail closed (Optional.empty()) to avoid inconsistent histogram
+            List<Bucket> newBuckets = childHist.getBuckets();
+            if (!newBuckets.isEmpty()) {
+                boolean needNegateBuckets = FunctionSet.NEGATIVE.equalsIgnoreCase(fn);
+                if (FunctionSet.ABS.equalsIgnoreCase(fn)) {
+                    boolean allNonNegative = newBuckets.stream().allMatch(b -> b.getLower() >= 0);
+                    boolean allNonPositive = newBuckets.stream().allMatch(b -> b.getUpper() <= 0);
+                    if (allNonNegative) {
+                        needNegateBuckets = false;
+                    } else if (allNonPositive) {
+                        needNegateBuckets = true;
+                    } else {
+                        return Optional.empty();
+                    }
+                }
+
+                if (needNegateBuckets) {
+                    long prevCum = 0L;
+                    List<Long> perBucketTotals = Lists.newArrayListWithCapacity(newBuckets.size());
+                    List<double[]> bounds = Lists.newArrayListWithCapacity(newBuckets.size());
+                    for (Bucket b : newBuckets) {
+                        long perBucketTotal = b.getCount() - prevCum;
+                        prevCum = b.getCount();
+                        perBucketTotals.add(perBucketTotal);
+                        bounds.add(new double[] {-b.getUpper(), -b.getLower()});
+                    }
+
+                    long newCum = 0L;
+                    List<Bucket> reversed = Lists.newArrayListWithCapacity(newBuckets.size());
+                    for (int i = newBuckets.size() - 1; i >= 0; i--) {
+                        newCum += perBucketTotals.get(i);
+                        double[] bd = bounds.get(i);
+                        reversed.add(new Bucket(bd[0], bd[1], newCum, 0L));
+                    }
+                    newBuckets = reversed;
+                }
+            }
+
+            Map<String, Long> newMcv = new HashMap<>();
+            for (Map.Entry<String, Long> e : childHist.getMCV().entrySet()) {
+                Optional<BigInteger> vOpt = parseFixedPointMcvKey(e.getKey(), targetType);
+                if (vOpt.isEmpty()) {
+                    return Optional.empty();
+                }
+                BigInteger v = vOpt.get();
+                BigInteger out;
+                if (FunctionSet.NEGATIVE.equalsIgnoreCase(fn)) {
+                    out = v.negate();
+                } else {
+                    out = v.abs();
+                }
+                Optional<ConstantOperator> outConst = fixedPointToConstant(out, targetType);
+                if (outConst.isEmpty()) {
+                    return Optional.empty();
+                }
+                newMcv.merge(outConst.get().toString(), e.getValue(), Long::sum);
+            }
+
+            return Optional.of(new Histogram(newBuckets, newMcv));
+        }
+
+        /**
+         * Only do histogram/MCV propagation for binary expressions when it is definitely correct.
+         * <p>
+         * NOTE: This code path must be semantics-safe because MCV keys may be used as exact constant values
+         * (e.g. as IN-list values in skew join elimination v2). Therefore we only support a small whitelist of
+         * transformations that we can prove to be correct. If you need to support more functions in the future,
+         * add them here with strict guards and "fail closed" (return Optional.empty()) on any ambiguity.
+         * <p>
+         * Current supported cases (fixed-point only):
+         * - ADD(x, const) / ADD(const, x)
+         * - SUBTRACT(x, const) / SUBTRACT(const, x)
+         * <p>
+         * For x +/- const we will:
+         * - transform MCV keys by applying the exact operation
+         * - shift bucket bounds for x +/- const when the mapping is monotonic (x +/- const)
+         * (for const - x we transform buckets by reversing order)
+         */
+        private Optional<Histogram> transformHistogramForBinary(
+                CallOperator callOperator, ColumnStatistic leftStats, ColumnStatistic rightStats) {
+            final String fn = callOperator.getFnName().toLowerCase();
+            if (!FunctionSet.ADD.equalsIgnoreCase(fn) && !FunctionSet.SUBTRACT.equalsIgnoreCase(fn)) {
+                return Optional.empty();
+            }
+
+            final Type targetType = callOperator.getType();
+            if (!isSupportedIntegerMcvType(targetType)) {
+                return Optional.empty();
+            }
+
+            ScalarOperator leftOp = callOperator.getChild(0);
+            ScalarOperator rightOp = callOperator.getChild(1);
+            boolean leftIsConst = leftOp != null && leftOp.isConstant();
+            boolean rightIsConst = rightOp != null && rightOp.isConstant();
+            if (leftIsConst == rightIsConst) {
+                return Optional.empty();
+            }
+
+            Optional<ConstantOperator> constOpOpt = toConstantOperator(leftIsConst ? leftOp : rightOp);
+            if (constOpOpt.isEmpty()) {
+                return Optional.empty();
+            }
+            ConstantOperator constOp = constOpOpt.get();
+            ColumnStatistic baseStats = leftIsConst ? rightStats : leftStats;
+            Histogram baseHist = baseStats == null ? null : baseStats.getHistogram();
+            if (baseHist == null || baseHist.getMCV().isEmpty()) {
+                return Optional.empty();
+            }
+
+            Optional<BigInteger> constValOpt = constantToFixedPoint(constOp, targetType);
+            if (constValOpt.isEmpty()) {
+                return Optional.empty();
+            }
+            BigInteger c = constValOpt.get();
+
+            Map<String, Long> newMcv = new HashMap<>();
+            for (Map.Entry<String, Long> e : baseHist.getMCV().entrySet()) {
+                Optional<BigInteger> vOpt = parseFixedPointMcvKey(e.getKey(), targetType);
+                if (vOpt.isEmpty()) {
+                    return Optional.empty();
+                }
+                BigInteger v = vOpt.get();
+                BigInteger out;
+                if (FunctionSet.ADD.equalsIgnoreCase(callOperator.getFnName())) {
+                    out = v.add(c);
+                } else {
+                    // SUBTRACT
+                    if (!leftIsConst) {
+                        // x - const
+                        out = v.subtract(c);
+                    } else {
+                        // const - x
+                        out = c.subtract(v);
+                    }
+                }
+                Optional<ConstantOperator> outConst = fixedPointToConstant(out, targetType);
+                if (outConst.isEmpty()) {
+                    return Optional.empty();
+                }
+                newMcv.merge(outConst.get().toString(), e.getValue(), Long::sum);
+            }
+
+            List<Bucket> newBuckets = baseHist.getBuckets();
+            boolean shouldShiftBuckets = FunctionSet.ADD.equalsIgnoreCase(callOperator.getFnName()) || !leftIsConst;
+            if (shouldShiftBuckets) {
+                OptionalDouble deltaOpt = ConstantOperatorUtils.doubleValueFromConstant(constOp);
+                if (deltaOpt.isPresent()) {
+                    final double bucketShift = FunctionSet.SUBTRACT.equalsIgnoreCase(callOperator.getFnName())
+                            ? -deltaOpt.getAsDouble()
+                            : deltaOpt.getAsDouble();
+                    newBuckets = baseHist.getBuckets().stream()
+                            .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
+                                    b.getCount(), b.getUpperRepeats()))
+                            .collect(Collectors.toList());
+                }
+            } else {
+                OptionalDouble cOpt = ConstantOperatorUtils.doubleValueFromConstant(constOp);
+                if (cOpt.isPresent() && !baseHist.getBuckets().isEmpty()) {
+                    final double cDouble = cOpt.getAsDouble();
+                    final List<Bucket> baseBuckets = baseHist.getBuckets();
+                    long prevCum = 0L;
+                    List<Long> perBucketTotals = Lists.newArrayListWithCapacity(baseBuckets.size());
+                    List<double[]> bounds = Lists.newArrayListWithCapacity(baseBuckets.size());
+                    for (Bucket b : baseBuckets) {
+                        long perBucketTotal = b.getCount() - prevCum;
+                        prevCum = b.getCount();
+                        perBucketTotals.add(perBucketTotal);
+                        bounds.add(new double[] {cDouble - b.getUpper(), cDouble - b.getLower()});
+                    }
+
+                    long newCum = 0L;
+                    List<Bucket> reversed = Lists.newArrayListWithCapacity(baseBuckets.size());
+                    for (int i = baseBuckets.size() - 1; i >= 0; i--) {
+                        newCum += perBucketTotals.get(i);
+                        double[] bd = bounds.get(i);
+                        reversed.add(new Bucket(bd[0], bd[1], newCum, 0L));
+                    }
+                    newBuckets = reversed;
+                }
+            }
+
+            return Optional.of(new Histogram(newBuckets, newMcv));
+        }
+
+        private Optional<ConstantOperator> toConstantOperator(ScalarOperator op) {
+            if (op == null || !op.isConstant() || op.isConstantNull()) {
+                return Optional.empty();
+            }
+            if (op instanceof ConstantOperator) {
+                return Optional.of((ConstantOperator) op);
+            }
+            return Optional.empty();
+        }
+
+        private Optional<BigInteger> parseFixedPointMcvKey(String mcvKey, Type targetType) {
+            Optional<ConstantOperator> c = ConstantOperator.createVarchar(mcvKey).castTo(targetType);
+            return c.map(constantOperator -> constantToBigInteger(constantOperator, targetType));
+        }
+
+        private Optional<BigInteger> constantToFixedPoint(ConstantOperator constant, Type targetType) {
+            Optional<ConstantOperator> c = constant.castTo(targetType);
+            return c.map(constantOperator -> constantToBigInteger(constantOperator, targetType));
+        }
+
+        private BigInteger constantToBigInteger(ConstantOperator c, Type targetType) {
+            if (targetType.isTinyint()) {
+                return BigInteger.valueOf(c.getTinyInt());
+            } else if (targetType.isSmallint()) {
+                return BigInteger.valueOf(c.getSmallint());
+            } else if (targetType.isInt()) {
+                return BigInteger.valueOf(c.getInt());
+            } else if (targetType.isBigint()) {
+                return BigInteger.valueOf(c.getBigint());
+            } else {
+                // LARGEINT
+                return c.getLargeInt();
+            }
+        }
+
+        private Optional<ConstantOperator> fixedPointToConstant(BigInteger v, Type targetType) {
+            try {
+                if (targetType.isTinyint()) {
+                    if (v.compareTo(BigInteger.valueOf(Byte.MIN_VALUE)) < 0 ||
+                            v.compareTo(BigInteger.valueOf(Byte.MAX_VALUE)) > 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(ConstantOperator.createTinyInt(v.byteValueExact()));
+                } else if (targetType.isSmallint()) {
+                    if (v.compareTo(BigInteger.valueOf(Short.MIN_VALUE)) < 0 ||
+                            v.compareTo(BigInteger.valueOf(Short.MAX_VALUE)) > 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(ConstantOperator.createSmallInt(v.shortValueExact()));
+                } else if (targetType.isInt()) {
+                    if (v.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0 ||
+                            v.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(ConstantOperator.createInt(v.intValueExact()));
+                } else if (targetType.isBigint()) {
+                    if (v.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0 ||
+                            v.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(ConstantOperator.createBigint(v.longValueExact()));
+                } else if (targetType.isLargeint()) {
+                    return Optional.of(ConstantOperator.createLargeInt(v));
+                } else {
+                    return Optional.empty();
+                }
+            } catch (ArithmeticException ex) {
+                return Optional.empty();
+            }
+        }
+
+        private boolean isSupportedIntegerMcvType(Type t) {
+            return t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint();
+        }
+
+        private void mapVariableStatistics(CallOperator call) {
+            if (FunctionSet.ARRAY_MAP.equalsIgnoreCase(call.getFnName())) {
+                addLambdaArgStats(call);
+            }
+        }
+
+        /**
+         * E.g. for `array_map((x) -> ... x ..., ARRAY_TEST)`, maps lambda argument 'x' to the statistics of ARRAY_TEST.
+         */
+        private void addLambdaArgStats(CallOperator arrayMapCall) {
+            final var lambda = getLambdaFromArrayMap(arrayMapCall);
+            if (lambda == null) {
+                return;
+            }
+
+            // Collect non-lambda children (the array inputs) in order.
+            List<ScalarOperator> arrayInputs = new ArrayList<>();
+            for (ScalarOperator child : arrayMapCall.getChildren()) {
+                if (!(child instanceof LambdaFunctionOperator)) {
+                    arrayInputs.add(child);
+                }
+            }
+
+            final var refColumns = lambda.getRefColumns();
+            for (int i = 0; i < Math.min(refColumns.size(), arrayInputs.size()); i++) {
+                ColumnRefOperator lambdaArg = refColumns.get(i);
+                ScalarOperator arrayInput = arrayInputs.get(i);
+                ColumnStatistic stat = arrayInput.accept(this, null);
+                mappedStats.put(lambdaArg, stat);
+            }
+        }
+
+        @Nullable
+        private static LambdaFunctionOperator getLambdaFromArrayMap(CallOperator callOperator) {
+            final var firstChild = callOperator.getChild(0);
+            final var secondChild = callOperator.getChild(1);
+
+            if (firstChild instanceof LambdaFunctionOperator lambda) {
+                return lambda;
+            }
+
+            if (secondChild instanceof LambdaFunctionOperator lambda) {
+                return lambda;
+            }
+
+            return null;
+        }
+
+        private static ColumnStatistic getArrayMapFirstArrayStats(CallOperator callOperator, List<ColumnStatistic> stats) {
+            final var firstChild = callOperator.getChild(0);
+            final var lastChild = callOperator.getChild(callOperator.getChildren().size() - 1);
+
+            if (firstChild instanceof LambdaFunctionOperator) {
+                return stats.get(1);
+            }
+
+            if (lastChild instanceof LambdaFunctionOperator) {
+                return stats.get(0);
+            }
+
+            return ColumnStatistic.unknown();
+        }
+
+        private static ColumnStatistic getArrayMapLambdaStats(CallOperator callOperator,
+                                                              LambdaFunctionOperator lambda,
+                                                              List<ColumnStatistic> stats) {
+            return stats.get(callOperator.getChildren().indexOf(lambda));
+        }
+
+        private static double calculateArrayMapNdv(CallOperator arrayMap, List<ColumnStatistic> stats) {
+            final var lambda = getLambdaFromArrayMap(arrayMap);
+            final var arrayStats = getArrayMapFirstArrayStats(arrayMap, stats);
+            if (lambda != null && lambda.getNumberOfDependentArguments() <= 1) {
+                final var lambdaStats = getArrayMapLambdaStats(arrayMap, lambda, stats);
+                if (!lambdaStats.isUnknown()) {
+                    if (lambda.isIndependentOfArguments()) {
+                        if (arrayStats.isUnknown()) {
+                            return lambdaStats.getDistinctValuesCount();
+                        } else {
+                            return Math.max(lambdaStats.getDistinctValuesCount(), arrayStats.getDistinctValuesCount());
+                        }
+                    }
+                    // TODO(o.layer): Could use NDV of unnest stats (https://github.com/StarRocks/starrocks/pull/69272) to
+                    // better estimate the NDV of array_map when lambda depends on the array elements.
+                }
+            }
+
+            // As a fallback, return the input NDVs as approximation.
+            if (arrayStats.isUnknown()) {
+                return ColumnStatistic.unknown().getDistinctValuesCount();
+            }
+            return arrayStats.getDistinctValuesCount();
         }
     }
 }

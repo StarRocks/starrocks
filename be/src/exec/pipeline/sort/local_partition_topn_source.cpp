@@ -24,6 +24,12 @@ LocalPartitionTopnSourceOperator::LocalPartitionTopnSourceOperator(OperatorFacto
         : SourceOperator(factory, id, "local_partition_topn_source", plan_node_id, false, driver_sequence),
           _partition_topn_ctx(partition_topn_ctx) {}
 
+Status LocalPartitionTopnSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _partition_topn_ctx->observable().attach_source_observer(state, observer());
+    return Status::OK();
+}
+
 bool LocalPartitionTopnSourceOperator::has_output() const {
     return _partition_topn_ctx->has_output();
 }
@@ -33,6 +39,7 @@ bool LocalPartitionTopnSourceOperator::is_finished() const {
 }
 
 StatusOr<ChunkPtr> LocalPartitionTopnSourceOperator::pull_chunk(RuntimeState* state) {
+    auto notify = _partition_topn_ctx->observable().defer_notify_sink();
     return _partition_topn_ctx->pull_one_chunk();
 }
 

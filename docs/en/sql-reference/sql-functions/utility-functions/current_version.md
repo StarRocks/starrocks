@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the current version of StarRocks."
 ---
 
 # current_version
 
-## Description
+
 
 Returns the current version of StarRocks. Two syntaxes are provided for compatibility with different clients.
 

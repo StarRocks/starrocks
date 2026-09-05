@@ -1,0 +1,97 @@
+-- name: testIcebergHadoopCatalog
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0}",
+"aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (
+    c0 int, 
+    c1 string
+);
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test values (1, "A");
+-- result:
+-- !result
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+-- result:
+1	A
+-- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double (
+    c0 double
+);
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as as select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double;
+-- result:
+-- !result
+describe ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as;
+-- result:
+c0	DOUBLE	Yes	false	None		None
+-- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as;
+-- result:
+-- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double;
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member (
+    name string
+);
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member VALUES ('Kim');
+-- result:
+-- !result
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+-- result:
+Kim
+-- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member (
+    address string
+);
+-- result:
+-- !result
+desc ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+-- result:
+address	VARCHAR(1073741824)	Yes	false	None		None
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member VALUES ('Earth');
+-- result:
+-- !result
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+-- result:
+Earth
+-- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+-- result:
+-- !result
+drop database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+-- result:
+-- !result
+drop catalog ice_hadoop${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

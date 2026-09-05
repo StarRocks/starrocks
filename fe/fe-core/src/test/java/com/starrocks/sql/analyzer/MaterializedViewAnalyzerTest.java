@@ -15,29 +15,37 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
-import mockit.Expectations;
-import mockit.Mocked;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.util.Lists;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.IntStream;
@@ -47,119 +55,18 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class MaterializedViewAnalyzerTest {
     static StarRocksAssert starRocksAssert;
+    @TempDir
+    public static File temp;
 
-    @Test
-    public void testMaterializedAnalyPaimonTable(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
-        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
-                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
-
-        {
-            // test check partition column can not be found
-            boolean checkSuccess = false;
-            new Expectations() {
-                {
-                    table.isUnPartitioned();
-                    result = false;
-                }
-            };
-            try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
-                checkSuccess = true;
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage(),
-                        e.getMessage().contains("Materialized view partition column in partition exp " +
-                                "must be base table partition column"));
-            }
-            Assert.assertFalse(checkSuccess);
-        }
-
-        {
-            // test check successfully
-            boolean checkSuccess = false;
-            new Expectations() {
-                {
-                    table.isUnPartitioned();
-                    result = false;
-
-                    table.getPartitionColumnNames();
-                    result = Lists.newArrayList("dt");
-
-                    slotRef.getColumnName();
-                    result = "dt";
-
-                    table.getColumn("dt");
-                    result = new Column("dt", ScalarType.createType(PrimitiveType.DATE));
-                }
-            };
-            try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
-                checkSuccess = true;
-            } catch (Exception e) {
-            }
-            Assert.assertTrue(checkSuccess);
-        }
-
-        {
-            //test paimon table is unparitioned
-            new Expectations() {
-                {
-                    table.isUnPartitioned();
-                    result = true;
-                }
-            };
-
-            boolean checkSuccess = false;
-            try {
-                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage(),
-                        e.getMessage().contains("Materialized view partition column in partition exp " +
-                                "must be base table partition column"));
-            }
-            Assert.assertFalse(checkSuccess);
-        }
-    }
-
-    @Test
-    public void testReplacePaimonTableAlias(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
-        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
-                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
-        BaseTableInfo baseTableInfo = new BaseTableInfo("test_catalog", "test_db", "test_tbl",
-                "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES");
-        {
-            new Expectations() {
-                {
-                    table.getCatalogName();
-                    result = "test_catalog";
-                    table.getDbName();
-                    result = "test_db";
-                    table.getTableIdentifier();
-                    result = "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES";
-                }
-            };
-
-            Assert.assertTrue(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
-        }
-
-        {
-            new Expectations() {
-                {
-                    table.getCatalogName();
-                    result = "test_catalog2";
-
-                }
-            };
-            Assert.assertFalse(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
-
-        }
-
-    }
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
-        Config.enable_experimental_mv = true;
         starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        ConnectorPlanTestBase.mockAllCatalogs(starRocksAssert.getCtx(), temp.toURI().toString());
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(starRocksAssert.getCtx());
+
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -181,15 +88,131 @@ public class MaterializedViewAnalyzerTest {
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
     }
 
+    @AfterAll
+    public static void afterClass() {
+        ConnectorPlanTestBase.dropAllCatalogs();
+    }
+
+    @Test
+    public void testCreateIcebergTable1() throws Exception {
+        {
+            String mvName = "iceberg_parttbl_mv1";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+            Table mv = starRocksAssert.getTable("test", mvName);
+            Assertions.assertTrue(mv != null);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_bucket_mv1`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY ts\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_bucket` as a;");
+            Assertions.fail();
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().
+                    contains("Do not support create materialized view when base iceberg table partition transform "));
+        }
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithVariantColumnRejected() throws Exception {
+        starRocksAssert.useDatabase("test");
+        // A materialized view is stored as a native OLAP table, so a VARIANT value column projected
+        // from an external (Iceberg) base table must be rejected at analysis: the generated MV column
+        // path does not go through ColumnDefAnalyzer, and a native VARIANT column would abort the BE
+        // on refresh (storage LogicalType dispatch LOG(FATAL)). A native VARIANT base column can no
+        // longer be created, so an external catalog is the only way to reach this path.
+        analyzeFail("CREATE MATERIALIZED VIEW test.mv_variant\n" +
+                        "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                        "AS SELECT id, v FROM iceberg0.unpartitioned_db.variant_t0;",
+                "VARIANT is not supported as a column type for materialized views");
+    }
+
+    @Test
+    public void testCreateIcebergTable2() throws Exception {
+        String mvName = "iceberg_parttbl_mv1";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                        "PARTITION BY date \n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+        Table mv = starRocksAssert.getTable("test", mvName);
+        Assertions.assertTrue(mv != null);
+        Assertions.assertTrue(mv instanceof MaterializedView);
+        PartitionInfo partitionInfo = ((MaterializedView) mv).getPartitionInfo();
+        Assertions.assertTrue(partitionInfo.isListPartition());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateIcebergTable2WithAdaptive() throws Exception {
+        String mvName = "iceberg_parttbl_mv1";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                        "PARTITION BY date \n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "properties (\n" +
+                        "'replication_num' = '1',\n" +
+                        "'partition_refresh_strategy' = 'adaptive'" +
+                        ") \n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+        Table mv = starRocksAssert.getTable("test", mvName);
+        Assertions.assertTrue(mv != null);
+        Assertions.assertTrue(mv instanceof MaterializedView);
+        PartitionInfo partitionInfo = ((MaterializedView) mv).getPartitionInfo();
+        Assertions.assertTrue(partitionInfo.isListPartition());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateIcebergTable3() {
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_bucket_mv1`\n" +
+                            "PARTITION BY (id, data, date_trunc('year', ts))\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_year` as a;");
+            Table mv = starRocksAssert.getTable("test", "iceberg_bucket_mv1");
+            Assertions.assertTrue(mv != null);
+            Assertions.assertTrue(mv instanceof MaterializedView);
+            PartitionInfo partitionInfo = ((MaterializedView) mv).getPartitionInfo();
+            Assertions.assertTrue(partitionInfo.isListPartition());
+        } catch (Exception e) {
+            Assertions.fail();
+        }
+    }
+
     @Test
     public void testRefreshMaterializedView() throws Exception {
         analyzeSuccess("refresh materialized view mv");
-        Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
-        Table table = testDb.getTable("mv");
-        Assert.assertNotNull(table);
-        Assert.assertTrue(table instanceof MaterializedView);
+        Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv");
+        Assertions.assertNotNull(table);
+        Assertions.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
-        mv.setInactiveAndReason("");
+        mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
         analyzeFail("refresh materialized view mv");
     }
 
@@ -201,18 +224,26 @@ public class MaterializedViewAnalyzerTest {
                         "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
                         "REFRESH ASYNC\n" +
                         "PROPERTIES (\n" +
+                        "\"compression\" = \"zstd\",\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT k1, k2, v1 from test.tbl1");
-        ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
-                (ShowStmt) analyzeSuccess("show full columns from mv1"));
-        ShowResultSet showResultSet = showExecutor.execute();
-        Assert.assertEquals("[[a, date, , YES, YES, null, , , a1]," +
-                        " [b, int, , YES, YES, null, , , b2]," +
-                        " [c, int, , YES, YES, null, , , ]]",
-                showResultSet.getResultRows().toString());
+        {
+            ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) analyzeSuccess("show full columns from mv1"),
+                    starRocksAssert.getCtx());
+            Assertions.assertEquals("[[a, date, , YES, YES, null, , , a1]," +
+                            " [b, int, , YES, YES, null, , , b2]," +
+                            " [c, int, , YES, YES, null, , , ]]",
+                    showResultSet.getResultRows().toString());
+        }
+        {
+            ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) analyzeSuccess("show create table mv1"),
+                    starRocksAssert.getCtx());
+            String result = showResultSet.getResultRows().toString();
+            Assertions.assertTrue(result.contains("zstd"));
+        }
     }
 
     @Test
@@ -231,6 +262,75 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+    public void testCreateMaterializedViewWithTimeTravelClause() {
+        analyzeFail("create materialized view mv_time_travel\n" +
+                        "distributed by hash(id) buckets 3\n" +
+                        "refresh deferred manual\n" +
+                        "as select id, data, date from iceberg0.partitioned_db.t1 for version as of 1",
+                "Do not support create materialized view with time travel clause");
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithTimeTravelClauseInCte() {
+        analyzeFail("create materialized view mv_time_travel_in_cte\n" +
+                        "distributed by hash(id) buckets 3\n" +
+                        "refresh deferred manual\n" +
+                        "as with cte as (select id, data, date from iceberg0.partitioned_db.t1 for version as of 1)\n" +
+                        "select id, data, date from cte",
+                "Do not support create materialized view with time travel clause");
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_mv_time_travel as select k1, k2 from test.tbl1", () ->
+                analyzeFail("create materialized view mv_time_travel_on_view\n" +
+                                "distributed by hash(k2) buckets 3\n" +
+                                "refresh deferred manual\n" +
+                                "as select k1, k2 from test.base_view_mv_time_travel for version as of 1",
+                        "Unsupported relation type for temporal clauses, relation type: VIEW"));
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClause() {
+        analyzeFail("create view test.view_time_travel as " +
+                        "select id, data from iceberg0.partitioned_db.t1 for version as of 1",
+                "Do not support create view with time travel clause");
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClauseInCte() {
+        analyzeFail("create view test.view_time_travel_in_cte as " +
+                        "with cte as (select id, data from iceberg0.partitioned_db.t1 for version as of 1)\n" +
+                        "select id, data from cte",
+                "Do not support create view with time travel clause");
+    }
+
+    @Test
+    public void testCreateViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_time_travel as select k1, k2 from test.tbl1", () ->
+                analyzeFail("create view test.view_time_travel_on_view as " +
+                                "select k1, k2 from test.base_view_time_travel for version as of 1",
+                        "Unsupported relation type for temporal clauses, relation type: VIEW"));
+    }
+
+    @Test
+    public void testAlterViewWithTimeTravelClause() throws Exception {
+        starRocksAssert.withView("create view test.view_alter_time_travel as select k1 from test.tbl1", () ->
+                analyzeFail("alter view test.view_alter_time_travel as " +
+                                "select id, data from iceberg0.partitioned_db.t1 for version as of 1",
+                        "Do not support alter view with time travel clause"));
+    }
+
+    @Test
+    public void testAlterViewWithTimeTravelClauseOnView() throws Exception {
+        starRocksAssert.withView("create view test.base_view_alter_time_travel as select k1, k2 from test.tbl1", () ->
+                starRocksAssert.withView("create view test.target_view_alter_time_travel as select k1, k2 from test.tbl1",
+                        () -> analyzeFail("alter view test.target_view_alter_time_travel as " +
+                                        "select k1, k2 from test.base_view_alter_time_travel for version as of 1",
+                                "Unsupported relation type for temporal clauses, relation type: VIEW")));
+    }
+
+    @Test
     public void testCreateMvWithNotExistResourceGroup() {
         String sql = "create materialized view mv\n" +
                 "PARTITION BY k1\n" +
@@ -243,8 +343,8 @@ public class MaterializedViewAnalyzerTest {
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;";
-        Assert.assertThrows("resource_group not_exist_rg does not exist.",
-                DdlException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
+        Assertions.assertThrows(DdlException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql),
+                "resource_group not_exist_rg does not exist.");
     }
 
     @Test
@@ -274,6 +374,7 @@ public class MaterializedViewAnalyzerTest {
         }
 
         {
+            // Not supported
             String mvSql = "create materialized view window_mv_3\n" +
                     "partition by k1\n" +
                     "distributed by hash(k2)\n" +
@@ -285,6 +386,117 @@ public class MaterializedViewAnalyzerTest {
             analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions" +
                     " should contain the partition column k1 of materialized view");
         }
+
+        {
+            starRocksAssert.withTable("CREATE TABLE t1_event(\n" +
+                    "    order_root_id VARCHAR(255),\n" +
+                    "    event_type VARCHAR(255),\n" +
+                    "    sequence_timestamp datetime\n" + ")\n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\"replication_num\"=\"1\");");
+
+            // Not supported
+            String mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC " +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" +
+                    "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) of" +
+                    " materialized view.");
+
+            // Not supported: with subquery
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "SELECT * from  (\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) t\n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) " +
+                    "of materialized view.");
+
+            // Supported: with subquery
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "SELECT * from  (\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id, date_trunc('DAY', sequence_timestamp) " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) t\n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeSuccess(mvSql);
+
+            // Not supported: with CTE
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    " WITH cte1 AS (" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) \n" +
+                    "SELECT * FROM cte1 \n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) " +
+                    "of materialized view.");
+
+            // Supported: with CTE
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    " WITH cte1 AS (" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id, date_trunc('DAY', sequence_timestamp) " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) \n" +
+                    "SELECT * FROM cte1 \n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeSuccess(mvSql);
+        }
+    }
+
+    @Test
+    public void testCreateMvBaseOnView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withView("create view v1 as select date_trunc('month', k1) as kv1, k2 as kv2 from tbl1");
+
+        analyzeSuccess("create materialized view mv1 partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                "as select kv1 as k1, kv2 as k2 from v1");
+
+        starRocksAssert.useDatabase("test")
+                .withView("create view v2(kv1, kv2) as select date_trunc('month', k1), k2 as vv from tbl1");
+
+        analyzeSuccess("create materialized view mv2 partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                "as select kv1 as k1, kv2 as k2 from v2");
     }
 
     @Test
@@ -299,13 +511,164 @@ public class MaterializedViewAnalyzerTest {
     private void checkQueryOutputIndices(List<Integer> inputs, String expect, boolean isChanged) {
         List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
         for (Integer i : inputs) {
-            mvColumnPairs.add(Pair.create(new Column(), i));
+            mvColumnPairs.add(Pair.create(new Column("k1", IntegerType.INT), i));
         }
         List<Integer> queryOutputIndices = MaterializedViewAnalyzer.getQueryOutputIndices(mvColumnPairs);
-        Assert.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());
-        Assert.assertEquals(Joiner.on(",").join(queryOutputIndices), expect);
-        Assert.assertEquals(IntStream.range(0, queryOutputIndices.size()).anyMatch(i -> i != queryOutputIndices.get(i)),
+        Assertions.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());
+        Assertions.assertEquals(Joiner.on(",").join(queryOutputIndices), expect);
+        Assertions.assertEquals(IntStream.range(0, queryOutputIndices.size()).anyMatch(i -> i != queryOutputIndices.get(i)),
                 isChanged);
+    }
 
+    @Test
+    public void testReplicationNum() throws Exception {
+        short defaultReplication = Config.default_replication_num;
+        final String sql = "create materialized view mv1 refresh manual as " +
+                "SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;";
+
+        {
+            Config.default_replication_num = 1;
+            CreateMaterializedViewStatement statementBase =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            starRocksAssert.getCtx());
+            MaterializedViewAnalyzer.analyze(statementBase, starRocksAssert.getCtx());
+            Assertions.assertEquals("1",
+                    statementBase.getProperties().get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+        }
+        {
+            Config.default_replication_num = 3;
+            CreateMaterializedViewStatement statementBase =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            starRocksAssert.getCtx());
+            MaterializedViewAnalyzer.analyze(statementBase, starRocksAssert.getCtx());
+            Assertions.assertEquals("3",
+                    statementBase.getProperties().get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+        }
+
+        Config.default_replication_num = defaultReplication;
+    }
+
+    @Test
+    public void testCreateMVCheckPartitionNameIgnoreCaseSensitive() {
+        analyzeSuccess("create materialized view mv_hive_0 partition by str2date(L_SHIPDATE, '%Y%m%d') refresh manual as " +
+                "SELECT l_partkey, L_SHIPDATE  FROM hive0.partitioned_db.lineitem_mul_par3 as a");
+    }
+
+    @Test
+    public void testCreateMVForceRange() throws Exception {
+        boolean oldEnableRangeDistribution = Config.enable_range_distribution;
+        boolean oldEnableMvRangeDistribution = Config.enable_mv_range_distribution;
+        Config.enable_range_distribution = false;
+        try {
+            // set default config for async mvs
+            UtFrameUtils.setDefaultConfigForAsyncMVTest(starRocksAssert.getCtx());
+
+            String sql = "create materialized view test.force_range_mv\n" +
+                    "refresh async\n" +
+                    "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;";
+
+            // 1. Default: should NOT be range distribution if Config is false
+            CreateMaterializedViewStatement stmt1 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+            Assertions.assertFalse(stmt1.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // 2. Set session variable to true: should be range distribution
+            starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(true);
+            try {
+                CreateMaterializedViewStatement stmt2 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+                Assertions.assertTrue(stmt2.getDistributionDesc() instanceof RangeDistributionDesc);
+            } finally {
+                starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(false);
+            }
+
+            // 3. Set Config to true: a materialized view also needs enable_mv_range_distribution,
+            // so the table-level config alone selects nothing.
+            Config.enable_range_distribution = true;
+            CreateMaterializedViewStatement stmt3 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+            Assertions.assertFalse(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // 4. Set both configs to true: the config-driven default only takes effect in shared-data
+            // mode (range distribution is shared-data only), so the outcome tracks the current run mode.
+            Config.enable_mv_range_distribution = true;
+            CreateMaterializedViewStatement stmt4 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+            Assertions.assertEquals(RunMode.isSharedDataMode(),
+                    stmt4.getDistributionDesc() instanceof RangeDistributionDesc);
+
+        } finally {
+            Config.enable_range_distribution = oldEnableRangeDistribution;
+            Config.enable_mv_range_distribution = oldEnableMvRangeDistribution;
+        }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergTableWithPartitionEvolution() throws Exception {
+        String unpartitionedMvName = "iceberg_evolution_unpartitioned_mv";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + unpartitionedMvName + "`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")\n" +
+                        "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                        + "`t0_date_month_identity_evolution` as a;");
+        Table unpartitionedMv = starRocksAssert.getTable("test", unpartitionedMvName);
+        Assertions.assertTrue(unpartitionedMv instanceof MaterializedView);
+        Assertions.assertTrue(((MaterializedView) unpartitionedMv).getPartitionInfo().isUnPartitioned());
+        starRocksAssert.dropMaterializedView(unpartitionedMvName);
+
+        String partitionedMvName = "iceberg_evolution_partitioned_mv";
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + partitionedMvName + "`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY date_trunc('month', ts)\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                            + "`t0_date_month_identity_evolution` as a;");
+            Assertions.fail("Should fail because Iceberg table has partition evolution");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("partition evolution"));
+        }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergView() {
+        // Test creating MV on IcebergView should fail
+        String sql = "create materialized view mv_on_iceberg_view refresh manual as " +
+                "SELECT id, data, date FROM `iceberg0`.`view_db`.`iceberg_view` as a;";
+        analyzeFail(sql, "Create/Rebuild materialized view do not support the table type: ICEBERG_VIEW");
+    }
+
+    /**
+     * Report the distribution the DDL asked for only when it differs from the one the MV gets: a
+     * reconstructed DDL already names the key columns and must stay quiet.
+     */
+    @Test
+    public void testDescribeReplacedDistribution() {
+        List<String> keyColumns = Arrays.asList("__ROW_ID__", "id");
+
+        Assertions.assertEquals("DISTRIBUTED BY HASH(id)",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new HashDistributionDesc(8, Lists.newArrayList("id")), keyColumns));
+        Assertions.assertEquals("DISTRIBUTED BY RANDOM",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new RandomDistributionDesc(), keyColumns));
+        Assertions.assertEquals("DISTRIBUTED BY HASH(id, __ROW_ID__)",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new HashDistributionDesc(8, Lists.newArrayList("id", "__ROW_ID__")), keyColumns),
+                "a different column order is a different distribution");
+
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new HashDistributionDesc(8, Lists.newArrayList("__ROW_ID__", "id")), keyColumns));
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new HashDistributionDesc(8, Lists.newArrayList("__row_id__", "ID")), keyColumns),
+                "column names are case-insensitive");
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new RangeDistributionDesc(), keyColumns));
     }
 }

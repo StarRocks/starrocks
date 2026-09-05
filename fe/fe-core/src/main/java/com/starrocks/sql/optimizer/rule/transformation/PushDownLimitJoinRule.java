@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -59,7 +59,7 @@ public class PushDownLimitJoinRule extends TransformationRule {
 
         // TODO: Push down the limit to the full outer join if BE can output
         // the matched rows first.
-        if (joinType.isSemiAntiJoin() || joinType.isFullOuterJoin()) {
+        if (joinType.isSemiAntiJoin() || joinType.isFullOuterJoin() || joinType.isAsofInnerJoin()) {
             return Lists.newArrayList(result);
         } else if (joinType.isInnerJoin() && newJoin.getOnPredicate() != null) {
             return Lists.newArrayList(result);
@@ -67,11 +67,11 @@ public class PushDownLimitJoinRule extends TransformationRule {
             return Lists.newArrayList(result);
         }
 
-        // Cross-Join || Full-Outer-Join
+        // Cross-Join (without ON) || Inner-Join (without ON) || Left-Outer-Join || Right-Outer-Join
         int[] pushDownChildIdx = {0, 1};
 
         // push down all child
-        if (joinType.isLeftOuterJoin()) {
+        if (joinType.isAnyLeftOuterJoin()) {
             pushDownChildIdx = new int[] {0};
         } else if (joinType.isRightOuterJoin()) {
             pushDownChildIdx = new int[] {1};

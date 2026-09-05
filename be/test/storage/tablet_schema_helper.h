@@ -100,6 +100,26 @@ inline ColumnPB create_int_value_pb(int32_t id, const std::string& agg_method = 
     return col;
 }
 
+inline ColumnPB create_bigint_value_pb(int32_t id, const std::string& agg_method = "SUM", bool is_nullable = true,
+                                       const std::string& default_value = "", bool is_bf_column = false,
+                                       bool has_bitmap_index = false) {
+    ColumnPB col;
+    col.set_unique_id(id);
+    col.set_name(std::to_string(id));
+    col.set_type("BIGINT");
+    col.set_is_key(false);
+    col.set_aggregation(agg_method);
+    col.set_is_nullable(is_nullable);
+    col.set_length(8);
+    col.set_index_length(8);
+    if (!default_value.empty()) {
+        col.set_default_value(default_value);
+    }
+    col.set_is_bf_column(is_bf_column);
+    col.set_has_bitmap_index(has_bitmap_index);
+    return col;
+}
+
 inline TabletColumn create_int_value(int32_t id, StorageAggregateType agg_method = STORAGE_AGGREGATE_SUM,
                                      bool is_nullable = true, const std::string default_value = "",
                                      bool is_bf_column = false, bool has_bitmap_index = false) {
@@ -137,6 +157,18 @@ inline TabletColumn create_varchar_key(int32_t id, bool is_nullable = true, int 
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
     column.set_type(TYPE_VARCHAR);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(length);
+    column.set_index_length(4);
+    return column;
+}
+
+inline TabletColumn create_varbinary_key(int32_t id, bool is_nullable = true, int length = 8) {
+    TabletColumn column;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(TYPE_VARBINARY);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(length);
@@ -191,7 +223,7 @@ inline ColumnPB create_with_default_value_pb(const std::string& col_type, std::s
 }
 
 template <LogicalType type>
-inline TabletColumn create_with_default_value(std::string default_value) {
+inline TabletColumn create_with_default_value(const std::string& default_value) {
     TabletColumn column;
     column.set_type(type);
     column.set_is_nullable(true);

@@ -1,0 +1,7 @@
+position: 20 # float position is supported
+label: 'Authorization'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: authorization

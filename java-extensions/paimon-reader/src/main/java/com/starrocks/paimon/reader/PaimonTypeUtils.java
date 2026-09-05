@@ -26,11 +26,14 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
+import org.apache.paimon.types.TimeType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.stream.Collectors;
@@ -60,6 +63,10 @@ public class PaimonTypeUtils {
         }
 
         public String visit(BinaryType binaryType) {
+            return "binary";
+        }
+
+        public String visit(VarBinaryType varBinaryType) {
             return "binary";
         }
 
@@ -95,7 +102,15 @@ public class PaimonTypeUtils {
             return "date";
         }
 
+        public String visit(TimeType timeType) {
+            return "time";
+        }
+
         public String visit(TimestampType timestampType) {
+            return "timestamp-millis";
+        }
+
+        public String visit(LocalZonedTimestampType timestampType) {
             return "timestamp-millis";
         }
 

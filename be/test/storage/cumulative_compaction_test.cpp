@@ -19,9 +19,14 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/schema.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/base_compaction.h"
@@ -35,7 +40,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -99,7 +103,7 @@ public:
         ASSERT_EQ(1024, src_rowset->num_rows());
         to_delete.push_back(src_rowset);
 
-        tablet->modify_rowsets(to_add, to_delete, &to_replace);
+        tablet->modify_rowsets_without_lock(to_add, to_delete, &to_replace);
         ASSERT_EQ(to_replace.size(), 1);
         ASSERT_EQ(to_replace[0]->rowset_id(), to_check->rowset_id());
     }
@@ -236,14 +240,14 @@ public:
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(_tablet_schema);
         for (size_t j = 0; j < 8; ++j) {
-            auto chunk = ChunkHelper::new_chunk(schema, 128);
+            auto chunk = ChunkFactory::new_chunk(schema, 128);
             for (size_t i = 0; i < 128; ++i) {
                 test_data.push_back("well" + std::to_string(i));
-                auto& cols = chunk->columns();
-                cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+                auto cols = chunk->columns();
+                cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
                 Slice field_1(test_data[i]);
-                cols[1]->append_datum(Datum(field_1));
-                cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+                cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
             }
             CHECK_OK(writer->add_chunk(*chunk));
         }
@@ -326,7 +330,9 @@ protected:
 };
 
 TEST_F(CumulativeCompactionTest, test_init_succeeded) {
+    create_tablet_schema(DUP_KEYS);
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
+    tablet_meta->set_tablet_schema(_tablet_schema);
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(cumulative_compaction.compact().ok());
@@ -1011,7 +1017,7 @@ TEST_F(CumulativeCompactionTest, test_issue_20084) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*schema, 1024);
     int count_rows = 0;
     while (true) {
         read_chunk_ptr->reset();

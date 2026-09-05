@@ -1,0 +1,20 @@
+--- ./src/shared/cmake/MacroCheckGccVisibility.cmake.orig       2025-11-04 06:57:54.030738906 +0000
++++ ./src/shared/cmake/MacroCheckGccVisibility.cmake    2025-11-04 06:58:32.812332667 +0000
+@@ -42,12 +42,12 @@
+    endif (GCC_IS_NEWER_THAN_4_1)
+ 
+    if (${GccVisibility} AND GCC_IS_NEWER_THAN_4_1 AND NOT _GCC_COMPILED_WITH_BAD_ALLOCATOR)
+-      set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+-      set (KDE4_C_FLAGS "${KDE4_C_FLAGS}" "-fvisibility=hidden")
++          #set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
++          #set (KDE4_C_FLAGS "${KDE4_C_FLAGS}" "-fvisibility=hidden")
+ 
+-      if (GCC_IS_NEWER_THAN_4_2)
+-          set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
+-      endif (GCC_IS_NEWER_THAN_4_2)
++          #if (GCC_IS_NEWER_THAN_4_2)
++          #set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
++          #endif (GCC_IS_NEWER_THAN_4_2)
+    else (${GccVisibility} AND GCC_IS_NEWER_THAN_4_1 AND NOT _GCC_COMPILED_WITH_BAD_ALLOCATOR)
+       set (${GccVisibility} 0)
+    endif (${GccVisibility} AND GCC_IS_NEWER_THAN_4_1 AND NOT _GCC_COMPILED_WITH_BAD_ALLOCATOR)

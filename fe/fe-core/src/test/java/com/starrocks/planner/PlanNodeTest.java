@@ -16,27 +16,26 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.Type;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.StarRocksTestBase;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
-public class PlanNodeTest {
+public class PlanNodeTest extends StarRocksTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
     }
 
     Expr createSlotRef(int idx) {
         SlotId slotId = new SlotId(idx);
-        SlotDescriptor descriptor = new SlotDescriptor(slotId, Integer.toString(idx), Type.INT,true);
+        SlotDescriptor descriptor = new SlotDescriptor(slotId, Integer.toString(idx), IntegerType.INT,true);
         return new SlotRef(Integer.toString(idx), descriptor);
     }
 
@@ -57,7 +56,7 @@ public class PlanNodeTest {
         List<Integer> result = Lists.newArrayList();
         for (Expr expr: slotRefs) {
             if (!(expr instanceof SlotRef)) {
-                Assert.assertTrue(false);
+                Assertions.assertTrue(false);
             }
             result.add(((SlotRef) expr).getSlotId().asInt());
         }
@@ -66,8 +65,8 @@ public class PlanNodeTest {
 
     boolean slotRefsEqualTo(List<Expr> slotRefs, List<Integer> expect) {
         List<Integer> slotRefsToInt = slotRefsToInt(slotRefs);
-        System.out.println("slotRefs:" + slotRefsToInt(slotRefs));
-        System.out.println("expect:" + expect);
+        logSysInfo("slotRefs:" + slotRefsToInt(slotRefs));
+        logSysInfo("expect:" + expect);
         if (slotRefsToInt.size() != expect.size()) {
             return false;
         }
@@ -83,18 +82,18 @@ public class PlanNodeTest {
     public void testPermutaionsOfPartitionByExprs1() throws Exception {
         List<List<Expr>> slotRefs = createSlotRefArray(2, 3);
         for (List<Expr> refs: slotRefs) {
-            System.out.println(slotRefsToInt(refs));
+            logSysInfo(slotRefsToInt(refs));
         }
         List<List<Expr>> newSlotRefs = PlanNode.candidateOfPartitionByExprs(slotRefs);
-        Assert.assertTrue(newSlotRefs.size() == 8);
+        Assertions.assertTrue(newSlotRefs.size() == 8);
         for (List<Expr> candidates: newSlotRefs) {
-            System.out.println(slotRefsToInt(candidates));
+            logSysInfo(slotRefsToInt(candidates));
         }
         int k = 0;
         for (int i = 0; i < 3; i++) {
             for (int j = 3; j < 6; j++) {
                 if (k >= 8) break;
-                Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(k++), Arrays.asList(i, j)));
+                Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(k++), Arrays.asList(i, j)));
             }
         }
     }
@@ -103,37 +102,37 @@ public class PlanNodeTest {
     public void testPermutaionsOfPartitionByExprs2() throws Exception {
         List<List<Expr>> slotRefs = createSlotRefArray(1, 3);
         for (List<Expr> refs: slotRefs) {
-            System.out.println(slotRefsToInt(refs));
+            logSysInfo(slotRefsToInt(refs));
         }
         List<List<Expr>> newSlotRefs = PlanNode.candidateOfPartitionByExprs(slotRefs);
-        Assert.assertTrue(newSlotRefs.size() == 3);
+        Assertions.assertTrue(newSlotRefs.size() == 3);
         for (List<Expr> candidates: newSlotRefs) {
-            System.out.println(slotRefsToInt(candidates));
+            logSysInfo(slotRefsToInt(candidates));
         }
 
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(0), Arrays.asList(0)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(1), Arrays.asList(1)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(2), Arrays.asList(2)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(0), Arrays.asList(0)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(1), Arrays.asList(1)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(2), Arrays.asList(2)));
     }
 
     @Test
     public void testPermutaionsOfPartitionByExprs3() throws Exception {
         List<List<Expr>> slotRefs = createSlotRefArray(4, 5);
         for (List<Expr> refs: slotRefs) {
-            System.out.println(slotRefsToInt(refs));
+            logSysInfo(slotRefsToInt(refs));
         }
         List<List<Expr>> newSlotRefs = PlanNode.candidateOfPartitionByExprs(slotRefs);
-        Assert.assertTrue (newSlotRefs.size() == 8);
+        Assertions.assertTrue (newSlotRefs.size() == 8);
         for (List<Expr> candidates: newSlotRefs) {
-            System.out.println(slotRefsToInt(candidates));
+            logSysInfo(slotRefsToInt(candidates));
         }
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(0), Arrays.asList(0, 5, 10, 15)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(1), Arrays.asList(0, 5, 10, 16)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(2), Arrays.asList(0, 5, 10, 17)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(3), Arrays.asList(0, 5, 10, 18)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(4), Arrays.asList(0, 5, 10, 19)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(5), Arrays.asList(0, 5, 11, 15)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(6), Arrays.asList(0, 5, 11, 16)));
-        Assert.assertTrue(slotRefsEqualTo(newSlotRefs.get(7), Arrays.asList(0, 5, 11, 17)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(0), Arrays.asList(0, 5, 10, 15)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(1), Arrays.asList(0, 5, 10, 16)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(2), Arrays.asList(0, 5, 10, 17)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(3), Arrays.asList(0, 5, 10, 18)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(4), Arrays.asList(0, 5, 10, 19)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(5), Arrays.asList(0, 5, 11, 15)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(6), Arrays.asList(0, 5, 11, 16)));
+        Assertions.assertTrue(slotRefsEqualTo(newSlotRefs.get(7), Arrays.asList(0, 5, 11, 17)));
     }
 }

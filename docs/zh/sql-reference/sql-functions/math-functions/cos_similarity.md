@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "通过计算两个向量间夹角的余弦值来衡量向量相似度。"
 ---
 
 # cosine_similarity
 
-## 功能
+
 
 计算两个向量的余弦夹角来评估向量之间的相似度。
 

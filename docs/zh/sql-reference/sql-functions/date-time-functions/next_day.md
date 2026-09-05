@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回指定日期之后的那个指定星期几所对应的日期。"
 ---
 
 # next_day
 
-## 功能
+
 
 根据输入的日期值，返回它之后的那个星期几所对应的日期。比如 `next_day('2023-04-06', 'Monday')` 返回 '2023-04-06' 之后的那个星期一所对应的日期。
 

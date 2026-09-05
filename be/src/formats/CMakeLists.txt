@@ -14,12 +14,50 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
-add_library(Formats STATIC
+ADD_BE_LIB(FormatCore
+        arrow/arrow_column_converter.cpp
+        column_evaluator.cpp
+        delta/deletion_vector.cpp
+        deletion_bitmap.cpp
+        disk_range.hpp
+        file_input_stream.cpp
+        file_writer.cpp
+        io/async_flush_output_stream.cpp
+        io/async_flush_stream_poller.cpp
+        io/formatted_output_stream_file.cpp
+        paimon/paimon_delete_file_builder.cpp
+        reserved_columns.h
+        scan_context.cpp
+        scan_context.h
+        utils.h
+        )
+
+target_link_libraries(FormatCore PUBLIC
+        Cache
+        ComputeEnv
+        ExecPrimitive
+        Expr
+        Runtime
+        FileSystem
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
+target_link_libraries(FormatCore PRIVATE arrow)
+
+ADD_BE_LIB(FormatCsv
         csv/array_converter.cpp
         csv/array_reader.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp
+        csv/csv_defaults.h
         csv/csv_reader.cpp
+        csv/csv_file_writer.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp
@@ -32,31 +70,76 @@ add_library(Formats STATIC
         csv/default_value_converter.cpp
         csv/string_converter.cpp
         csv/varbinary_converter.cpp
+        )
+
+target_link_libraries(FormatCsv PUBLIC FormatCore)
+
+ADD_BE_LIB(FormatJson
+        json/json_parser.cpp
+        json/json_utils.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
+        json/struct_column.cpp
+        json/map_column.cpp
+        )
+
+target_link_libraries(FormatJson PUBLIC FormatCore)
+
+ADD_BE_LIB(FormatAvro
         avro/nullable_column.cpp
         avro/numeric_column.cpp
         avro/binary_column.cpp
+        avro/cpp/avro_reader.cpp
+        avro/cpp/avro_schema_builder.cpp
+        avro/cpp/binary_column_reader.cpp
+        avro/cpp/column_reader.cpp
+        avro/cpp/complex_column_reader.cpp
+        avro/cpp/date_column_reader.cpp
+        avro/cpp/direct_column_reader.cpp
+        avro/cpp/nullable_column_reader.cpp
+        avro/cpp/numeric_column_reader.cpp
+        avro/cpp/utils.cpp
+        )
+
+target_link_libraries(FormatAvro PUBLIC FormatCore)
+
+ADD_BE_LIB(FormatOrc
         orc/orc_chunk_reader.cpp
-        orc/orc_chunk_writer.cpp
+        orc/orc_file_writer.cpp
         orc/orc_input_stream.cpp
         orc/orc_mapping.cpp
         orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
         orc/orc_schema_builder.cpp
+        orc/lzo_decompressor_registration.cpp
         orc/utils.cpp
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc
         orc/memory_stream/MemoryOutputStream.cc
+        )
+
+target_link_libraries(FormatOrc PUBLIC FormatCore Cache)
+
+ADD_BE_LIB(FormatParquet
+        parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
+        parquet/column_materializer.cpp
+        parquet/lazy_materialization_context.cpp
+        parquet/read_range_planner.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
+        parquet/column_reader_factory.cpp
+        parquet/scalar_column_reader.cpp
+        parquet/complex_column_reader.cpp
+        parquet/variant_projection.cpp
         parquet/encoding.cpp
         parquet/level_codec.cpp
         parquet/page_reader.cpp
+        parquet/parquet_file_writer.cpp
         parquet/schema.cpp
         parquet/stored_column_reader.cpp
+        parquet/stored_column_reader_with_index.cpp
         parquet/utils.cpp
         parquet/metadata.cpp
         parquet/meta_helper.cpp
@@ -67,7 +150,21 @@ add_library(Formats STATIC
         parquet/level_builder.cpp
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
-        utils.h
+        parquet/statistics_helper.cpp
+        parquet/parquet_block_split_bloom_filter.cpp
+        parquet/iceberg_row_id_reader.cpp
+        parquet/row_source_reader.cpp
+        parquet/parquet_pos_reader.cpp
         )
 
+target_link_libraries(FormatParquet PUBLIC FormatCore StoragePrimitive Cache)
+
+ADD_BE_LIB(Formats
+        formats_aggregate.cpp
+        iceberg/iceberg_delete_builder.cpp
+        )
+
+target_link_libraries(Formats PUBLIC FormatCore FormatCsv FormatJson FormatAvro FormatOrc FormatParquet)
+
 add_subdirectory(orc/apache-orc)
+target_link_libraries(FormatOrc PUBLIC orc)

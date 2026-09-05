@@ -17,9 +17,9 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 
-public class TransactionException extends UserException {
+public class TransactionException extends StarRocksException {
 
     private long transactionId = -1;
 

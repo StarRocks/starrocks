@@ -1,48 +1,10 @@
-[sql]
-select
-    s_suppkey,
-    s_name,
-    s_address,
-    s_phone,
-    total_revenue
-from
-    supplier,
-    (	select
-             l_suppkey as supplier_no,
-             sum(l_extendedprice * (1 - l_discount)) as total_revenue
-         from
-             lineitem
-         where
-                 l_shipdate >= date '1995-07-01'
-           and l_shipdate < date '1995-10-01'
-         group by
-             l_suppkey) a
-where
-        s_suppkey = supplier_no
-  and total_revenue = (
-    select
-        max(total_revenue)
-    from
-        (	select
-                 l_suppkey as supplier_no,
-                 sum(l_extendedprice * (1 - l_discount)) as total_revenue
-             from
-                 lineitem
-             where
-                     l_shipdate >= date '1995-07-01'
-               and l_shipdate < date '1995-10-01'
-             group by
-                 l_suppkey) b
-)
-order by
-    s_suppkey;
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:1: s_suppkey | 2: s_name | 3: s_address | 5: s_phone | 25: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-24:MERGING-EXCHANGE
+22:MERGING-EXCHANGE
 distribution type: GATHER
 cardinality: 1
 column statistics:
@@ -57,9 +19,9 @@ PLAN FRAGMENT 1(F00)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 24
+OutPut Exchange Id: 22
 
-23:SORT
+21:SORT
 |  order by: [1, INT, true] ASC
 |  offset: 0
 |  cardinality: 1
@@ -71,7 +33,7 @@ OutPut Exchange Id: 24
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
-22:Project
+20:Project
 |  output columns:
 |  1 <-> [1: s_suppkey, INT, true]
 |  2 <-> [2: s_name, VARCHAR, true]
@@ -86,7 +48,7 @@ OutPut Exchange Id: 24
 |  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 1.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
-21:HASH JOIN
+19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [1: s_suppkey, INT, true] = [10: l_suppkey, INT, true]
 |  build runtime filters:
@@ -101,7 +63,7 @@ OutPut Exchange Id: 24
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
-|----20:EXCHANGE
+|----18:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 1
 |
@@ -110,6 +72,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=84.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (1: s_suppkey)
@@ -123,9 +86,9 @@ PLAN FRAGMENT 2(F02)
 
 Input Partition: HASH_PARTITIONED: 10: l_suppkey
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 20
+OutPut Exchange Id: 18
 
-19:Project
+17:Project
 |  output columns:
 |  10 <-> [10: l_suppkey, INT, true]
 |  25 <-> [25: sum, DECIMAL128(38,4), true]
@@ -134,7 +97,7 @@ OutPut Exchange Id: 20
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
-18:HASH JOIN
+16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [25: sum, DECIMAL128(38,4), true] = [44: max, DECIMAL128(38,4), true]
 |  build runtime filters:
@@ -146,7 +109,7 @@ OutPut Exchange Id: 20
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |  * max-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
-|----17:EXCHANGE
+|----15:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 1
 |
@@ -170,22 +133,11 @@ PLAN FRAGMENT 3(F05)
 
 Input Partition: UNPARTITIONED
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 17
+OutPut Exchange Id: 15
 
-16:SELECT
-|  predicates: 44: max IS NOT NULL
-|  cardinality: 1
-|  column statistics:
-|  * max-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
-|
-15:ASSERT NUMBER OF ROWS
-|  assert number of rows: LE 1
-|  cardinality: 1
-|  column statistics:
-|  * max-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
-|
 14:AGGREGATE (merge finalize)
 |  aggregate: max[([44: max, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  having: 44: max IS NOT NULL
 |  cardinality: 1
 |  column statistics:
 |  * max-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
@@ -234,7 +186,7 @@ OutPut Exchange Id: 09
 
 8:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([42: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([42: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [28: l_suppkey, INT, true]
 |  cardinality: 1000000
 |  column statistics:
@@ -244,7 +196,7 @@ OutPut Exchange Id: 09
 7:Project
 |  output columns:
 |  28 <-> [28: l_suppkey, INT, true]
-|  42 <-> cast([31: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [32: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  42 <-> cast([31: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [32: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 21862767
 |  column statistics:
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -256,6 +208,7 @@ NON-PARTITION PREDICATES: 36: l_shipdate >= '1995-07-01', 36: l_shipdate < '1995
 MIN/MAX PREDICATES: 36: l_shipdate >= '1995-07-01', 36: l_shipdate < '1995-10-01'
 partitions=1/1
 avgRowSize=40.0
+dataCacheOptions={populate: false}
 cardinality: 21862767
 column statistics:
 * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -272,7 +225,7 @@ OutPut Exchange Id: 04
 
 3:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([24: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([24: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [10: l_suppkey, INT, true]
 |  cardinality: 1000000
 |  column statistics:
@@ -282,7 +235,7 @@ OutPut Exchange Id: 04
 2:Project
 |  output columns:
 |  10 <-> [10: l_suppkey, INT, true]
-|  24 <-> cast([13: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [14: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  24 <-> cast([13: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [14: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 21862767
 |  column statistics:
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -294,6 +247,7 @@ NON-PARTITION PREDICATES: 18: l_shipdate >= '1995-07-01', 18: l_shipdate < '1995
 MIN/MAX PREDICATES: 18: l_shipdate >= '1995-07-01', 18: l_shipdate < '1995-10-01'
 partitions=1/1
 avgRowSize=40.0
+dataCacheOptions={populate: false}
 cardinality: 21862767
 column statistics:
 * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE

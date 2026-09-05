@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "根据给定的年份和天数值构造一个日期。"
 ---
 
 # makedate
 
-## 功能
+
 
 根据给定的年份和天数值，构造一个日期值。
 

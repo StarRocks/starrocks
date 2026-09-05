@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the maximum value of the expr expression."
 ---
 
-# MAX
+# max
 
-## Description
+
 
 Returns the maximum value of the expr expression.
 

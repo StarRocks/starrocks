@@ -1,0 +1,195 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "exec/pipeline/sink/export_sink_operator.h"
+
+#include <chrono>
+#include <filesystem>
+#include <thread>
+
+#include "base/concurrency/await.h"
+#include "base/testutil/assert.h"
+#include "base/uid_util.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
+#include "gen_cpp/RuntimeProfile_types.h"
+#include "gtest/gtest.h"
+#include "runtime/runtime_state.h"
+
+namespace starrocks::pipeline {
+
+TEST(ExportSinkOperatorTest, test_set_finishing) {
+    using namespace std::chrono_literals;
+    TExecPlanFragmentParams _request;
+    _request.params.query_id = generate_uuid();
+    _request.params.fragment_instance_id = generate_uuid();
+
+    const auto& params = _request.params;
+    const auto& query_id = params.query_id;
+    const auto& fragment_id = params.fragment_instance_id;
+
+    pipeline::QueryContext* _query_ctx;
+    pipeline::FragmentContext* _fragment_ctx;
+    ExecEnv* _exec_env = ExecEnv::GetInstance();
+
+    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
+    _query_ctx->set_query_id(query_id);
+    _query_ctx->set_total_fragments(1);
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
+    _query_ctx->set_final_sink();
+    _query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 RuntimeEnv::GetInstance()->query_pool_mem_tracker());
+
+    auto fragment_ctx = std::make_shared<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
+    _fragment_ctx->set_query_id(query_id);
+    _fragment_ctx->set_fragment_instance_id(fragment_id);
+    _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+            _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+            _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
+    ASSERT_OK(_query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
+    RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
+    _query_ctx->attach_to_runtime_state(_runtime_state);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
+
+    TExportSink t_sink;
+    std::vector<TExpr> t_output_expr;
+    ExportSinkOperatorFactory factory(1, t_sink, t_output_expr, 1, _fragment_ctx);
+    EXPECT_TRUE(factory.prepare(_runtime_state).ok());
+
+    auto export_op = factory.create(1, 1);
+    EXPECT_TRUE(export_op->prepare(_runtime_state).ok());
+
+    // push a chunk, fail to create the file writer, so the context will be in cancel state
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    EXPECT_TRUE(export_op->push_chunk(_runtime_state, chunk).ok());
+
+    int timeout_us = 5 * 1000 * 1000; // 5s
+
+    Awaitility await;
+    EXPECT_TRUE(await.timeout(timeout_us).until([&] { return _runtime_state->is_cancelled(); }));
+
+    // now cancel the operator
+    export_op->set_finishing(_runtime_state);
+    export_op->set_cancelled(_runtime_state);
+
+    Awaitility await2;
+    EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
+
+    _query_ctx->fragment_mgr()->unregister(fragment_id);
+    _query_ctx->count_down_fragment();
+}
+
+// Test export with header option
+TEST(ExportSinkOperatorTest, test_export_with_header) {
+    using namespace std::chrono_literals;
+
+    // Create a temporary directory for export
+    std::string test_dir = "/tmp/export_sink_test_" + std::to_string(::getpid());
+    std::filesystem::create_directories(test_dir);
+
+    TExecPlanFragmentParams _request;
+    _request.params.query_id = generate_uuid();
+    _request.params.fragment_instance_id = generate_uuid();
+
+    const auto& params = _request.params;
+    const auto& query_id = params.query_id;
+    const auto& fragment_id = params.fragment_instance_id;
+
+    pipeline::QueryContext* _query_ctx;
+    pipeline::FragmentContext* _fragment_ctx;
+    ExecEnv* _exec_env = ExecEnv::GetInstance();
+
+    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
+    _query_ctx->set_query_id(query_id);
+    _query_ctx->set_total_fragments(1);
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
+    _query_ctx->set_final_sink();
+    _query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 RuntimeEnv::GetInstance()->query_pool_mem_tracker());
+
+    auto fragment_ctx = std::make_shared<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
+    _fragment_ctx->set_query_id(query_id);
+    _fragment_ctx->set_fragment_instance_id(fragment_id);
+    _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+            _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+            _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
+    ASSERT_OK(_query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
+    RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
+    _query_ctx->attach_to_runtime_state(_runtime_state);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
+
+    // Configure export sink with header options
+    TExportSink t_sink;
+    t_sink.file_type = TFileType::FILE_LOCAL;
+    t_sink.export_path = test_dir;
+    t_sink.__set_file_name_prefix("test_export");
+    t_sink.column_separator = ",";
+    t_sink.row_delimiter = "\n";
+    // Enable header with column names
+    t_sink.__set_with_header(true);
+    t_sink.__set_column_names({"col1", "col2"});
+
+    std::vector<TExpr> t_output_expr;
+    ExportSinkOperatorFactory factory(1, t_sink, t_output_expr, 1, _fragment_ctx);
+    EXPECT_TRUE(factory.prepare(_runtime_state).ok());
+
+    auto export_op = factory.create(1, 1);
+    EXPECT_TRUE(export_op->prepare(_runtime_state).ok());
+
+    // Push an empty chunk to trigger file creation
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    EXPECT_TRUE(export_op->push_chunk(_runtime_state, chunk).ok());
+
+    // Call set_finishing to trigger the completion flow
+    export_op->set_finishing(_runtime_state);
+
+    int timeout_us = 5 * 1000 * 1000; // 5s
+
+    Awaitility await;
+    // Wait for the operation to complete
+    EXPECT_TRUE(await.timeout(timeout_us).until([&] { return export_op->is_finished(); }));
+
+    // Cleanup
+    export_op->set_cancelled(_runtime_state);
+
+    Awaitility await2;
+    EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
+
+    _query_ctx->fragment_mgr()->unregister(fragment_id);
+    _query_ctx->count_down_fragment();
+
+    // Clean up test directory
+    std::filesystem::remove_all(test_dir);
+}
+
+} // namespace starrocks::pipeline

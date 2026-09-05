@@ -14,31 +14,41 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.Config;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeDeleteTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
+        AnalyzeTestUtil.starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tunique_for_delete` (\n" +
+                "  `k1` bigint NOT NULL,\n" +
+                "  `v1` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Test
     public void testPartitions() {
         DeleteStmt st;
         st = (DeleteStmt) SqlParser.parse("delete from tjson partition (p0)", 0).get(0);
-        Assert.assertEquals(1, st.getPartitionNamesList().size());
+        Assertions.assertEquals(1, st.getPartitionNamesList().size());
         st = (DeleteStmt) SqlParser.parse("delete from tjson partition p0", 0).get(0);
-        Assert.assertEquals(1, st.getPartitionNamesList().size());
+        Assertions.assertEquals(1, st.getPartitionNamesList().size());
         st = (DeleteStmt) SqlParser.parse("delete from tjson partition (p0, p1)", 0).get(0);
-        Assert.assertEquals(2, st.getPartitionNamesList().size());
+        Assertions.assertEquals(2, st.getPartitionNamesList().size());
     }
 
     @Test
@@ -64,13 +74,13 @@ public class AnalyzeDeleteTest {
     @Test
     public void testSingle() {
         StatementBase stmt = analyzeSuccess("delete from tjson where v_int = 1");
-        Assert.assertEquals(true, ((DeleteStmt) stmt).shouldHandledByDeleteHandler());
+        Assertions.assertEquals(true, ((DeleteStmt) stmt).shouldHandledByDeleteHandler());
 
         analyzeFail("delete from tjson",
                 "Where clause is not set");
 
         stmt = analyzeSuccess("delete from tprimary where pk = 1");
-        Assert.assertEquals(false, ((DeleteStmt) stmt).shouldHandledByDeleteHandler());
+        Assertions.assertEquals(false, ((DeleteStmt) stmt).shouldHandledByDeleteHandler());
 
         analyzeFail("delete from tprimary partitions (p1, p2) where pk = 1",
                 "Delete for primary key table do not support specifying partitions");
@@ -93,5 +103,84 @@ public class AnalyzeDeleteTest {
         analyzeSuccess(
                 "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
                         "tp2cte where tprimary.pk = tp2cte.pk");
+    }
+
+    @Test
+    public void testNonPrimaryKeyDeleteEmitsOkInfo() {
+        boolean original = Config.enable_non_primary_key_delete_warning;
+        try {
+            Config.enable_non_primary_key_delete_warning = true;
+            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tjson where v_int = 1");
+            String info = stmt.getOkInfoMessage();
+            Assertions.assertNotNull(info, "Duplicate Key DELETE should attach an OK info message");
+            Assertions.assertTrue(info.contains("Duplicate Key"),
+                    "info should name the keys type: " + info);
+            Assertions.assertTrue(info.contains("TRUNCATE PARTITION"),
+                    "info should recommend TRUNCATE PARTITION: " + info);
+            Assertions.assertTrue(info.contains("Primary Key"),
+                    "info should recommend Primary Key table for frequent deletes: " + info);
+        } finally {
+            Config.enable_non_primary_key_delete_warning = original;
+        }
+    }
+
+    @Test
+    public void testPrimaryKeyDeleteDoesNotEmitOkInfo() {
+        boolean original = Config.enable_non_primary_key_delete_warning;
+        try {
+            Config.enable_non_primary_key_delete_warning = true;
+            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tprimary where pk = 1");
+            Assertions.assertNull(stmt.getOkInfoMessage(),
+                    "Primary Key DELETE should not attach an OK info message");
+        } finally {
+            Config.enable_non_primary_key_delete_warning = original;
+        }
+    }
+
+    @Test
+    public void testNonPrimaryKeyDeleteWarningCanBeDisabled() {
+        boolean original = Config.enable_non_primary_key_delete_warning;
+        try {
+            Config.enable_non_primary_key_delete_warning = false;
+            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tjson where v_int = 1");
+            Assertions.assertNull(stmt.getOkInfoMessage(),
+                    "OK info should be suppressed when the FE config knob is off");
+        } finally {
+            Config.enable_non_primary_key_delete_warning = original;
+        }
+    }
+
+    @Test
+    public void testAggregateKeyDeleteEmitsOkInfo() {
+        boolean original = Config.enable_non_primary_key_delete_warning;
+        try {
+            Config.enable_non_primary_key_delete_warning = true;
+            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from test_object where v1 = 1");
+            String info = stmt.getOkInfoMessage();
+            Assertions.assertNotNull(info, "Aggregate Key DELETE should attach an OK info message");
+            Assertions.assertTrue(info.contains("Aggregate"),
+                    "info should name the keys type: " + info);
+            Assertions.assertTrue(info.contains("TRUNCATE PARTITION"),
+                    "info should recommend TRUNCATE PARTITION: " + info);
+        } finally {
+            Config.enable_non_primary_key_delete_warning = original;
+        }
+    }
+
+    @Test
+    public void testUniqueKeyDeleteEmitsOkInfo() {
+        boolean original = Config.enable_non_primary_key_delete_warning;
+        try {
+            Config.enable_non_primary_key_delete_warning = true;
+            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tunique_for_delete where k1 = 1");
+            String info = stmt.getOkInfoMessage();
+            Assertions.assertNotNull(info, "Unique Key DELETE should attach an OK info message");
+            Assertions.assertTrue(info.contains("Unique Key"),
+                    "info should name the keys type: " + info);
+            Assertions.assertTrue(info.contains("Primary Key"),
+                    "info should recommend Primary Key table: " + info);
+        } finally {
+            Config.enable_non_primary_key_delete_warning = original;
+        }
     }
 }

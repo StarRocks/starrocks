@@ -14,15 +14,18 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "exprs/array_expr.h"
-#include "exprs/mock_vectorized_expr.h"
+#include "exprs/expr_executor.h"
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_expr.h"
+#endif
 #include "gen_cpp/Descriptors_types.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 class ExprsTestHelper {
@@ -36,7 +39,7 @@ public:
             TScalarType scalar_type;
             scalar_type.__set_type(t_type);
             node.__set_scalar_type(scalar_type);
-            type.types.push_back(node);
+            type.types.emplace_back(node);
         }
 
         return type;
@@ -51,23 +54,22 @@ public:
         slot_desc.slotType = type;
         slot_desc.columnPos = -1;
         slot_desc.byteOffset = 4;
-        slot_desc.nullIndicatorByte = 0;
-        slot_desc.nullIndicatorBit = 1;
         slot_desc.colName = col_name;
         slot_desc.slotIdx = 1;
         slot_desc.isMaterialized = true;
+        slot_desc.__set_isNullable(true);
         return slot_desc;
     }
 
-    static TDescriptorTable create_table_desc(std::vector<TTupleDescriptor> tuple_descs,
-                                              std::vector<TSlotDescriptor> slot_descs) {
+    static TDescriptorTable create_table_desc(const std::vector<TTupleDescriptor>& tuple_descs,
+                                              const std::vector<TSlotDescriptor>& slot_descs) {
         TDescriptorTable t_desc_table;
         for (auto& slot_desc : slot_descs) {
-            t_desc_table.slotDescriptors.push_back(slot_desc);
+            t_desc_table.slotDescriptors.emplace_back(slot_desc);
         }
         t_desc_table.__isset.slotDescriptors = true;
         for (auto& tuple_desc : tuple_descs) {
-            t_desc_table.tupleDescriptors.push_back(tuple_desc);
+            t_desc_table.tupleDescriptors.emplace_back(tuple_desc);
         }
         return t_desc_table;
     }
@@ -97,7 +99,8 @@ public:
         return create_array_expr(type.to_thrift());
     }
 
-    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc t_type, bool is_nullable) {
+    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, const TTypeDesc& t_type,
+                                           bool is_nullable) {
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
         slot_ref.type = t_type;
@@ -111,11 +114,11 @@ public:
 
     static TExpr create_slot_expr(TExprNode slot_ref) {
         TExpr expr;
-        expr.nodes.push_back(slot_ref);
+        expr.nodes.emplace_back(slot_ref);
         return expr;
     }
 
-    static TFunction create_builtin_function(const std::string func_name, const std::vector<TTypeDesc>& arg_types,
+    static TFunction create_builtin_function(const std::string& func_name, const std::vector<TTypeDesc>& arg_types,
                                              const TTypeDesc& intermediate_type, const TTypeDesc& ret_type) {
         TFunction fn;
         {
@@ -145,11 +148,99 @@ public:
         node.fn = fn;
         node.num_children = children.size();
 
-        expr.nodes.push_back(node);
+        expr.nodes.emplace_back(node);
         for (auto& child : children) {
-            expr.nodes.push_back(child);
+            expr.nodes.emplace_back(child);
         }
         return expr;
+    }
+
+    static void verify_with_jit(ColumnPtr ptr, Expr* expr, RuntimeState* runtime_state,
+                                const std::function<void(ColumnPtr const&)>& test_func, bool need_jit = true) {
+        // Verify the original result.
+        test_func(ptr);
+
+#ifndef STARROCKS_JIT_ENABLE
+        (void)expr;
+        (void)runtime_state;
+        (void)need_jit;
+        return;
+#else
+        if (!need_jit) {
+            return;
+        }
+        auto jit_engine = JITEngine::get_instance();
+        if (!jit_engine->support_jit()) {
+            return;
+        }
+        DCHECK(runtime_state != nullptr);
+        runtime_state->set_jit_level(-1);
+        ObjectPool pool;
+        auto* jit_expr = JITExpr::create(&pool, expr);
+        jit_expr->set_uncompilable_children(runtime_state);
+        ExprContext exprContext(jit_expr);
+        std::vector<ExprContext*> expr_ctxs = {&exprContext};
+
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, runtime_state));
+        ASSERT_TRUE(jit_expr->is_jit_compiled());
+
+        ptr = jit_expr->evaluate(&exprContext, nullptr);
+        // Verify the result after JIT.
+        test_func(ptr);
+
+        ExprExecutor::close(expr_ctxs, runtime_state);
+#endif
+    }
+
+    static bool should_verify_with_jit(const Expr* expr, RuntimeState* runtime_state) {
+#ifndef STARROCKS_JIT_ENABLE
+        (void)expr;
+        (void)runtime_state;
+        return false;
+#else
+        return expr->is_compilable(runtime_state);
+#endif
+    }
+
+    static void verify_result_with_jit(const ColumnPtr& ptr, Expr* expr, RuntimeState* runtime_state) {
+#ifndef STARROCKS_JIT_ENABLE
+        (void)ptr;
+        (void)expr;
+        (void)runtime_state;
+        return;
+#else
+        auto jit_engine = JITEngine::get_instance();
+        if (!jit_engine->support_jit()) {
+            return;
+        }
+        DCHECK(runtime_state != nullptr);
+        runtime_state->set_jit_level(-1);
+        ObjectPool pool;
+        auto* jit_expr = JITExpr::create(&pool, expr);
+        jit_expr->set_uncompilable_children(runtime_state);
+        ExprContext exprContext(jit_expr);
+        std::vector<ExprContext*> expr_ctxs = {&exprContext};
+
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, runtime_state));
+        ASSERT_TRUE(jit_expr->is_jit_compiled());
+
+        Chunk chunk;
+        chunk.append_column(ptr, 0);
+        auto jit_ptr = jit_expr->evaluate(&exprContext, &chunk);
+
+        ASSERT_TRUE(jit_ptr->is_constant() == ptr->is_constant());
+
+        // ASSERT_TRUE(jit_ptr->is_nullable() == ptr->is_nullable());
+        ASSERT_TRUE(jit_ptr->size() == ptr->size());
+        for (int i = 0; i < jit_ptr->size(); ++i) {
+            ASSERT_TRUE(jit_ptr->is_null(i) == ptr->is_null(i));
+            ASSERT_TRUE(jit_ptr->equals(i, *ptr, i));
+        }
+
+        ExprExecutor::close(expr_ctxs, runtime_state);
+#endif
     }
 };
 

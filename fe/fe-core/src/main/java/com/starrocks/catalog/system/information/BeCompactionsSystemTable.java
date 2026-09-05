@@ -13,29 +13,31 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class BeCompactionsSystemTable {
+    private static final String NAME = "be_compactions";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.BE_COMPACTIONS_ID,
-                "be_compactions",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CANDIDATES_NUM", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("BASE_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CUMULATIVE_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("LATEST_COMPACTION_SCORE", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("CANDIDATE_MAX_SCORE", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("MANUAL_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("MANUAL_COMPACTION_CANDIDATES_NUM", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", IntegerType.BIGINT)
+                        .column("CANDIDATES_NUM", IntegerType.BIGINT)
+                        .column("BASE_COMPACTION_CONCURRENCY", IntegerType.BIGINT)
+                        .column("CUMULATIVE_COMPACTION_CONCURRENCY", IntegerType.BIGINT)
+                        .column("LATEST_COMPACTION_SCORE", FloatType.DOUBLE)
+                        .column("CANDIDATE_MAX_SCORE", FloatType.DOUBLE)
+                        .column("MANUAL_COMPACTION_CONCURRENCY", IntegerType.BIGINT)
+                        .column("MANUAL_COMPACTION_CANDIDATES_NUM", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_BE_COMPACTIONS);
     }
 }

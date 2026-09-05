@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Converts a WKT (Well Known Text) to the corresponding memory geometry."
 ---
 
 # ST_GeometryFromText,ST_GeomFromText
 
-## Description
+
 
 Converts a WKT (Well Known Text) to the corresponding memory geometry.
 

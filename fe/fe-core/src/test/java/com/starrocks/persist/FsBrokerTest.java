@@ -18,11 +18,13 @@
 package com.starrocks.persist;
 
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -35,7 +37,7 @@ public class FsBrokerTest {
     private static String fileName1 = "./FsBrokerTest1";
     private static String fileName2 = "./FsBrokerTest2";
 
-    @AfterClass
+    @AfterAll
     public static void tear() {
         new File(fileName1).delete();
         new File(fileName2).delete();
@@ -52,7 +54,7 @@ public class FsBrokerTest {
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, time);
         fsBroker.handleHbResponse(hbResponse, false);
-        fsBroker.write(dos);
+        Text.writeString(dos, GsonUtils.GSON.toJson(fsBroker, FsBroker.class));
         dos.flush();
         dos.close();
 
@@ -60,12 +62,12 @@ public class FsBrokerTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
 
         FsBroker readBroker = FsBroker.readIn(dis);
-        Assert.assertEquals(fsBroker.ip, readBroker.ip);
-        Assert.assertEquals(fsBroker.port, readBroker.port);
-        Assert.assertEquals(fsBroker.isAlive, readBroker.isAlive);
-        Assert.assertTrue(fsBroker.isAlive);
-        Assert.assertEquals(time, readBroker.lastStartTime);
-        Assert.assertEquals(-1, readBroker.lastUpdateTime);
+        Assertions.assertEquals(fsBroker.ip, readBroker.ip);
+        Assertions.assertEquals(fsBroker.port, readBroker.port);
+        Assertions.assertEquals(fsBroker.isAlive, readBroker.isAlive);
+        Assertions.assertTrue(fsBroker.isAlive);
+        Assertions.assertEquals(time, readBroker.lastStartTime);
+        Assertions.assertEquals(-1, readBroker.lastUpdateTime);
         dis.close();
     }
 
@@ -77,10 +79,9 @@ public class FsBrokerTest {
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
 
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
-        long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, "got exception");
         fsBroker.handleHbResponse(hbResponse, false);
-        fsBroker.write(dos);
+        Text.writeString(dos, GsonUtils.GSON.toJson(fsBroker, FsBroker.class));
         dos.flush();
         dos.close();
 
@@ -88,12 +89,12 @@ public class FsBrokerTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
 
         FsBroker readBroker = FsBroker.readIn(dis);
-        Assert.assertEquals(fsBroker.ip, readBroker.ip);
-        Assert.assertEquals(fsBroker.port, readBroker.port);
-        Assert.assertEquals(fsBroker.isAlive, readBroker.isAlive);
-        Assert.assertFalse(fsBroker.isAlive);
-        Assert.assertEquals(-1, readBroker.lastStartTime);
-        Assert.assertEquals(-1, readBroker.lastUpdateTime);
+        Assertions.assertEquals(fsBroker.ip, readBroker.ip);
+        Assertions.assertEquals(fsBroker.port, readBroker.port);
+        Assertions.assertEquals(fsBroker.isAlive, readBroker.isAlive);
+        Assertions.assertFalse(fsBroker.isAlive);
+        Assertions.assertEquals(-1, readBroker.lastStartTime);
+        Assertions.assertEquals(-1, readBroker.lastUpdateTime);
         dis.close();
     }
 
@@ -101,14 +102,13 @@ public class FsBrokerTest {
     public void testBrokerAlive() throws Exception {
 
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
-        long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, "got exception");
 
         hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.ALIVE;
         fsBroker.handleHbResponse(hbResponse, true);
-        Assert.assertTrue(fsBroker.isAlive);
+        Assertions.assertTrue(fsBroker.isAlive);
         hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.NOT_ALIVE;
         fsBroker.handleHbResponse(hbResponse, true);
-        Assert.assertFalse(fsBroker.isAlive);
+        Assertions.assertFalse(fsBroker.isAlive);
     }
 }

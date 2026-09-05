@@ -17,10 +17,10 @@ SQL_RETRY_INTERNAL=5
 FE_HOME=$SR_HOME/fe
 BE_HOME=$SR_HOME/be
 MYCNF=$SR_HOME/director/my.cnf
-BROKER_HOME=$SR_HOME/apache_hdfs_broker
 source $FE_HOME/bin/common.sh
 PREVIOUS_FQDN=
 CURRENT_FQDN=`hostname -f`
+BOOTSTRAP_DONE_FILE=$SR_HOME/bootstrap_done
 
 PASSWD_ERROR_MSG="Password error, stop retrying!
 If the root user password is changed, please re-run the container with '-e MYSQL_PWD=<root_password>'"
@@ -31,8 +31,8 @@ If FE/BE state needs to be persisted, please be sure the following directories a
 * BE service storage: $BE_HOME/storage
 "
 HOSTNAME_MISMATCH_MSG="
-Detect FE service hostname mismatch, FE service won't start.
-This is probably caused by persisted fe/meta from outside container, but the container's
+FE service hostname mismatch detected, FE service won't start.
+This is probably caused by persisted fe/meta from outside of container, but the container's
 hostname is not fixed. If running with docker engine, use '-h <hostname>' to assign a
 fixed hostname and restart.
 "
@@ -80,12 +80,6 @@ be_heartbeat_service_port()
     echo ${heartbeat_service_port:-"9050"}
 }
 
-broker_ipc_port()
-{
-    export_env_from_conf $BROKER_HOME/conf/apache_hdfs_broker.conf 
-    echo ${broker_ipc_port:-"8000"}
-}
-
 check_fe_fqdn_mismatch()
 {
     if [ -f $FE_HOME/meta/image/ROLE ] ; then
@@ -107,10 +101,11 @@ check_fe_fqdn_mismatch()
 check_fe_liveness()
 {
     fequeryport=`fe_mysql_port`
-    loginfo "checking if FE service query port:$fequeryport alive or not ..."
+    loginfo "checking if FE service query port:$fequeryport is alive or not ..."
     while true
     do
-        if nc -z -4 -w 5 $MYHOST $fequeryport ; then
+        NC="nc -z -w 5"
+        if $NC $MYHOST $fequeryport ; then
             loginfo "FE service query port:$fequeryport is alive!"
             break
         else
@@ -189,42 +184,23 @@ check_and_add_be()
     done
 }
 
-check_and_add_broker()
-{
-    loginfo "check if need to add BROKER into FE service ..."
-    while true
-    do
-        result=`exec_sql_with_retry "SHOW BROKER;"`
-        ret=$?
-        if [ $ret -ne 0 ] ; then
-            hang_and_die
-        else
-            if echo "$result" | grep -q $MYHOST &>/dev/null ; then
-                loginfo "broker service already added into FE service ... "
-                return 0
-            else
-                brokerport=`broker_ipc_port`
-                loginfo "Add BROKER($MYHOST:$brokerport) into FE service ..."
-                exec_sql_with_retry "ALTER SYSTEM ADD BROKER allin1broker '$MYHOST:$brokerport';"
-            fi
-        fi
-    done
-}
-
-loginfo "checking if need to perform auto registring Backend and Broker ..."
+# remove the flag file
+rm -f $BOOTSTRAP_DONE_FILE
+loginfo "checking if need to perform auto registring Backend ..."
 check_fe_fqdn_mismatch
 check_fe_liveness
 generate_my_cnf
 check_and_add_be
-check_and_add_broker
 loginfo "cluster initialization DONE!"
-loginfo "wait a few seconds for BE and Broker's heartbeat ..."
-# allow heartbeat from BE/BROKER to FE
+loginfo "wait a few seconds for BE's heartbeat ..."
+# allow heartbeat from BE to FE
 sleep 10
 loginfo "StarRocks Cluster information details:"
 exec_sql_with_column 'SHOW FRONTENDS\G'
 exec_sql_with_column 'SHOW BACKENDS\G'
-exec_sql_with_column 'SHOW BROKER\G'
+
+# touch the flag file
+touch $BOOTSTRAP_DONE_FILE
 
 loginfo
 loginfo
@@ -233,7 +209,7 @@ loginfo
 loginfo "FE mysql query port: `fe_mysql_port`"
 loginfo "FE http service port: 8080"
 loginfo
-loginfo "Enjoy the journal to StarRocks blazing-fast lake-house engine!"
+loginfo "Enjoy the journey to StarRocks blazing-fast lake-house engine!"
 
 while true
 do

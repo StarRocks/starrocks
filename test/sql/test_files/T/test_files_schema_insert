@@ -1,0 +1,37 @@
+-- name: test_files_schema_insert
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_sink (a BIGINT, b VARCHAR(64))
+distributed by hash(a) buckets 1 properties("replication_num" = "1");
+
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+-- INSERT SELECT with explicit schema (k2 INT -> target BIGINT)
+insert into t_sink
+select k2, k7 from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "k2 INT, k7 VARCHAR(64)");
+
+select count(*), min(a), max(a) from t_sink;
+
+-- CTAS with explicit schema
+create table ctas_target
+distributed by hash(k2) buckets 1 properties("replication_num" = "1")
+as select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "k2 BIGINT, k7 VARCHAR(64)");
+
+desc ctas_target;
+select count(*) from ctas_target;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null

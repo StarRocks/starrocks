@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class PredicateSplit {
     // column equality predicates conjuncts
@@ -67,14 +68,27 @@ public class PredicateSplit {
         return Lists.newArrayList(equalPredicates, rangePredicates, residualPredicates);
     }
 
+    private static ScalarOperator filterPredicate(ScalarOperator predicate) {
+        if (predicate == null) {
+            return null;
+        }
+        List<ScalarOperator> filterPredicate = Utils.extractConjuncts(predicate)
+                .stream()
+                .filter(x -> !x.isConstantTrue())
+                .collect(Collectors.toList());
+        return Utils.compoundAnd(filterPredicate);
+    }
+
     // split predicate into three parts: equal columns predicates, range predicates, and residual predicates
     public static PredicateSplit splitPredicate(ScalarOperator predicate) {
-        if (predicate == null) {
+        ScalarOperator normalPredicate = filterPredicate(predicate);
+        if (normalPredicate == null) {
             return PredicateSplit.of(null, null, null);
         }
+
         PredicateExtractor extractor = new PredicateExtractor();
         RangePredicate rangePredicate =
-                predicate.accept(extractor, new PredicateExtractor.PredicateExtractorContext());
+                normalPredicate.accept(extractor, new PredicateExtractor.PredicateExtractorContext());
         ScalarOperator equalityConjunct = Utils.compoundAnd(extractor.getColumnEqualityPredicates());
         ScalarOperator rangeConjunct = null;
         ScalarOperator residualConjunct = Utils.compoundAnd(extractor.getResidualPredicates());
@@ -82,8 +96,17 @@ public class PredicateSplit {
             // convert rangePredicate to rangeConjunct
             rangeConjunct = rangePredicate.toScalarOperator();
         } else if (extractor.getColumnEqualityPredicates().isEmpty() && extractor.getResidualPredicates().isEmpty()) {
-            residualConjunct = Utils.compoundAnd(residualConjunct, predicate);
+            residualConjunct = Utils.compoundAnd(residualConjunct, normalPredicate);
         }
         return PredicateSplit.of(equalityConjunct, rangeConjunct, residualConjunct);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("equalPredicates=%s, rangePredicates=%s, residualPredicates=%s",
+                equalPredicates == null ? "" : equalPredicates,
+                rangePredicates == null ? "" : rangePredicates,
+                residualPredicates == null ? "" : residualPredicates
+        );
     }
 }

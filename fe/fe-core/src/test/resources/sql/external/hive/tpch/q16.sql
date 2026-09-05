@@ -1,34 +1,3 @@
-[sql]
-select
-    p_brand,
-    p_type,
-    p_size,
-    count(distinct ps_suppkey) as supplier_cnt
-from
-    partsupp,
-    part
-where
-        p_partkey = ps_partkey
-  and p_brand <> 'Brand#43'
-  and p_type not like 'PROMO BURNISHED%'
-  and p_size in (31, 43, 9, 6, 18, 11, 25, 1)
-  and ps_suppkey not in (
-    select
-        s_suppkey
-    from
-        supplier
-    where
-            s_comment like '%Customer%Complaints%'
-)
-group by
-    p_brand,
-    p_type,
-    p_size
-order by
-    supplier_cnt desc,
-    p_brand,
-    p_type,
-    p_size ;
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:9: p_brand | 10: p_type | 11: p_size | 23: count
@@ -185,6 +154,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 21: s_comment LIKE '%Customer%Complaints%'
 partitions=1/1
 avgRowSize=105.0
+dataCacheOptions={populate: false}
 cardinality: 250000
 column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
@@ -202,6 +172,7 @@ NON-PARTITION PREDICATES: 9: p_brand != 'Brand#43', NOT (10: p_type LIKE 'PROMO 
 MIN/MAX PREDICATES: 11: p_size >= 1, 11: p_size <= 43
 partitions=1/1
 avgRowSize=47.0
+dataCacheOptions={populate: false}
 cardinality: 2304000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2304000.0] ESTIMATE
@@ -220,6 +191,7 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 1: ps_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
+dataCacheOptions={populate: false}
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (1: ps_partkey)
@@ -227,4 +199,3 @@ column statistics:
 * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 [end]
-

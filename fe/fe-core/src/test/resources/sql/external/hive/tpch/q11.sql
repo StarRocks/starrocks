@@ -1,38 +1,10 @@
-[sql]
-select
-    ps_partkey,
-    sum(ps_supplycost * ps_availqty) as value
-from
-    partsupp,
-    supplier,
-    nation
-where
-    ps_suppkey = s_suppkey
-  and s_nationkey = n_nationkey
-  and n_name = 'PERU'
-group by
-    ps_partkey having
-    sum(ps_supplycost * ps_availqty) > (
-    select
-    sum(ps_supplycost * ps_availqty) * 0.0001000000
-    from
-    partsupp,
-    supplier,
-    nation
-    where
-    ps_suppkey = s_suppkey
-                  and s_nationkey = n_nationkey
-                  and n_name = 'PERU'
-    )
-order by
-    value desc ;
 [fragment statistics]
 PLAN FRAGMENT 0(F13)
 Output Exprs:1: ps_partkey | 18: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-32:MERGING-EXCHANGE
+31:MERGING-EXCHANGE
 distribution type: GATHER
 cardinality: 1600000
 column statistics:
@@ -44,9 +16,9 @@ PLAN FRAGMENT 1(F05)
 
 Input Partition: HASH_PARTITIONED: 1: ps_partkey
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 32
+OutPut Exchange Id: 31
 
-31:SORT
+30:SORT
 |  order by: [18, DECIMAL128(38,2), true] DESC
 |  offset: 0
 |  cardinality: 1600000
@@ -55,7 +27,7 @@ OutPut Exchange Id: 32
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
-30:Project
+29:Project
 |  output columns:
 |  1 <-> [1: ps_partkey, INT, true]
 |  18 <-> [18: sum, DECIMAL128(38,2), true]
@@ -64,7 +36,7 @@ OutPut Exchange Id: 32
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |
-29:NESTLOOP JOIN
+28:NESTLOOP JOIN
 |  join op: INNER JOIN
 |  other join predicates: cast([18: sum, DECIMAL128(38,2), true] as DOUBLE) > cast([37: expr, DECIMAL128(38,12), true] as DOUBLE)
 |  cardinality: 1600000
@@ -73,7 +45,7 @@ OutPut Exchange Id: 32
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
-|----28:EXCHANGE
+|----27:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 1
 |
@@ -94,15 +66,8 @@ PLAN FRAGMENT 2(F11)
 
 Input Partition: UNPARTITIONED
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 28
+OutPut Exchange Id: 27
 
-27:ASSERT NUMBER OF ROWS
-|  assert number of rows: LE 1
-|  cardinality: 1
-|  column statistics:
-|  * sum-->[1.0, 9999000.0, 0.0, 16.0, 1.0] ESTIMATE
-|  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
-|
 26:Project
 |  output columns:
 |  37 <-> [36: sum, DECIMAL128(38,2), true] * 0.0001000000
@@ -165,6 +130,7 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 20: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=20.0
+dataCacheOptions={populate: false}
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 3, probe_expr = (20: ps_suppkey)
@@ -207,6 +173,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 24: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (27: s_nationkey)
@@ -233,6 +200,7 @@ NON-PARTITION PREDICATES: 32: n_name = 'PERU'
 MIN/MAX PREDICATES: 32: n_name <= 'PERU', 32: n_name >= 'PERU'
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -286,6 +254,7 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 2: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
+dataCacheOptions={populate: false}
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (2: ps_suppkey)
@@ -329,6 +298,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 6: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (9: s_nationkey)
@@ -355,6 +325,7 @@ NON-PARTITION PREDICATES: 14: n_name = 'PERU'
 MIN/MAX PREDICATES: 14: n_name <= 'PERU', 14: n_name >= 'PERU'
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE

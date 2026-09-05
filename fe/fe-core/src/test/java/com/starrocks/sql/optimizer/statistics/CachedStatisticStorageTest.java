@@ -15,16 +15,25 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorTableColumnKey;
-import com.starrocks.connector.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
+import com.starrocks.connector.statistics.ConnectorTableColumnKey;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.StatisticsUtils;
+import com.starrocks.metric.CounterMetric;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.StarRocksMetricRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -40,9 +49,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -50,6 +60,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
+
+import static com.starrocks.metric.MetricRepo.SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -81,7 +96,7 @@ public class CachedStatisticStorageTest {
     public static void createStatisticsTable() throws Exception {
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -89,7 +104,7 @@ public class CachedStatisticStorageTest {
         starRocksAssert.withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -121,8 +136,8 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetColumnStatistic(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t0");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
 
         new Expectations() {
             {
@@ -132,30 +147,28 @@ public class CachedStatisticStorageTest {
 
                 cachedStatisticStorage.getColumnStatistic(table, "v2");
                 result = ColumnStatistic.builder().setDistinctValuesCount(999).build();
-                minTimes = 0;
 
                 cachedStatisticStorage.getColumnStatistic(table, "v3");
                 result = ColumnStatistic.builder().setDistinctValuesCount(666).build();
-                minTimes = 0;
             }
         };
         ColumnStatistic columnStatistic1 =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v1");
-        Assert.assertEquals(888, columnStatistic1.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(888, columnStatistic1.getDistinctValuesCount(), 0.001);
 
         ColumnStatistic columnStatistic2 =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v2");
-        Assert.assertEquals(999, columnStatistic2.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(999, columnStatistic2.getDistinctValuesCount(), 0.001);
 
         ColumnStatistic columnStatistic3 =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v3");
-        Assert.assertEquals(666, columnStatistic3.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(666, columnStatistic3.getDistinctValuesCount(), 0.001);
     }
 
     @Test
     public void testGetColumnStatistics(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t0");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
         ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
@@ -169,21 +182,21 @@ public class CachedStatisticStorageTest {
         };
         List<ColumnStatistic> columnStatistics = Deencapsulation
                 .invoke(cachedStatisticStorage, "getColumnStatistics", table, ImmutableList.of("v1", "v2"));
-        Assert.assertEquals(2, columnStatistics.size());
-        Assert.assertEquals(888, columnStatistics.get(0).getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(999, columnStatistics.get(1).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(2, columnStatistics.size());
+        Assertions.assertEquals(888, columnStatistics.get(0).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(999, columnStatistics.get(1).getDistinctValuesCount(), 0.001);
     }
 
     @Test
     public void testGetHiveColumnStatistics(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "region");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "tpch", "region");
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
         ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
         ConnectorTableColumnStats connectorTableColumnStats1 =
-                new ConnectorTableColumnStats(columnStatistic1, 5);
+                new ConnectorTableColumnStats(columnStatistic1, 5, "2024-01-01 01:00:00");
         ConnectorTableColumnStats connectorTableColumnStats2 =
-                new ConnectorTableColumnStats(columnStatistic2, 5);
+                new ConnectorTableColumnStats(columnStatistic2, 5, "2024-01-01 02:00:00");
 
         new Expectations() {
             {
@@ -195,69 +208,84 @@ public class CachedStatisticStorageTest {
         List<ConnectorTableColumnStats> columnStatistics = Deencapsulation
                 .invoke(cachedStatisticStorage, "getConnectorTableStatistics", table,
                         ImmutableList.of("r_regionkey", "r_name"));
-        Assert.assertEquals(2, columnStatistics.size());
-        Assert.assertEquals(888, columnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(999, columnStatistics.get(1).getColumnStatistic().getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(5, columnStatistics.get(0).getRowCount());
-        Assert.assertEquals(5, columnStatistics.get(1).getRowCount());
+        Assertions.assertEquals(2, columnStatistics.size());
+        Assertions.assertEquals(888, columnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(999, columnStatistics.get(1).getColumnStatistic().getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(5, columnStatistics.get(0).getRowCount());
+        Assertions.assertEquals(5, columnStatistics.get(1).getRowCount());
+        Assertions.assertEquals("2024-01-01 01:00:00", columnStatistics.get(0).getUpdateTime());
+        Assertions.assertEquals("2024-01-01 02:00:00", columnStatistics.get(1).getUpdateTime());
     }
 
     @Test
-    public void testGetConnectorTableStatistics(@Mocked
-                                                AsyncLoadingCache<ConnectorTableColumnKey,
-                                                        Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics,
-                                                @Mocked
-                                                CompletableFuture<Map<ConnectorTableColumnKey,
-                                                        Optional<ConnectorTableColumnStats>>> res)
-            throws ExecutionException, InterruptedException {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
-        List<ConnectorTableColumnKey> cacheKeys =
-                ImmutableList.of(new ConnectorTableColumnKey(table.getUUID(), "c1"),
-                        new ConnectorTableColumnKey(table.getUUID(), "c2"));
-
-        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnKeyOptionalMap = Maps.newHashMap();
-        columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c1"),
-                Optional.of(new ConnectorTableColumnStats(
-                        new ColumnStatistic(0, 10, 0, 20, 5), 5)));
-        columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c2"),
-                Optional.of(new ConnectorTableColumnStats(
-                        new ColumnStatistic(0, 100, 0, 200, 50), 50)));
-
-        new Expectations() {
-            {
-                connectorTableCachedStatistics.getAll(cacheKeys);
-                result = res;
-                minTimes = 0;
-
-                res.isDone();
-                result = true;
-                minTimes = 0;
-
-                res.get();
-                result = columnKeyOptionalMap;
-                minTimes = 0;
-            }
-        };
-
-        new MockUp<StatisticUtils>() {
+    public void testGetConnectorTableStatistics() throws ExecutionException, InterruptedException {
+        AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>
+                connectorTableCachedStatistics =
+                Caffeine.newBuilder().expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+                        .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+                        .maximumSize(Config.statistic_cache_columns)
+                        .buildAsync(new ConnectorColumnStatsCacheLoader());
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
             @Mock
-            public boolean checkStatisticTableStateNormal() {
-                return true;
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                TStatisticData data1 = new TStatisticData();
+                data1.setColumnName("c1");
+                data1.setRowCount(5);
+                data1.setDataSize(100);
+                data1.setCountDistinct(5);
+                data1.setNullCount(0);
+                data1.setMin("0");
+                data1.setMax("10");
+
+                TStatisticData data2 = new TStatisticData();
+                data2.setColumnName("c2");
+                data2.setRowCount(5);
+                data2.setDataSize(100);
+                data2.setCountDistinct(5);
+                data2.setNullCount(0);
+                data2.setMin("a");
+                data2.setMax("z");
+
+                TStatisticData data3 = new TStatisticData();
+                data3.setColumnName("c3");
+                data3.setRowCount(5);
+                data3.setDataSize(100);
+                data3.setCountDistinct(5);
+                data3.setNullCount(0);
+                data3.setMin("x");
+                data3.setMax("y");
+
+                return ImmutableList.of(data1, data2, data3);
             }
         };
 
-        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getTable(connectContext, "hive0", "partitioned_db", "t1");
+            }
 
-        List<ConnectorTableColumnStats> connectorColumnStatistics = Deencapsulation
-                .invoke(cachedStatisticStorage, "getConnectorTableStatistics", table,
-                        ImmutableList.of("c1", "c2"));
-        Assert.assertEquals(2, connectorColumnStatistics.size());
-        Assert.assertEquals(5, connectorColumnStatistics.get(0).getRowCount());
-        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getMinValue(), 0.0001);
-        Assert.assertEquals(10, connectorColumnStatistics.get(0).getColumnStatistic().getMaxValue(), 0.0001);
-        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getNullsFraction(), 0.0001);
-        Assert.assertEquals(20, connectorColumnStatistics.get(0).getColumnStatistic().getAverageRowSize(), 0.0001);
-        Assert.assertEquals(5, connectorColumnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.0001);
+        };
+
+        List<ConnectorTableColumnKey> cacheKeys = ImmutableList.of(
+                new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c1"),
+                new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c2"),
+                new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c3"));
+        CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> future =
+                connectorTableCachedStatistics.getAll(cacheKeys);
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
+
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+                "c1")).get().getRowCount());
+        Assertions.assertEquals(20, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+                "c1")).get().getColumnStatistic().getAverageRowSize(), 0.0001);
+        Assertions.assertEquals(10, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+                "c1")).get().getColumnStatistic().getMaxValue(), 0.0001);
+        Assertions.assertEquals(0, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+                "c1")).get().getColumnStatistic().getMinValue(), 0.0001);
     }
 
     @Test
@@ -266,18 +294,16 @@ public class CachedStatisticStorageTest {
                     Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics,
             @Mocked LoadingCache<ConnectorTableColumnKey,
                     Optional<ConnectorTableColumnStats>> connectorTableTableSyncCachedStatistics) {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
-        List<ConnectorTableColumnKey> cacheKeys =
-                ImmutableList.of(new ConnectorTableColumnKey(table.getUUID(), "c1"),
-                        new ConnectorTableColumnKey(table.getUUID(), "c2"));
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnKeyOptionalMap = Maps.newHashMap();
         columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c1"),
                 Optional.of(new ConnectorTableColumnStats(
-                        new ColumnStatistic(0, 10, 0, 20, 5), 5)));
+                        new ColumnStatistic(0, 10, 0, 20, 5), 5, "")));
         columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c2"),
                 Optional.of(new ConnectorTableColumnStats(
-                        new ColumnStatistic(0, 100, 0, 200, 50), 50)));
+                        new ColumnStatistic(0, 100, 0, 200, 50), 50, "")));
 
         new MockUp<StatisticUtils>() {
             @Mock
@@ -289,7 +315,7 @@ public class CachedStatisticStorageTest {
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
         List<ConnectorTableColumnStats> connectorColumnStatistics = cachedStatisticStorage.
                 getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
-        Assert.assertEquals(2, connectorColumnStatistics.size());
+        Assertions.assertEquals(2, connectorColumnStatistics.size());
 
         new MockUp<StatisticUtils>() {
             @Mock
@@ -299,26 +325,204 @@ public class CachedStatisticStorageTest {
         };
         connectorColumnStatistics = cachedStatisticStorage.
                 getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
-        Assert.assertEquals(2, connectorColumnStatistics.size());
-        Assert.assertTrue(connectorColumnStatistics.get(0).getColumnStatistic().isUnknown());
-        Assert.assertTrue(connectorColumnStatistics.get(1).getColumnStatistic().isUnknown());
+        Assertions.assertEquals(2, connectorColumnStatistics.size());
+        Assertions.assertTrue(connectorColumnStatistics.get(0).getColumnStatistic().isUnknown());
+        Assertions.assertTrue(connectorColumnStatistics.get(1).getColumnStatistic().isUnknown());
     }
 
     @Test
     public void testExpireConnectorTableColumnStatistics() {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
         try {
             cachedStatisticStorage.expireConnectorTableColumnStatistics(table, ImmutableList.of("c1", "c2"));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testInvalidateConnectorTableColumnStatisticsByUuid() {
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        try {
+            // null / empty UUID is a no-op and must not throw.
+            cachedStatisticStorage.invalidateConnectorTableColumnStatistics(null, ImmutableList.of("c1"));
+            cachedStatisticStorage.invalidateConnectorTableColumnStatistics("", ImmutableList.of("c1"));
+            // A normal UUID invalidates by key without resolving the table.
+            cachedStatisticStorage.invalidateConnectorTableColumnStatistics(
+                    "hive0.partitioned_db.t1.1234", ImmutableList.of("c1", "c2"));
+        } catch (Exception e) {
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testInvalidateConnectorHistogramStatisticsByUuid() {
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        try {
+            cachedStatisticStorage.invalidateConnectorHistogramStatistics(null, ImmutableList.of("c1"));
+            cachedStatisticStorage.invalidateConnectorHistogramStatistics(
+                    "hive0.partitioned_db.t1.1234", ImmutableList.of("c1"));
+        } catch (Exception e) {
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testGetColumnNDVForPartitions(@Mocked AsyncLoadingCache<ColumnStatsCacheKey, Optional<PartitionStats>>
+                                                          partitionStatistics) {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "c1");
+        new Expectations() {
+            {
+                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                result = CompletableFuture.completedFuture(ImmutableMap.of(key, Optional.empty()));
+                minTimes = 0;
+            }
+        };
+        Map<String, PartitionStats> partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+
+
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new InterruptedException("test");
+            }
+        };
+
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+
+
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new ExecutionException("test", new Exception());
+            }
+        };
+
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+
+
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new TimeoutException("test");
+            }
+        };
+
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+    }
+
+    @Test
+    public void testGetConnectorHistogramStatistics(@Mocked AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>>
+                                                            histogramCache) {
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c1");
+        new Expectations() {
+            {
+                histogramCache.getAll((Iterable<? extends ConnectorTableColumnKey>) any);
+                result = CompletableFuture.completedFuture(ImmutableMap.of(key, Optional.empty()));
+                minTimes = 0;
+            }
+        };
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        Map<String, Histogram> histogramMap =
+                cachedStatisticStorage.getConnectorHistogramStatistics(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, histogramMap.size());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testGetHistogramStatisticsSkipInStatisticsConnection(
+            @Mocked AsyncLoadingCache<ColumnStatsCacheKey, Optional<Histogram>> histogramCache) {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+
+        // A histogram-collect INSERT holds the histogram_statistics READ lock while its plan is
+        // optimized; estimating the source scan then calls getHistogramStatistics on the source
+        // table. If that synchronously loads the histogram, the loader re-acquires the
+        // histogram_statistics READ lock and (behind a queued publish WRITE) self-deadlocks.
+        // The guard must short-circuit for statistics-collect connections BEFORE touching the
+        // cache, so the loader is never dispatched. Assert getAll is never called.
+        new Expectations() {
+            {
+                histogramCache.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                times = 0;
+            }
+        };
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+
+        connectContext.setThreadLocalInfo();
+        boolean prev = connectContext.isStatisticsConnection();
+        connectContext.setStatisticsConnection(true);
+        try {
+            Map<String, Histogram> result =
+                    cachedStatisticStorage.getHistogramStatistics(table, ImmutableList.of("v1"));
+            Assertions.assertTrue(result.isEmpty());
+        } finally {
+            connectContext.setStatisticsConnection(prev);
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testGetHistogramStatisticsSkipForStatisticsInternalTable(
+            @Mocked AsyncLoadingCache<ColumnStatsCacheKey, Optional<Histogram>> histogramCache) {
+        Database statsDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Table statsTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(statsDb.getFullName(), "table_statistic_v1");
+        Assertions.assertNotNull(statsTable);
+
+        // The other guard branch: statistics-internal tables (in the collect blacklist DB) must also
+        // skip the load, independent of the connection type, so the cache is never touched.
+        new Expectations() {
+            {
+                histogramCache.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                times = 0;
+            }
+        };
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        ConnectContext.remove();
+        Map<String, Histogram> result =
+                cachedStatisticStorage.getHistogramStatistics(statsTable, ImmutableList.of("column_name"));
+        Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testExpireConnectorHistogramStatistics() {
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        try {
+            cachedStatisticStorage.expireConnectorHistogramStatistics(table, ImmutableList.of("c1", "c2"));
+        } catch (Exception e) {
+            Assertions.fail();
         }
     }
 
     @Test
     public void testLoadCacheLoadEmpty(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        Table table = db.getTable("t0");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
 
         new Expectations() {
             {
@@ -329,17 +533,17 @@ public class CachedStatisticStorageTest {
         };
         ColumnStatistic columnStatistic =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v1");
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(0.0, columnStatistic.getNullsFraction(), 0.001);
-        Assert.assertEquals(1.0, columnStatistic.getAverageRowSize(), 0.001);
-        Assert.assertEquals(1.0, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0.0, columnStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(1.0, columnStatistic.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(1.0, columnStatistic.getDistinctValuesCount(), 0.001);
     }
 
     @Test
     public void testConvert2ColumnStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t0");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
         ColumnBasicStatsCacheLoader cachedStatisticStorage =
                 Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
 
@@ -352,38 +556,38 @@ public class CachedStatisticStorageTest {
 
         ColumnStatistic columnStatistic =
                 Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(123, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(123, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v4");
         statisticData.setMax("2021-05-21");
         statisticData.setMin("2021-05-20");
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2021, 5, 21, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2021, 5, 21, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2021, 5, 20, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2021, 5, 20, 0, 0, 0)),
                 columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v1");
         statisticData.setMin("aa");
         statisticData.setMax("bb");
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v1");
         statisticData.setMin("");
         statisticData.setMax("");
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v4");
         statisticData.setMin("");
         statisticData.setMax("");
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v4");
         statisticData.setMin("");
@@ -392,9 +596,464 @@ public class CachedStatisticStorageTest {
         statisticData.setDataSize(0);
         statisticData.setNullCount(0);
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(0, columnStatistic.getAverageRowSize(), 0.001);
-        Assert.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    @Timeout(5)
+    public void testWaitForStatsFutureTimeout() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        // Create a future that will never complete
+        final var neverCompletingFuture = new CompletableFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100; // 100ms timeout
+
+            // WHEN
+            // The method should return without throwing despite the future not completing
+            Supplier<String> contextSupplier = () -> "context";
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                    contextSupplier);
+
+            // THEN
+            // Future should still not be done (timeout was caught internally)
+            Assertions.assertFalse(neverCompletingFuture.isDone());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    public void testWaitForStatsFutureDisabled() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var neverCompletingFuture = new CompletableFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        try {
+            Config.enable_sync_statistics_load = false;
+
+            // WHEN
+            // Should return immediately without waiting
+            Supplier<String> contextSupplier = () -> "context";
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                    contextSupplier);
+
+            // THEN
+            Assertions.assertFalse(neverCompletingFuture.isDone());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+        }
+    }
+
+    private static class TimeoutFuture<T> extends CompletableFuture<T> {
+        private int timedGetCalls;
+        private long timeout;
+        private TimeUnit unit;
+
+        @Override
+        public T get(long timeout, TimeUnit unit) throws TimeoutException {
+            this.timedGetCalls++;
+            this.timeout = timeout;
+            this.unit = unit;
+            throw new TimeoutException("test");
+        }
+    }
+
+    private static class FixedWaitStatisticsLoadBudget extends StatisticsLoadBudget {
+        private final long waitMsToRecord;
+
+        private FixedWaitStatisticsLoadBudget(long totalBudgetMs, long waitMsToRecord) {
+            super(totalBudgetMs);
+            this.waitMsToRecord = waitMsToRecord;
+        }
+
+        @Override
+        public synchronized void recordWait(long elapsedNanos) {
+            super.recordWait(TimeUnit.MILLISECONDS.toNanos(waitMsToRecord));
+        }
+    }
+
+    @Test
+    public void testWaitForStatsFutureUsesPerCallTimeoutWithoutQueryBudget() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var timeoutFuture = new TimeoutFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        long beforeMetric = SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+            Config.sync_statistics_load_per_query_budget_ms = 0;
+            connectContext.setStatisticsLoadBudget(null);
+
+            // WHEN
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", timeoutFuture,
+                    (Supplier<String>) () -> "context");
+
+            // THEN
+            Assertions.assertEquals(1, timeoutFuture.timedGetCalls);
+            Assertions.assertEquals(100, timeoutFuture.timeout);
+            Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
+            Assertions.assertFalse(timeoutFuture.isDone());
+            Assertions.assertNull(connectContext.getStatisticsLoadBudget());
+            Assertions.assertEquals(beforeMetric, SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+            Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    public void testWaitForStatsFutureDoesNotReportBudgetExceededWhenPerCallTimeoutExpiresWithBudgetRemaining() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var timeoutFuture = new TimeoutFuture<>();
+        final var budget = new FixedWaitStatisticsLoadBudget(1000, 100);
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        long beforeMetric = SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+            connectContext.setStatisticsLoadBudget(budget);
+
+            // WHEN
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", timeoutFuture,
+                    (Supplier<String>) () -> "context");
+
+            // THEN
+            Assertions.assertEquals(1, timeoutFuture.timedGetCalls);
+            Assertions.assertEquals(100, timeoutFuture.timeout);
+            Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
+            Assertions.assertEquals(900, budget.getRemainingBudgetMs());
+            Assertions.assertEquals(beforeMetric, SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    public void testWaitForStatsFutureReportsBudgetExceededAfterTimedWaitExhaustsBudget() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var timeoutFuture = new TimeoutFuture<>();
+        final var budget = new FixedWaitStatisticsLoadBudget(100, 100);
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        long beforeMetric = SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 1000;
+            connectContext.setStatisticsLoadBudget(budget);
+
+            // WHEN
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", timeoutFuture,
+                    (Supplier<String>) () -> "context");
+
+            // THEN
+            Assertions.assertEquals(1, timeoutFuture.timedGetCalls);
+            Assertions.assertEquals(100, timeoutFuture.timeout);
+            Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
+            Assertions.assertEquals(0, budget.getRemainingBudgetMs());
+            Assertions.assertEquals(beforeMetric + 1, SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    public void testStatisticsLoadBudgetDefaultUsesPerCallTimeout() {
+        // GIVEN
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
+        try {
+            Config.sync_statistics_load_timeout_ms = 123;
+            Config.sync_statistics_load_per_query_budget_ms = -1;
+
+            // WHEN
+            StatisticsLoadBudget budget = StatisticsLoadBudget.fromConfig();
+
+            // THEN
+            Assertions.assertEquals(123, budget.getTotalBudgetMs());
+        } finally {
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+            Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    public void testWaitForStatsFutureSkippedWhenQueryBudgetIsZero() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var timeoutFuture = new TimeoutFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 1000;
+            Config.sync_statistics_load_per_query_budget_ms = 0;
+            connectContext.setStatisticsLoadBudget(null);
+
+            try (var ignored = StatisticsLoadBudget.openScope(connectContext)) {
+                // WHEN
+                Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", timeoutFuture,
+                        (Supplier<String>) () -> "context");
+
+                // THEN
+                Assertions.assertEquals(0, timeoutFuture.timedGetCalls);
+                Assertions.assertFalse(timeoutFuture.isDone());
+                Assertions.assertEquals(0, connectContext.getStatisticsLoadBudget().getConsumedBudgetMs());
+            }
+            // THEN
+            Assertions.assertNull(connectContext.getStatisticsLoadBudget());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+            Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    public void testWaitForStatsFutureUsesRemainingQueryBudget() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 1000;
+            Config.sync_statistics_load_per_query_budget_ms = 100;
+            connectContext.setStatisticsLoadBudget(null);
+
+            try (var ignored = StatisticsLoadBudget.openScope(connectContext)) {
+                final var firstFuture = new TimeoutFuture<>();
+
+                // WHEN
+                Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", firstFuture,
+                        (Supplier<String>) () -> "first");
+
+                // THEN
+                Assertions.assertEquals(1, firstFuture.timedGetCalls);
+                Assertions.assertEquals(100, firstFuture.timeout);
+                Assertions.assertEquals(TimeUnit.MILLISECONDS, firstFuture.unit);
+
+                // GIVEN
+                connectContext.getStatisticsLoadBudget().recordWait(TimeUnit.MILLISECONDS.toNanos(100));
+                Assertions.assertEquals(0, connectContext.getStatisticsLoadBudget().getRemainingBudgetMs());
+
+                final var secondFuture = new TimeoutFuture<>();
+
+                // WHEN
+                Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", secondFuture,
+                        (Supplier<String>) () -> "second");
+
+                // THEN
+                Assertions.assertEquals(0, secondFuture.timedGetCalls);
+                Assertions.assertFalse(secondFuture.isDone());
+            }
+            // THEN
+            Assertions.assertNull(connectContext.getStatisticsLoadBudget());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+            Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    public void testGetColumnStatisticReturnsUnknownOnTimeout() {
+        // GIVEN
+        final var db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        final var table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t0");
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+
+            // Install a cache that returns a never-completing future
+            final var storage = new CachedStatisticStorage();
+            final var slowCache = Caffeine.newBuilder()
+                    .maximumSize(100)
+                    .buildAsync((key, executor) -> new CompletableFuture<>());
+            Deencapsulation.setField(storage, "columnStatistics", slowCache);
+
+            // WHEN
+            // Should return unknown after timeout, not block forever
+            ColumnStatistic result = storage.getColumnStatistic(table, "v1");
+
+            // THEN
+            Assertions.assertTrue(result.isUnknown());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    public void testGetColumnStatisticsTimeoutWithSyncStats() {
+        // GIVEN
+        final var db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        final var table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t0");
+
+        final var originalEnabled = Config.enable_sync_statistics_load;
+        final var originalTimeout = Config.sync_statistics_load_timeout_ms;
+
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+
+            // Install a cache whose loader returns a future that never completes
+            final var storage = new CachedStatisticStorage();
+            final AsyncLoadingCache<ColumnStatsCacheKey, Optional<ColumnStatistic>> slowCache =
+                    Caffeine.newBuilder()
+                            .maximumSize(100)
+                            .buildAsync((key, executor) -> new CompletableFuture<>());
+            Deencapsulation.setField(storage, "columnStatistics", slowCache);
+
+            // WHEN
+            final var stats = storage.getColumnStatistics(table, ImmutableList.of("v1", "v2"));
+
+            // THEN
+            // Each column resolves to the default unknown statistic.
+            Assertions.assertEquals(2, stats.size());
+            Assertions.assertTrue(stats.get(0).isUnknown());
+            Assertions.assertTrue(stats.get(1).isUnknown());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    public void testGetCachesExposesAllNamedCacheMapWithStatsRecording() {
+        final var originalEnabled = Config.enable_statistic_cache_metrics;
+
+        try {
+            Config.enable_statistic_cache_metrics = true;
+            CachedStatisticStorage storage = new CachedStatisticStorage();
+            Map<String, LoadingCache<?, ?>> caches = storage.getNamedCacheMap();
+
+            Assertions.assertEquals(
+                    ImmutableList.of("table_stats", "column_stats", "partition_stats", "connector_table_stats",
+                            "histogram_stats", "connector_histogram_stats", "multi_column_stats").stream().sorted().toList(),
+                    caches.keySet().stream().sorted().toList());
+
+            // recordStats() must be enabled so the metric layer can read hit/miss/eviction/load counts.
+            for (Map.Entry<String, LoadingCache<?, ?>> entry : caches.entrySet()) {
+                Assertions.assertTrue(entry.getValue().policy().isRecordingStats(),
+                        "stats recording should be enabled for cache " + entry.getKey());
+            }
+        } finally {
+            Config.enable_statistic_cache_metrics = originalEnabled;
+        }
+
+    }
+
+    @Test
+    public void testInitStatisticsCacheMetricsRegistersCountersAndGauge() {
+        // GIVEN
+        final boolean originalEnabled = Config.enable_statistic_cache_metrics;
+        final var globalStateMgr = GlobalStateMgr.getCurrentState();
+        final var originalStorage = globalStateMgr.getStatisticStorage();
+
+        final var counterMetrics = List.of(
+                "statistics_cache_hit_count",
+                "statistics_cache_miss_count",
+                "statistics_cache_eviction_count",
+                "statistics_cache_load_success_count",
+                "statistics_cache_load_failure_count");
+        final var gaugeMetrics = List.of("statistics_cache_entries");
+        // Each metric is registered once per named cache, so this is the expected series count per metric name.
+        final int expectedCacheCount = new CachedStatisticStorage().getNamedCacheMap().size();
+
+        try {
+            Config.enable_statistic_cache_metrics = true;
+            globalStateMgr.setStatisticStorage(new CachedStatisticStorage());
+
+            // WHEN
+            Deencapsulation.invoke(MetricRepo.class, "initStatisticsCacheMetrics");
+
+            // THEN
+            for (String metricName : counterMetrics) {
+                final var metrics = MetricRepo.getMetricsByName(metricName);
+                Assertions.assertEquals(expectedCacheCount, metrics.size(),
+                        "expected one metric per cache for " + metricName);
+                for (var metric : metrics) {
+                    Assertions.assertEquals(Metric.MetricType.COUNTER, metric.getType(),
+                            metricName + " should be exposed as a counter");
+                    Assertions.assertTrue((Long) metric.getValue() >= 0L);
+                    // increase() is a no-op: the value is pulled from Caffeine, never pushed.
+                    ((CounterMetric<Long>) metric).increase(1L);
+                    Assertions.assertTrue((Long) metric.getValue() >= 0L);
+                }
+            }
+
+            for (String metricName : gaugeMetrics) {
+                final var metrics = MetricRepo.getMetricsByName(metricName);
+                Assertions.assertEquals(expectedCacheCount, metrics.size(),
+                        "expected one metric per cache for " + metricName);
+
+                for (var metric : metrics) {
+                    Assertions.assertEquals(Metric.MetricType.GAUGE, metric.getType(),
+                            metric + " should be exposed as a gauge");
+                    Assertions.assertTrue((Long) metric.getValue() >= 0L);
+                }
+            }
+        } finally {
+            // Avoid leaking the registered metrics into the shared registry used by other tests.
+            final var registry = Deencapsulation.getField(MetricRepo.class, StarRocksMetricRegistry.class);
+            counterMetrics.forEach(registry::removeMetrics);
+            gaugeMetrics.forEach(registry::removeMetrics);
+            globalStateMgr.setStatisticStorage(originalStorage);
+            Config.enable_statistic_cache_metrics = originalEnabled;
+        }
     }
 }

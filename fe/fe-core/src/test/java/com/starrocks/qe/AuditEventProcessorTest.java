@@ -34,21 +34,32 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
+import com.starrocks.plugin.AuditPlugin;
+import com.starrocks.plugin.Plugin;
 import com.starrocks.plugin.PluginInfo;
+import com.starrocks.plugin.PluginInfo.PluginType;
+import com.starrocks.plugin.PluginMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
-public class AuditEventProcessorTest {
+public class AuditEventProcessorTest extends StarRocksTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
     }
@@ -70,18 +81,72 @@ public class AuditEventProcessorTest {
                 .setStmt("select * from tbl1")
                 .setCatalog("catalog1").build();
 
-        Assert.assertEquals("127.0.0.1", event.clientIp);
-        Assert.assertEquals(200000, event.scanRows);
-        Assert.assertEquals("catalog1", event.catalog);
-        Assert.assertEquals("user2", event.authorizedUser);
+        Assertions.assertEquals("127.0.0.1", event.clientIp);
+        Assertions.assertEquals(200000, event.scanRows);
+        Assertions.assertEquals("catalog1", event.catalog);
+        Assertions.assertEquals("user2", event.authorizedUser);
+    }
+
+    @Test
+    public void testAuditLogBuilderCONNECTION() throws IOException {
+        try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
+            AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.CONNECTION)
+                    .setTimestamp(System.currentTimeMillis())
+                    .setClientIp("127.0.0.1")
+                    .setUser("user1")
+                    .setAuthorizedUser("user2")
+                    .setDb("db1")
+                    .setState("EOF")
+                    .setQueryTime(2000)
+                    .setScanBytes(100000)
+                    .setScanRows(200000)
+                    .setReturnRows(1)
+                    .setStmtId(1234)
+                    .setStmt("select * from tbl1").build();
+
+            if (auditLogBuilder.eventFilter(event.type)) {
+                auditLogBuilder.exec(event);
+                Config.audit_log_json_format = true;
+                auditLogBuilder.exec(event);
+            }
+            Assertions.assertEquals(EventType.CONNECTION,  event.type);
+        }
+    }
+
+    @Test
+    public void testAuditLogBuilderBigQuery() throws IOException {
+        try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
+            AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)
+                    .setTimestamp(System.currentTimeMillis())
+                    .setClientIp("127.0.0.1")
+                    .setUser("user1")
+                    .setAuthorizedUser("user2")
+                    .setDb("db1")
+                    .setState("EOF")
+                    .setQueryTime(2000)
+                    .setScanBytes(100000)
+                    .setScanRows(200000)
+                    .setReturnRows(1)
+                    .setStmtId(1234)
+                    .setStmt("select * from tbl1")
+                    .setBigQueryLogCPUSecondThreshold(5)
+                    .setCpuCostNs(6 * 1000000000L).build();
+            if (auditLogBuilder.eventFilter(event.type)) {
+                auditLogBuilder.exec(event);
+                Config.audit_log_json_format = true;
+                auditLogBuilder.exec(event);
+            }
+            Assertions.assertEquals(6 * 1000000000L, event.cpuCostNs);
+            Assertions.assertEquals(5, event.bigQueryLogCPUSecondThreshold);
+        }
     }
 
     @Test
     public void testAuditLogBuilder() throws IOException {
         try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
             PluginInfo pluginInfo = auditLogBuilder.getPluginInfo();
-            Assert.assertEquals(DigitalVersion.fromString("0.12.0"), pluginInfo.getVersion());
-            Assert.assertEquals(DigitalVersion.fromString("1.8.31"), pluginInfo.getJavaVersion());
+            Assertions.assertEquals(DigitalVersion.fromString("0.12.0"), pluginInfo.getVersion());
+            Assertions.assertEquals(DigitalVersion.fromString("1.8.31"), pluginInfo.getJavaVersion());
             long start = System.currentTimeMillis();
             for (int i = 0; i < 10000; i++) {
                 AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)
@@ -102,13 +167,68 @@ public class AuditEventProcessorTest {
                 }
             }
             long total = System.currentTimeMillis() - start;
-            System.out.println("total(ms): " + total + ", avg: " + total / 10000.0);
+            logSysInfo("total(ms): " + total + ", avg: " + total / 10000.0);
+        }
+    }
+
+    // A plugin that throws OOM on the first exec() call, succeeds afterwards.
+    private static class OomOnFirstExecPlugin extends Plugin implements AuditPlugin {
+        private final CountDownLatch processedLatch;
+        private boolean firstCall = true;
+
+        OomOnFirstExecPlugin(CountDownLatch processedLatch) {
+            this.processedLatch = processedLatch;
+        }
+
+        @Override
+        public boolean eventFilter(AuditEvent.EventType type) {
+            return true;
+        }
+
+        @Override
+        public void exec(AuditEvent event) {
+            if (firstCall) {
+                firstCall = false;
+                throw new OutOfMemoryError("simulated OOM in audit plugin");
+            }
+            processedLatch.countDown();
+        }
+    }
+
+    @Test
+    public void testWorkerSurvivesOOMInPluginExec(@Mocked PluginMgr mockPluginMgr) throws Exception {
+        CountDownLatch processedLatch = new CountDownLatch(2);
+        try (OomOnFirstExecPlugin fakePlugin = new OomOnFirstExecPlugin(processedLatch)) {
+            new Expectations() {{
+                    mockPluginMgr.getActivePluginList(PluginType.AUDIT);
+                    result = Collections.singletonList(fakePlugin);
+                }};
+
+            AuditEventProcessor processor = new AuditEventProcessor(mockPluginMgr);
+            processor.start();
+            try {
+                AuditEvent event = new AuditEvent.AuditEventBuilder()
+                        .setEventType(EventType.AFTER_QUERY)
+                        .setTimestamp(System.currentTimeMillis())
+                        .setClientIp("127.0.0.1")
+                        .setUser("user1")
+                        .setDb("db1")
+                        .setStmt("select 1")
+                        .build();
+                for (int i = 0; i < 5; i++) {
+                    processor.handleAuditEvent(event);
+                }
+                Assertions.assertTrue(processedLatch.await(10, TimeUnit.SECONDS),
+                        "Worker should survive OOM and continue processing subsequent events");
+            } finally {
+                processor.stop();
+            }
         }
     }
 
     @Test
     public void testAuditEventProcessor() throws IOException {
-        AuditEventProcessor processor = GlobalStateMgr.getCurrentAuditEventProcessor();
+        AuditEventProcessor processor = GlobalStateMgr.getCurrentState().getAuditEventProcessor();
         long start = System.currentTimeMillis();
         for (int i = 0; i < 10000; i++) {
             AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)
@@ -127,6 +247,6 @@ public class AuditEventProcessorTest {
             processor.handleAuditEvent(event);
         }
         long total = System.currentTimeMillis() - start;
-        System.out.println("total(ms): " + total + ", avg: " + total / 10000.0);
+        logSysInfo("total(ms): " + total + ", avg: " + total / 10000.0);
     }
 }

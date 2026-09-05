@@ -12,20 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalProjectNode;
@@ -43,6 +39,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ProjectNode extends PlanNode {
+    // ProjectOperator only computes the projection; it never evaluates runtime filters.
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        return false;
+    }
+
     private final Map<SlotId, Expr> slotMap;
     private final Map<SlotId, Expr> commonSlotMap;
 
@@ -67,20 +69,9 @@ public class ProjectNode extends PlanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.PROJECT_NODE;
         msg.project_node = new TProjectNode();
-        slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), value.treeToThrift()));
-        commonSlotMap.forEach((key, value) -> msg.project_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
-    }
-
-    @Override
-    public void init(Analyzer analyzer) throws UserException {
-        Preconditions.checkState(conjuncts.isEmpty());
-        computeStats(analyzer);
-        createDefaultSmap(analyzer);
-    }
-
-    @Override
-    public int getNumInstances() {
-        return children.get(0).getNumInstances();
+        slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), ExprToThrift.treeToThrift(value)));
+        commonSlotMap.forEach((key, value) -> msg.project_node.putToCommon_slot_map(
+                key.asInt(), ExprToThrift.treeToThrift(value)));
     }
 
     @Override
@@ -102,12 +93,12 @@ public class ProjectNode extends PlanNode {
             output.append(prefix);
             if (detailLevel == TExplainLevel.VERBOSE) {
                 output.append(kv.first).append(" <-> ")
-                        .append(kv.second.explain()).append("\n");
+                        .append(ExprToSql.explain(kv.second)).append("\n");
             } else {
                 output.append("<slot ").
                         append(kv.first).
                         append("> : ").
-                        append(kv.second.toSql()).
+                        append(explainExpr(kv.second)).
                         append("\n");
             }
         }
@@ -117,12 +108,12 @@ public class ProjectNode extends PlanNode {
             for (Map.Entry<SlotId, Expr> kv : commonSlotMap.entrySet()) {
                 output.append(prefix);
                 if (detailLevel == TExplainLevel.VERBOSE) {
-                    output.append(kv.getKey()).append(" <-> ").append(kv.getValue().explain()).append("\n");
+                    output.append(kv.getKey()).append(" <-> ").append(ExprToSql.explain(kv.getValue())).append("\n");
                 } else {
                     output.append("<slot ").
                             append(kv.getKey()).
                             append("> : ").
-                            append(kv.getValue().toSql()).
+                            append(explainExpr(kv.getValue())).
                             append("\n");
                 }
             }
@@ -147,32 +138,61 @@ public class ProjectNode extends PlanNode {
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
-
     @Override
     public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
-        if (!(expr instanceof SlotRef)) {
-            return Optional.empty();
-        }
         if (!couldBound.apply(expr)) {
             return Optional.empty();
         }
-        List<Expr> newExprs = Lists.newArrayList();
-        for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
-            // Replace the probeExpr only when:
-            // 1. when probeExpr is slot ref
-            // 2. and probe expr slot id == kv.getKey()
-            // then replace probeExpr with kv.getValue()
-            // and push down kv.getValue()
-            if (expr.isBound(kv.getKey())) {
-                newExprs.add(kv.getValue());
+        if (expr instanceof SlotRef) {
+            List<Expr> newExprs = Lists.newArrayList();
+            for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
+                // Replace the probeExpr only when:
+                // 1. when probeExpr is slot ref
+                // 2. and probe expr slot id == kv.getKey()
+                // then replace probeExpr with kv.getValue()
+                // and push down kv.getValue()
+                if (ExprUtils.isBound(expr, kv.getKey())) {
+                    newExprs.add(kv.getValue());
+                }
+            }
+            return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
+        }
+        // The expr is no longer a bare SlotRef because an upper projection already rewrote it --
+        // typically into the implicit widening CAST of a join key. It can still descend as long as
+        // every slot it references is merely *relayed* by this projection: substituting a computed
+        // slot instead would move that computation into the child's per-row runtime-filter
+        // evaluation, so give up in that case and let this node probe with the filter itself.
+        Expr relayed = expr.clone();
+        if (!relaySlotRefsThroughProjection(relayed)) {
+            return Optional.empty();
+        }
+        return Optional.of(Lists.newArrayList(relayed));
+    }
+
+    // Rewrite every SlotRef inside `node` to what this projection relays it from. Returns false as
+    // soon as a slot is produced by an expression rather than relayed, leaving `node` unusable.
+    private boolean relaySlotRefsThroughProjection(Expr node) {
+        for (int i = 0; i < node.getChildren().size(); i++) {
+            Expr child = node.getChild(i);
+            if (child instanceof SlotRef) {
+                Expr relayedFrom = slotMap.get(((SlotRef) child).getSlotId());
+                if (!(relayedFrom instanceof SlotRef)) {
+                    return false;
+                }
+                node.setChild(i, relayedFrom.clone());
+            } else if (!relaySlotRefsThroughProjection(child)) {
+                return false;
             }
         }
-        return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
+        return true;
     }
+
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -181,8 +201,12 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+        Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(ExprUtils::containsDictMappingExpr));
+
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                optProbeExprCandidates,
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr(descTbl)), 0, true);
     }
 
     // This functions is used by query cache to compute digest of fragments. for examples:
@@ -194,17 +218,30 @@ public class ProjectNode extends PlanNode {
     // digest from Q1, the ProjectNode is trivial, it just extract v1 from outputs of the
     // OlapScanNode, so we can ignore the trivial project when we compute digest of the fragment.
     public boolean isTrivial() {
-        return slotMap.values().stream().allMatch(e -> e instanceof SlotRef) && commonSlotMap.isEmpty();
+        return slotMap.entrySet().stream().allMatch(
+                e -> e.getValue() instanceof SlotRef && ((SlotRef) e.getValue()).getSlotId().equals(e.getKey())) &&
+                commonSlotMap.isEmpty() &&
+                (!(getChild(0) instanceof ScanNode) || ((ScanNode) getChild(0)).getHeavyExprs().isEmpty());
     }
 
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalProjectNode projectNode = new TNormalProjectNode();
+        projectNode.setCse_slot_ids(Lists.newArrayList());
+        projectNode.setCse_exprs(Lists.newArrayList());
+        if ((getChild(0) instanceof ScanNode)) {
+            ScanNode scanNode = (ScanNode) getChild(0);
+            normalizer.addSlotsUseAggColumns(scanNode.getHeavyExprs());
+            Pair<List<Integer>, List<ByteBuffer>> slotIdsAndHeavyExprs =
+                    normalizer.normalizeSlotIdsAndExprs(scanNode.getHeavyExprs());
+            projectNode.getCse_slot_ids().addAll(slotIdsAndHeavyExprs.first);
+            projectNode.getCse_exprs().addAll(slotIdsAndHeavyExprs.second);
+        }
         normalizer.addSlotsUseAggColumns(commonSlotMap);
         normalizer.addSlotsUseAggColumns(slotMap);
         Pair<List<Integer>, List<ByteBuffer>> cseSlotIdsAndExprs = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
-        projectNode.setCse_slot_ids(cseSlotIdsAndExprs.first);
-        projectNode.setCse_exprs(cseSlotIdsAndExprs.second);
+        projectNode.getCse_slot_ids().addAll(cseSlotIdsAndExprs.first);
+        projectNode.getCse_exprs().addAll(cseSlotIdsAndExprs.second);
 
         Pair<List<Integer>, List<ByteBuffer>> slotIdAndExprs = normalizer.normalizeSlotIdsAndExprs(slotMap);
         projectNode.setSlot_ids(slotIdAndExprs.first);

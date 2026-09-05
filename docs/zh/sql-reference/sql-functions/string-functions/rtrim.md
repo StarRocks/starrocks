@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "从字符串右侧移除连续出现的空格或指定字符。"
 ---
 
 # rtrim
 
-## 功能
+
 
 从字符串的右侧（结尾部分）移除连续出现的空格或指定字符。从 2.5.0 版本开始，支持从字符串中移除指定的字符。
 

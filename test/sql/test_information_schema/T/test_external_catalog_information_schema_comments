@@ -1,0 +1,73 @@
+-- name: test_external_catalog_information_schema_comments
+
+admin set frontend config ("enable_external_catalog_information_schema_tables_access_full_metadata" = "true");
+
+-- Iceberg catalog (hive metastore) table comments in information_schema.tables
+create external catalog ice_hive_${uuid0}
+properties (
+    "type"="iceberg", 
+    "iceberg.catalog.type"="hive", 
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "enable_iceberg_metadata_cache"="true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database ice_hive_${uuid0}.db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/ice_hive_${uuid0}/db_${uuid0}"
+);
+
+create table ice_hive_${uuid0}.db_${uuid0}.t_ice_comment (
+    c0 int comment 'c0 comment',
+    c1 string comment 'c1 comment'
+)
+comment 'iceberg table comment';
+
+select TABLE_NAME, TABLE_COMMENT
+from ice_hive_${uuid0}.information_schema.tables
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 't_ice_comment';
+
+select TABLE_NAME, COLUMN_NAME, COLUMN_COMMENT
+from ice_hive_${uuid0}.information_schema.columns
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 't_ice_comment';
+
+drop table ice_hive_${uuid0}.db_${uuid0}.t_ice_comment force;
+drop database ice_hive_${uuid0}.db_${uuid0};
+
+drop catalog ice_hive_${uuid0};
+
+-- JDBC catalog (MySQL) table comments in information_schema.tables
+
+-- create mysql table
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'create database db_comment_${uuid0};'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e "use db_comment_${uuid0}; CREATE TABLE t_mysql_comment (c0 int comment 'c0 comment', c1 int comment 'c1 comment') comment = 'mysql table comment';"
+
+-- create catalog
+create external catalog jdbc_mysql_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+
+select TABLE_NAME, TABLE_COMMENT
+from jdbc_mysql_${uuid0}.information_schema.tables
+where TABLE_SCHEMA = 'db_comment_${uuid0}'
+  and TABLE_NAME = 't_mysql_comment';
+
+select TABLE_NAME, COLUMN_NAME, COLUMN_COMMENT
+from jdbc_mysql_${uuid0}.information_schema.columns
+where TABLE_SCHEMA = 'db_comment_${uuid0}' and TABLE_NAME = 't_mysql_comment';
+
+drop catalog jdbc_mysql_${uuid0};
+
+-- drop mysql table
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_comment_${uuid0};'
+
+
+admin set frontend config ("enable_external_catalog_information_schema_tables_access_full_metadata" = "false");

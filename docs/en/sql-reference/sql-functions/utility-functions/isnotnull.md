@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Checks whether the value is not NULL, returns 1 if it is not NULL, and returns 0 if it is NULL."
 ---
 
-# ISNOTNULL
+# isnotnull
 
-## Description
+
 
 Checks whether the value is not `NULL`, returns `1` if it is not `NULL`, and returns `0` if it is `NULL`.
 

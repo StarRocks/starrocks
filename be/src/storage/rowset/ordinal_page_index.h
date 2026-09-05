@@ -38,16 +38,16 @@
 #include <memory>
 #include <string>
 
+#include "base/coding.h"
+#include "base/concurrency/once.h"
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_pointer.h"
-#include "util/coding.h"
-#include "util/once.h"
-#include "util/slice.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
@@ -93,6 +93,8 @@ public:
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
 
+    OrdinalPageIndexIterator seek_by_page_index(int page_index);
+
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator begin();
 
@@ -120,6 +122,8 @@ public:
         }
     }
 
+    void print_debug_info();
+
 private:
     friend OrdinalPageIndexIterator;
 
@@ -141,7 +145,10 @@ public:
     OrdinalPageIndexIterator() = default;
     explicit OrdinalPageIndexIterator(OrdinalIndexReader* index) : _index(index), _cur_idx(0) {}
     OrdinalPageIndexIterator(OrdinalIndexReader* index, int cur_idx) : _index(index), _cur_idx(cur_idx) {}
-    bool valid() const { return _cur_idx < _index->_num_pages; }
+    // A default-constructed iterator (no index bound yet) is never valid.
+    bool valid() const { return _index != nullptr && _cur_idx < _index->_num_pages; }
+    // REQUIRES: valid(). Callers that may re-enter after exhaustion must test
+    // valid() first instead of relying on next() to saturate at the end.
     void next() {
         DCHECK_LT(_cur_idx, _index->_num_pages);
         _cur_idx++;

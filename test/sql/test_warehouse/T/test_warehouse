@@ -1,5 +1,0 @@
--- name: test_show_warehouse
-SHOW WAREHOUSES;
-SHOW PROC '/warehouses';
-SHOW PROC '/warehouses/0';
-SHOW PROC '/warehouses/default_warehouse';

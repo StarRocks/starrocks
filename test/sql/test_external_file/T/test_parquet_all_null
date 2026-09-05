@@ -1,0 +1,37 @@
+-- name: testParquetAllNull
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_all_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/dict_null_page_snappy.parquet oss://${oss_bucket}/test_parquet_all_null_value/${uuid0}/dict_null_page_snappy.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/dict_null_page_uncompress.parquet oss://${oss_bucket}/test_parquet_all_null_value/${uuid0}/dict_null_page_uncompress.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE parquet_dict_null_snappy
+(
+    c0 int,
+    c1 int,
+    c2 string
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_parquet_all_null_value/${uuid0}/dict_null_page_snappy.parquet",
+    "format" = "parquet"
+);
+
+select count(c2) from parquet_dict_null_snappy;
+
+CREATE EXTERNAL TABLE parquet_dict_null_uncompress
+(
+    c0 int,
+    c1 int,
+    c2 string
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_parquet_all_null_value/${uuid0}/dict_null_page_uncompress.parquet",
+    "format" = "parquet"
+);
+
+select count(c2) from parquet_dict_null_uncompress;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_all_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

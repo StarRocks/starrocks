@@ -14,6 +14,8 @@
 
 #include "storage/rowset/segment_group.h"
 
+#include <numeric>
+
 namespace starrocks {
 
 /// ShortKeyIndexGroupIterator
@@ -30,13 +32,22 @@ Slice ShortKeyIndexGroupIterator::operator*() const {
 }
 
 /// ShortKeyIndexDecoderGroup
-ShortKeyIndexDecoderGroup::ShortKeyIndexDecoderGroup(const std::vector<SegmentSharedPtr>& segments) {
+ShortKeyIndexDecoderGroup::ShortKeyIndexDecoderGroup(const std::vector<SegmentSharedPtr>& segments,
+                                                     bool use_full_sort_key) {
     size_t num_decoders = segments.size();
 
     _sk_index_decoders.reserve(num_decoders);
     for (const auto& segment : segments) {
         DCHECK(segment->has_loaded_index());
-        _sk_index_decoders.emplace_back(segment->decoder());
+        if (use_full_sort_key) {
+            // The full decoder is published only after ensure_full_sort_key_index_usable() succeeds,
+            // which the caller (LogicalSplitMorselQueue::_create_segment_group) guarantees before
+            // requesting the full decoders.
+            DCHECK(segment->full_sort_key_index_decoder() != nullptr);
+            _sk_index_decoders.emplace_back(segment->full_sort_key_index_decoder());
+        } else {
+            _sk_index_decoders.emplace_back(segment->decoder());
+        }
     }
 
     _decoder_start_ordinals.reserve(num_decoders + 1);
@@ -99,7 +110,12 @@ void ShortKeyIndexDecoderGroup::_find_position(ssize_t ordinal, ssize_t* decoder
 }
 
 /// SegmentGroup
-SegmentGroup::SegmentGroup(std::vector<SegmentSharedPtr>&& segments)
-        : _segments(std::move(segments)), _decoder_group(_segments) {}
+SegmentGroup::SegmentGroup(std::vector<SegmentSharedPtr>&& segments, bool use_full_sort_key)
+        : _segments(std::move(segments)), _decoder_group(_segments, use_full_sort_key) {}
+
+uint32_t SegmentGroup::num_rows() const {
+    return std::accumulate(_segments.cbegin(), _segments.cend(), 0,
+                           [](uint32_t acc, const auto& segment) { return acc + segment->num_rows(); });
+}
 
 } // namespace starrocks

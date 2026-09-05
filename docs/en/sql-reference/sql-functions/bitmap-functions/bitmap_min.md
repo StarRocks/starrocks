@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Obtains the minimum value of a bitmap."
 ---
 
 # bitmap_min
 
-## Description
+
 
 Obtains the minimum value of a bitmap. If the bitmap is `NULL`, this function returns `NULL`. If the bitmap is empty, this function returns `NULL` by default.
 

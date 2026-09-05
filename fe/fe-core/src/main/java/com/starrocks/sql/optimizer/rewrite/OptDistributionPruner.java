@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -24,12 +26,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.planner.DistributionPruner;
 import com.starrocks.planner.HashDistributionPruner;
 import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.planner.RangeDistributionPruner;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,14 +45,27 @@ public class OptDistributionPruner {
 
     public static List<Long> pruneTabletIds(LogicalOlapScanOperator olapScanOperator,
                                             List<Long> selectedPartitionIds) {
-        OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+        return computeSelectedTabletIds(olapScanOperator, selectedPartitionIds,
+                olapScanOperator.getSelectedIndexMetaId());
+    }
+
+    /**
+     * Computes the selected tablet ids within {@code selectedPartitionIds} from the scan's
+     * distribution-column predicates. Typed against the base LogicalScanOperator because it reads
+     * only generic scan state (table, predicate, column filters), nothing OLAP-scan specific.
+     * {@code selectedIndexMetaId} picks the materialized index per physical partition.
+     */
+    private static List<Long> computeSelectedTabletIds(LogicalScanOperator scan,
+                                                      List<Long> selectedPartitionIds, long selectedIndexMetaId) {
+        OlapTable olapTable = (OlapTable) scan.getTable();
 
         List<Long> result = Lists.newArrayList();
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex table = physicalPartition.getIndex(olapScanOperator.getSelectedIndexId());
-                Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), olapScanOperator);
+                MaterializedIndex index = physicalPartition.getQueryableIndex(selectedIndexMetaId);
+                Collection<Long> tabletIds = distributionPrune(index, partition.getDistributionInfo(),
+                        scan, olapTable.getIdToColumn());
                 result.addAll(tabletIds);
             }
         }
@@ -57,27 +73,30 @@ public class OptDistributionPruner {
     }
 
     private static Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
-                                                      LogicalOlapScanOperator operator) {
-        try {
-            DistributionPruner distributionPruner;
+                                                      LogicalScanOperator operator, Map<ColumnId, Column> idToColumn) {
+        if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH ||
+                distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+            Table table = operator.getTable();
+            if (table.isExprPartitionTable()) {
+                // Bucketing needs to use the original predicate for hashing
+                ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(), filters, table);
+            } else {
+                filters = operator.getColumnFilters();
+            }
+
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
-                Table table = operator.getTable();
-                if (table.isExprPartitionTable()) {
-                    // Bucketing needs to use the original predicate for hashing
-                    ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(), filters, table);
-                } else {
-                    filters = operator.getColumnFilters();
-                }
-                distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
-                        info.getDistributionColumns(),
-                        filters,
-                        info.getBucketNum());
-                return distributionPruner.prune();
+                HashDistributionPruner pruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
+                        MetaUtils.getColumnsByColumnIds(idToColumn, info.getDistributionColumns()),
+                        filters);
+                return pruner.prune();
+            } else {
+                RangeDistributionPruner pruner = new RangeDistributionPruner(index.getTablets(),
+                        MetaUtils.getRangeDistributionColumns((OlapTable) operator.getTable(), index.getMetaId()),
+                        filters);
+                return pruner.prune();
             }
-        } catch (AnalysisException e) {
-            LOG.warn("distribution prune failed. ", e);
         }
 
         return index.getTabletIdsInOrder();

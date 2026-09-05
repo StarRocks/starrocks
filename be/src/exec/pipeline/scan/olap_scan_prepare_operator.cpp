@@ -14,7 +14,11 @@
 
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
+#include "compute_env/global_dict/parser.h"
 #include "exec/olap_scan_node.h"
+#include "exprs/expr_executor.h"
+#include "runtime/runtime_state.h"
+#include "storage/query/olap_morsel_queue.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {
@@ -27,7 +31,7 @@ OlapScanPrepareOperator::OlapScanPrepareOperator(OperatorFactory* factory, int32
 }
 
 OlapScanPrepareOperator::~OlapScanPrepareOperator() {
-    auto* state = runtime_state();
+    auto* state = get_factory()->runtime_state();
     if (state == nullptr) {
         return;
     }
@@ -36,14 +40,18 @@ OlapScanPrepareOperator::~OlapScanPrepareOperator() {
 }
 
 Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
+    TEST_SUCC_POINT("OlapScanPrepareOperator::prepare");
+
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     RETURN_IF_ERROR(_ctx->prepare(state));
 
-    auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
+    RuntimeProfile::Counter* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
     {
         SCOPED_TIMER(capture_tablet_rowsets_timer);
-        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+        auto* olap_morsel_queue = dynamic_cast<OlapMorselQueue*>(_morsel_queue);
+        DCHECK(olap_morsel_queue != nullptr);
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(state, olap_morsel_queue->prepare_olap_scan_ranges()));
     }
 
     return Status::OK();
@@ -62,19 +70,53 @@ bool OlapScanPrepareOperator::is_finished() const {
 }
 
 StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
-    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
+    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), get_factory()->get_runtime_bloom_filters(),
+                                          _driver_sequence);
 
-    _morsel_queue->set_key_ranges(_ctx->key_ranges());
-    _morsel_queue->set_tablets(_ctx->tablets());
-    _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
+    auto* olap_morsel_queue = dynamic_cast<OlapMorselQueue*>(_morsel_queue);
+    DCHECK(olap_morsel_queue != nullptr);
 
-    _ctx->set_prepare_finished();
-    if (!status.ok()) {
-        static_cast<void>(_ctx->set_finished());
-        return status;
+    olap_morsel_queue->set_key_ranges(_ctx->key_ranges());
+    std::vector<BaseTabletSharedPtr> tablets;
+    for (auto& tablet : _ctx->tablets()) {
+        tablets.emplace_back(tablet);
+    }
+    olap_morsel_queue->set_tablets(tablets);
+
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    for (auto& rowsets : _ctx->tablet_rowsets()) {
+        tablet_rowsets.emplace_back();
+        auto& rss = tablet_rowsets.back();
+        for (auto& rowset : rowsets) {
+            rss.emplace_back(rowset);
+        }
+    }
+    olap_morsel_queue->set_tablet_rowsets(tablet_rowsets);
+
+    if (!tablets.empty()) {
+        olap_morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
     }
 
-    return nullptr;
+    DeferOp defer([&]() {
+        _ctx->set_prepare_finished();
+        _ctx->notify_observers();
+        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
+    });
+
+    if (!status.ok()) {
+        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::before_set_finished");
+        // OlapScanOperator::has_output() will `use !_ctx->is_prepare_finished() || _ctx->is_finished()` to
+        // determine whether OlapScanOperator::pull_chunk() needs to be executed.
+        // When _ctx->parse_conjuncts returns EOF, if set_prepare_finished first, and then set_finished.
+        // Between calling set_finished, OlapScanOperator::has_output maybe return true,
+        // causing OlapScanOperator::pull_chunk to be executed, which is invalid, maybe cause crash.
+        // So we will set_finished first and set_prepare_finished()
+        static_cast<void>(_ctx->set_finished());
+        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_finished");
+        return status;
+    } else {
+        return nullptr;
+    }
 }
 
 /// OlapScanPrepareOperatorFactory
@@ -94,16 +136,17 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
 
     DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
+    DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
 
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
 
     return Status::OK();
 }
 
 void OlapScanPrepareOperatorFactory::close(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
+    ExprExecutor::close(conjunct_ctxs, state);
 
     SourceOperatorFactory::close(state);
 }

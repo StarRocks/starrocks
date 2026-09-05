@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算一组 Bitmap 值的交集并返回。"
 ---
 
 # bitmap_intersect
 
-## 功能
+
 
 输入一组 bitmap 值，求这一组 bitmap 值的交集，并返回。
 

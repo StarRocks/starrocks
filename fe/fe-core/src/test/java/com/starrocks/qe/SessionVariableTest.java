@@ -13,33 +13,230 @@
 // limitations under the License.
 package com.starrocks.qe;
 
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.common.DdlException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TBinaryEncodingFormat;
+import com.starrocks.thrift.TBinaryEncodingLevel;
+import com.starrocks.thrift.TQueryOptions;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 public class SessionVariableTest {
 
     @Test
+    public void testPaimonReaderMode() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.AUTO, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertEquals("AUTO",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "auto"));
+        Assertions.assertEquals("JNI",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "jNi"));
+        String nativeMode = VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "native");
+        Assertions.assertEquals("NATIVE", nativeMode);
+        sessionVariable.setPaimonReaderMode(nativeMode);
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.NATIVE, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertThrows(DdlException.class,
+                () -> VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "invalid"));
+    }
+
+    @Test
     public void testNonDefaultVariables() {
         SessionVariable sessionVariable = new SessionVariable();
         Map<String, SessionVariable.NonDefaultValue> nonDefaultVariables = sessionVariable.getNonDefaultVariables();
-        Assert.assertTrue(nonDefaultVariables.isEmpty());
+        Assertions.assertTrue(nonDefaultVariables.isEmpty());
 
         sessionVariable.setSqlDialect("test1");
         nonDefaultVariables = sessionVariable.getNonDefaultVariables();
-        Assert.assertEquals(1, nonDefaultVariables.size());
-        Assert.assertTrue(nonDefaultVariables.containsKey(SessionVariable.SQL_DIALECT));
+        Assertions.assertEquals(1, nonDefaultVariables.size());
+        Assertions.assertTrue(nonDefaultVariables.containsKey(SessionVariable.SQL_DIALECT));
         SessionVariable.NonDefaultValue kv = nonDefaultVariables.get(SessionVariable.SQL_DIALECT);
-        Assert.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getSqlDialect(), kv.defaultValue);
-        Assert.assertEquals("test1", kv.actualValue);
+        Assertions.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getSqlDialect(), kv.defaultValue);
+        Assertions.assertEquals("test1", kv.actualValue);
 
         sessionVariable.setPipelineProfileLevel(100);
         nonDefaultVariables = sessionVariable.getNonDefaultVariables();
-        Assert.assertEquals(2, nonDefaultVariables.size());
-        Assert.assertTrue(nonDefaultVariables.containsKey(SessionVariable.PIPELINE_PROFILE_LEVEL));
+        Assertions.assertEquals(2, nonDefaultVariables.size());
+        Assertions.assertTrue(nonDefaultVariables.containsKey(SessionVariable.PIPELINE_PROFILE_LEVEL));
         kv = nonDefaultVariables.get(SessionVariable.PIPELINE_PROFILE_LEVEL);
-        Assert.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getPipelineProfileLevel(), kv.defaultValue);
-        Assert.assertEquals(100, kv.actualValue);
+        Assertions.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getPipelineProfileLevel(), kv.defaultValue);
+        Assertions.assertEquals(100, kv.actualValue);
+    }
+
+    @Test
+    public void testSetChooseMode() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setChooseExecuteInstancesMode("adaptive_increase");
+        Assertions.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableIncreaseInstance());
+
+        sessionVariable.setChooseExecuteInstancesMode("adaptive_decrease");
+        Assertions.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableDecreaseInstance());
+
+        sessionVariable.setChooseExecuteInstancesMode("auto");
+        Assertions.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableIncreaseInstance());
+        Assertions.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableDecreaseInstance());
+
+        try {
+            sessionVariable.setChooseExecuteInstancesMode("xxx");
+            Assertions.fail("cannot set a invalid value");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Legal values of choose_execute_instances_mode are"),
+                    e.getMessage());
+        }
+    }
+
+    @Test
+    public void testLakeBucketAssignMode() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setLakeBucketAssignMode("balance");
+        Assertions.assertEquals(SessionVariableConstants.BALANCE, sessionVariable.getLakeBucketAssignMode());
+
+        sessionVariable.setLakeBucketAssignMode("elastic");
+        Assertions.assertEquals(SessionVariableConstants.ELASTIC, sessionVariable.getLakeBucketAssignMode());
+
+        try {
+            sessionVariable.setLakeBucketAssignMode("auto");
+            Assertions.fail("cannot set a invalid value");
+        } catch (Exception e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("Legal values of lake_bucket_assign_mode are elastic|balance"),
+                    e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSetEnableInsertPartialUpdate() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableInsertPartialUpdate(true);
+        Assertions.assertTrue(sessionVariable.isEnableInsertPartialUpdate());
+
+        sessionVariable.setEnableInsertPartialUpdate(false);
+        Assertions.assertFalse(sessionVariable.isEnableInsertPartialUpdate());
+    }
+
+    @Test
+    public void testConnectorSinkShuffleModeBackwardCompatibility() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // Default mode is AUTO
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.AUTO,
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
+
+        // Backward compatibility: enableIcebergSinkGlobalShuffle implies FORCE when mode stays at default AUTO.
+        com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "enableIcebergSinkGlobalShuffle", true);
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.FORCE,
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
+
+        // Explicitly set mode to NEVER should not be affected by legacy boolean.
+        com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "connectorSinkShuffleMode", "never");
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.NEVER,
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
+    }
+
+    @Test
+    public void testEnableMVPlanner() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // Test default value
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
+
+        // Deprecated compatibility flag should remain inert.
+        sessionVariable.setMVPlanner(true);
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
+
+        sessionVariable.setMVPlanner(false);
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
+    }
+
+    @Test
+    public void testEnableIncrementalRefreshMvIsNoOp() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+        sessionVariable.setEnableIncrementalRefreshMv(true);
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+        sessionVariable.setEnableIncrementalRefreshMv(false);
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+    }
+
+    @Test
+    public void testBinaryEncodingDefaultsAndToThrift() {
+        SessionVariable sessionVariable = new SessionVariable();
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+
+        Assertions.assertEquals("hex", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("nested", sessionVariable.getBinaryEncodingLevel());
+        Assertions.assertEquals(TBinaryEncodingFormat.HEX, queryOptions.getBinary_encoding_format());
+        Assertions.assertEquals(TBinaryEncodingLevel.NESTED, queryOptions.getBinary_encoding_level());
+    }
+
+    @Test
+    public void testBinaryEncodingSettersNormalizeAndValidate() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        sessionVariable.setBinaryEncodingFormat("BASE64");
+        sessionVariable.setBinaryEncodingLevel("ALL");
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+        Assertions.assertEquals("base64", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("all", sessionVariable.getBinaryEncodingLevel());
+        Assertions.assertEquals(TBinaryEncodingFormat.BASE64, queryOptions.getBinary_encoding_format());
+        Assertions.assertEquals(TBinaryEncodingLevel.ALL, queryOptions.getBinary_encoding_level());
+
+        sessionVariable.setBinaryEncodingFormat(null);
+        sessionVariable.setBinaryEncodingLevel(null);
+        Assertions.assertEquals("hex", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("nested", sessionVariable.getBinaryEncodingLevel());
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setBinaryEncodingFormat("invalid"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setBinaryEncodingLevel("invalid"));
+    }
+
+    @Test
+    public void testLakeTabletInternalParallelSkewSplitRatioValidation() {
+        SessionVariable sessionVariable = new SessionVariable();
+        // A positive finite ratio is accepted.
+        sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(2.0);
+        Assertions.assertEquals(2.0, sessionVariable.getLakeTabletInternalParallelSkewSplitRatio(), 0.0);
+        // Non-positive or non-finite ratios are rejected: a non-positive value would make every sufficiently
+        // large tablet look skewed (over-splitting), and NaN/Infinity would silently disable the skew override.
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(0));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(-1.0));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(Double.NaN));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(Double.POSITIVE_INFINITY));
+    }
+
+    @Test
+    public void testReplayFromJsonWithAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // alias key in JSON should be resolved
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 1024}");
+        Assertions.assertEquals(1024, sessionVariable.getScanLakePartitionNumLimit());
+
+        // canonical name key should also work
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 2048}");
+        Assertions.assertEquals(2048, sessionVariable.getScanLakePartitionNumLimit());
+    }
+
+    @Test
+    public void testReplayFromJsonNameTakesPriorityOverAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // when both name and alias are present, canonical name takes priority
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 4096, \"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
+        Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
     }
 }

@@ -15,10 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -26,8 +22,10 @@ import java.util.List;
 /**
  * Represents a CREATE TABLE AS SELECT (CTAS) statement
  * Syntax:
- * CREATE TABLE table_name [( column_name_list )]
- * opt_engine opt_partition opt_properties KW_AS query_stmt
+ * CREATE [TEMPORARY] TABLE [IF NOT EXISTS] table_name [( column_name_list )]
+ * [ENGINE = engine_name] [key_desc] [COMMENT 'comment']
+ * [partition_desc] [distribution_desc] [order_by_desc] [properties]
+ * AS query_stmt
  */
 public class CreateTableAsSelectStmt extends StatementBase {
     private final CreateTableStmt createTableStmt;
@@ -48,23 +46,11 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.createTableStmt = createTableStmt;
         this.columnNames = columnNames;
         this.queryStatement = queryStatement;
-        this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
-    }
-
-    public boolean createTable(ConnectContext session) throws AnalysisException {
-        try {
-            return session.getGlobalStateMgr().getMetadataMgr().createTable(createTableStmt);
-        } catch (DdlException e) {
-            throw new AnalysisException(e.getMessage());
+        TableRef tableRef = createTableStmt.getTableRef();
+        if (tableRef == null) {
+            throw new IllegalStateException("CreateTableStmt tableRef cannot be null");
         }
-    }
-
-    public void dropTable(ConnectContext session) throws AnalysisException {
-        try {
-            session.getGlobalStateMgr().getMetadataMgr().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
-        } catch (Exception e) {
-            throw new AnalysisException(e.getMessage());
-        }
+        this.insertStmt = new InsertStmt(tableRef, queryStatement);
     }
 
     public List<String> getColumnNames() {
@@ -84,17 +70,12 @@ public class CreateTableAsSelectStmt extends StatementBase {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
-    }
-
-    @Override
     public String toSql() {
         return createTableStmt.toSql() + " AS " + queryStatement.toSql();
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTableAsSelectStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTableAsSelectStatement(this, context);
     }
 }

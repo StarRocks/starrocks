@@ -16,17 +16,16 @@
 package com.starrocks.system;
 
 import com.starrocks.ha.FrontendNodeType;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class FrontendTest {
     
     @Test
     public void testFeUpdate() {
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "name", "testHost", 1110);
-        fe.updateHostAndEditLogPort("modifiedHost", 2110);
-        Assert.assertEquals("modifiedHost", fe.getHost());
-        Assert.assertTrue(fe.getEditLogPort() == 2110);
+        fe.updateHost("modifiedHost");
+        Assertions.assertEquals("modifiedHost", fe.getHost());
     }
 
     @Test
@@ -35,6 +34,6 @@ public class FrontendTest {
         
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "name", "testHost", 1110);
         boolean needSync = fe.handleHbResponse(hbResponse, true);
-        Assert.assertTrue(needSync);
+        Assertions.assertTrue(needSync);
     }
 }

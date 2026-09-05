@@ -27,7 +27,7 @@ RESULT SINK
 [sql]
 select * from t0 where v1 in (1.1, 2, null)
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[cast(1: v1 as decimal128(20, 1)) IN (1.1, 2.0, null)])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[cast(1: v1 as DECIMAL128(20,1)) IN (1.1, 2.0, null)])
 [end]
 
 [sql]
@@ -42,7 +42,7 @@ SELECT TIMEDIFF("1969-12-23 21:53:55", "1969-12-18")  FROM t0
 SCAN (columns[1: v1] predicate[null])
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:4: timediff
+OUTPUT EXPRS:4: TIMEDIFF
 PARTITION: UNPARTITIONED
 
 RESULT SINK

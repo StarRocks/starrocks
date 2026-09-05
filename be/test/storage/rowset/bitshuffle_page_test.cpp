@@ -38,12 +38,15 @@
 
 #include <memory>
 
+#include "base/logging.h"
+#include "column/chunk_factory.h"
+#include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "column/raw_data_visitor.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
 using starrocks::DataDecoder;
@@ -56,17 +59,17 @@ public:
     ~BitShufflePageTest() override = default;
 
     template <LogicalType type, class PageDecoderType>
-    void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        auto column = ChunkHelper::column_from_field_type(type, true);
+    void copy_one(PageDecoderType* decoder, StorageCppType<type>* ret) {
+        auto column = ChunkFactory::column_from_field_type(type, true);
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
+        *ret = GetStorageContainer<type>::get_data(column, 0);
     }
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType, int ReserveHead = 0>
-    void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    void test_encode_decode_page_template(StorageCppType<Type>* src, size_t size) {
+        using CppType = StorageCppType<Type>;
         PageBuilderOptions options;
         options.data_page_size = 256 * 1024;
         PageBuilderType page_builder(options);
@@ -90,7 +93,7 @@ public:
         footer.set_type(starrocks::DATA_PAGE);
         starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
 
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
@@ -99,17 +102,22 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
-
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        for (uint i = 0; i < size; i++) {
+            CppType out;
+            page_decoder.at_index(i, &out);
+            if (src[i] != out) {
+                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << out;
+            }
+        }
+        auto column = ChunkFactory::column_from_field_type(Type, false);
 
         status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
 
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
-        auto* decoded = (CppType*)values;
+        const auto values = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < size; i++) {
-            if (src[i] != decoded[i]) {
-                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << decoded[i];
+            if (src[i] != values[i]) {
+                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];
             }
         }
 
@@ -120,14 +128,14 @@ public:
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);
-            EXPECT_EQ(decoded[seek_off], ret);
+            EXPECT_EQ(values[seek_off], ret);
         }
     }
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_encode_decode_page_vectorized() {
-        using CppType = typename CppTypeTraits<Type>::CppType;
-        auto src = ChunkHelper::column_from_field_type(Type, false);
+        using CppType = StorageCppType<Type>;
+        auto src = ChunkFactory::column_from_field_type(Type, false);
         CppType value = 0;
         size_t count = 64 * 1024 / sizeof(CppType);
         src->reserve(count);
@@ -139,12 +147,14 @@ public:
         PageBuilderOptions options;
         options.data_page_size = 64 * 1024;
         PageBuilderType page_builder(options);
-        size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(src->raw_data()), count);
+        RawDataVisitor visitor;
+        ASSERT_TRUE(src->accept(&visitor).ok());
+        size_t added = page_builder.add(visitor.result(), count);
         ASSERT_EQ(count, added);
         OwnedSlice s = page_builder.finish()->build();
 
         Slice encoded_data = s.slice();
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
         {
             starrocks::PageFooterPB footer;
             footer.set_type(starrocks::DATA_PAGE);
@@ -159,8 +169,17 @@ public:
             Status status = page_decoder.init();
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
+            CppType src_value = 0;
+            for (uint i = 0; i < count; i++) {
+                CppType out;
+                page_decoder.at_index(i, &out);
+                if (src_value != out) {
+                    FAIL() << "Fail at index " << i << " inserted=" << src_value << " got=" << out;
+                }
+                src_value++;
+            }
 
-            auto dst = ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkFactory::column_from_field_type(Type, false);
             dst->reserve(count);
             size_t size = count;
             status = page_decoder.next_batch(&size, dst.get());
@@ -181,7 +200,7 @@ public:
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
 
-            auto dst = ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkFactory::column_from_field_type(Type, false);
             size_t size = count / 2;
             dst->reserve(size);
             status = page_decoder.next_batch(&size, dst.get());
@@ -202,7 +221,7 @@ public:
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
 
-            auto dst = ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkFactory::column_from_field_type(Type, false);
             SparseRange<> read_range;
             read_range.add(Range<>(0, count / 3));
             read_range.add(Range<>(count / 2, (count * 2 / 3)));
@@ -231,10 +250,10 @@ public:
 
     // The values inserted should be sorted.
     template <LogicalType Type, class PageBuilderType, class PageDecoderType>
-    void test_seek_at_or_after_value_template(typename TypeTraits<Type>::CppType* src, size_t size,
-                                              typename TypeTraits<Type>::CppType* small_than_smallest,
-                                              typename TypeTraits<Type>::CppType* bigger_than_biggest) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    void test_seek_at_or_after_value_template(StorageCppType<Type>* src, size_t size,
+                                              StorageCppType<Type>* small_than_smallest,
+                                              StorageCppType<Type>* bigger_than_biggest) {
+        using CppType = StorageCppType<Type>;
         PageBuilderOptions options;
         options.data_page_size = 256 * 1024;
         PageBuilderType page_builder(options);
@@ -247,7 +266,7 @@ public:
         footer.set_type(starrocks::DATA_PAGE);
         starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
@@ -319,7 +338,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderRandom) {
 
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = random() + static_cast<float>(random()) / std::numeric_limits<int>::max();
+        floats.get()[i] = random() + random() / static_cast<float>(std::numeric_limits<int>::max());
     }
 
     test_encode_decode_page_template<TYPE_FLOAT, BitshufflePageBuilder<TYPE_FLOAT>, BitShufflePageDecoder<TYPE_FLOAT>>(
@@ -332,7 +351,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderRandom) {
 
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = random() + static_cast<double>(random()) / std::numeric_limits<int>::max();
+        doubles.get()[i] = random() + random() / static_cast<double>(std::numeric_limits<int>::max());
     }
 
     test_encode_decode_page_template<TYPE_DOUBLE, BitshufflePageBuilder<TYPE_DOUBLE>,
@@ -428,7 +447,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderSeekValue) {
     const uint32_t size = 1000;
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = i + 100 + static_cast<float>(random()) / std::numeric_limits<int>::max();
+        floats.get()[i] = i + 100 + random() / static_cast<float>(std::numeric_limits<int>::max());
     }
 
     float small_than_smallest = 99.9;
@@ -443,7 +462,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderSeekValue) {
     const uint32_t size = 1000;
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = i + 100 + static_cast<double>(random()) / std::numeric_limits<int>::max();
+        doubles.get()[i] = i + 100 + random() / static_cast<double>(std::numeric_limits<int>::max());
     }
 
     double small_than_smallest = 99.9;
@@ -489,6 +508,151 @@ TEST_F(BitShufflePageTest, TestDecodeVectorized) {
     test_encode_decode_page_vectorized<TYPE_INT, BitshufflePageBuilder<TYPE_INT>, BitShufflePageDecoder<TYPE_INT>>();
     test_encode_decode_page_vectorized<TYPE_BIGINT, BitshufflePageBuilder<TYPE_BIGINT>,
                                        BitShufflePageDecoder<TYPE_BIGINT>>();
+}
+
+// A corrupted or truncated bitshuffle page must be rejected by the page-load
+// pre-decoder with a clear error instead of driving out-of-bounds reads or
+// writes from sizes taken straight from the page bytes.
+// NOLINTNEXTLINE
+TEST_F(BitShufflePageTest, TestCorruptedPagePreDecodeRejected) {
+    const uint32_t size = 1000;
+    std::unique_ptr<int32_t[]> ints(new int32_t[size]);
+    for (int i = 0; i < size; i++) {
+        ints.get()[i] = i;
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BitshufflePageBuilder<TYPE_INT> page_builder(options);
+    ASSERT_EQ(size, page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size));
+    OwnedSlice s = page_builder.finish()->build();
+    std::string good(s.slice().data, s.slice().size);
+
+    auto decode = [](std::string page_bytes, uint32_t footer_size = 0) {
+        Slice slice(page_bytes.data(), page_bytes.size());
+        std::unique_ptr<std::vector<uint8_t>> page;
+        starrocks::PageFooterPB footer;
+        footer.set_type(starrocks::DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        return StoragePageDecoder::decode_page(&footer, footer_size, starrocks::BIT_SHUFFLE, &page, &slice);
+    };
+
+    // Sanity: the untouched page decodes fine.
+    ASSERT_TRUE(decode(good).ok());
+
+    // Page smaller than the 16-byte bitshuffle header.
+    ASSERT_FALSE(decode(good.substr(0, BITSHUFFLE_PAGE_HEADER_SIZE - 1)).ok());
+
+    // Compressed size larger than the page (header bytes [4,8)).
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 4, good.size() + 100);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // Compressed size smaller than the bitshuffle header itself.
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 4, BITSHUFFLE_PAGE_HEADER_SIZE - 8);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // Padded element count that does not match num_elements (header bytes [8,12)).
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8, 12345678);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // num_elements = 0xffffffff with a padded count of 0: ALIGN_UP(0xffffffff,
+    // 8U) wraps to 0 with the 32-bit mask, so a full-width check is required to
+    // reject this instead of reconstructing a page that reports ~4.29e9 rows.
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 0, 0xffffffff);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8, 0);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // A page that declares elements but carries an empty compressed body
+    // (compressed_size == BITSHUFFLE_PAGE_HEADER_SIZE) must be rejected before
+    // the decompressor runs: decompress_lz4() takes no input length, so it
+    // would read the trailer as block framing. Only a genuinely empty page
+    // (padded count 0) is header-only.
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 0, 1);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 4, BITSHUFFLE_PAGE_HEADER_SIZE);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8, 8);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // An element size outside the supported set would drive an absurd
+    // allocation (e.g. 8 * 0xffffffff bytes) before any decode.
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 12, 0xffffffff);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // Consistent but implausibly large element counts (decoded size far past
+    // what LZ4 could ever expand to) must be rejected before allocating.
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 0, 100000000);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8, 100000000);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // A trailer (nullmap/footer) claimed to be larger than the bytes actually
+    // present after the compressed body must be rejected, not copied.
+    ASSERT_FALSE(decode(good, /*footer_size=*/8).ok());
+
+    // Surplus bytes between the compressed body and the trailer must be
+    // rejected too: the input has to be consumed exactly, otherwise the
+    // cached page (whose footer is parsed from its end) is polluted.
+    ASSERT_FALSE(decode(good + std::string(3, 'x')).ok());
+}
+
+TEST_F(BitShufflePageTest, TestReadByRowids) {
+    const uint32_t size = 100;
+    std::unique_ptr<int32_t[]> ints(new int32_t[size]);
+    for (int i = 0; i < size; i++) {
+        ints.get()[i] = i;
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BitshufflePageBuilder<TYPE_INT> page_builder(options);
+
+    size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
+    ASSERT_EQ(size, added);
+    OwnedSlice s = page_builder.finish()->build();
+
+    Slice encoded_data = s.slice();
+    starrocks::PageFooterPB footer;
+    footer.set_type(starrocks::DATA_PAGE);
+    starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
+    data_page_footer->set_nullmap_size(0);
+    std::unique_ptr<std::vector<uint8_t>> page = nullptr;
+    Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
+    ASSERT_TRUE(st.ok());
+
+    BitShufflePageDecoder<TYPE_INT> page_decoder(encoded_data);
+    st = page_decoder.init();
+    ASSERT_TRUE(st.ok());
+
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    rowid_t rowids[] = {0, 50, 99};
+    size_t num_read = 3;
+    st = page_decoder.read_by_rowids(0, rowids, &num_read, column.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(3, num_read);
+    ASSERT_EQ(3, column->size());
+
+    ASSERT_EQ(0, column->get(0).get_int32());
+    ASSERT_EQ(50, column->get(1).get_int32());
+    ASSERT_EQ(99, column->get(2).get_int32());
 }
 
 } // namespace starrocks

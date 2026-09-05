@@ -14,27 +14,35 @@
 
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 
+#include "base/utility/defer_op.h"
+#include "compute_env/spill/common.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/spill/common.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
-#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(PartitionSortSinkOperator::prepare(state));
+    RETURN_IF_ERROR(PartitionSortSinkOperator::prepare_local_state(state));
     RETURN_IF_ERROR(_chunks_sorter->spiller()->prepare(state));
     if (state->spill_mode() == TSpillMode::FORCE) {
         _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
     }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+
+    // Subscribe this sink driver to the spiller's sink list so flush/channel completions wake the OUTPUT_FULL
+    // sleeper directly. Unconditional: the gate for the poller mode lives inside subscribe_sink (no-op when
+    // the event scheduler is disabled). observer() is valid here (assigned before prepare).
+    _chunks_sorter->spiller()->observable().subscribe_sink(state, observer());
+
     return Status::OK();
 }
 
@@ -57,6 +65,7 @@ Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const
 }
 
 Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() { _chunks_sorter->spill_channel()->set_finishing(); });
     if (state->is_cancelled()) {
         _is_finished = true;
@@ -64,27 +73,31 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
         return Status::Cancelled("runtime state is cancelled");
     }
 
-    // channnel:
-    //
     // if has spill task. we should wait all spill task finished then to call finished
-    // TODO: test cancel case
-    auto io_executor = _chunks_sorter->spill_channel()->io_executor();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        return _chunks_sorter->spiller()->set_flush_all_call_back(
-                [this]() {
+
+    // This callback function is delayed executed, and in some cases the source operator will be is_finished
+    // earlier, at which point the sink operator will call set_finished and close, at which point
+    // this->chunks_sorter will become null. That's why we need to catch the chunks here.
+    // So we need to capture the shared_ptr of chunks_sorter here.
+    auto chunk_sorter = _chunks_sorter.get();
+    _sort_context->ref();
+    auto set_call_back_function = [this, chunk_sorter](RuntimeState* state) {
+        return chunk_sorter->spiller()->set_flush_all_call_back(
+                [this, chunk_sorter]() {
                     // Current partition sort is ended, and
                     // the last call will drive LocalMergeSortSourceOperator to work.
-                    TRACE_SPILL_LOG << "finish partition rows:" << _chunks_sorter->get_output_rows();
-                    _sort_context->finish_partition(_chunks_sorter->get_output_rows());
+                    TRACE_SPILL_LOG << "finish partition rows:" << chunk_sorter->get_output_rows();
+                    _sort_context->finish_partition(chunk_sorter->get_output_rows());
+                    _sort_context->unref(get_factory()->runtime_state());
                     _is_finished = true;
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _chunks_sorter->spiller()));
+                state, TRACKER_WITH_SPILLER_GUARD(state, chunk_sorter->spiller()));
     };
 
     Status ret_status;
     auto defer = DeferOp([&]() {
-        SpillProcessTasksBuilder task_builder(state, io_executor);
+        SpillProcessTasksBuilder task_builder(state);
         task_builder.finally(set_call_back_function);
         Status st = _chunks_sorter->spill_channel()->execute(task_builder);
         ret_status = ret_status.ok() ? st : ret_status;
@@ -96,16 +109,24 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
 
 Status SpillablePartitionSortSinkOperator::set_finished(RuntimeState* state) {
     _is_finished = true;
-    _chunks_sorter->cancel();
+    if (state->is_cancelled()) {
+        _chunks_sorter->cancel();
+    }
     return Status::OK();
 }
 
 OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     std::shared_ptr<ChunksSorter> chunks_sorter;
 
-    chunks_sorter = std::make_unique<SpillableChunksSorterFullSort>(
-            runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
-            _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
+    if (_limit > 0) {
+        chunks_sorter = std::make_unique<SpillableChunksSorterTopN>(
+                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                _sort_keys, 0, _limit + _offset);
+    } else {
+        chunks_sorter = std::make_unique<SpillableChunksSorterFullSort>(
+                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                _sort_keys, _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
+    }
 
     auto spiller = _spill_factory->create(*_spill_options);
     auto spill_channel = _spill_channel_factory->get_or_create(driver_sequence);
@@ -118,7 +139,7 @@ OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<SpillablePartitionSortSinkOperator>(
             this, _id, _plan_node_id, driver_sequence, chunks_sorter, _sort_exec_exprs, _order_by_types,
-            _materialized_tuple_desc, sort_context.get(), _runtime_filter_hub);
+            _materialized_record_desc, sort_context.get(), _runtime_filter_hub);
 
     return ope;
 }
@@ -133,10 +154,15 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
+    _spill_options->block_manager = state->query_runtime_state()->query_spill_manager()->block_manager();
     _spill_options->name = "local-sort-spill";
+    _spill_options->enable_block_compaction = state->spill_enable_compaction();
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+
     return Status::OK();
 }
 

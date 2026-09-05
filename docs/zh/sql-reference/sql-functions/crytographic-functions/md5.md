@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "使用 MD5 加密算法将给定字符串加密为 128-bit 的校验和。"
 ---
 
 # md5
 
-## 功能
+
 
 使用 MD5 加密算法将给定字符串进行加密，输出一个 128-bit 的校验和 (checksum)。校验和以 32 字符的十六进制字符串表示。
 

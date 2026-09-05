@@ -1,0 +1,74 @@
+-- name: test_iceberg_row_id_multi_row_group
+create external catalog iceberg_rowid_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/warehouse/"
+);
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/warehouse/rowid_db > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_rowid_${uuid0}.rowid_db;
+-- result:
+-- !result
+CREATE TABLE rowid_multi_rg (
+    id INT,
+    payload STRING
+) properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/row_id_multi_rg/row_id_multi_rg_file1.parquet oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/data/row_id_multi_rg_file1.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/row_id_multi_rg/row_id_multi_rg_file2.parquet oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/data/row_id_multi_rg_file2.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table rowid_multi_rg execute add_files(location='oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/data/row_id_multi_rg_file1.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table rowid_multi_rg execute add_files(location='oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/data/row_id_multi_rg_file2.parquet', file_format='parquet');
+-- result:
+-- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
+select count(*), count(distinct _row_id), min(_row_id), max(_row_id) from rowid_multi_rg;
+-- result:
+3000	3000	0	2999
+-- !result
+select id, _row_id from rowid_multi_rg where id in (0, 99, 100, 101, 1499, 1500, 1599, 1600, 2999) order by id;
+-- result:
+0	0
+99	99
+100	100
+101	101
+1499	1499
+1500	1500
+1599	1599
+1600	1600
+2999	2999
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
+drop table rowid_multi_rg force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_rowid_${uuid0};
+-- result:
+-- !result

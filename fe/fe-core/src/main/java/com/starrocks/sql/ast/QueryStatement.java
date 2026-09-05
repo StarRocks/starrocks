@@ -15,15 +15,30 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.OutFileClause;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.SlotRef;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class QueryStatement extends StatementBase {
     private final QueryRelation queryRelation;
 
     // represent the "INTO OUTFILE" clause
     protected OutFileClause outFileClause;
+
+    private int queryStartIndex = -1;
 
     public QueryStatement(QueryRelation queryRelation, OriginStatement originStatement) {
         super(queryRelation.getPos());
@@ -53,11 +68,118 @@ public class QueryStatement extends StatementBase {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitQueryStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitQueryStatement(this, context);
     }
 
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
+    public int getQueryStartIndex() {
+        return queryStartIndex;
+    }
+
+    public void setQueryStartIndex(int idx) {
+        this.queryStartIndex = idx;
+    }
+
+    // only for prepare execute query
+    public boolean isPointQuery() {
+        if (queryRelation == null || !(queryRelation instanceof SelectRelation)) {
+            return false;
+        }
+
+        SelectRelation selectRelation = (SelectRelation) queryRelation;
+        if (selectRelation.hasLimit() || selectRelation.hasOffset() || selectRelation.hasHavingClause() ||
+                selectRelation.hasAggregation() || selectRelation.hasOrderByClause() ||
+                selectRelation.hasWithClause()) {
+            return false;
+        }
+
+        if (!(selectRelation.getRelation() instanceof TableRelation)) {
+            return false;
+        }
+
+        if (((TableRelation) selectRelation.getRelation()).getTable().getType() != Table.TableType.OLAP) {
+            return false;
+        }
+
+        Map<SlotRef, Expr> eqPredicates = new HashMap<>();
+        eqPredicates = getEQBinaryPredicates(eqPredicates, selectRelation.getPredicate(), BinaryType.EQ);
+        if (eqPredicates == null) {
+            return false;
+        }
+
+        OlapTable olapTable = (OlapTable) ((TableRelation) selectRelation.getRelation()).getTable();
+        List<Column> pkColumns = olapTable.getKeyColumns();
+        if (pkColumns.size() != eqPredicates.size()) {
+            return false;
+        }
+
+        for (Column column : pkColumns) {
+            SlotRef slotRef = findSlotRef(eqPredicates.keySet(), column.getName());
+            if (slotRef == null) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static Map<SlotRef, Expr> getEQBinaryPredicates(Map<SlotRef, Expr> result, Expr expr,
+                                                            BinaryType eqType) {
+        if (expr == null) {
+            return null;
+        }
+        if (expr instanceof CompoundPredicate) {
+            CompoundPredicate compoundPredicate = (CompoundPredicate) expr;
+            if (compoundPredicate.getOp() != CompoundPredicate.Operator.AND) {
+                return null;
+            }
+
+            result = getEQBinaryPredicates(result, compoundPredicate.getChild(0), eqType);
+            if (result == null) {
+                return null;
+            }
+            result = getEQBinaryPredicates(result, compoundPredicate.getChild(1), eqType);
+            if (result == null) {
+                return null;
+            }
+            return result;
+        } else if (expr instanceof BinaryPredicate) {
+            BinaryPredicate binaryPredicate = (BinaryPredicate) expr;
+            if (binaryPredicate.getOp() != eqType) {
+                return null;
+            }
+            Pair<SlotRef, Expr> slotRefExprPair = createSlotAndLiteralPair(binaryPredicate);
+            if (slotRefExprPair == null || result.containsKey(slotRefExprPair.first)) {
+                return null;
+            }
+
+            result.put(slotRefExprPair.first, slotRefExprPair.second);
+            return result;
+        } else {
+            return null;
+        }
+    }
+
+    public static Pair<SlotRef, Expr> createSlotAndLiteralPair(Expr expr) {
+        Expr leftExpr = expr.getChild(0);
+        Expr rightExpr = expr.getChild(1);
+        if (leftExpr instanceof SlotRef && (rightExpr instanceof Parameter) &&
+                (((Parameter) rightExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) leftExpr;
+            return Pair.create(slot, ((Parameter) rightExpr).getExpr());
+        } else if (rightExpr instanceof SlotRef && (leftExpr instanceof Parameter) &&
+                (((Parameter) leftExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) rightExpr;
+            return Pair.create(slot, ((Parameter) leftExpr).getExpr());
+        }
+        return null;
+    }
+
+    private SlotRef findSlotRef(Set<SlotRef> slotRefs, String colName) {
+        for (SlotRef slotRef : slotRefs) {
+            if (slotRef.getColumnName().equalsIgnoreCase(colName)) {
+                return slotRef;
+            }
+        }
+        return null;
     }
 }

@@ -16,18 +16,19 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.iceberg.exceptions.CommitFailedException;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -48,7 +49,7 @@ public class CommitRateLimiterTest {
         threshold = Config.lake_ingest_slowdown_threshold;
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         compactionMgr = new CompactionMgr();
         transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 123456L, "label", null,
@@ -63,7 +64,7 @@ public class CommitRateLimiterTest {
         transactionState.setWriteEndTimeMs(currentTimeMs);
 
         limiter.check(Collections.emptySet(), currentTimeMs);
-        Assert.assertEquals(transactionState.getWriteEndTimeMs(), transactionState.getAllowCommitTimeMs());
+        Assertions.assertEquals(transactionState.getWriteEndTimeMs(), transactionState.getAllowCommitTimeMs());
     }
 
     @Test
@@ -75,14 +76,14 @@ public class CommitRateLimiterTest {
         transactionState.setPrepareTime(currentTimeMs - 100);
         transactionState.setWriteEndTimeMs(currentTimeMs);
 
-        Assert.assertTrue(ratio > 0.01);
-        Assert.assertTrue(threshold > 0);
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(threshold)));
 
         limiter.check(partitions, currentTimeMs);
-        Assert.assertEquals(transactionState.getWriteEndTimeMs(), transactionState.getAllowCommitTimeMs());
+        Assertions.assertEquals(transactionState.getWriteEndTimeMs(), transactionState.getAllowCommitTimeMs());
     }
 
     @Test
@@ -94,24 +95,24 @@ public class CommitRateLimiterTest {
         transactionState.setPrepareTime(currentTimeMs - 100);
         transactionState.setWriteEndTimeMs(currentTimeMs);
 
-        Assert.assertTrue(ratio > 0.01);
-        Assert.assertTrue(threshold > 0);
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
 
         CommitRateExceededException e1 =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertTrue(e1.getAllowCommitTime() > currentTimeMs);
+                Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertTrue(e1.getAllowCommitTime() > currentTimeMs);
 
         // test retry after compaction score changed
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 4, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(threshold + 10.0)));
 
         CommitRateExceededException e2 =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+                Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
         // allowCommitTime will not be affected by new compaction score
-        Assert.assertEquals(e1.getAllowCommitTime(), e2.getAllowCommitTime());
+        Assertions.assertEquals(e1.getAllowCommitTime(), e2.getAllowCommitTime());
     }
 
     @Test
@@ -125,25 +126,25 @@ public class CommitRateLimiterTest {
         transactionState.setWriteEndTimeMs(currentTimeMs);
         transactionState.setWriteDurationMs(writeDurationMs);
 
-        Assert.assertTrue(ratio > 0.01);
-        Assert.assertTrue(threshold > 0);
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
 
         CommitRateExceededException e1 =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertTrue(e1.getAllowCommitTime() > currentTimeMs);
-        Assert.assertEquals(currentTimeMs + writeDurationMs * 1.0 * ratio, e1.getAllowCommitTime(), 0.1);
+                Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertTrue(e1.getAllowCommitTime() > currentTimeMs);
+        Assertions.assertEquals(currentTimeMs + writeDurationMs * 1.0 * ratio, e1.getAllowCommitTime(), 0.1);
 
         // test retry after compaction score changed
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 4, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(threshold + 10.0)));
 
         CommitRateExceededException e2 =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+                Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
         // allowCommitTime will be affected by new compaction score
-        Assert.assertEquals(e1.getAllowCommitTime(), e2.getAllowCommitTime());
+        Assertions.assertEquals(e1.getAllowCommitTime(), e2.getAllowCommitTime());
     }
 
     @Test
@@ -155,15 +156,96 @@ public class CommitRateLimiterTest {
         transactionState.setPrepareTime(currentTimeMs - timeoutMs);
         transactionState.setWriteEndTimeMs(currentTimeMs);
 
-        Assert.assertTrue(ratio > 0.01);
-        Assert.assertTrue(threshold > 0);
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(threshold + 10.0)));
 
         CommitFailedException e1 =
-                Assert.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertTrue(e1.getMessage().contains("timed out"));
+                Assertions.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertTrue(e1.getMessage().contains("timed out"));
+    }
+
+    @Test
+    public void testPreparedTransactionUsesPreparedDeadline() {
+        long partitionId = 54321;
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - timeoutMs);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setWriteDurationMs(1_000);
+        transactionState.setTransactionStatus(TransactionStatus.PREPARED);
+        transactionState.setPreparedTimeAndTimeout(currentTimeMs, timeoutMs);
+
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
+
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+
+        Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+    }
+
+    @Test
+    public void testPreparedTransactionAbortedAtPreparedDeadline() {
+        long partitionId = 54321;
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - 100);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setWriteDurationMs(1_000);
+        transactionState.setTransactionStatus(TransactionStatus.PREPARED);
+        transactionState.setPreparedTimeAndTimeout(currentTimeMs - timeoutMs, timeoutMs);
+
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
+
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+
+        CommitFailedException e =
+                Assertions.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertTrue(e.getMessage().contains("timed out"));
+    }
+
+    @Test
+    public void testOnePhasePreparedTransactionUsesOriginalDeadline() {
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - timeoutMs + 1_000);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setWriteDurationMs(1_000);
+        transactionState.setAllowCommitTimeMs(currentTimeMs + 2_000);
+        transactionState.setTransactionStatus(TransactionStatus.PREPARED);
+        transactionState.setPreparedTimeAndTimeout(
+                currentTimeMs, timeoutMs, TransactionState.TxnPrepareMode.INTERNAL_ONE_PHASE);
+
+        CommitFailedException e = Assertions.assertThrows(
+                CommitFailedException.class, () -> limiter.check(Collections.emptySet(), currentTimeMs));
+        Assertions.assertTrue(e.getMessage().contains("timed out"));
+    }
+
+    @Test
+    public void testSuccessfulRetryClearsTemporaryReason() throws CommitRateExceededException {
+        long partitionId = 54321;
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - 100);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setReason("unrelated reason");
+
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+
+        CommitRateExceededException e = Assertions.assertThrows(
+                CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertTrue(transactionState.getReason().contains("delay commit"));
+
+        limiter.check(partitions, e.getAllowCommitTime());
+        Assertions.assertEquals("unrelated reason", transactionState.getReason());
     }
 
     @Test
@@ -175,11 +257,11 @@ public class CommitRateLimiterTest {
         transactionState.setPrepareTime(currentTimeMs - 100);
         transactionState.setWriteEndTimeMs(currentTimeMs);
 
-        Assert.assertTrue(ratio > 0.01);
-        Assert.assertTrue(threshold > 0);
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
 
         limiter.check(partitions, currentTimeMs);
-        Assert.assertEquals(transactionState.getWriteEndTimeMs(), transactionState.getAllowCommitTimeMs());
+        Assertions.assertEquals(transactionState.getWriteEndTimeMs(), transactionState.getAllowCommitTimeMs());
     }
 
     @Test
@@ -196,8 +278,8 @@ public class CommitRateLimiterTest {
 
         limiter = new CommitRateLimiter(compactionMgr, transactionState, tableId);
 
-        Assert.assertTrue(ratio > 0.01);
-        Assert.assertTrue(threshold > 0);
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
 
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(threshold + 100)));
@@ -214,8 +296,8 @@ public class CommitRateLimiterTest {
         transactionState.setPrepareTime(currentTimeMs - 100);
         transactionState.setWriteEndTimeMs(currentTimeMs);
 
-        Assert.assertTrue(ratio > 0.01);
-        Assert.assertTrue(threshold > 0);
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
 
         new MockUp<CommitRateLimiter>() {
             @Mock
@@ -229,13 +311,7 @@ public class CommitRateLimiterTest {
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(compactionScore)));
 
-        CommitRateExceededException e =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertEquals(currentTimeMs + 1000, e.getAllowCommitTime());
-
-        CommitRateExceededException e2 =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertEquals(currentTimeMs + 1000, e2.getAllowCommitTime());
+        Assertions.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
     }
 
     @Test
@@ -247,8 +323,8 @@ public class CommitRateLimiterTest {
         transactionState.setPrepareTime(currentTimeMs - 100);
         transactionState.setWriteEndTimeMs(currentTimeMs);
 
-        Assert.assertTrue(ratio > 0.01);
-        Assert.assertTrue(threshold > 0);
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
 
         new MockUp<CommitRateLimiter>() {
             @Mock
@@ -264,7 +340,7 @@ public class CommitRateLimiterTest {
 
         // Commit should be denied by lake_ingest_slowdown_threshold
         CommitRateExceededException e =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+                Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
 
         ThreadUtil.sleepAtLeastIgnoreInterrupts(e.getAllowCommitTime() - currentTimeMs);
         long newCurrentTimeMs = System.currentTimeMillis();
@@ -275,8 +351,7 @@ public class CommitRateLimiterTest {
                 Quantiles.compute(Lists.newArrayList(compactionScore)));
 
         // This time commit should be denied by the lake_compaction_score_upper_bound
-        CommitRateExceededException e2 = Assert.assertThrows(CommitRateExceededException.class,
+        Assertions.assertThrows(CommitFailedException.class,
                 () -> limiter.check(partitions, newCurrentTimeMs));
-        Assert.assertEquals(newCurrentTimeMs + 1000, e2.getAllowCommitTime());
     }
 }

@@ -14,15 +14,8 @@
 
 #pragma once
 
-#include "column/array_column.h"
-#include "column/column_builder.h"
-#include "column/column_hash.h"
-#include "column/column_viewer.h"
 #include "column/map_column.h"
-#include "exprs/function_context.h"
 #include "exprs/function_helper.h"
-#include "util/orlp/pdqsort.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -37,6 +30,8 @@ public:
     DEFINE_VECTORIZED_FN(map_values);
 
     DEFINE_VECTORIZED_FN(map_filter);
+
+    DEFINE_VECTORIZED_FN(map_entries);
 
     DEFINE_VECTORIZED_FN(distinct_map_keys);
 

@@ -15,7 +15,7 @@
 #pragma once
 #include <memory>
 
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::query_cache {
 class ConjugateOperator;
@@ -43,6 +43,7 @@ public:
                       pipeline::OperatorPtr source_op);
     ~ConjugateOperator() override = default;
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool has_output() const override;
     bool need_input() const override;
@@ -66,6 +67,9 @@ public:
     ~ConjugateOperatorFactory() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() override;
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override;
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:

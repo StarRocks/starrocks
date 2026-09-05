@@ -15,19 +15,19 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
+public class MvRewriteMultiTableJoinTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         prepareDatas();
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         try {
             starRocksAssert.dropTable("tbl_1");
@@ -104,10 +104,10 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                 "\"replication_num\"=\"1\",\n" +
                 "\"in_memory\"=\"false\",\n" +
                 "\"storage_format\"=\"DEFAULT\",\n" +
-                "\"enable_persistent_index\"=\"false\",\n" +
+                "\"enable_persistent_index\"=\"true\",\n" +
                 "\"compression\"=\"LZ4\"\n" +
                 ")");
-        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1 \n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -121,7 +121,7 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune1() throws Exception {
-        createAndRefreshMv("test", "test_mv2", "CREATE MATERIALIZED VIEW test_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv2\n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -131,7 +131,7 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                 "AS SELECT " +
                 "p1.dt, p1.p1_col1, p1.p1_col2, p1.p1_col3, " +
                 "p2.p2_col2, p2.p2_col4, " +
-                "p3.p3_col1, p4.p4_col2, p4.p4_col1, " +
+                "p3.p3_col1, " +
                 "p5.sum_p1_col4, " +
                 "sum(p1.p1_col4) AS p1_col4\n" +
                 "FROM " +
@@ -142,13 +142,11 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                 "   ON p2.p2_col1='1' AND p1.p1_col2=p2.p2_col2 " +
                 "   AND p2.start_dt <= p1.dt AND p2.end_dt > p1.dt " +
                 "LEFT OUTER JOIN tbl_3 AS p3 ON p1.p1_col2=p3.p3_col2 AND p3.dt=p1.dt " +
-                "LEFT OUTER JOIN tbl_4 AS p4 ON p1.p1_col1=p4.p4_col1 AND p4.dt=p1.dt\n" +
-                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;");
+                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8;");
         {
             String query = "select " +
                     " p1.p1_col2, p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -161,9 +159,8 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt=p1.dt \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt=p1.dt \n" +
-                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' and p4.p4_col2='200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' \n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -177,7 +174,6 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
             String query = "select " +
                     " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -191,9 +187,8 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = p1.dt \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = p1.dt \n" +
-                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31'\n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -237,7 +232,7 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune2() throws Exception {
-        createAndRefreshMv("test", "test_mv2", "CREATE MATERIALIZED VIEW test_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv2\n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -247,7 +242,7 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                 "AS SELECT " +
                 "p1.dt, p1.p1_col1, p1.p1_col2, p1.p1_col3, " +
                 "p2.p2_col2, p2.p2_col4, " +
-                "p3.p3_col1, p4.p4_col2, p4.p4_col1, " +
+                "p3.p3_col1, " +
                 "p5.p1_col3 as p5_col3, p5.sum_p1_col4, " +
                 "sum(p1.p1_col4) AS p1_col4\n" +
                 "FROM " +
@@ -258,13 +253,11 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                 "   ON p2.p2_col1='1' AND p1.p1_col2=p2.p2_col2 " +
                 "   AND p2.start_dt <= p1.dt AND p2.end_dt > p1.dt " +
                 "LEFT OUTER JOIN tbl_3 AS p3 ON p1.p1_col2=p3.p3_col2 AND p3.dt=p1.dt " +
-                "LEFT OUTER JOIN tbl_4 AS p4 ON p1.p1_col1=p4.p4_col1 AND p4.dt=p1.dt\n" +
-                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11;");
+                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9;");
         {
             String query = "select " +
                     " p1.p1_col2, p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -277,9 +270,8 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt=p1.dt \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt=p1.dt \n" +
-                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' and p4.p4_col2='200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' \n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -292,7 +284,6 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
             String query = "select " +
                     " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -306,9 +297,8 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = p1.dt \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = p1.dt \n" +
-                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' \n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 

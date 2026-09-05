@@ -14,397 +14,288 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.elasticsearch.EsUtil;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
+import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.Identifier;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
-import static com.starrocks.catalog.AggregateType.HLL_UNION;
-
 public class CreateTableAnalyzer {
+    private static final Logger LOG = LoggerFactory.getLogger(CreateTableAnalyzer.class);
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(CreateTableAnalyzer.class);
+    public static void analyze(CreateTableStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference cannot be null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+        statement.setTableRef(tableRef);
 
-    private static final String DEFAULT_CHARSET_NAME = "utf8";
+        final String catalogName = tableRef.getCatalogName();
+        MetaUtils.checkCatalogExistAndReport(catalogName);
 
-    private static final String UNIFIED = "unified";
-    private static final String ELASTICSEARCH = "elasticsearch";
-    private static final String ICEBERG = "iceberg";
-    private static final String HIVE = "hive";
+        final String db = tableRef.getDbName();
+        final String tableName = tableRef.getTableName();
+        FeNameFormat.checkTableName(tableName);
 
-    public enum CharsetType {
-        UTF8,
-        GBK,
+        Database dbObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
+        if (dbObj == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
+        }
+        if (statement instanceof CreateTemporaryTableStmt) {
+            analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
+        } else {
+            if (GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .tableExists(context, catalogName, db, tableName) && !statement.isSetIfNotExists()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+            }
+        }
+
+        analyzeEngineName(statement, catalogName);
+        analyzeCharsetName(statement);
+
+        com.starrocks.catalog.TableName tableNameObj = com.starrocks.catalog.TableName.fromTableRef(tableRef);
+        analyzeMultiExprsPartition(statement, tableNameObj);
+        preCheckColumnRef(statement);
+        analyzeKeysDesc(statement);
+        analyzePartitionDesc(statement);
+        analyzeDistributionDesc(statement);
+        analyzeSortKeys(statement); // analyzeSortKeys must be called after analyzeDistributionDesc
+        analyzeColumnRef(statement, catalogName);
+
+        if (statement.isHasGeneratedColumn()) {
+            analyzeGeneratedColumn(statement, context);
+        }
+
+        analyzeIndexDefs(statement);
+        if (statement.isOlapEngine()) {
+            validateComplexTypeDefaultValues(statement);
+        }
     }
 
-    private static String analyzeEngineName(String engineName, String catalogName) {
+    private static void analyzeTemporaryTable(CreateTableStmt stmt, ConnectContext context,
+                                              String catalogName, Database db, String tableName) {
+        ((CreateTemporaryTableStmt) stmt).setSessionId(context.getSessionId());
+        if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException("temporary table must be created under internal catalog");
+        }
+        Map<String, String> properties = stmt.getProperties();
+        if (properties != null) {
+            // temporary table doesn't support colocate_with property, so ignore it
+            properties.remove(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+        }
+
+        UUID sessionId = context.getSessionId();
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        if (temporaryTableMgr.tableExists(sessionId, db.getId(), tableName) && !stmt.isSetIfNotExists()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+        }
+    }
+
+    protected static void analyzeEngineName(CreateTableStmt stmt, String catalogName) {
+        String engineName = stmt.getEngineName();
+
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             if (Strings.isNullOrEmpty(engineName)) {
-                return EngineType.defaultEngine().name();
+                engineName = EngineType.defaultEngine().name();
             } else {
                 try {
-                    return EngineType.valueOf(engineName.toUpperCase()).name();
+                    engineName = EngineType.valueOf(engineName.toUpperCase()).name();
                 } catch (IllegalArgumentException e) {
                     throw new SemanticException("Unknown engine name: %s", engineName);
                 }
             }
-        }
+        } else {
+            String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
+            if (catalogType.equalsIgnoreCase(ConnectorType.UNIFIED.getName())) {
+                if (Strings.isNullOrEmpty(engineName)) {
+                    throw new SemanticException("Create table in unified catalog requires engine clause (ENGINE = ENGINE_NAME)");
+                }
+            } else {
+                if (Strings.isNullOrEmpty(engineName)) {
+                    engineName = catalogType; // use catalog type if engine is not specified
+                }
 
-        String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
-        if (catalogType.equalsIgnoreCase(UNIFIED)) {
-            if (Strings.isNullOrEmpty(engineName)) {
-                throw new SemanticException("Create table in unified catalog requires engine clause " +
-                        "(ENGINE = ENGINE_NAME)");
+                if (!engineName.equalsIgnoreCase(catalogType)) {
+                    throw new SemanticException("Can't create %s table in the %s catalog", engineName, catalogType);
+                }
             }
-            return engineName;
         }
 
-        if (Strings.isNullOrEmpty(engineName)) {
-            return catalogType; // use catalog type if engine is not specified
+        if ((stmt instanceof CreateTemporaryTableStmt) && !engineName.equalsIgnoreCase("olap")) {
+            throw new SemanticException("temporary table only support olap engine");
         }
 
-        if (!engineName.equalsIgnoreCase(catalogType)) {
-            throw new SemanticException("Can't create %s table in the %s catalog", engineName, catalogType);
-        }
-
-        return engineName;
+        stmt.setEngineName(engineName.toLowerCase());
     }
 
-    private static String analyzeCharsetName(String charsetName) {
+    private static void analyzeCharsetName(CreateTableStmt stmt) {
+        String charsetName = stmt.getCharsetName();
+
         if (Strings.isNullOrEmpty(charsetName)) {
-            return DEFAULT_CHARSET_NAME;
-        }
-        try {
-            CharsetType.valueOf(charsetName.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new SemanticException("Unknown charset name: %s", charsetName);
+            charsetName = "utf8";
         }
         // be is not supported yet,so Display unsupported information to the user
-        if (!charsetName.equalsIgnoreCase(DEFAULT_CHARSET_NAME)) {
+        if (!charsetName.equalsIgnoreCase("utf8")) {
             throw new SemanticException("charset name %s is not supported yet", charsetName);
         }
-        return charsetName;
+
+        stmt.setCharsetName(charsetName.toLowerCase());
     }
 
-    public static void analyze(CreateTableStmt statement, ConnectContext context) {
-        final TableName tableNameObject = statement.getDbTbl();
-        MetaUtils.normalizationTableName(context, tableNameObject);
-
-        final String tableName = tableNameObject.getTbl();
-        FeNameFormat.checkTableName(tableName);
-
-        final String catalogName = tableNameObject.getCatalog();
-        try {
-            MetaUtils.checkCatalogExistAndReport(catalogName);
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
-        }
-
-        Database db = MetaUtils.getDatabase(catalogName, tableNameObject.getDb());
-
-        // check if table exists in db
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-
-        final String engineName = analyzeEngineName(statement.getEngineName(), catalogName).toLowerCase();
-        statement.setEngineName(engineName);
-        statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
-
-        KeysDesc keysDesc = statement.getKeysDesc();
-        List<Integer> sortKeyIdxes = Lists.newArrayList();
-        if (statement.getSortKeys() != null) {
-            if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
-                NodePosition keysPos = NodePosition.ZERO;
-                if (keysDesc != null) {
-                    keysPos = keysDesc.getPos();
-                }
-                throw new SemanticException("only primary key support sort key", keysPos);
-            } else {
-                List<String> columnNames =
-                        statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
-
-                for (String column : statement.getSortKeys()) {
-                    int idx = columnNames.indexOf(column);
-                    if (idx == -1) {
-                        throw new SemanticException("Unknown column '%s' does not exist", column);
-                    }
-                    sortKeyIdxes.add(idx);
-                }
-            }
-        }
+    private static void preCheckColumnRef(CreateTableStmt statement) {
         List<ColumnDef> columnDefs = statement.getColumnDefs();
-        int autoIncrementColumnCount = 0;
-        for (ColumnDef colDef : columnDefs) {
-            if (colDef.isAutoIncrement()) {
-                autoIncrementColumnCount++;
-                if (colDef.getType() != Type.BIGINT) {
-                    throw new SemanticException("The AUTO_INCREMENT column must be BIGINT", colDef.getPos());
-                }
-            }
-
-            if (autoIncrementColumnCount > 1) {
-                throw new SemanticException("More than one AUTO_INCREMENT column defined in CREATE TABLE Statement",
-                        colDef.getPos());
-            }
-        }
-        PartitionDesc partitionDesc = statement.getPartitionDesc();
-        // analyze key desc
-        if (statement.isOlapEngine()) {
-            // olap table or lake table
-            if (keysDesc == null) {
-                List<String> keysColumnNames = Lists.newArrayList();
-                int keyLength = 0;
-                boolean hasAggregate = false;
-                for (ColumnDef columnDef : columnDefs) {
-                    if (columnDef.getAggregateType() != null) {
-                        hasAggregate = true;
-                        break;
-                    }
-                }
-                if (hasAggregate) {
-                    for (ColumnDef columnDef : columnDefs) {
-                        if (columnDef.getAggregateType() == null) {
-                            keysColumnNames.add(columnDef.getName());
-                        }
-                    }
-                    keysDesc = new KeysDesc(KeysType.AGG_KEYS, keysColumnNames);
-                } else {
-                    for (ColumnDef columnDef : columnDefs) {
-                        keyLength += columnDef.getType().getIndexSize();
-                        if (keysColumnNames.size() >= FeConstants.SHORTKEY_MAX_COLUMN_COUNT
-                                || keyLength > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
-                            if (keysColumnNames.size() == 0
-                                    && columnDef.getType().getPrimitiveType().isCharFamily()) {
-                                keysColumnNames.add(columnDef.getName());
-                            }
-                            break;
-                        }
-                        if (!columnDef.getType().canDistributedBy()) {
-                            break;
-                        }
-                        if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
-                            keysColumnNames.add(columnDef.getName());
-                            break;
-                        }
-                        keysColumnNames.add(columnDef.getName());
-                    }
-                    if (columnDefs.isEmpty()) {
-                        throw new SemanticException("Empty schema");
-                    }
-                    // The OLAP table must has at least one short key and the float and double should not be short key.
-                    // So the float and double could not be the first column in OLAP table.
-                    if (keysColumnNames.isEmpty()) {
-                        throw new SemanticException("Data type of first column cannot be %s",
-                                columnDefs.get(0).getType());
-                    }
-                    keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames);
-                }
-            }
-
-            keysDesc.analyze(columnDefs);
-            keysDesc.checkColumnDefs(columnDefs, sortKeyIdxes);
-            for (int i = 0; i < keysDesc.keysColumnSize(); ++i) {
-                columnDefs.get(i).setIsKey(true);
-            }
-            if (keysDesc.getKeysType() != KeysType.AGG_KEYS) {
-                AggregateType type = AggregateType.REPLACE;
-                // note: PRIMARY_KEYS uses REPLACE aggregate type for now
-                if (keysDesc.getKeysType() == KeysType.DUP_KEYS) {
-                    type = AggregateType.NONE;
-                }
-                for (int i = keysDesc.keysColumnSize(); i < columnDefs.size(); ++i) {
-                    columnDefs.get(i).setAggregateType(type);
-                }
-            }
-            statement.setKeysDesc(keysDesc);
-        } else {
-            // mysql, broker, iceberg, hudi and hive do not need key desc
-            if (keysDesc != null) {
-                throw new SemanticException("Create " + engineName + " table should not contain keys desc", keysDesc.getPos());
-            }
-
-            for (ColumnDef columnDef : columnDefs) {
-                if (engineName.equalsIgnoreCase("mysql") && columnDef.getType().isComplexType()) {
-                    throw new SemanticException(engineName + " external table don't support complex type", columnDef.getPos());
-                }
-
-                if (!engineName.equalsIgnoreCase("hive")) {
-                    columnDef.setIsKey(true);
-                }
-            }
-        }
-
-        // analyze column def
         if (columnDefs == null || columnDefs.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
 
-        boolean hasHll = false;
-        boolean hasBitmap = false;
-        boolean hasReplace = false;
+        if (columnDefs.size() > Config.max_column_number_per_table) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_COLUMNS, Config.max_column_number_per_table);
+        }
+
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
-            try {
-                columnDef.analyze(statement.isOlapEngine(), CatalogMgr.isInternalCatalog(catalogName), engineName);
-            } catch (AnalysisException e) {
-                LOGGER.error("Column definition analyze failed.", e);
-                throw new SemanticException(e.getMessage());
-            }
-
-            if (columnDef.getAggregateType() == HLL_UNION) {
-                hasHll = true;
-            }
-
-            if (columnDef.getAggregateType() == BITMAP_UNION) {
-                hasBitmap = columnDef.getType().isBitmapType();
-            }
-
-            if (columnDef.getAggregateType() != null && columnDef.getAggregateType().isReplaceFamily()) {
-                hasReplace = true;
-            }
-
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }
-        }
 
-        if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
-            throw new SemanticException("HLL_UNION must be used in AGG_KEYS", keysDesc.getPos());
-        }
-
-        if (hasBitmap && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
-            throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
-        }
-
-        DistributionDesc distributionDesc = statement.getDistributionDesc();
-        if (statement.isOlapEngine()) {
-            // analyze partition
-            Map<String, String> properties = statement.getProperties();
-            if (partitionDesc != null) {
-                if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
-                    try {
-                        partitionDesc.analyze(columnDefs, properties);
-                    } catch (AnalysisException e) {
-                        throw new SemanticException(e.getMessage());
-                    }
-                } else if (partitionDesc instanceof ExpressionPartitionDesc) {
-                    ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
-                    try {
-                        expressionPartitionDesc.analyze(columnDefs, properties);
-                    } catch (AnalysisException e) {
-                        throw new SemanticException(e.getMessage());
-                    }
-                } else {
-                    throw new SemanticException("Currently only support range and list partition with engine type olap",
-                            partitionDesc.getPos());
-                }
+            if (columnDef.getAggregateType() != null && columnDef.getAggregateType().isReplaceFamily()) {
+                statement.setHasReplace(true);
             }
 
-            // analyze distribution
-            if (distributionDesc == null) {
-                if (keysDesc.getKeysType() != KeysType.DUP_KEYS) {
-                    throw new SemanticException("Currently only support default distribution in DUP_KEYS");
-                }
-                if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
-                    if (properties == null) {
-                        properties = Maps.newHashMap();
-                        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
-                    }
-                    distributionDesc = new HashDistributionDesc(0, Lists.newArrayList(columnDefs.get(0).getName()));
-                } else {
-                    distributionDesc = new RandomDistributionDesc();
-                }
-            }
-            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS
-                    && !(keysDesc.getKeysType() == KeysType.AGG_KEYS && !hasReplace)) {
-                throw new SemanticException(keysDesc.getKeysType().toSql() + (hasReplace ? " with replace " : "")
-                        + " must use hash distribution", distributionDesc.getPos());
-            }
-            distributionDesc.analyze(columnSet);
-            statement.setDistributionDesc(distributionDesc);
-            statement.setProperties(properties);
-        } else {
-            if (engineName.equalsIgnoreCase(ELASTICSEARCH)) {
-                EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
-            } else if (engineName.equalsIgnoreCase(ICEBERG) || engineName.equalsIgnoreCase(HIVE)) {
-                if (partitionDesc != null) {
-                    ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(columnDefs, engineName);
-                }
-            } else {
-                if (partitionDesc != null || distributionDesc != null) {
-                    NodePosition pos = NodePosition.ZERO;
-                    if (partitionDesc != null) {
-                        pos = partitionDesc.getPos();
-                    }
-
-                    if (distributionDesc != null) {
-                        pos = distributionDesc.getPos();
-                    }
-
-                    throw new SemanticException("Create " + engineName + " table should not contain partition " +
-                            "or distribution desc", pos);
-                }
+            if (columnDef.isGeneratedColumn()) {
+                statement.setHasGeneratedColumn(true);
             }
         }
-        List<Column> columns = statement.getColumns();
-        List<Index> indexes = statement.getIndexes();
+    }
+
+    private static void analyzeColumnRef(CreateTableStmt statement, String catalogName) {
+        String engineName = statement.getEngineName();
+        KeysDesc keysDesc = statement.getKeysDesc();
+        List<ColumnDef> columnDefs = statement.getColumnDefs();
+
+        if (columnDefs.stream().filter(ColumnDef::isAutoIncrement).count() > 1) {
+            throw new SemanticException("More than one AUTO_INCREMENT column defined in CREATE TABLE Statement",
+                    statement.getPos());
+        }
+
+        List<Column> columns = new ArrayList<>();
         for (ColumnDef columnDef : columnDefs) {
-            Column col = columnDef.toColumn();
+            try {
+                String name = columnDef.getName();
+                boolean isAllowNull = columnDef.isAllowNull();
+
+                if (CatalogMgr.isInternalCatalog(catalogName)) {
+                    if (!isAllowNull && !EngineType.supportNotNullColumn(engineName)) {
+                        // prevent not null for external table
+                        throw new AnalysisException(String.format("All columns must be nullable for external table. " +
+                                "Column %s is not nullable, You can rebuild the external table and " +
+                                "We strongly recommend that you use catalog to access external data", name));
+                    }
+                }
+                ColumnDefAnalyzer.analyze(columnDef, statement.isOlapEngine());
+            } catch (AnalysisException e) {
+                LOG.error("Column definition analyze failed.", e);
+                throw new SemanticException(e.getMessage());
+            }
+
+            if (columnDef.isAutoIncrement()) {
+                if (columnDef.getType() != IntegerType.BIGINT) {
+                    throw new SemanticException("The AUTO_INCREMENT column must be BIGINT", columnDef.getPos());
+                }
+            }
+
+            if (engineName.equalsIgnoreCase(Table.TableType.MYSQL.name()) && columnDef.getType().isComplexType()) {
+                throw new SemanticException(engineName + " external table don't support complex type", columnDef.getPos());
+            }
+
+            if (!statement.isOlapEngine() && !engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+                columnDef.setIsKey(true);
+            }
+
+            if (columnDef.getAggregateType() == AggregateType.HLL_UNION && keysDesc != null
+                    && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
+                throw new SemanticException("HLL_UNION must be used in AGG_KEYS", keysDesc.getPos());
+            }
+
+            if (columnDef.getAggregateType() == AggregateType.BITMAP_UNION && columnDef.getType().isBitmapType()
+                    && keysDesc != null && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
+                throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
+            }
+
+            Column col;
+            if (columnDef.getGeneratedColumnExpr() != null) {
+                col = ColumnBuilder.buildGeneratedColumn(null, columnDef);
+            } else {
+                col = ColumnBuilder.buildColumn(columnDef);
+            }
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -414,113 +305,696 @@ public class CreateTableAnalyzer {
             }
             columns.add(col);
         }
-        boolean hasGeneratedColumn = false;
-        for (Column column : columns) {
-            if (column.isGeneratedColumn()) {
-                hasGeneratedColumn = true;
-                break;
+
+        statement.setColumns(columns);
+    }
+
+    private static void analyzeKeysDesc(CreateTableStmt stmt) {
+        KeysDesc keysDesc = stmt.getKeysDesc();
+        if (!stmt.isOlapEngine()) {
+            // mysql, broker, iceberg, hudi and hive do not need key desc
+            if (keysDesc != null) {
+                throw new SemanticException("Create " + stmt.getEngineName() + " table should not contain keys desc",
+                        keysDesc.getPos());
+            }
+            return;
+        }
+
+        List<ColumnDef> columnDefs = stmt.getColumnDefs();
+
+        if (keysDesc == null) {
+            List<String> keysColumnNames = Lists.newArrayList();
+            if (columnDefs.stream().anyMatch(c -> c.getAggregateType() != null)) {
+                for (ColumnDef columnDef : columnDefs) {
+                    if (columnDef.getAggregateType() == null) {
+                        keysColumnNames.add(columnDef.getName());
+                    }
+                }
+                keysDesc = new KeysDesc(KeysType.AGG_KEYS, keysColumnNames, true);
+            } else {
+                int keyLength = 0;
+                for (ColumnDef columnDef : columnDefs) {
+                    // generated column should not be key
+                    if (columnDef.isGeneratedColumn()) {
+                        break;
+                    }
+                    keyLength += columnDef.getType().getIndexSize();
+                    if (keysColumnNames.size() >= FeConstants.SHORTKEY_MAX_COLUMN_COUNT
+                            || keyLength > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
+                        if (keysColumnNames.size() == 0
+                                && columnDef.getType().getPrimitiveType().isCharFamily()) {
+                            keysColumnNames.add(columnDef.getName());
+                        }
+                        break;
+                    }
+                    if (!columnDef.getType().canDistributedBy()) {
+                        break;
+                    }
+                    if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+                        keysColumnNames.add(columnDef.getName());
+                        break;
+                    }
+                    keysColumnNames.add(columnDef.getName());
+                }
+                if (columnDefs.isEmpty()) {
+                    throw new SemanticException("Empty schema");
+                }
+                // The OLAP table must has at least one short key and the float and double should not be short key.
+                // So the float and double could not be the first column in OLAP table.
+                if (keysColumnNames.isEmpty()) {
+                    throw new SemanticException("Data type of first column cannot be %s", columnDefs.get(0).getType());
+                }
+                keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames, true);
             }
         }
 
-        if (hasGeneratedColumn && !statement.isOlapEngine()) {
-            throw new SemanticException("Generated Column only support olap table");
+        KeysType keysType = keysDesc.getKeysType();
+        if (keysType == null) {
+            throw new SemanticException("Keys type is null.");
         }
 
-        if (hasGeneratedColumn && keysDesc.getKeysType() == KeysType.AGG_KEYS) {
+        List<String> keysColumnNames = keysDesc.getKeysColumnNames();
+        if (keysColumnNames == null || keysColumnNames.size() == 0) {
+            throw new SemanticException("The number of key columns is 0.");
+        }
+
+        if (keysColumnNames.size() > columnDefs.size()) {
+            throw new SemanticException("The number of key columns should be less than the number of columns.");
+        }
+
+        for (int i = 0; i < keysColumnNames.size(); ++i) {
+            String colName = columnDefs.get(i).getName();
+            if (!keysColumnNames.get(i).equalsIgnoreCase(colName)) {
+                String keyName = keysColumnNames.get(i);
+                if (columnDefs.stream().noneMatch(col -> col.getName().equalsIgnoreCase(keyName))) {
+                    throw new SemanticException("Key column(%s) doesn't exist.", keysColumnNames.get(i));
+                } else {
+                    throw new SemanticException("Key columns must be the first few columns of the schema and the order "
+                            + " of the key columns must be consistent with the order of the schema");
+                }
+            }
+
+            if (columnDefs.get(i).getAggregateType() != null) {
+                throw new SemanticException("Key column[" + colName + "] should not specify aggregate type.");
+            }
+
+            if (keysType == KeysType.PRIMARY_KEYS) {
+                ColumnDef cd = columnDefs.get(i);
+                cd.setPrimaryKeyNonNullable();
+                if (cd.isAllowNull()) {
+                    throw new SemanticException("primary key column[" + colName + "] cannot be nullable");
+                }
+                Type t = cd.getType();
+                if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                        t.isDatetime())) {
+                    throw new SemanticException("primary key column[" + colName + "] type not supported: " + t.toSql());
+                }
+            }
+        }
+
+        // for olap table
+        for (int i = keysColumnNames.size(); i < columnDefs.size(); ++i) {
+            if (keysType == KeysType.AGG_KEYS) {
+                if (columnDefs.get(i).getAggregateType() == null) {
+                    throw new SemanticException(keysType.name() + " table should specify aggregate type for "
+                            + "non-key column[" + columnDefs.get(i).getName() + "]");
+                }
+            } else {
+                if (columnDefs.get(i).getAggregateType() != null
+                        && columnDefs.get(i).getAggregateType() != AggregateType.REPLACE) {
+                    throw new SemanticException(keysType.name() + " table should not specify aggregate type for "
+                            + "non-key column[" + columnDefs.get(i).getName() + "]");
+                }
+            }
+        }
+
+        for (int i = 0; i < keysDesc.getKeysColumnNames().size(); ++i) {
+            columnDefs.get(i).setIsKey(true);
+        }
+
+        if (keysDesc.getKeysType() != KeysType.AGG_KEYS) {
+            // note: PRIMARY_KEYS uses REPLACE aggregate type for now
+            AggregateType aggregateType = keysDesc.getKeysType() == KeysType.DUP_KEYS ?
+                    AggregateType.NONE : AggregateType.REPLACE;
+            for (int i = keysDesc.getKeysColumnNames().size(); i < columnDefs.size(); ++i) {
+                columnDefs.get(i).setAggregateType(aggregateType);
+            }
+        }
+
+        stmt.setKeysDesc(keysDesc);
+    }
+
+    // analyzeSortKeys must be called after analyzeDistributionDesc
+    private static void analyzeSortKeys(CreateTableStmt stmt) {
+        if (!stmt.isOlapEngine() || stmt.getOrderByElements() == null) {
+            return;
+        }
+
+        KeysDesc keysDesc = stmt.getKeysDesc();
+        KeysType keysType = keysDesc.getKeysType();
+
+        List<ColumnDef> columnDefs = stmt.getColumnDefs();
+        List<OrderByElement> orderByElements = stmt.getOrderByElements();
+        List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
+        if (stmt.getDistributionDesc() instanceof RangeDistributionDesc) {
+            // For range distribution, the sort columns must be the same as the key
+            // columns or only in a different order for none duplicate key table
+            if (keysType != KeysType.DUP_KEYS) {
+                List<Integer> sortKeyIdxes = Lists.newArrayList();
+                for (OrderByElement orderByElement : orderByElements) {
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
+                    }
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Column '%s' does not exist", column);
+                    }
+                    if (keysType == KeysType.PRIMARY_KEYS) {
+                        ColumnDef cd = columnDefs.get(idx);
+                        Type t = cd.getType();
+                        if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isBinaryType()
+                                || t.isDate() || t.isDatetime())) {
+                            throw new SemanticException(
+                                    "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
+                        }
+                    }
+                    sortKeyIdxes.add(idx);
+                }
+
+                List<Integer> keyColIdxes = Lists.newArrayList();
+                for (String column : keysDesc.getKeysColumnNames()) {
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Column '%s' does not exist in key columns", column);
+                    }
+                    keyColIdxes.add(idx);
+                }
+
+                if (keysType == KeysType.PRIMARY_KEYS && !keyColIdxes.equals(sortKeyIdxes)) {
+                    Map<String, String> properties = stmt.getProperties();
+                    boolean fileBundling = properties == null ? Config.enable_file_bundling
+                            : Boolean.parseBoolean(properties.getOrDefault(
+                                    PropertyAnalyzer.PROPERTIES_FILE_BUNDLING,
+                                    Boolean.toString(Config.enable_file_bundling)));
+                    if (!fileBundling) {
+                        throw new SemanticException("Range-distributed primary key tables with ORDER BY different "
+                                + "from the primary key require file_bundling=true");
+                    }
+                } else if (keysType != KeysType.PRIMARY_KEYS &&
+                                !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
+                    throw new SemanticException("The sort columns must be same with key columns");
+                }
+            } else {
+                // A range-distributed duplicate key table's sort key defines the tablet range
+                // boundaries; every sort key column type must be encodable as a key on the BE.
+                checkSortKeyTypesEncodable(orderByElements, columnDefs, columnNames);
+            }
+        } else {
+            // we should check sort key column type if table is primary key table
+            if (keysType == KeysType.PRIMARY_KEYS) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
+                    }
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Unknown column '%s' does not exist", column);
+                    }
+                    ColumnDef cd = columnDefs.get(idx);
+                    Type t = cd.getType();
+                    if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isBinaryType() ||
+                            t.isDate() || t.isDatetime())) {
+                        throw new SemanticException("sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
+                    }
+                }
+            } else if (keysType == KeysType.DUP_KEYS) {
+                // A duplicate key table's sort key columns are encoded on the BE (short-key index)
+                // regardless of distribution, so their types must be BE-encodable here too.
+                checkSortKeyTypesEncodable(orderByElements, columnDefs, columnNames);
+            } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
+                List<Integer> sortKeyIdxes = Lists.newArrayList();
+                for (OrderByElement orderByElement : orderByElements) {
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
+                    }
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Unknown column '%s' does not exist", column);
+                    }
+                    sortKeyIdxes.add(idx);
+                }
+
+                List<Integer> keyColIdxes = Lists.newArrayList();
+                for (String column : keysDesc.getKeysColumnNames()) {
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Unknown column '%s' does not exist", column);
+                    }
+                    keyColIdxes.add(idx);
+                }
+
+                // sort key column of AGG and UNIQUE table must include all key columns and cannot have any columns other than
+                // the key columns
+                boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+                if (!res) {
+                    throw new SemanticException("The sort columns of " + keysType.toSql()
+                            + " table must be same with key columns");
+                }
+            } else {
+                throw new SemanticException("Table type:" + keysType.toSql() + " does not support sort key column");
+            }
+        }
+    }
+
+    // Reject sort key (ORDER BY) columns whose type the BE cannot encode as a key. Sort key columns
+    // are written into the short-key index via an order-preserving KeyCoder; a type without a key
+    // coder (JSON, complex, floating-point, metric, variant, and TIME) would crash the BE encoder,
+    // so fail cleanly at CREATE TABLE instead. Column resolution is case-insensitive to match
+    // OlapTableFactory.
+    private static void checkSortKeyTypesEncodable(List<OrderByElement> orderByElements,
+                                                   List<ColumnDef> columnDefs, List<String> columnNames) {
+        for (OrderByElement orderByElement : orderByElements) {
+            Expr expr = orderByElement.getExpr();
+            String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+            if (column == null) {
+                throw new SemanticException("Unknown column '%s' in order by clause",
+                        ExprToSql.toSql(orderByElement.getExpr()));
+            }
+            int idx = -1;
+            for (int i = 0; i < columnNames.size(); i++) {
+                if (columnNames.get(i).equalsIgnoreCase(column)) {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx == -1) {
+                throw new SemanticException("Column '%s' does not exist", column);
+            }
+            ColumnDef cd = columnDefs.get(idx);
+            Type t = cd.getType();
+            if (!t.canDistributedBy()) {
+                throw new SemanticException(
+                        "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
+            }
+        }
+    }
+
+    public static void analyzeMultiExprsPartition(CreateTableStmt stmt, TableName tableName) {
+        PartitionDesc partitionDesc = stmt.getPartitionDesc();
+        if (partitionDesc == null || !(partitionDesc instanceof ListPartitionDesc)) {
+            return;
+        }
+        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+        if (!listPartitionDesc.isAutoPartitionTable()) {
+            return;
+        }
+        List<ParseNode> multiDescList = listPartitionDesc.getMultiDescList();
+        if (multiDescList == null || multiDescList.isEmpty()) {
+            return;
+        }
+        List<ColumnDef> columnDefs = stmt.getColumnDefs();
+        List<String> partitionColumnList = Lists.newArrayList();
+        List<PartitionDesc> partitionDescList = Lists.newArrayList();
+        List<Expr> partitionExprs = Lists.newArrayList();
+        int placeHolderSlotId = 0;
+        for (ParseNode partitionExpr : multiDescList) {
+            if (partitionExpr instanceof Identifier) {
+                Identifier identifier = (Identifier) partitionExpr;
+                partitionColumnList.add(identifier.getValue());
+            }
+            if (partitionExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
+                if (stmt.isIcebergEngine()) {
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
+                    fnName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + fnName;
+                    expr.resetFnName(null, fnName);
+                }
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                new RelationFields(columnDefs.stream().map(col -> new Field(col.getName(),
+                                        col.getType(), null, null)).collect(Collectors.toList()))),
+                        ConnectContext.buildInner());
+                String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId++;
+                partitionColumnList.add(columnName);
+                Type type = expr.getType();
+                if (type.isScalarType()) {
+                    ScalarType scalarType = (ScalarType) type;
+                    if (scalarType.isWildcardChar()) {
+                        type = TypeFactory.createCharType(TypeFactory.getOlapMaxVarcharLength());
+                    } else if (scalarType.isWildcardVarchar()) {
+                        type = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                    }
+                }
+                TypeDef typeDef = new TypeDef(type);
+                try {
+                    TypeDefAnalyzer.analyze(typeDef);
+                } catch (Exception e) {
+                    throw new SemanticException("Generate partition column " + columnName
+                            + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());
+                }
+                // generated column expression should be saved in unanalyzed way in meta
+                ColumnDef generatedPartitionColumn = new ColumnDef(
+                        columnName, typeDef, null, false, null, null, true,
+                        ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
+                columnDefs.add(generatedPartitionColumn);
+                partitionExprs.add((FunctionCallExpr) partitionExpr);
+            }
+        }
+        for (ColumnDef columnDef : columnDefs) {
+            if (partitionColumnList.contains(columnDef.getName())) {
+                columnDef.setIsPartitionColumn(true);
+            }
+        }
+        listPartitionDesc = new ListPartitionDesc(partitionColumnList, partitionDescList);
+        listPartitionDesc.setAutoPartitionTable(true);
+        listPartitionDesc.setPartitionExprs(partitionExprs);
+        stmt.setPartitionDesc(listPartitionDesc);
+    }
+
+    public static void analyzePartitionDesc(CreateTableStmt stmt) {
+        String engineName = stmt.getEngineName();
+        PartitionDesc partitionDesc = stmt.getPartitionDesc();
+        if (stmt.isOlapEngine()) {
+            if (partitionDesc != null) {
+                if (partitionDesc instanceof ListPartitionDesc ||
+                        partitionDesc instanceof MultiItemListPartitionDesc ||
+                        partitionDesc instanceof RangePartitionDesc ||
+                        partitionDesc instanceof SingleItemListPartitionDesc ||
+                        partitionDesc instanceof SingleRangePartitionDesc) {
+                    try {
+                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties(),
+                                stmt.getKeysDesc().getKeysType());
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                    if (partitionDesc instanceof ListPartitionDesc) {
+                        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                        if (listPartitionDesc.getPartitionExprs() != null && !listPartitionDesc.getPartitionExprs().isEmpty()
+                                && (stmt.getKeysDesc().getKeysType() == KeysType.AGG_KEYS
+                                || stmt.getKeysDesc().getKeysType() == KeysType.UNIQUE_KEYS)) {
+                            throw new SemanticException("expression partition base on generated column"
+                                    + " doest not support AGG_KEYS or UNIQUE_KEYS", partitionDesc.getPos());
+                        }
+                    }
+                } else if (partitionDesc instanceof ExpressionPartitionDesc) {
+                    ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                    try {
+                        PartitionDescAnalyzer.analyze(expressionPartitionDesc, stmt.getColumnDefs(), stmt.getProperties());
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                } else {
+                    throw new SemanticException("Currently only support range and list partition with engine type olap",
+                            partitionDesc.getPos());
+                }
+            }
+        } else {
+            if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
+                EsUtil.analyzePartitionDesc(partitionDesc);
+            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())
+                    || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+                if (partitionDesc != null) {
+                    ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
+                }
+            } else {
+                if (partitionDesc != null) {
+                    throw new SemanticException("Create " + engineName + " table should not contain partition desc",
+                            partitionDesc.getPos());
+                }
+            }
+        }
+    }
+
+    public static void analyzeDistributionDesc(CreateTableStmt stmt) {
+        List<ColumnDef> columnDefs = stmt.getColumnDefs();
+        DistributionDesc distributionDesc = stmt.getDistributionDesc();
+        if (stmt.isOlapEngine()) {
+            Map<String, String> properties = stmt.getProperties();
+            KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
+
+            boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(ConnectContext.get());
+
+            if (enableRangeDistribution) {
+                if (distributionDesc == null) {
+                    // For duplicate key table, if both duplicate key and order by are not
+                    // specified, use random distribution, otherwise, use range distribution
+                    if (!(keysDesc.getKeysType() == KeysType.DUP_KEYS
+                            && keysDesc.isKeysColumnsDerived()
+                            && stmt.getOrderByElements() == null)) {
+                        distributionDesc = new RangeDistributionDesc();
+                    }
+                }
+            }
+
+            // analyze distribution
+            if (distributionDesc == null) {
+                if (properties != null && properties.containsKey("colocate_with")) {
+                    throw new SemanticException("Colocate table must specify distribution column");
+                }
+
+                if (keysDesc != null && keysDesc.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    distributionDesc = new HashDistributionDesc(0, keysDesc.getKeysColumnNames());
+                } else if (keysDesc.getKeysType() == KeysType.DUP_KEYS) {
+                    // no specified distribution, use random distribution
+                    if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
+                        if (properties == null) {
+                            properties = Maps.newHashMap();
+                            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+                        }
+                        distributionDesc = new HashDistributionDesc(0, Lists.newArrayList(columnDefs.get(0).getName()));
+                    } else {
+                        distributionDesc = new RandomDistributionDesc();
+                    }
+                } else {
+                    throw new SemanticException("Currently not support default distribution in " + keysDesc.getKeysType());
+                }
+            }
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+                throw new SemanticException(keysDesc.getKeysType().toSql()
+                        + " cannot use random distribution", distributionDesc.getPos());
+            }
+            if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()
+                    && stmt.getPartitionDesc() != null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_BUCKETS, Config.max_bucket_number_per_partition);
+            }
+            Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            columnSet.addAll(columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toSet()));
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
+            stmt.setDistributionDesc(distributionDesc);
+            stmt.setProperties(properties);
+        } else {
+            if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
+                EsUtil.analyzeDistributionDesc(distributionDesc);
+            } else if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.ICEBERG.name())
+                    || stmt.getEngineName().equalsIgnoreCase(Table.TableType.HIVE.name())) {
+                // no special analyze
+            } else {
+                if (distributionDesc != null) {
+                    throw new SemanticException("Create " + stmt.getEngineName() + " table should not contain distribution desc",
+                            distributionDesc.getPos());
+                }
+            }
+        }
+    }
+
+    private static void analyzeGeneratedColumnForIceberg(CreateTableStmt stmt, ConnectContext context) {
+        List<Column> columns = stmt.getColumns();
+        ListPartitionDesc desc = (ListPartitionDesc) stmt.getPartitionDesc();
+
+        for (Column column : columns) {
+            if (column.isGeneratedColumn()) {
+                if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                    throw new SemanticException("Define iceberg generated column are not supported");
+                }
+                boolean isMatched = desc.getPartitionColNames().stream()
+                        .anyMatch(partitionColName -> partitionColName.equalsIgnoreCase(column.getName()));
+                if (!isMatched) {
+                    throw new SemanticException("Iceberg generated column are illegal");
+                }
+                Expr expr = column.getGeneratedColumnExpr(columns);
+                if (expr instanceof FunctionCallExpr) {
+                    if (null != ((FunctionCallExpr) expr).getDbName()) {
+                        throw new SemanticException("Iceberg transform expression should not have db name");
+                    }
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
+                    if (fnName.equalsIgnoreCase("year") ||
+                            fnName.equalsIgnoreCase("month") ||
+                            fnName.equalsIgnoreCase("day") ||
+                            fnName.equalsIgnoreCase("hour") ||
+                            fnName.equalsIgnoreCase("identity") ||
+                            fnName.equalsIgnoreCase("void")) {
+                        if (expr.getChildren().size() != 1) {
+                            throw new SemanticException("Iceberg transform expression parameter's count not valid");
+                        } else if (!(expr.getChild(0) instanceof SlotRef)) {
+                            throw new SemanticException("Iceberg transform expression's parameter should be a column reference");
+                        }
+                    } else if (fnName.equalsIgnoreCase("truncate") ||
+                            fnName.equalsIgnoreCase("bucket")) {
+                        if (expr.getChildren().size() != 2) {
+                            throw new SemanticException("Iceberg transform expression parameter's count not valid");
+                        } else if (!(expr.getChild(0) instanceof SlotRef)) {
+                            throw new SemanticException("Iceberg transform expression's first parameter is not valid");
+                        } else if (!(expr.getChild(1) instanceof LiteralExpr)) {
+                            throw new SemanticException("Iceberg transform expression's second parameter is not valid");
+                        }
+                    } else {
+                        throw new SemanticException("Iceberg partition column does not support " + fnName +
+                                " transform expression");
+                    }
+                } else {
+                    throw new SemanticException("Should be a function call expr for iceberg generated column");
+                }
+            }
+        }
+    }
+
+    private static void analyzeGeneratedColumnForOlap(CreateTableStmt stmt, ConnectContext context) {
+        KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
+        if (keysDesc.getKeysType() == KeysType.AGG_KEYS) {
             throw new SemanticException("Generated Column does not support AGG table");
         }
 
+        final com.starrocks.catalog.TableName tableNameObject = com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef());
+
+        List<Column> columns = stmt.getColumns();
         Map<String, Column> columnsMap = Maps.newHashMap();
         for (Column column : columns) {
             columnsMap.put(column.getName(), column);
-            if (column.isGeneratedColumn() && keysDesc.containsCol(column.getName())) {
-                throw new SemanticException("Generated Column can not be KEY");
-            }
         }
 
-        if (hasGeneratedColumn) {
-            if (!statement.isOlapEngine()) {
-                throw new SemanticException("Generated Column only support olap table");
+        boolean found = false;
+        for (Column column : columns) {
+            if (found && !column.isGeneratedColumn()) {
+                throw new SemanticException("All generated columns must be defined after ordinary columns");
             }
 
-            if (RunMode.allowCreateLakeTable()) {
-                throw new SemanticException("Does not support generated column in shared data cluster yet");
-            }
-
-            boolean found = false;
-            for (Column column : columns) {
-                if (found && !column.isGeneratedColumn()) {
-                    throw new SemanticException("All generated columns must be defined after ordinary columns");
+            if (column.isGeneratedColumn()) {
+                if (keysDesc.containsCol(column.getName())) {
+                    throw new SemanticException("Generated Column " + column.getName() + " can not be KEY");
                 }
 
-                if (column.isGeneratedColumn()) {
-                    Expr expr = column.generatedColumnExpr();
+                Expr expr = column.getGeneratedColumnExpr(columns);
 
-                    ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
-                            new RelationFields(columns.stream().map(col -> new Field(
-                                            col.getName(), col.getType(), tableNameObject, null))
-                                    .collect(Collectors.toList()))), context);
-
-                    // check if contain aggregation
-                    List<FunctionCallExpr> funcs = Lists.newArrayList();
-                    expr.collect(FunctionCallExpr.class, funcs);
-                    for (FunctionCallExpr fn : funcs) {
-                        if (fn.isAggregateFunction()) {
-                            throw new SemanticException("Generated Column don't support aggregation function");
-                        }
+                List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
+                expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
+                if (dictionaryGetExprs.size() != 0) {
+                    for (DictionaryGetExpr dictionaryGetExpr : dictionaryGetExprs) {
+                        dictionaryGetExpr.setSkipStateCheck(true);
                     }
-
-                    // check if the expression refers to other Generated columns
-                    List<SlotRef> slots = Lists.newArrayList();
-                    expr.collect(SlotRef.class, slots);
-                    if (slots.size() != 0) {
-                        for (SlotRef slot : slots) {
-                            Column refColumn = columnsMap.get(slot.getColumnName());
-                            if (refColumn.isGeneratedColumn()) {
-                                throw new SemanticException("Expression can not refers to other generated columns");
-                            }
-                            if (refColumn.isAutoIncrement()) {
-                                throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
-                            }
-                        }
-                    }
-
-                    if (!column.getType().matchesType(expr.getType())) {
-                        throw new SemanticException("Illege expression type for Generated Column " +
-                                "Column Type: " + column.getType().toString() +
-                                ", Expression Type: " + expr.getType().toString());
-                    }
-
-                    found = true;
                 }
+
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                        new RelationFields(columns.stream().map(col -> new Field(
+                                        col.getName(), col.getType(), tableNameObject, null))
+                                .collect(Collectors.toList()))), context);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
+
+                // check if contain aggregation
+                List<FunctionCallExpr> funcs = Lists.newArrayList();
+                expr.collect(FunctionCallExpr.class, funcs);
+                for (FunctionCallExpr fn : funcs) {
+                    if (fn.isAggregateFunction()) {
+                        throw new SemanticException("Generated Column don't support aggregation function");
+                    }
+                }
+
+                // check if the expression refers to other Generated columns
+                List<SlotRef> slots = Lists.newArrayList();
+                expr.collect(SlotRef.class, slots);
+                if (slots.size() != 0) {
+                    for (SlotRef slot : slots) {
+                        Column refColumn = columnsMap.get(slot.getColumnName());
+                        if (refColumn == null) {
+                            throw new SemanticException("column:" + slot.getColumnName() + " does not exist");
+                        }
+                        if (refColumn.isGeneratedColumn()) {
+                            throw new SemanticException("Expression can not refers to other generated columns");
+                        }
+                        if (refColumn.isAutoIncrement()) {
+                            throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        }
+                    }
+                }
+
+                if (!column.getType().matchesType(expr.getType())) {
+                    throw new SemanticException("Illegal expression type for Generated Column " +
+                            "Column Type: " + column.getType().toString() +
+                            ", Expression Type: " + expr.getType().toString());
+                }
+
+                found = true;
             }
         }
+    }
+
+    public static void analyzeGeneratedColumn(CreateTableStmt stmt, ConnectContext context) {
+        if (stmt.isOlapEngine()) {
+            analyzeGeneratedColumnForOlap(stmt, context);
+        } else if (stmt.isIcebergEngine()) {
+            analyzeGeneratedColumnForIceberg(stmt, context);
+        } else {
+            throw new SemanticException("Generated Column only support olap/iceberg table");
+        }
+        return;
+    }
+
+    public static void analyzeIndexDefs(CreateTableStmt statement) {
         List<IndexDef> indexDefs = statement.getIndexDefs();
+
+        List<Column> columns = statement.getColumns();
+        KeysDesc keysDesc = statement.getKeysDesc();
+
+        List<Index> indexes = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(indexDefs)) {
+            List<String> vectorIndexNames = indexDefs.stream()
+                    .filter(indexDef -> indexDef.getIndexType() == IndexDef.IndexType.VECTOR)
+                    .map(IndexDef::getIndexName)
+                    .collect(Collectors.toList());
+            if (vectorIndexNames.size() > 1) {
+                throw new SemanticException(
+                        String.format("At most one vector index is allowed for a table, but %d were found: %s",
+                                vectorIndexNames.size(), vectorIndexNames));
+            }
+
             Set<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             Set<List<String>> distinctCol = new HashSet<>();
 
             for (IndexDef indexDef : indexDefs) {
-                indexDef.analyze();
+                IndexAnalyzer.analyze(indexDef);
                 if (!statement.isOlapEngine()) {
                     throw new SemanticException("index only support in olap engine at current version", indexDef.getPos());
                 }
+                List<ColumnId> columnIds = new ArrayList<>(indexDef.getColumns().size());
                 for (String indexColName : indexDef.getColumns()) {
                     boolean found = false;
                     for (Column column : columns) {
                         if (column.getName().equalsIgnoreCase(indexColName)) {
-                            indexDef.checkColumn(column, keysDesc.getKeysType());
+                            IndexAnalyzer.checkColumn(column, indexDef.getIndexType(), indexDef.getProperties(),
+                                    keysDesc.getKeysType());
                             found = true;
+                            columnIds.add(column.getColumnId());
                             break;
                         }
                     }
                     if (!found) {
-                        throw new SemanticException("BITMAP column does not exist in table. invalid column: " + indexColName,
+                        throw new SemanticException(
+                                indexDef.getIndexName() + " column does not exist in table. invalid column: " +
+                                        indexColName,
                                 indexDef.getPos());
                     }
                 }
-                indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
-                        indexDef.getComment()));
+                indexes.add(new Index(indexDef.getIndexName(), columnIds, indexDef.getIndexType(),
+                        indexDef.getComment(), indexDef.getProperties()));
+
                 distinct.add(indexDef.getIndexName());
                 distinctCol.add(indexDef.getColumns().stream().map(String::toUpperCase).collect(Collectors.toList()));
             }
@@ -530,6 +1004,33 @@ public class CreateTableAnalyzer {
             if (distinctCol.size() != indexes.size()) {
                 throw new SemanticException("same index columns have multiple index name is not allowed",
                         indexDefs.get(0).getPos());
+            }
+        }
+
+        statement.setIndexes(indexes);
+    }
+
+    private static void validateComplexTypeDefaultValues(CreateTableStmt statement) {
+        Map<String, String> properties = statement.getProperties();
+        boolean fastSchemaEvolution = true;
+
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
+            fastSchemaEvolution = Boolean.parseBoolean(value);
+        }
+
+        if (!fastSchemaEvolution) {
+            List<Column> columns = statement.getColumns();
+            if (columns != null) {
+                for (Column column : columns) {
+                    if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
+                        throw new SemanticException(
+                                "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution. " +
+                                        "Table '" + statement.getTableName() + "' has fast_schema_evolution=false. " +
+                                        "Please remove the 'fast_schema_evolution'='false' property or remove the default " +
+                                        "value for column '" + column.getName() + "'");
+                    }
+                }
             }
         }
     }

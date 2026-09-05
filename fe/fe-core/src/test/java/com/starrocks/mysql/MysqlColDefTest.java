@@ -17,14 +17,14 @@
 
 package com.starrocks.mysql;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class MysqlColDefTest {
     // TODO(dhc): comment to pass ut coverage
     @Test
     public void testCreate() {
         //        Expr expr = EasyMock.createMock(Expr.class);
-        //        EasyMock.expect(expr.getType()).andReturn(ScalarType.createType(PrimitiveType.BIGINT)).anyTimes();
+        //        EasyMock.expect(expr.getType()).andReturn(IntegerType.BIGINT).anyTimes();
         //        EasyMock.replay(expr);
         //
         //        MysqlColDef def = MysqlColDef.fromExpr(expr, "col1");
@@ -50,7 +50,7 @@ public class MysqlColDefTest {
     @Test
     public void testCreateFromName() {
         //        Expr expr = EasyMock.createMock(Expr.class);
-        //        EasyMock.expect(expr.getType()).andReturn(ScalarType.createType(PrimitiveType.BIGINT)).anyTimes();
+        //        EasyMock.expect(expr.getType()).andReturn(IntegerType.BIGINT).anyTimes();
         //        EasyMock.replay(expr);
         //
         //        MysqlColDef def = MysqlColDef.fromName("col1");

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the DATETIME value of a date or datetime expression."
 ---
 
 # timestamp
 
-## Description
+
 
 Returns the DATETIME value of a date or datetime expression.
 

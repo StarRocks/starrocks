@@ -17,15 +17,17 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.common.GenericPool;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
-public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends GenericPool<VALUE> {
+public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends ThriftConnectionPool<VALUE> {
     protected Map<TNetworkAddress, MockedBackend> backendMap = Maps.newConcurrentMap();
 
     public MockGenericPool(String name) {
@@ -37,11 +39,6 @@ public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> ext
 
     @Override
     public boolean reopen(VALUE object, int timeoutMs) {
-        return true;
-    }
-
-    @Override
-    public boolean reopen(VALUE object) {
         return true;
     }
 
@@ -70,6 +67,10 @@ public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> ext
 
     @Override
     public void invalidateObject(TNetworkAddress address, VALUE object) {
+    }
+
+    public List<MockedBackend> getAllBackends() {
+        return new ArrayList<>(backendMap.values());
     }
 
     public static class HeatBeatPool extends MockGenericPool<HeartbeatService.Client> {

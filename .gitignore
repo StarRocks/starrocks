@@ -21,21 +21,29 @@ thirdparty/installed
 core.*
 extension/spark-doris-connector/.classpath
 extension/spark-doris-connector/target
+contrib/*/target/
 fe/log
 **/ut_ports
+venv/
 custom_env.sh
 ut_dir
 log/
 fe_plugins/*/target
+fe/fe-core/pseudo_cluster_*
 fe_plugins/output
 fe/mocked
 fe/ut_ports
 fe/*/target
+fe/*/bin
+fe/target/
+fe/plugin/*/target/
+fe/fe-grammar/gen
+fe/fe-grammar/src/main/antlr/com/starrocks/grammar/gen
 fe/fe-core/gen
 fe/fe-common/.classpath
-fe/fe-core/src/main/java/com/starrocks/sql/parser/gen
 fe/fe-core/src/main/java/com/starrocks/builtins
 fe/fe-core/src/main/java/com/starrocks/common/Version.java
+fe/fe-core/*.log
 fe/fe-core/src/main/java/com/starrocks/proto
 fe/fe-core/src/main/java/com/starrocks/thrift
 fs_brokers/apache_hdfs_broker/src/main/resources/
@@ -48,7 +56,9 @@ test/nosetests.xml
 test/common/data
 tags
 .tags
+.ctags
 .cache
+.direnv/
 *.vim
 *.swo
 compile_commands.json
@@ -56,6 +66,12 @@ compile_commands.json
 .classpath
 .vimspector.json
 .gdb_history
+
+# FE Plugin
+fe/plugin/hive-udf/target
+fe/plugin/spark-dpp/target
+fe/plugin/hive-udf/bin/
+fe/plugin/spark-dpp/bin/
 
 # ignore generated files
 StarRocksLex.tokens
@@ -70,8 +86,10 @@ StarRocksLex.tokens
 /Default/
 be/cmake-build*
 be/.vscode
+be/src/gen_cpp/cmake-build*
 be/src/gen_cpp/*.cc
 be/src/gen_cpp/*.cpp
+!be/src/gen_cpp/thrift_types_customize_impl.cpp
 be/src/gen_cpp/*.h
 be/src/gen_cpp/opcode
 be/src/thirdparty/starcache/
@@ -86,3 +104,25 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
+# Ignore local Claude Code state, but track shared project skills
+.claude/*
+!.claude/skills/
+!docs/.claude/
+!docs/.claude/**
+docs/.claude/settings.local.json
+.clangd
+.cursor/
+.codex/
+.codex
+.worktrees/
+handbook/plans/local/
+
+_codeql_detected_source_root
+test/.venv
+
+.lycheecache
+memory/
+!be/src/runtime/memory/
+!be/src/runtime/memory/**
+!be/test/runtime/memory/
+!be/test/runtime/memory/**

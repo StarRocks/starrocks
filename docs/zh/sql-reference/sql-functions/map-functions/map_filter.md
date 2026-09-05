@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "根据 Boolean 数组或 Lambda 函数过滤 Map 中的键值对。"
 ---
 
 # map_filter
 
-## 功能
+
 
 根据设定的过滤函数返回 MAP 中匹配的 Key-value 对。该过滤函数可以是普通的 Boolean 数组，也可以是灵活的 Lambda 函数。有关 Lambda 函数的详细信息，参见 [Lambda expression](../Lambda_expression.md)。
 

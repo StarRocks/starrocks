@@ -1,0 +1,5 @@
+extends: script
+message: "Use backtick inline code for a literal '%s' instead of a backslash escape. Backslash escapes are silently dropped by the Markdown parser and cause emphasis errors in translated output."
+level: error
+scope: raw
+script: BackslashEscape.tengo

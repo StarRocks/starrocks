@@ -41,7 +41,7 @@ public class ConfigWatcher extends Daemon {
     public final Path configPath;
 
     public ConfigWatcher(String configPathStr) {
-        super("config watcher");
+        super("config-watcher");
         Preconditions.checkState(!Strings.isNullOrEmpty(configPathStr));
         configPath = Paths.get(configPathStr);
     }

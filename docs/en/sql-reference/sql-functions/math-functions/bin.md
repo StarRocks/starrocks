@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Transforms the input arg into a binary."
 ---
 
 # bin
 
-## Description
+
 
 Transforms the input `arg` into a binary.
 

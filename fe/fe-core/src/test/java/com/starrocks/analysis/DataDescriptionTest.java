@@ -36,27 +36,38 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.DataDescription;
-import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.FunctionRef;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class DataDescriptionTest {
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -81,33 +92,33 @@ public class DataDescriptionTest {
         DataDescription desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"),
                 null, null, null, null, false, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt') INTO TABLE testTable", desc.toString());
+        Assertions.assertEquals("DATA INFILE ('abc.txt') INTO TABLE testTable", desc.toString());
 
         desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"), null, null, null,
                 null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt') NEGATIVE INTO TABLE testTable", desc.toString());
+        Assertions.assertEquals("DATA INFILE ('abc.txt') NEGATIVE INTO TABLE testTable", desc.toString());
 
         desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt", "bcd.txt"), null,
                 null, null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable", desc.toString());
+        Assertions.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable", desc.toString());
 
         desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("col1", "col2"), null, null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt') NEGATIVE INTO TABLE testTable (`col1`, `col2`)", desc.toString());
-        Assert.assertEquals("testTable", desc.getTableName());
-        Assert.assertEquals("[col1, col2]", desc.getFileFieldNames().toString());
-        Assert.assertEquals("[abc.txt]", desc.getFilePaths().toString());
-        Assert.assertTrue(desc.isNegative());
-        Assert.assertNull(desc.getColumnSeparator());
+        Assertions.assertEquals("DATA INFILE ('abc.txt') NEGATIVE INTO TABLE testTable (`col1`, `col2`)", desc.toString());
+        Assertions.assertEquals("testTable", desc.getTableName());
+        Assertions.assertEquals("[col1, col2]", desc.getFileFieldNames().toString());
+        Assertions.assertEquals("[abc.txt]", desc.getFilePaths().toString());
+        Assertions.assertTrue(desc.isNegative());
+        Assertions.assertNull(desc.getColumnSeparator());
 
         desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt", "bcd.txt"),
                 Lists.newArrayList("col1", "col2"), new ColumnSeparator("\t"),
                 null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable COLUMNS TERMINATED BY '\t' (`col1`, `col2`)",
+        Assertions.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable COLUMNS TERMINATED BY '\t' (`col1`, `col2`)",
                 desc.toString());
 
         // hive \x01 column separator
@@ -115,15 +126,16 @@ public class DataDescriptionTest {
                 Lists.newArrayList("col1", "col2"), new ColumnSeparator("\\x01"),
                 null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable COLUMNS TERMINATED BY '\\x01' (`col1`, `col2`)",
+        Assertions.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable COLUMNS TERMINATED BY '\\x01' (`col1`, `col2`)",
                 desc.toString());
 
         // with partition
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 Lists.newArrayList("abc.txt"),
                 null, null, null, null, false, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2)", desc.toString());
+        Assertions.assertEquals("DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2)", desc.toString());
 
         // alignment_timestamp func
         List<Expr> params = Lists.newArrayList();
@@ -131,13 +143,14 @@ public class DataDescriptionTest {
         params.add(new SlotRef(null, "k2"));
         BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.ALIGNMENT_TIMESTAMP, params));
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
                 Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
         String sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (alignment_timestamp('day', `k2`)))";
-        Assert.assertEquals(sql, desc.toString());
+        Assertions.assertEquals(sql, desc.toString());
 
         // replace_value func
         params.clear();
@@ -145,13 +158,14 @@ public class DataDescriptionTest {
         params.add(new StringLiteral("10"));
         predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null,
                 false, Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
         sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (replace_value('-', '10')))";
-        Assert.assertEquals(sql, desc.toString());
+        Assertions.assertEquals(sql, desc.toString());
 
         // replace_value null
         params.clear();
@@ -159,44 +173,52 @@ public class DataDescriptionTest {
         params.add(new NullLiteral());
         predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
                 Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
         sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (replace_value('', NULL)))";
-        Assert.assertEquals(sql, desc.toString());
+        Assertions.assertEquals(sql, desc.toString());
 
         // data from table and set bitmap_dict
         params.clear();
         params.add(new SlotRef(null, "k2"));
         predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr("bitmap_dict", params));
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 "testHiveTable", false, Lists.newArrayList(predicate), null);
         desc.analyze("testDb");
         sql = "DATA FROM TABLE testHiveTable INTO TABLE testTable PARTITIONS (p1, p2) SET (`k1` = (bitmap_dict(`k2`)))";
-        Assert.assertEquals(sql, desc.toString());
+        Assertions.assertEquals(sql, desc.toString());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoTable() throws AnalysisException {
-        DataDescription desc = new DataDescription("", null, Lists.newArrayList("abc.txt"),
-                null, null, null, null, false, null);
-        desc.analyze("testDb");
+    @Test
+    public void testNoTable() {
+        assertThrows(AnalysisException.class, () -> {
+            DataDescription desc = new DataDescription("", null, Lists.newArrayList("abc.txt"),
+                    null, null, null, null, false, null);
+            desc.analyze("testDb");
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoFile() throws AnalysisException {
-        DataDescription desc = new DataDescription("testTable", null, null, null, null, null, null, false, null);
-        desc.analyze("testDb");
+    @Test
+    public void testNoFile() {
+        assertThrows(AnalysisException.class, () -> {
+            DataDescription desc = new DataDescription("testTable", null, null, null, null, null, null, false, null);
+            desc.analyze("testDb");
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testDupCol() throws AnalysisException {
-        DataDescription desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"),
-                Lists.newArrayList("col1", "col1"), null, null, null, false, null);
-        desc.analyze("testDb");
+    @Test
+    public void testDupCol() {
+        assertThrows(AnalysisException.class, () -> {
+            DataDescription desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"),
+                    Lists.newArrayList("col1", "col1"), null, null, null, false, null);
+            desc.analyze("testDb");
+        });
     }
 
     @Test
@@ -210,10 +232,10 @@ public class DataDescriptionTest {
         DataDescription dataDescription = new DataDescription(null, null, null, columns, null, null, null, false, null);
         try {
             Deencapsulation.invoke(dataDescription, "analyzeColumns");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             if (!(e instanceof AnalysisException)) {
-                Assert.fail();
+                Assertions.fail();
             }
         }
     }
@@ -225,7 +247,7 @@ public class DataDescriptionTest {
                                                               @Injectable SlotRef column2,
                                                               @Injectable FunctionCallExpr expr1,
                                                               @Injectable FunctionCallExpr expr2,
-                                                              @Injectable FunctionName functionName) {
+                                                              @Injectable FunctionRef functionName) {
         List<String> columns = Lists.newArrayList();
         columns.add("tmp_col1");
         columns.add("tmp_col2");
@@ -244,10 +266,10 @@ public class DataDescriptionTest {
                 columnMapping1.getChild(1);
                 minTimes = 0;
                 result = expr1;
-                expr1.getFnName();
+                expr1.getFnRef();
                 minTimes = 0;
                 result = functionName;
-                functionName.getFunction();
+                functionName.getDbName();
                 minTimes = 0;
                 result = "test";
                 column1.getColumnName();
@@ -262,10 +284,10 @@ public class DataDescriptionTest {
                 null, null, false, columnMappingList);
         try {
             Deencapsulation.invoke(dataDescription, "analyzeColumns");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             if (!(e instanceof AnalysisException)) {
-                Assert.fail();
+                Assertions.fail();
             }
         }
     }

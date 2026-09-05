@@ -20,27 +20,63 @@ set -eo pipefail
 
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
+MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
-. ${STARROCKS_HOME}/env.sh
+. "${STARROCKS_HOME}/build-support/build_helpers.sh"
 
-PARALLEL=$[$(nproc)/4+1]
+append_runtime_library_path() {
+    local dir="$1"
+
+    if [[ -z "${dir}" || ! -d "${dir}" ]]; then
+        return 0
+    fi
+
+    export LD_LIBRARY_PATH="${dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    if starrocks_is_darwin; then
+        export DYLD_LIBRARY_PATH="${dir}${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+    fi
+}
+
+if starrocks_is_darwin; then
+    starrocks_setup_darwin_build_env
+    PARALLEL=$(starrocks_detect_parallelism)
+else
+    . ${STARROCKS_HOME}/env.sh
+    host_parallelism=$(starrocks_detect_parallelism)
+    PARALLEL=$[$host_parallelism/4+1]
+fi
 
 # Check args
 usage() {
   echo "
 Usage: $0 <options>
   Optional options:
-     --test  [TEST_NAME]            run specific test
+     --test TEST_NAME               run specific test
+     --gtest_filter GTEST_FILTER    run test cases with gtest filters
      --dry-run                      dry-run unit tests
      --clean                        clean old unit tests before run
      --with-gcov                    enable to build with gcov
+     --with-dynamic                 enable to build with dynamic libs
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     --without-connector-benchmark  build without the benchgen-backed benchmark connector
+     --without-connector-elasticsearch
+                                    build without the Elasticsearch connector
+     --without-connector-jdbc       build without the JDBC connector
+     --without-connector-mysql
+                                    build without the MySQL connector
+     --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
+     --build-target TARGET          only build the specified target (e.g. base_test)
      --enable-shared-data           enable to build with shared-data feature support
+     --without-starcache            build without starcache library
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
+     --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
+                                    of loading binary into memory and start execution.
+     --without-tenann               build without tenann (vector index library); default is ON on Linux
+     --without-paimon-cpp           build without paimon-cpp library; default is ON on Linux, not supported on macOS
      -j                             build parallel
 
   Eg.
@@ -49,22 +85,55 @@ Usage: $0 <options>
     $0 --dry-run                    dry-run unit tests
     $0 --clean                      clean old unit tests before run
     $0 --help                       display usage
+    $0 --gtest_filter CompactionUtilsTest*:TabletUpdatesTest*   run the two test suites: CompactionUtilsTest and TabletUpdatesTest
   "
   exit 1
 }
 
+# Append negative cases to existing $TEST_NAME
+# refer to https://github.com/google/googletest/blob/main/docs/advanced.md#running-a-subset-of-the-tests
+# for detailed explaination of `--gtest_filter`
+append_negative_case() {
+    local exclude_case=$1
+    case $TEST_NAME in
+      *-*)
+        # already has negative cases, just append the cases to the end
+        TEST_NAME=${TEST_NAME}:$exclude_case
+        ;;
+      *)
+        # doesn't have negative cases, start the negative session
+        TEST_NAME=${TEST_NAME}-$exclude_case
+        ;;
+    esac
+}
+
 # -l run and -l gtest_filter only used for compatibility
-OPTS=$(getopt \
+GETOPT_BIN="$(starrocks_resolve_getopt_bin)" || exit 1
+
+OPTS=$(${GETOPT_BIN} \
   -n $0 \
   -o '' \
   -l 'test:' \
   -l 'dry-run' \
   -l 'clean' \
   -l 'with-gcov' \
+  -l 'with-dynamic' \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
+  -l 'without-connector-benchmark' \
+  -l 'without-connector-elasticsearch' \
+  -l 'without-connector-jdbc' \
+  -l 'without-connector-mysql' \
+  -l 'excluding-test-suit:' \
   -l 'use-staros' \
+  -l 'enable-shared-data' \
+  -l 'build-target:' \
+  -l 'without-starcache' \
+  -l 'without-debug-symbol-split' \
+  -l 'without-java-ext' \
+  -l 'without-tenann' \
+  -l 'without-paimon-cpp' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -81,27 +150,74 @@ CLEAN=0
 DRY_RUN=0
 TEST_NAME=*
 TEST_MODULE=".*"
+EXCLUDING_TEST_SUIT=
 HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
+WITH_CONNECTOR_BENCHMARK=ON
+WITH_CONNECTOR_ELASTICSEARCH=ON
+WITH_CONNECTOR_JDBC=ON
+WITH_CONNECTOR_MYSQL=ON
+if starrocks_is_darwin; then
+    WITH_STARCACHE=OFF
+else
+    WITH_STARCACHE=ON
+fi
+WITH_DEBUG_SYMBOL_SPLIT=ON
+BUILD_JAVA_EXT=ON
+BUILD_TARGET=
+if starrocks_is_darwin; then
+    WITH_TENANN=OFF
+else
+    WITH_TENANN=ON
+fi
+WITH_PAIMON_CPP=ON
+if [[ -z ${WITH_DYNAMIC} ]]; then
+    WITH_DYNAMIC=OFF
+fi
+if [[ -z ${THIN_ARCHIVE} ]]; then
+    THIN_ARCHIVE=$(starrocks_default_ut_thin_archive)
+fi
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
         --dry-run) DRY_RUN=1 ; shift ;;
         --run) shift ;; # Option only for compatibility
-        --test) TEST_NAME=$2 ; shift 2;;
-        --gtest_filter) TEST_NAME=$2 ; shift 2;; # Option only for compatibility
+        --test) TEST_NAME=${2}* ; shift 2;;
+        --gtest_filter) TEST_NAME=$2 ; shift 2;;
         --module) TEST_MODULE=$2; shift 2;;
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+        --with-dynamic) WITH_DYNAMIC=ON; shift ;;
+        --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
+        --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
+        --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
+        --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
+        --without-starcache) WITH_STARCACHE=OFF; shift ;;
+        --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
+        --build-target) BUILD_TARGET=$2; shift 2;;
+        --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
+        --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+        --without-tenann) WITH_TENANN=OFF; shift ;;
+        --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
 done
+
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
+fi
+
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
+fi
 
 if [ ${HELP} -eq 1 ]; then
     usage
@@ -113,6 +229,9 @@ CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
+fi
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -120,26 +239,44 @@ if [[ -z ${USE_AVX512} ]]; then
     # Disable it by default
     USE_AVX512=OFF
 fi
+if [ -e /proc/cpuinfo ] ; then
+    # detect cpuinfo
+    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
+        USE_AVX2=OFF
+    fi
+    if [[ -z $(grep -o 'avx512' /proc/cpuinfo) ]]; then
+        USE_AVX512=OFF
+    fi
+    if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
+        USE_SSE4_2=OFF
+    fi
+    if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
+        USE_BMI_2=OFF
+    fi
+fi
+if [[ -z ${ENABLE_JIT} ]]; then
+    if starrocks_is_darwin; then
+        ENABLE_JIT=OFF
+    else
+        ENABLE_JIT=ON
+    fi
+fi
 echo "Build Backend UT"
 
-CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/ut_build_${CMAKE_BUILD_TYPE}
+if [ -z $CMAKE_BUILD_PREFIX ]; then
+    CMAKE_BUILD_PREFIX=${STARROCKS_HOME}/be
+fi
+
+CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/ut_build_${CMAKE_BUILD_TYPE}
 if [ ${CLEAN} -eq 1 ]; then
-    rm ${CMAKE_BUILD_DIR} -rf
-    rm ${STARROCKS_HOME}/be/output/ -rf
+    rm -rf ${CMAKE_BUILD_DIR}
+    rm -rf ${STARROCKS_HOME}/be/output/
 fi
 
 if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
-
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
-# This option will soon be deprecated.
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    # force turn off cachelib on arm platform
-    WITH_CACHELIB=OFF
-elif [[ -z ${WITH_CACHELIB} ]]; then
-    WITH_CACHELIB=OFF
-fi
+starrocks_reset_stale_darwin_cmake_cache "${CMAKE_BUILD_DIR}"
 
 source ${STARROCKS_HOME}/bin/common.sh
 
@@ -152,36 +289,98 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
-if [[ -z ${WITH_STARCACHE} ]]; then
-    WITH_STARCACHE=ON
+# Build Java Extensions
+if [ ${BUILD_JAVA_EXT} = "ON" ]; then
+    echo "Build Java Extensions"
+    cd ${STARROCKS_HOME}/java-extensions
+    if [ ${CLEAN} -eq 1 ]; then
+        ${MVN_CMD} clean
+    fi
+    ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
+    cd ${STARROCKS_HOME}
+else
+    echo "Skip Building Java Extensions"
 fi
 
+echo "Build script-generated code"
+cd ${STARROCKS_HOME}/gensrc
+if [ ${CLEAN} -eq 1 ]; then
+    make clean
+fi
+make script
+
+if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
+    CCACHE=ccache
+    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros,include_file_ctime"
+fi
+
+cd ${CMAKE_BUILD_DIR}
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
+            -DSTARROCKS_PRECONFIG_MODE=OFF \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=$CCACHE \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
-            -DWITH_CACHELIB=${WITH_CACHELIB} \
+            -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
+            -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
+            -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC} \
+            -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
+            -DWITH_TENANN=${WITH_TENANN} \
+            -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP} \
+            -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
+            -DWITH_RELATIVE_SRC_PATH=OFF \
+            -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
+            -DTHIN_ARCHIVE=${THIN_ARCHIVE} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            ${STARROCKS_HOME}/be
 
-${BUILD_SYSTEM} -j${PARALLEL}
+if [[ -n "$BUILD_TARGET" ]]; then
+    ${BUILD_SYSTEM} -j${PARALLEL} ${BUILD_TARGET}
+else
+    ${BUILD_SYSTEM} -j${PARALLEL}
+fi
+
+cd ${STARROCKS_HOME}
+export STARROCKS_TEST_BINARY_BASE_DIR=${CMAKE_BUILD_DIR}
+export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_BASE_DIR}/test
+
+split_debug_symbol() {
+    local bin="$1"
+    local symbol="${bin}.debuginfo"
+    echo "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
+    objcopy --only-keep-debug "$bin" "$symbol"
+    strip --strip-debug "$bin"
+    objcopy --add-gnu-debuglink="$symbol" "$bin"
+}
+
+if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && ! starrocks_is_darwin ; then
+    if [ "x$WITH_DEBUG_SO_SYMBOL_SPLIT" = "xON" ] ; then
+        find "${STARROCKS_TEST_BINARY_BASE_DIR}" -type f -name "*.so*" ! -name "*.debuginfo" | while read -r so; do
+            split_debug_symbol "$so"
+        done
+    fi
+    if [ -f "${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test" ]; then
+        split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test
+    fi
+    if [ -f "${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test" ]; then
+        split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test
+    fi
+fi
 
 echo "*********************************"
 echo "  Starting to Run BE Unit Tests  "
 echo "*********************************"
 
-cd ${STARROCKS_HOME}
-export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}
 export TERM=xterm
 export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
-for i in `sed 's/ //g' $STARROCKS_HOME/conf/be_test.conf | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`; do
+for i in `sed 's/ //g' $STARROCKS_HOME/conf/be_test.conf | grep -E "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`; do
     eval "export $i";
 done
 
@@ -189,45 +388,92 @@ mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
 
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib"
+
+while IFS= read -r runtime_lib_dir; do
+    append_runtime_library_path "${runtime_lib_dir}"
+done < <(find "${CMAKE_BUILD_DIR}" -type f \( -name "*.so" -o -name "*.so.*" -o -name "*.dylib" -o -name "*.dylib.*" \) \
+    -exec dirname {} \; | sort -u)
+
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
 # this is only for starting be
 jvm_arch="amd64"
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+if [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]; then
     jvm_arch="aarch64"
 fi
 
-if [ "$JAVA_HOME" = "" ]; then
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jvm/$jvm_arch/server:$STARROCKS_HOME/lib/jvm/$jvm_arch:$LD_LIBRARY_PATH
+if starrocks_is_darwin; then
+    if [[ -z "${JAVA_HOME:-}" ]]; then
+        JAVA_HOME="$(starrocks_resolve_java_home "${STARROCKS_THIRDPARTY}/installed/open_jdk")"
+    fi
+    append_runtime_library_path "${JAVA_HOME}/lib/server"
+    append_runtime_library_path "${JAVA_HOME}/lib"
+elif [ "${JAVA_HOME:-}" = "" ]; then
+    append_runtime_library_path "$STARROCKS_HOME/lib/jvm/$jvm_arch/server"
+    append_runtime_library_path "$STARROCKS_HOME/lib/jvm/$jvm_arch"
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/lib/server"
+        append_runtime_library_path "$JAVA_HOME/lib"
     # JAVA_HOME is jdk
     elif [[ -d "$JAVA_HOME/jre"  ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvm_arch/server:$JAVA_HOME/jre/lib/$jvm_arch:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/jre/lib/$jvm_arch/server"
+        append_runtime_library_path "$JAVA_HOME/jre/lib/$jvm_arch"
     # JAVA_HOME is jre
     else
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/$jvm_arch/server:$JAVA_HOME/lib/$jvm_arch:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/lib/$jvm_arch/server"
+        append_runtime_library_path "$JAVA_HOME/lib/$jvm_arch"
     fi
 fi
 
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
-if [ "${WITH_CACHELIB}" == "ON"  ]; then
-    CACHELIB_DIR=${STARROCKS_THIRDPARTY}/installed/cachelib
-    export LD_LIBRARY_PATH=$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
+if ! starrocks_is_darwin && [[ -n "$STARROCKS_GCC_HOME" ]] ; then
+    # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
+    append_runtime_library_path "$(dirname "$($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)")"
 fi
 
+RUN_UT_HADOOP_COMMON_HOME=${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib
+if [[ -d ${RUN_UT_HADOOP_COMMON_HOME} ]] ; then
+    export HADOOP_CLASSPATH=${RUN_UT_HADOOP_COMMON_HOME}/*:${RUN_UT_HADOOP_COMMON_HOME}/lib/*:
+    # get rid of StackOverflowError on the process reaper thread, which has a small stack size.
+    # https://bugs.openjdk.org/browse/JDK-8153057
+    export LIBHDFS_OPTS="$LIBHDFS_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
+else
+    # exclude HdfsFileSystemTest related test case if no hadoop env found
+    echo "[INFO] Can't find available HADOOP common lib, disable HdfsFileSystemTest related test!"
+    append_negative_case "HdfsFileSystemTest*"
+fi
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
+export CLASSPATH=${STARROCKS_HOME}/java-extensions/udf-extensions/target/*:$CLASSPATH
+export CLASSPATH=${STARROCKS_HOME}/java-extensions/java-utils/target/*:$CLASSPATH
 
 # ===========================================================
 
-export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
+asan_options="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
+if starrocks_is_darwin && [[ "${CMAKE_BUILD_TYPE}" == "ASAN" ]]; then
+    # Apple libc++ container annotations can report false positives in static
+    # third-party initializers before gtest starts, for example RE2.
+    asan_options="${asan_options}:detect_container_overflow=0"
+fi
+export ASAN_OPTIONS="${asan_options}"
 
 if [ $WITH_AWS = "OFF" ]; then
-    TEST_NAME="$TEST_NAME*:-*S3*"
+    append_negative_case "*S3*"
+fi
+
+if [ -n "$EXCLUDING_TEST_SUIT" ]; then
+    excluding_test_suit=$EXCLUDING_TEST_SUIT
+    excluding_test_suit_array=("${excluding_test_suit//|/ }")
+    for element in ${excluding_test_suit_array[*]}; do
+        append_negative_case "*.${element}_*"
+    done
 fi
 
 # prepare util test_data
@@ -236,25 +482,30 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
-    | grep -v starrocks_test \
-    | grep -v bench_test \
-    | grep -e "$TEST_MODULE" `
+test_files=$(starrocks_collect_test_binaries "${STARROCKS_TEST_BINARY_DIR}" "${TEST_MODULE}")
 
-# run cases in starrocks_test in parallel if has gtest-parallel script.
-# reference: https://github.com/google/gtest-parallel
-if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
-  echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test"
-  if [ ${DRY_RUN} -eq 0 ]; then
-    if [ -x "${GTEST_PARALLEL}" ]; then
-        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
-            --gtest_filter=${TEST_NAME} \
-            --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
-    else
-        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+echo "[INFO] gtest_filter: $TEST_NAME"
+
+run_test_module() {
+    TARGET=$1
+    # run cases in gunit test in parallel if has gtest-parallel script.
+    # reference: https://github.com/google/gtest-parallel
+    if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == $TARGET ]]; then
+        echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/$TARGET"
+        if [ ${DRY_RUN} -eq 0 ]; then
+            if [ -x "${GTEST_PARALLEL}" ]; then
+                ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/$TARGET \
+                    --gtest_filter=${TEST_NAME} \
+                    --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+            else
+                ${STARROCKS_TEST_BINARY_DIR}/$TARGET $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+            fi
+        fi
     fi
-  fi
-fi
+}
+
+run_test_module starrocks_test
+run_test_module starrocks_dw_test
 
 for test_bin in $test_files
 do

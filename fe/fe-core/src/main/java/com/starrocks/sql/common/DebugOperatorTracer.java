@@ -14,11 +14,7 @@
 
 package com.starrocks.sql.common;
 
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -40,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
@@ -47,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -56,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFetchOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -65,13 +64,16 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -79,13 +81,39 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
+    private String appendProjectionAndPredicate(Operator op) {
+        StringBuilder sb = new StringBuilder();
+        if (op.getProjection() != null && !op.getProjection().getColumnRefMap().isEmpty()) {
+            sb.append(appendProject(op.getProjection().getColumnRefMap()));
+        }
+        if (op.getPredicate() != null) {
+            sb.append(", predicate=").append(op.getPredicate());
+        }
+        return sb.toString();
+    }
+
+    private String appendProject(Map<ColumnRefOperator, ScalarOperator> project) {
+        StringBuilder sb = new StringBuilder();
+        if (project != null && !project.isEmpty()) {
+            String projectionStr = project.entrySet()
+                    .stream()
+                    .map(e -> e.getKey() + "->" + e.getValue())
+                    .collect(Collectors.joining(", ", "projection=[", "]"));
+            sb.append(projectionStr);
+        }
+        return sb.toString();
+    }
+
     @Override
     public String visitOperator(Operator op, Void context) {
         return op.toString();
@@ -94,8 +122,18 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalTableScan(LogicalScanOperator node, Void context) {
         return "LogicalScanOperator" + " {" +
-                "table='" + node.getTable().getId() + '\'' +
+                "table='" + node.getTable().getName() + '\'' +
                 ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
+                appendProjectionAndPredicate(node) +
+                '}';
+    }
+
+    @Override
+    public String visitLogicalViewScan(LogicalViewScanOperator node, Void context) {
+        return "LogicalViewScanOperator" + " {" +
+                "table='" + node.getTable().getName() + '\'' +
+                ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
+                appendProjectionAndPredicate(node) +
                 '}';
     }
 
@@ -106,48 +144,54 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalOlapScan(LogicalOlapScanOperator node, Void context) {
-        return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
+        return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getName() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
+                ", selectedIndexMetaId=" + node.getSelectedIndexMetaId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
+                ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitLogicalHiveScan(LogicalHiveScanOperator node, Void context) {
-        return "LogicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getTableName() +
+        return "LogicalHiveScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitLogicalIcebergScan(LogicalIcebergScanOperator node, Void context) {
         StringBuilder sb = new StringBuilder("LogicalIcebergScanOperator");
-        sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getRemoteTableName())
+        sb.append(" {").append("table=").append(node.getTable().getCatalogTableName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
+                .append(", tvrVersionRange=").append(node.getTvrVersionRange())
+                .append(appendProjectionAndPredicate(node))
                 .append("}");
         return sb.toString();
     }
 
     @Override
     public String visitLogicalHudiScan(LogicalHudiScanOperator node, Void context) {
-        return "LogicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTableName() +
+        return "LogicalHudiScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitLogicalMysqlScan(LogicalMysqlScanOperator node, Void context) {
-        return "LogicalMysqlScanOperator" + " {" + "table=" + ((MysqlTable) node.getTable()).getMysqlTableName() +
+        return "LogicalMysqlScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -160,24 +204,24 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalEsScan(LogicalEsScanOperator node, Void context) {
         return "LogicalEsScanOperator" + " {" + "selectedIndex=" + node.getSelectedIndex() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitLogicalJDBCScan(LogicalJDBCScanOperator node, Void context) {
-        return "LogicalJDBCScanOperator" + " {" + "table=" + ((JDBCTable) node.getTable()).getJdbcTable() +
+        return "LogicalJDBCScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitLogicalProject(LogicalProjectOperator node, Void context) {
-        StringBuilder sb = new StringBuilder("LogicalProjectOperator {projection=");
-        sb.append(new ArrayList<>(node.getColumnRefMap().values()));
+        StringBuilder sb = new StringBuilder("LogicalProjectOperator {");
+        sb.append(appendProject(node.getColumnRefMap()));
         sb.append("}");
         return sb.toString();
     }
@@ -191,7 +235,10 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalAggregation(LogicalAggregationOperator node, Void context) {
         return "LogicalAggregation" + " {type=" + node.getType() +
                 " ,aggregations=" + node.getAggregations() +
-                " ,groupKeys=" + node.getGroupingKeys() + "}";
+                " ,groupKeys=" + node.getGroupingKeys() +
+                ", partitionBys=" + node.getPartitionByColumns() +
+                appendProjectionAndPredicate(node) +
+                "}";
     }
 
     @Override
@@ -200,6 +247,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", orderBy=" + node.getOrderByElements() +
                 ", limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -215,6 +263,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         sb.append(", partitions=").append(node.getPartitionExpressions());
         sb.append(", orderBy=").append(node.getOrderByElements());
         sb.append(", enforceSort").append(node.getEnforceSortColumns());
+        sb.append(appendProjectionAndPredicate(node));
         sb.append("}");
         return sb.toString();
     }
@@ -222,24 +271,32 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalUnion(LogicalUnionOperator node, Void context) {
         return getSetOperationBuilder("LogicalUnionOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitLogicalExcept(LogicalExceptOperator node, Void context) {
         return getSetOperationBuilder("LogicalExceptOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitLogicalIntersect(LogicalIntersectOperator node, Void context) {
         return getSetOperationBuilder("LogicalIntersectOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitLogicalValues(LogicalValuesOperator node, Void context) {
         return super.visitLogicalValues(node, context);
+    }
+
+    @Override
+    public String visitLogicalRawValues(LogicalRawValuesOperator node, Void context) {
+        return "LogicalRawValuesOperator {" +
+               "count=" + node.getConstantCount() +
+               ", constantType=" + node.getConstantType() +
+               appendProjectionAndPredicate(node) + "}";
     }
 
     @Override
@@ -249,7 +306,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalFilter(LogicalFilterOperator node, Void context) {
-        return "LogicalFilterOperator" + " {" + "predicate=" + node.getPredicate() + "}";
+        return "LogicalFilterOperator" + " {" + appendProjectionAndPredicate(node) + "}";
     }
 
     @Override
@@ -259,8 +316,9 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalLimit(LogicalLimitOperator node, Void context) {
-        return "LogicalLimitOperator" + " {limit=" + node.getLimit() +
+        return "LogicalLimitOperator {" + node.getPhase().name() + " limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -288,13 +346,14 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalDistribution(PhysicalDistributionOperator node, Void context) {
         return "PhysicalDistributionOperator" + " {distributionSpec=" + node.getDistributionSpec() +
                 " ,globalDict=" + node.getGlobalDicts() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitPhysicalProject(PhysicalProjectOperator node, Void context) {
-        StringBuilder sb = new StringBuilder("PhysicalProjectOperator {projection=");
-        sb.append(new ArrayList<>(node.getColumnRefMap().values()));
+        StringBuilder sb = new StringBuilder("PhysicalProjectOperator {");
+        sb.append(appendProject(node.getColumnRefMap()));
         sb.append("}");
         return sb.toString();
     }
@@ -305,6 +364,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", groupBy=" + node.getGroupBys() +
                 ", partitionBy=" + node.getPartitionByColumns() +
                 " ,aggregations=" + node.getAggregations() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -322,38 +382,43 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalOlapScan(PhysicalOlapScanOperator node, Void context) {
         return "PhysicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
+                ", selectedIndexMetaId=" + node.getSelectedIndexMetaId() +
                 ", outputColumns=" + node.getOutputColumns() +
-                ", projection=" + node.getProjection() +
-                ", predicate=" + node.getPredicate() +
+                ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitPhysicalHiveScan(PhysicalHiveScanOperator node, Void context) {
-        return "PhysicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getTableName() +
+        return "PhysicalHiveScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
     @Override
     public String visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, Void context) {
         StringBuilder sb = new StringBuilder("PhysicalIcebergScanOperator");
-        sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getRemoteTableName())
+        sb.append(" {").append("table=").append(node.getTable().getCatalogTableName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
+                .append(", tvrVersionRange=").append(node.getTvrVersionRange())
+                .append(appendProjectionAndPredicate(node))
                 .append("}");
         return sb.toString();
     }
 
     @Override
     public String visitPhysicalHudiScan(PhysicalHudiScanOperator node, Void context) {
-        return "PhysicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTableName() +
+        return "PhysicalHudiScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -364,10 +429,10 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, Void context) {
-        return "PhysicalMysqlScanOperator" + " {" + "table=" + ((MysqlTable) node.getTable()).getMysqlTableName() +
+        return "PhysicalMysqlScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -375,8 +440,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalEsScan(PhysicalEsScanOperator node, Void context) {
         return "PhysicalEsScanOperator" + " {" + "selectedIndex=" + node.getSelectedIndex() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -387,10 +452,10 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, Void context) {
-        return "PhysicalJDBCScanOperator" + " {" + "table=" + ((JDBCTable) node.getTable()).getJdbcTable() +
+        return "PhysicalJDBCScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                ", predicate=" + node.getPredicate() +
                 ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -400,6 +465,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", orderBy=" + node.getOrderSpec() +
                 ", limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -416,24 +482,24 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalUnion(PhysicalUnionOperator node, Void context) {
         return getSetOperationBuilder("PhysicalUnionOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitPhysicalExcept(PhysicalExceptOperator node, Void context) {
         return getSetOperationBuilder("PhysicalExceptOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @Override
     public String visitPhysicalIntersect(PhysicalIntersectOperator node, Void context) {
         return getSetOperationBuilder("PhysicalIntersectOperator", node.getOutputColumnRefOp(),
-                node.getChildOutputColumns());
+                node.getChildOutputColumns(), node);
     }
 
     @NotNull
     private String getSetOperationBuilder(String name, List<ColumnRefOperator> outputColumnRefOp,
-                                          List<List<ColumnRefOperator>> childOutputColumns) {
+                                          List<List<ColumnRefOperator>> childOutputColumns, Operator op) {
         StringBuilder sb = new StringBuilder(name);
         sb.append("{");
         sb.append("output=[").append(outputColumnRefOp.stream().map(ColumnRefOperator::toString)
@@ -443,13 +509,23 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 .map(l -> l.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(", ")))
                 .collect(Collectors.joining(", "));
 
-        sb.append(child).append("}");
+        sb.append(child);
+        sb.append(appendProjectionAndPredicate(op));
+        sb.append("}");
         return sb.toString();
     }
 
     @Override
     public String visitPhysicalValues(PhysicalValuesOperator node, Void context) {
         return super.visitPhysicalValues(node, context);
+    }
+
+    @Override
+    public String visitPhysicalRawValues(PhysicalRawValuesOperator node, Void context) {
+        return "PhysicalRawValuesOperator {" +
+               "count=" + node.getConstantCount() +
+               ", constantType=" + node.getConstantType() +
+               appendProjectionAndPredicate(node) + "}";
     }
 
     @Override
@@ -471,6 +547,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalLimit(PhysicalLimitOperator node, Void context) {
         return "PhysicalLimitOperator" + " {limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
+                appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -492,5 +569,38 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalNoCTE(PhysicalNoCTEOperator node, Void context) {
         return super.visitPhysicalNoCTE(node, context);
+    }
+
+    @Override
+    public String visitPhysicalFetch(PhysicalFetchOperator node, Void context) {
+        Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToLazyColumns = node.getRowIdToLazyColumns();
+        Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator = node.getRowIdToScanOperator();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("PhysicalFetchOperator {");
+        sb.append(rowIdToLazyColumns.entrySet().stream().map(entry -> {
+            Table table = rowIdToScanOperator.get(entry.getKey()).getTable();
+            Set<ColumnRefOperator> columns = entry.getValue();
+            String str = columns.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(",", "{", "}"));
+            return "table " + table.getId() + " -> " + str;
+        }).collect(Collectors.joining(",", "{", "}")));
+        sb.append("}");
+        return sb.toString();
+    }
+
+    @Override
+    public String visitPhysicalLookUp(PhysicalLookUpOperator node, Void context) {
+        Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToColumns = node.getRowIdToLazyColumns();
+        Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator = node.getRowIdToScanOperator();
+        StringBuilder sb = new StringBuilder();
+        sb.append("PhysicalLookUpOperator {");
+        sb.append(rowIdToColumns.entrySet().stream().map(entry -> {
+            Table table = rowIdToScanOperator.get(entry.getKey()).getTable();
+            Set<ColumnRefOperator> columns = entry.getValue();
+            String str = columns.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(",", "{", "}"));
+            return "table " + table.getId() + " -> " + str;
+        }).collect(Collectors.joining(",", "{", "}")));
+        sb.append("}");
+        return sb.toString();
     }
 }

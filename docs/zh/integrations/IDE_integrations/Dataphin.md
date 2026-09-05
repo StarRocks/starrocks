@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+sidebar_position: 20
+displayed_sidebar: docs
+description: "Dataphin 与 StarRocks 集成用于数据采集、转换、存储和分析的全生命周期管理。"
 ---
 
 # Dataphin
@@ -22,7 +24,7 @@ Dataphin 与 StarRocks 集成分为以下几种场景：
 
 #### 基本信息
 
-![Create StarRocks datasource - Basic info](../../assets/Dataphin/create_sr_datasource_1.png)
+![Create StarRocks datasource - Basic info](../../_assets/Dataphin/create_sr_datasource_1.png)
 
 - **数据源名称**：必填。输入数据源的名称，只能包含中文、字母、数字、下划线（_）或中划线（-），长度不能超过 64 个字符。
 
@@ -38,7 +40,7 @@ Dataphin 与 StarRocks 集成分为以下几种场景：
 
 #### 配置信息
 
-![Create StarRocks datasource - Configuration info](../../assets/Dataphin/create_sr_datasource_2.png)
+![Create StarRocks datasource - Configuration info](../../_assets/Dataphin/create_sr_datasource_2.png)
 
 - **JDBC URL**：必填。格式为 `jdbc:mysql://<host>:<port>/<dbname>`，其中 `host` 为 StarRocks 集群的 FE（Front End）主机 IP 地址，`port` 为 FE 的查询端口，`dbname` 为数据库名称。
 
@@ -50,7 +52,7 @@ Dataphin 与 StarRocks 集成分为以下几种场景：
 
 #### 高级设置
 
-![Create StarRocks datasource - Advanced settings](../../assets/Dataphin/create_sr_datasource_3.png)
+![Create StarRocks datasource - Advanced settings](../../_assets/Dataphin/create_sr_datasource_3.png)
 
 - **connectTimeout**：数据库的 `connectTimeout` 时长（单位 ms），默认 900000 毫秒（15 分钟）。
 
@@ -60,11 +62,11 @@ Dataphin 与 StarRocks 集成分为以下几种场景：
 
 #### 在离线集成任务画布中拖入 StarRocks 输入组件
 
-![Read from StarRocks - 1](../../assets/Dataphin/read_from_sr_datasource_1.png)
+![Read from StarRocks - 1](../../_assets/Dataphin/read_from_sr_datasource_1.png)
 
 #### 配置 StarRocks 输入组件配置
 
-![Read from StarRocks - 2](../../assets/Dataphin/read_from_sr_datasource_2.png)
+![Read from StarRocks - 2](../../_assets/Dataphin/read_from_sr_datasource_2.png)
 
 - **步骤名称**：根据当前组件的使用场景及定位，输入合适的名称。
 
@@ -89,21 +91,21 @@ Dataphin 与 StarRocks 集成分为以下几种场景：
 
 ### 选择目标数据源作为输出组件并配置
 
-![Select data source as output component](../../assets/Dataphin/write_to_sr_datasource_1.png)
+![Select data source as output component](../../_assets/Dataphin/write_to_sr_datasource_1.png)
 
 #### 选择目标数据源作为输出组件，并配置输出组件
 
-![Read from StarRocks - 3](../../assets/Dataphin/read_from_sr_datasource_3.png)
+![Read from StarRocks - 3](../../_assets/Dataphin/read_from_sr_datasource_3.png)
 
 ### 从其他数据源读取数据写入到 StarRocks 数据源
 
 #### 在离线集成任务中配置输入组件，配置 StarRocks 输出组件作为下游
 
-![Write to StarRocks - 1](../../assets/Dataphin/write_to_sr_datasource_1.png)
+![Write to StarRocks - 1](../../_assets/Dataphin/write_to_sr_datasource_1.png)
 
 #### 配置 StarRocks 输出组件
 
-![Write to StarRocks - 2](../../assets/Dataphin/write_to_sr_datasource_2.png)
+![Write to StarRocks - 2](../../_assets/Dataphin/write_to_sr_datasource_2.png)
 
 - **步骤名称**：根据当前组件的使用场景及定位，输入合适的名称。
 
@@ -150,7 +152,7 @@ Dataphin 支持 StarRocks 数据源作为实时计算的读写目标端，支持
 
 2. 点击**新建**，选择**实时计算表**。
 
-   ![Create StarRocks metatable - 1](../../assets/Dataphin/create_sr_metatable_1.png)
+   ![Create StarRocks metatable - 1](../../_assets/Dataphin/create_sr_metatable_1.png)
 
    - **表类型**：选择**元表**。
 
@@ -164,11 +166,11 @@ Dataphin 支持 StarRocks 数据源作为实时计算的读写目标端，支持
 
    - **描述**：选填。输入原表的简单描述。
 
-   ![Create StarRocks metatable - 2](../../assets/Dataphin/create_sr_metatable_2.png)
+   ![Create StarRocks metatable - 2](../../_assets/Dataphin/create_sr_metatable_2.png)
 
 3. 建好元表后，可以对元表进行编辑，包括修改数据源、来源表、元表字段、配置元表参数等。
 
-   ![Edit StarRocks metatable](../../assets/Dataphin/edit_sr_metatable_1.png)
+   ![Edit StarRocks metatable](../../_assets/Dataphin/edit_sr_metatable_1.png)
 
 4. 提交元表。
 
@@ -178,25 +180,25 @@ Dataphin 支持 StarRocks 数据源作为实时计算的读写目标端，支持
 
 2. 点击**新建 Flink SQL 任务**。
 
-   ![Create Flink SQL task -1 ](../../assets/Dataphin/create_flink_task_1.png)
+   ![Create Flink SQL task -1 ](../../_assets/Dataphin/create_flink_task_1.png)
 
 3. 编辑 Fink SQL 代码并进行预编译，这里用到了 Kafka 元表作为输入表，StarRocks 元表作为输出表。
 
-   ![Create Flink SQL task - 2](../../assets/Dataphin/create_flink_task_2.png)
+   ![Create Flink SQL task - 2](../../_assets/Dataphin/create_flink_task_2.png)
 
-   ![Create Flink SQL task - 3](../../assets/Dataphin/create_flink_task_3.png)
+   ![Create Flink SQL task - 3](../../_assets/Dataphin/create_flink_task_3.png)
 
 4. 预编译成功后，可以对代码进行调试、提交。
 
 5. 在开发环境进行测试，可以通过打印日志和写测试表两种方式进行，其中测试表可以在**元表** > **属性** > **调试测试配置**中进行设置。
 
-   ![Create Flink SQL task - 4](../../assets/Dataphin/create_flink_task_4.png)
+   ![Create Flink SQL task - 4](../../_assets/Dataphin/create_flink_task_4.png)
 
-   ![Create Flink SQL task - 5](../../assets/Dataphin/create_flink_task_5.png)
+   ![Create Flink SQL task - 5](../../_assets/Dataphin/create_flink_task_5.png)
 
 6. 开发环境任务正常运行后，可以将任务及用到的元表一起发布到生产环境。
 
-   ![Create Flink SQL task - 6](../../assets/Dataphin/create_flink_task_6.png)
+   ![Create Flink SQL task - 6](../../_assets/Dataphin/create_flink_task_6.png)
 
 7. 在生产环境启动任务，实现将 Kafka 中的数据实时写入到 StarRocks 中。可以通过查看运行分析中各指标的情况和日志了解任务运行情况，也可以为任务配置监控告警。
 
@@ -208,7 +210,7 @@ Dataphin 支持 StarRocks 数据源作为实时计算的读写目标端，支持
 
 - 已安装 Dataphin，且 Dataphin 版本为 3.12 及以上。
 
-- 统计信息采集已开启，StarRocks 安装后采集即默认开启。详情见[CBO 统计信息](https://docs.starrocks.io/zh-cn/latest/using_starrocks/Cost_based_optimizer)。
+- 统计信息采集已开启，StarRocks 安装后采集即默认开启。详情见[CBO 统计信息](https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/)。
 
 - 仅支持 StarRocks Internal Catalog，即 `default_catalog`，不支持 External Catalog。
 
@@ -230,7 +232,7 @@ Dataphin 可以基于元数据进行信息的呈现与展示，包括表使用�
 
    d. 完成元仓初始化。
 
-   ![Metadata compute engine settings](../../assets/Dataphin/metadata_engine_settings_1.png)
+   ![Metadata compute engine settings](../../_assets/Dataphin/metadata_engine_settings_1.png)
 
    参数说明如下：
 
@@ -294,7 +296,7 @@ Dataphin 可以基于元数据进行信息的呈现与展示，包括表使用�
 
    **基本信息**
 
-   ![Create compute engine - 1](../../assets/Dataphin/create_compute_engine_1.png)
+   ![Create compute engine - 1](../../_assets/Dataphin/create_compute_engine_1.png)
 
    - **计算源类型**：选择 **StarRocks**。
 
@@ -304,7 +306,7 @@ Dataphin 可以基于元数据进行信息的呈现与展示，包括表使用�
 
    **配置信息**
 
-   ![Create compute engine - 2](../../assets/Dataphin/create_compute_engine_2.png)
+   ![Create compute engine - 2](../../_assets/Dataphin/create_compute_engine_2.png)
 
    - **JDBC URL**：格式为 `jdbc:mysql://<Host>:<Port>/`，其中 `Host` 为 StarRocks 集群的 FE 主机 IP 地址，`Port` 为 FE 的查询端口，默认为 9030。
 
@@ -316,7 +318,7 @@ Dataphin 可以基于元数据进行信息的呈现与展示，包括表使用�
 
    - **任务资源组**：可指定不同优先级的任务使用不同的 StarRocks 资源组。选择**不指定资源组**时，由 StarRocks 引擎决定执行的资源组；选择**指定资源组**时，不同优先级的任务将在执行时由 Dataphin 指定到设置的资源组。若在 SQL 任务的代码里、以及逻辑表的物化配置里指定了资源组，则以代码的设置及逻辑表的物化配置为准，计算源的任务资源组配置在该任务执行时将被忽略。
 
-   ![Create compute engine - 3](../../assets/Dataphin/create_compute_engine_3.png)
+   ![Create compute engine - 3](../../_assets/Dataphin/create_compute_engine_3.png)
 
 ##### 步骤三：创建 Dataphin 项目
 
@@ -344,10 +346,10 @@ Dataphin 可以基于元数据进行信息的呈现与展示，包括表使用�
 
 2. 点击右上角的 **+**，创建 StarRocks SQL 任务。
 
-   ![Create Dataphin project - 1](../../assets/Dataphin/configure_dataphin_project_1.png)
+   ![Create Dataphin project - 1](../../_assets/Dataphin/configure_dataphin_project_1.png)
 
 3. 填入名称及调度类型后，完成 SQL 任务的创建。
 
 4. 在编辑器输入 SQL，即可开始对 StarRock 进行 DDL 及 DML 操作。
 
-   ![Create Dataphin project - 2](../../assets/Dataphin/configure_dataphin_project_2.png)
+   ![Create Dataphin project - 2](../../_assets/Dataphin/configure_dataphin_project_2.png)

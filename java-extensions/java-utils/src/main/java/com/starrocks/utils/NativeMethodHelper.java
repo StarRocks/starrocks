@@ -27,6 +27,15 @@ public final class NativeMethodHelper {
     // return byteAddr
     public static native long resizeStringData(long columnAddr, int byteSize);
 
+    public static native void resize(long columnAddr, int size);
+
+    public static native int getColumnLogicalType(long columnAddr);
+
     // [nullAddr, dataAddr]
     public static native long[] getAddrs(long columnAddr);
+
+    // For NullableColumn(StructColumn), return one address per STRUCT field. Each
+    // returned address is the field's outer NullableColumn so the same getAddrs /
+    // resize / per-type writer contract applies recursively.
+    public static native long[] getStructFieldAddrs(long columnAddr);
 }

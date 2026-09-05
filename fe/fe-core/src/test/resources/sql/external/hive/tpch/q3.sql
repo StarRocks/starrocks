@@ -1,26 +1,3 @@
-[sql]
-select
-    l_orderkey,
-    sum(l_extendedprice * (1 - l_discount)) as revenue,
-    o_orderdate,
-    o_shippriority
-from
-    customer,
-    orders,
-    lineitem
-where
-  c_mktsegment = 'HOUSEHOLD'
-  and c_custkey = o_custkey
-  and l_orderkey = o_orderkey
-  and o_orderdate < date '1995-03-11'
-  and l_shipdate > date '1995-03-11'
-group by
-    l_orderkey,
-    o_orderdate,
-    o_shippriority
-order by
-    revenue desc,
-    o_orderdate limit 10;
 [fragment statistics]
 PLAN FRAGMENT 0(F07)
 Output Exprs:18: l_orderkey | 35: sum | 13: o_orderdate | 16: o_shippriority
@@ -55,7 +32,7 @@ OutPut Exchange Id: 14
 |  * sum-->[810.9, 1315947.4994776787, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 12:AGGREGATE (update finalize)
-|  aggregate: sum[([34: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([34: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [18: l_orderkey, INT, true], [13: o_orderdate, DATE, true], [16: o_shippriority, INT, true]
 |  cardinality: 46851716
 |  column statistics:
@@ -69,7 +46,7 @@ OutPut Exchange Id: 14
 |  13 <-> [13: o_orderdate, DATE, true]
 |  16 <-> [16: o_shippriority, INT, true]
 |  18 <-> [18: l_orderkey, INT, true]
-|  34 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  34 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 46851716
 |  column statistics:
 |  * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
@@ -144,6 +121,7 @@ NON-PARTITION PREDICATES: 13: o_orderdate < '1995-03-11'
 MIN/MAX PREDICATES: 13: o_orderdate < '1995-03-11'
 partitions=1/1
 avgRowSize=24.0
+dataCacheOptions={populate: false}
 cardinality: 72661123
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)
@@ -172,6 +150,7 @@ NON-PARTITION PREDICATES: 7: c_mktsegment = 'HOUSEHOLD'
 MIN/MAX PREDICATES: 7: c_mktsegment <= 'HOUSEHOLD', 7: c_mktsegment >= 'HOUSEHOLD'
 partitions=1/1
 avgRowSize=18.0
+dataCacheOptions={populate: false}
 cardinality: 3000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
@@ -200,6 +179,7 @@ NON-PARTITION PREDICATES: 28: l_shipdate > '1995-03-11'
 MIN/MAX PREDICATES: 28: l_shipdate > '1995-03-11'
 partitions=1/1
 avgRowSize=28.0
+dataCacheOptions={populate: false}
 cardinality: 323426370
 probe runtime filters:
 - filter_id = 1, probe_expr = (18: l_orderkey)

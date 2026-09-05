@@ -34,30 +34,59 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
-import com.starrocks.common.UserException;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
+import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
+import com.starrocks.thrift.TConnectorScanNode;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.collections4.CollectionUtils;
+import org.jetbrains.annotations.TestOnly;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * Representation of the common elements of all scan nodes.
  */
 public abstract class ScanNode extends PlanNode {
-    protected final TupleDescriptor desc;
+    protected TupleDescriptor desc;
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
-    protected ScanOptimzeOption scanOptimzeOption;
+    protected DataCacheOptions dataCacheOptions = null;
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    protected ScanOptimizeOption scanOptimizeOption;
+    // The column names applied dict optimization
+    // used for explain
+    protected final List<String> appliedDictStringColumns = new ArrayList<>();
+    // NOTE: To avoid trigger a new compute resource creation, set the value when the scan node needs to use it.
+    // The compute resource used by this scan node.
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    // the scan node's version range to scan
+    protected TvrVersionRange tvrVersionRange;
+
+    private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -72,27 +101,82 @@ public abstract class ScanNode extends PlanNode {
         this.columnAccessPaths = columnAccessPaths;
     }
 
-    public void setScanOptimzeOption(ScanOptimzeOption opt) {
-        this.scanOptimzeOption = opt.copy();
+    @TestOnly
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return this.columnAccessPaths;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+    }
+
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
+    }
+
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
+    }
+
+    public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (appliedColumnIds.contains(slot.getId().asInt())) {
+                appliedDictStringColumns.add(slot.getColumn().getName());
+            }
+        }
+    }
+
+    public TupleDescriptor getDesc() {
+        return desc;
     }
 
     public String getTableName() {
         return desc.getTable().getName();
     }
 
+    public int getBucketNums() throws StarRocksException {
+        throw new StarRocksException("Error when using bucket-aware execution");
+    }
+
+    public Optional<List<BucketProperty>> getBucketProperties() throws StarRocksException {
+        throw new StarRocksException("Error when using bucket-aware execution");
+    }
+
+    public boolean isLocalNativeTable() {
+        return false;
+    }
+
+    public boolean hasMoreScanRanges() {
+        return false;
+    }
+
+    public void setReachLimit() {
+    }
+
+    /**
+     * Hook for subclasses that hold external resources (scan range sources, iterators, etc.)
+     * to release them when query finishes/cancels. Default no-op.
+     */
+    public void clear() {
+    }
+
     /**
      * cast expr to SlotDescriptor type
      */
-    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws UserException {
+    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {
         if (!slotDesc.getType().matchesType(expr.getType())) {
-            return expr.castTo(slotDesc.getType());
+            return ExprCastFunction.castTo(expr, slotDesc.getType());
         } else {
             return expr;
         }
+    }
+
+    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
+        this.tvrVersionRange = tvrVersionRange;
     }
 
     /**
@@ -114,9 +198,12 @@ public abstract class ScanNode extends PlanNode {
 
     protected String explainColumnAccessPath(String prefix) {
         String result = "";
-        if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate())) {
+        if (CollectionUtils.isEmpty(columnAccessPaths)) {
+            return result;
+        }
+        if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate() && !c.isExtended())) {
             result += prefix + "ColumnAccessPath: [" + columnAccessPaths.stream()
-                    .filter(c -> !c.isFromPredicate())
+                    .filter(c -> !c.isFromPredicate() && !c.isExtended())
                     .map(ColumnAccessPath::explain)
                     .sorted()
                     .collect(Collectors.joining(", ")) + "]\n";
@@ -124,6 +211,14 @@ public abstract class ScanNode extends PlanNode {
         if (columnAccessPaths.stream().anyMatch(ColumnAccessPath::isFromPredicate)) {
             result += prefix + "PredicateAccessPath: [" + columnAccessPaths.stream()
                     .filter(ColumnAccessPath::isFromPredicate)
+                    .map(ColumnAccessPath::explain)
+                    .sorted()
+                    .collect(Collectors.joining(", ")) + "]\n";
+        }
+        // explain the extended column access path if ColumnAccessPath::isExtended
+        if (columnAccessPaths.stream().anyMatch(ColumnAccessPath::isExtended)) {
+            result += prefix + "ExtendedColumnAccessPath: [" + columnAccessPaths.stream()
+                    .filter(ColumnAccessPath::isExtended)
                     .map(ColumnAccessPath::explain)
                     .sorted()
                     .collect(Collectors.joining(", ")) + "]\n";
@@ -141,5 +236,65 @@ public abstract class ScanNode extends PlanNode {
 
     protected boolean supportTopNRuntimeFilter() {
         return false;
+    }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+
+    // We use this flag to know how many connector scan nodes at BE side, and connector framework
+    // will use this number to fair share memory usage between those scan nodes.
+    public boolean isRunningAsConnectorOperator() {
+        return true;
+    }
+
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+    }
+
+    public boolean isConnectorScanNode() {
+        return this instanceof HdfsScanNode || this instanceof IcebergScanNode ||
+                this instanceof HudiScanNode || this instanceof DeltaLakeScanNode ||
+                this instanceof FileTableScanNode || this instanceof PaimonScanNode ||
+                this instanceof OdpsScanNode || this instanceof IcebergMetadataScanNode ||
+                this instanceof FlussScanNode;
+    }
+
+    protected String explainColumnDict(String prefix) {
+        StringBuilder output = new StringBuilder();
+        if (!appliedDictStringColumns.isEmpty()) {
+            int limit = Math.max(0, Config.explain_dict_column_size);
+            int maxSize = Math.min(appliedDictStringColumns.size(), limit);
+            List<String> printList = appliedDictStringColumns.subList(0, maxSize);
+            String format_template = "dict_col=%s";
+            if (appliedDictStringColumns.size() > limit) {
+                format_template = format_template + "...";
+            }
+            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
+            output.append("\n");
+        }
+        return output.toString();
+    }
+
+    public void setHeavyExprs(Map<SlotId, Expr> heavyExprs) {
+        this.heavyExprs = heavyExprs;
+    }
+
+    public Map<SlotId, Expr> getHeavyExprs() {
+        return heavyExprs;
+    }
+
+    public void prepareRetry() {
+        // default no-op: subclasses that maintain streaming scan state should override
+    }
+
+    protected void setConnectorCatalogType(TPlanNode msg) {
+        Table table = desc.getTable();
+        if (table != null) {
+            TConnectorScanNode connectorScanNode = msg.isSetConnector_scan_node()
+                    ? msg.getConnector_scan_node() : new TConnectorScanNode();
+            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(table.getType()));
+            msg.setConnector_scan_node(connectorScanNode);
+        }
     }
 }

@@ -14,11 +14,13 @@
 
 #pragma once
 
-#include "connector/connector.h"
+#include "compute_env/query/connector_scan_mem_share_arbitrator.h"
+#include "compute_env/workgroup/work_group_fwd.h"
+#include "connector_primitive/connector.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/workgroup/work_group_fwd.h"
+#include "gutil/casts.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -41,6 +43,8 @@ public:
 
     ~ConnectorScanOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
@@ -49,16 +53,30 @@ public:
 
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
     const std::vector<ExprContext*>& partition_exprs() const override;
-    void set_estimated_mem_usage_per_chunk_source(int64_t mem_usage);
-    void set_scan_mem_limit(int64_t mem_limit);
+    const std::vector<TBucketProperty>& get_bucket_properties() const override;
+    void set_chunk_source_mem_bytes(int64_t mem_bytes);
+    void set_scan_mem_limit(int64_t scan_mem_limit);
+    void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
+    void set_data_source_mem_bytes(int64_t value);
+    Status mark_split_source_morsel_finished();
+
+    void attach_shared_input(int32_t operator_seq, int32_t source_index);
+    void detach_shared_input(int32_t operator_seq, int32_t source_index);
+    bool active_inputs_empty_event() {
+        bool val = true;
+        return _active_inputs_empty.compare_exchange_strong(val, false);
+    }
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
     ActiveInputSet _active_inputs;
+    std::atomic_int _num_active_inputs{};
+    std::atomic_bool _active_inputs_empty{};
 
 public:
-    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
+    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter = nullptr;
+    ConnectorScanOperatorMemShareArbitrator* _mem_share_arb = nullptr;
 };
 
 struct ConnectorScanOperatorAdaptiveProcessor;
@@ -73,35 +91,62 @@ public:
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
-    connector::ConnectorType connector_type();
+    connector::ConnectorType connector_type() const;
 
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
-    ChunkPtr get_chunk_from_buffer() override;
-    size_t num_buffered_chunks() const override;
-    size_t buffer_size() const override;
-    size_t buffer_capacity() const override;
-    size_t buffer_memory_usage() const override;
-    size_t default_buffer_capacity() const override;
-    ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
-    bool is_buffer_full() const override;
-    void set_buffer_finished() override;
+    BalancedChunkBuffer& get_chunk_buffer() const override {
+        auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+        return factory->get_chunk_buffer();
+    }
 
     int available_pickup_morsel_count() override;
     void begin_driver_process() override;
-    void end_driver_process(PipelineDriver* driver) override;
+    void end_driver_process(DriverState driver_state) override;
     bool is_running_all_io_tasks() const override;
 
-public:
+    Status append_morsels(std::vector<MorselPtr>&& morsels);
+    Status mark_split_source_morsel_finished();
+    ConnectorScanOperatorAdaptiveProcessor* adaptive_processor() const { return _adaptive_processor; }
+    bool enable_adaptive_io_tasks() const { return _enable_adaptive_io_tasks; }
+
+    workgroup::ScanSchedEntityType sched_entity_type() const override {
+        return workgroup::ScanSchedEntityType::CONNECTOR;
+    }
+    std::string get_name() const override;
+    bool need_notify_all() override;
+
+    int64_t get_scan_table_id() const override;
+
+private:
+    int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
+    bool _can_reuse_chunk_source_for(Morsel& morsel) const override;
+    void _record_reusable_chunk_source_event(ReusableChunkSourceEvent event) override;
+    bool _is_empty_slot_for_new_morsel(int chunk_source_index) const override;
+    ReusableChunkSourceLookup _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                                          Morsel& morsel) override;
+    void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                      ChunkSourcePtr chunk_source) override;
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
+    // Only the lake prepared-physical-split path uses chunk-source reuse. Cache the flag once so the
+    // per-morsel reuse hot path (slot classification lock, dynamic_cast) is skipped when it is off,
+    // keeping the flag-off scan path identical to the pre-optimization behavior.
+    bool _prepared_split_reuse_enabled = false;
+    std::vector<ChunkSourcePtr> _reusable_chunk_sources;
+    RuntimeProfile::Counter* _chunk_source_reuse_candidate_counter = nullptr;
+    RuntimeProfile::Counter* _chunk_source_reuse_hit_counter = nullptr;
+    RuntimeProfile::Counter* _chunk_source_reuse_miss_counter = nullptr;
+    RuntimeProfile::Counter* _chunk_source_reuse_stale_close_counter = nullptr;
+    RuntimeProfile::Counter* _chunk_source_reuse_failure_counter = nullptr;
 };
 
 class ConnectorChunkSource : public ChunkSource {
 public:
     ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer,
+                         bool enable_adaptive_io_tasks);
 
     ~ConnectorChunkSource() override;
 
@@ -110,18 +155,27 @@ public:
     const std::string get_custom_coredump_msg() const override;
 
     bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }
+    bool has_reusable_state() const override;
+    bool can_reuse_with(Morsel& morsel) const override;
+    Status reuse(RuntimeState* state, MorselPtr&& morsel) override;
+    void release_for_reuse(RuntimeState* state) override;
+
+    uint64_t avg_row_mem_bytes() const;
 
 protected:
-    virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
-    Status _open_data_source(RuntimeState* state);
+    virtual bool _reach_eof() const { return _limit != -1 && _chunk_rows_read >= _limit; }
+    Status _open_data_source(RuntimeState* state, bool* mem_alloc_failed);
 
     connector::DataSourcePtr _data_source;
     [[maybe_unused]] ConnectorScanNode* _scan_node;
 
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
-
-    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
+    Status _report_split_source_morsel_finished_once();
+    Status _publish_generated_split_tasks(RuntimeState* state);
+    bool _should_publish_generated_split_tasks_after_open() const;
+    void _reset_reuse_state(RuntimeState* state, MorselPtr&& morsel);
+    void _update_catalog_metrics();
 
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 
@@ -137,7 +191,13 @@ private:
     ChunkPipelineAccumulator _ck_acc;
     bool _opened = false;
     bool _closed = false;
-    uint64_t _rows_read = 0;
+    bool _is_split_source_morsel = false;
+    bool _split_source_morsel_reported = false;
+    uint64_t _chunk_rows_read = 0;
+    uint64_t _chunk_mem_bytes = 0;
+    int64_t _request_mem_tracker_bytes = 0;
+    int64_t _mem_alloc_failed_count = 0;
+    bool _enable_adaptive_io_tasks = true;
 };
 
 } // namespace pipeline

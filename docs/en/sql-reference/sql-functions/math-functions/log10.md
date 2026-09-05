@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Calculates the base 10 logarithm of a number."
 ---
 
 # log10, dlog10
 
-## Description
+
 
 Calculates the base 10 logarithm of a number.
 

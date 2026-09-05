@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回以弧度表示的角度x的余切值。"
 ---
 
 # cot
 
-## 功能
+
 
 求参数 `x` 的余切值，`x` 是弧度。如果输入值为 `0` 或者 `NULL`，则返回 `NULL`。
 

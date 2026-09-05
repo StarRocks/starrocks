@@ -1,0 +1,21 @@
+-- name: test_stream_load_txn_coordinator
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `test` (
+  `id` int
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+shell: curl --location-trusted -u root: -H "Expect:100-continue"  -X PUT -d '1' ${url}/api/db_${uuid0}/test/_stream_load
+[UC]shell: curl --location-trusted -u root: -H "label:test" -H "db:db_${uuid0}" -H "table:test" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:test" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test" -d '1' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:test" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/prepare
+[UC]shell: curl --location-trusted -u root: -H "label:test" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/commit
+
+shell: env url="${url}" db="db_${uuid0}" bash ${root_path}/sql/test_stream_load/T/verify_txn_coordinator.sh

@@ -19,15 +19,12 @@ import com.starrocks.jni.connector.ColumnType;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class HudiScannerUtils {
-    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     public static final Map<String, String> HIVE_TYPE_MAPPING = new HashMap<>();
     public static Map<ColumnType.TypeValue, TimeUnit> TIMESTAMP_UNIT_MAPPING = new HashMap<>();
 
@@ -45,12 +42,7 @@ public class HudiScannerUtils {
     private static final long MICRO = 1_000_000;
     private static final long NANO = 1_000_000_000;
 
-    public static LocalDateTime getTimestamp(long value, TimeUnit timeUnit, boolean isAdjustedToUTC) {
-
-        ZoneId zone = ZoneOffset.UTC;
-        if (isAdjustedToUTC) {
-            zone = ZoneId.systemDefault();
-        }
+    public static LocalDateTime getTimestamp(long value, TimeUnit timeUnit, ZoneId zoneId) {
         long seconds = 0L;
         long nanoseconds = 0L;
 
@@ -77,11 +69,7 @@ public class HudiScannerUtils {
             default:
                 break;
         }
-        return LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds, nanoseconds), zone);
-    }
-
-    public static String formatDateTime(LocalDateTime dateTime) {
-        return dateTime.format(DATETIME_FORMATTER);
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds, nanoseconds), zoneId);
     }
 
     public static boolean isMaybeInt64Timestamp(ColumnType.TypeValue type) {
@@ -91,7 +79,6 @@ public class HudiScannerUtils {
     }
 
     public static String mapColumnTypeToHiveType(ColumnType type) {
-        ColumnType.TypeValue typeValue = type.getTypeValue();
         StringBuilder sb = new StringBuilder();
         if (type.isStruct()) {
             List<String> childNames = type.getChildNames();

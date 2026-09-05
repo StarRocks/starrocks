@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Adds the specified minutes to the date, accurate to the minute."
 ---
 
 # minutes_add
 
-## Description
+
 
 Adds the specified minutes to the date, accurate to the minute.
 

@@ -49,11 +49,12 @@ class OlapScanNode;
 class Chunk;
 
 class Expr;
-class MemPool;
 class MemTracker;
 class RuntimeState;
 class ObjectPool;
 class TColumnValue;
+class BloomFilter;
+struct NgramBloomFilterReaderOptions;
 
 /// An ExprContext contains the state for the execution of a tree of Exprs, in particular
 /// the FunctionContexts necessary for the expr tree. This allows for multi-threaded
@@ -67,22 +68,20 @@ public:
 
     /// Prepare expr tree for evaluation.
     /// Allocations from this context will be counted against 'tracker'.
-    [[nodiscard]] Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state);
 
     /// Must be called after calling Prepare(). Does not need to be called on clones.
     /// Idempotent (this allows exprs to be opened multiple times in subplans without
     /// reinitializing function state).
-    [[nodiscard]] Status open(RuntimeState* state);
-
-    [[nodiscard]] static Status open(std::vector<ExprContext*> input_evals, RuntimeState* state);
+    Status open(RuntimeState* state);
 
     /// Creates a copy of this ExprContext. Open() must be called first. The copy contains
     /// clones of each FunctionContext, which share the fragment-local state of the
-    /// originals but have their own MemPool and thread-local state. Clone() should be used
+    /// originals but have their own thread-local state. Clone() should be used
     /// to create an ExprContext for each execution thread that needs to evaluate
     /// 'root'. Note that clones are already opened. '*new_context' must be initialized by
     /// the caller to NULL.
-    [[nodiscard]] Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_context);
+    Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_context);
 
     /// Closes all FunctionContexts. Must be called on every ExprContext, including clones.
     void close(RuntimeState* state);
@@ -103,32 +102,39 @@ public:
     }
 
     Expr* root() { return _root; }
+    Expr** mutable_root() { return &_root; }
+    void set_root(Expr* root) { _root = root; }
+    RuntimeState* runtime_state() const { return _runtime_state; }
 
     bool closed() { return _closed; }
 
     bool opened() { return _opened; }
 
-    [[nodiscard]] Status get_udf_error();
+    Status get_udf_error();
 
     std::string get_error_msg() const;
 
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
+    StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
+    StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
+    bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options);
+    bool support_ngram_bloom_filter();
+    bool is_index_only_filter() const;
 
     bool error_if_overflow() const;
+    bool error_for_division_by_zero() const;
+    void set_build_from_only_in_filter(bool build_from_only_in_filter) {
+        _build_from_only_in_filter = build_from_only_in_filter;
+    }
+    bool build_from_only_in_filter() const { return _build_from_only_in_filter; }
 
 private:
     friend class Expr;
-    friend class OlapScanNode;
     friend class OlapScanNode;
     friend class EsPredicate;
 
     /// FunctionContexts for each registered expression. The FunctionContexts are created
     /// and owned by this ExprContext.
     std::vector<FunctionContext*> _fn_contexts;
-
-    /// Pool backing fn_contexts_. Counts against the runtime state's UDF mem tracker.
-    std::unique_ptr<MemPool> _pool;
 
     RuntimeState* _runtime_state = nullptr;
     /// The expr tree this context is for.
@@ -139,6 +145,10 @@ private:
     /// Variables keeping track of current state.
     bool _prepared{false};
     bool _opened{false};
+    // Indicates that this expr is built from only in runtime in filter
+    // For hash join, it will build both IN filter and bloom filter. This variable is false.
+    // For cross join, it will only build Runtime IN filter, and this value is false.
+    bool _build_from_only_in_filter{false};
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed{false};
 };
@@ -150,13 +160,14 @@ private:
         }                                          \
     } while (false)
 
-#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                             \
-    [](ExprContext* c, Expr* e, Chunk* ptr) {                                                \
-        auto st = c->evaluate(e, ptr);                                                       \
-        if (st.ok()) {                                                                       \
-            return st.value();                                                               \
-        }                                                                                    \
-        return ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                                      \
+    [](ExprContext* c, Expr* e, Chunk* ptr) {                                                         \
+        auto st = c->evaluate(e, ptr);                                                                \
+        if (st.ok()) {                                                                                \
+            return st.value();                                                                        \
+        }                                                                                             \
+        ColumnPtr res = ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+        return res;                                                                                   \
     }(ctx, expr, chunk)
 
 } // namespace starrocks

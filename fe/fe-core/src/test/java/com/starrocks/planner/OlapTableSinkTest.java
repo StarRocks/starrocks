@@ -18,51 +18,73 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.AggregateType;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PhysicalPartitionImpl;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.system.Backend;
+import com.starrocks.system.BackendHbResponse;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TOlapTableIndexSchema;
+import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTableLocationParam;
+import com.starrocks.thrift.TOlapTableSchemaParam;
+import com.starrocks.thrift.TOlapTableSink;
+import com.starrocks.thrift.TOlapTablePartition;
+import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TSlotDescriptor;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -71,15 +93,18 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class OlapTableSinkTest {
     private static final Logger LOG = LogManager.getLogger(OlapTableSinkTest.class);
@@ -87,70 +112,72 @@ public class OlapTableSinkTest {
     @Injectable
     public OlapTable dstTable;
 
-    private static StarRocksAssert starRocksAssert;
-
-    private static ConnectContext connectContext;
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        String createTblStmtStr = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
-                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("db2");
-        starRocksAssert.withTable(createTblStmtStr);
-    }
-
-    @Before
-    public void setUp() {
-
-    }
-
     private TupleDescriptor getTuple() {
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
         // k1
         SlotDescriptor k1 = descTable.addSlotDescriptor(tuple);
-        k1.setColumn(new Column("k1", Type.BIGINT));
+        k1.setColumn(new Column("k1", IntegerType.BIGINT));
         k1.setIsMaterialized(true);
 
         // k2
         SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
-        k2.setColumn(new Column("k2", ScalarType.createVarchar(25)));
+        k2.setColumn(new Column("k2", TypeFactory.createVarcharType(25)));
         k2.setIsMaterialized(true);
         // v1
         SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
-        v1.setColumn(new Column("v1", ScalarType.createVarchar(25)));
+        v1.setColumn(new Column("v1", TypeFactory.createVarcharType(25)));
         v1.setIsMaterialized(true);
         // v2
         SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);
-        v2.setColumn(new Column("v2", Type.BIGINT));
+        v2.setColumn(new Column("v2", IntegerType.BIGINT));
         v2.setIsMaterialized(true);
 
         return tuple;
     }
 
+    @BeforeEach
+    public void before() {
+        UtFrameUtils.mockInitWarehouseEnv();
+    }
+
     @Test
-    public void testSinglePartition() throws UserException {
+    public void testSinglePartition(@Mocked GlobalStateMgr globalStateMgr,
+                                    @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
-                2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
-        Partition partition = new Partition(2, "p1", index, distInfo);
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+        TransactionState registeredState = new TransactionState();
+        registeredState.setUseCombinedTxnLog(true);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitionInfo();
-            result = partInfo;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(2L);
-            result = partition;
-        }};
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = registeredState;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
                 TWriteQuorumType.MAJORITY, false, false, false);
@@ -158,68 +185,245 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // init() plans the sink during the load, before an explicit transaction (multi-statement stream
+    // load / BEGIN..COMMIT) is upserted into the DatabaseTransactionMgr. It must reserve the
+    // explicit transaction layout to observe the
+    // combined-txn-log decision; otherwise write_txn_log stays at the per-tablet default and publish
+    // (which expects combined logs) wedges.
+    @Test
+    public void testInitFallsBackToExplicitTxnStateForCombinedTxnLog(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(3L, 4L, 1L);
+                result = explicitState;
+                globalTransactionMgr.getTransactionState(4L, 3L);
+                result = null;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // Layout reservation applies to every explicit transaction source, but INSERT_STREAMING must
+    // keep its per-load-id logs rather than enabling the combined transaction log.
+    @Test
+    public void testInitDoesNotFallBackForInsertStreaming(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(3L, 4L, 1L);
+                result = explicitState;
+                globalTransactionMgr.getTransactionState(4L, 3L);
+                result = null;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // A registered explicit INSERT_STREAMING transaction still reserves its layout, but the normal
+    // database lookup must not let the same state enable combined transaction logs.
+    @Test
+    public void testInitKeepsPerTabletTxnLogForRegisteredExplicitInsertStreaming(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.INSERT_STREAMING);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(3L, 4L, 1L);
+                result = explicitState;
+                times = 2;
+                globalTransactionMgr.getTransactionState(4L, 3L);
+                result = explicitState;
+                times = 1;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
     @Test
-    public void testRangePartition(
-            @Injectable RangePartitionInfo partInfo,
-            @Injectable MaterializedIndex index) throws UserException {
+    public void testRangePartition(@Injectable RangePartitionInfo partInfo,
+                                   @Injectable MaterializedIndex index,
+                                   @Mocked GlobalStateMgr globalStateMgr,
+                                   @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
 
         HashDistributionInfo distInfo = new HashDistributionInfo(
-                2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
 
-        Column partKey = new Column("k2", Type.VARCHAR);
+        Column partKey = new Column("k2", VarcharType.VARCHAR);
         PartitionKey key = PartitionKey
                 .createPartitionKey(Lists.newArrayList(new PartitionValue("123")), Lists.newArrayList(partKey));
-        Partition p1 = new Partition(1, "p1", index, distInfo);
-        Partition p2 = new Partition(2, "p2", index, distInfo);
+        Partition p1 = new Partition(1, 21, "p1", index, distInfo);
+        Partition p2 = new Partition(2, 22, "p2", index, distInfo);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitionInfo();
-            result = partInfo;
-            partInfo.getType();
-            result = PartitionType.RANGE;
-            partInfo.getPartitionColumns();
-            result = Lists.newArrayList(partKey);
-            dstTable.getPartitions();
-            result = Lists.newArrayList(p1, p2);
-            dstTable.getPartition(p1.getId());
-            result = p1;
-        }};
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                partInfo.getType();
+                result = PartitionType.RANGE;
+                partInfo.getPartitionColumns((Map<ColumnId, Column>) any);
+                result = Lists.newArrayList(partKey);
+                dstTable.getPartitions();
+                result = Lists.newArrayList(p1, p2);
+                dstTable.getPartition(p1.getId());
+                result = p1;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()),
                 TWriteQuorumType.MAJORITY, false, false, false);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         try {
             sink.complete();
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
 
         }
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
 
-    @Test(expected = UserException.class)
+    @Test
     public void testRangeUnknownPartition(
             @Injectable RangePartitionInfo partInfo,
-            @Injectable MaterializedIndex index) throws UserException {
-        TupleDescriptor tuple = getTuple();
+            @Injectable MaterializedIndex index) {
+        assertThrows(StarRocksException.class, () -> {
+            TupleDescriptor tuple = getTuple();
 
-        long unknownPartId = 12345L;
-        new Expectations() {{
-            dstTable.getPartition(unknownPartId);
-            result = null;
-        }};
+            long unknownPartId = 12345L;
+            new Expectations() {
+                {
+                    dstTable.getPartition(unknownPartId);
+                    result = null;
+                }
+            };
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId),
-                TWriteQuorumType.MAJORITY, false, false, false);
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
-        LOG.info("sink is {}", sink.toThrift());
-        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+            OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId),
+                    TWriteQuorumType.MAJORITY, false, false, false);
+            sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sink.complete();
+            LOG.info("sink is {}", sink.toThrift());
+            LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        });
     }
 
     @Test
@@ -230,15 +434,16 @@ public class OlapTableSinkTest {
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+        long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Replica
         Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
@@ -255,78 +460,100 @@ public class OlapTableSinkTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, TStorageMedium.SSD);
         index.addTablet(tablet, tabletMeta);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
             }
         };
 
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartitionId);
+        partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), Lists.newArrayList(partitionId), false);
+                table, partitionParam, false, null);
         System.out.println(param);
 
         // Check
         List<TTabletLocation> locations = param.getTablets();
-        Assert.assertEquals(1, locations.size());
+        Assertions.assertEquals(1, locations.size());
         TTabletLocation location = locations.get(0);
         List<Long> nodes = location.getNode_ids();
-        Assert.assertEquals(3, nodes.size());
+        Assertions.assertEquals(3, nodes.size());
         Collections.sort(nodes);
-        Assert.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
+        Assertions.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
     }
 
     @Test
     public void testReplicatedStorageWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) throws Exception {
+                                                     @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+        long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
+        
+        //init be node
+        Backend be1 = new Backend(1001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(1002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(1003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(true);
+        be3.setAlive(true);
+        
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
 
         for (int i = 0; i < 9; i++) {
             // Replica
-            Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
-            Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
-            Replica replica3 = new Replica(replicaId + 2, backendId + 2, Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica1 = new Replica(replicaId, be1.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica2 = new Replica(replicaId + 1, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica3 = new Replica(replicaId + 2, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
 
             // Tablet
             LocalTablet tablet = new LocalTablet(tabletId);
@@ -335,7 +562,7 @@ public class OlapTableSinkTest {
             tablet.addReplica(replica3);
 
             // Index
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, TStorageMedium.SSD);
             index.addTablet(tablet, tabletMeta);
         }
 
@@ -343,149 +570,321 @@ public class OlapTableSinkTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
             }
         };
 
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartitionId);
+        partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), Lists.newArrayList(partitionId), true);
+                table, partitionParam, true, null);
         System.out.println(param);
 
         // Check
         List<TTabletLocation> locations = param.getTablets();
-        Assert.assertEquals(9, locations.size());
+        Assertions.assertEquals(9, locations.size());
 
         HashMap<Long, Integer> beCount = new HashMap<>();
         for (TTabletLocation location : locations) {
             List<Long> nodes = location.getNode_ids();
-            Assert.assertEquals(3, nodes.size());
+            Assertions.assertEquals(3, nodes.size());
 
             beCount.put(nodes.get(0), beCount.getOrDefault(nodes.get(0), 0) + 1);
         }
-        
+
         for (Integer v : beCount.values()) {
-            Assert.assertEquals(3, v.longValue());
+            Assertions.assertEquals(3, v.longValue());
         }
     }
 
     @Test
-    public void testSingleListPartition() throws UserException{
+    public void testSingleListPartition(@Mocked GlobalStateMgr globalStateMgr,
+                                        @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
-                Lists.newArrayList(new Column("province",Type.STRING)));
-        listPartitionInfo.setValues(1,Lists.newArrayList("beijing","shanghai"));
+                Lists.newArrayList(new Column("province", StringType.STRING)));
+        listPartitionInfo.setValues(1, Lists.newArrayList("beijing", "shanghai"));
         listPartitionInfo.setReplicationNum(1, (short) 3);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
-                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
-        Partition partition = new Partition(1, "p1", index, distInfo);
+                3, Lists.newArrayList(new Column("id", IntegerType.BIGINT)));
+        Partition partition = new Partition(1, 11, "p1", index, distInfo);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(1L);
-            result = partition;
-            dstTable.getPartitionInfo();
-            result = listPartitionInfo;
-        }};
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(ColumnId.create("province"), new Column("province", StringType.STRING));
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(1L);
+                result = partition;
+                dstTable.getPartitionInfo();
+                result = listPartitionInfo;
+                dstTable.getIdToColumn();
+                result = idToColumn;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L),
                 TWriteQuorumType.MAJORITY, false, false, false);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
-        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
+        Assertions.assertTrue(sink.toThrift() instanceof TDataSink);
     }
 
-    @Test
-    public void testMultiListPartition() throws UserException{
-        TupleDescriptor tuple = getTuple();
-        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
-                Lists.newArrayList(new Column("dt",Type.STRING), new Column("province",Type.STRING)));
-        List<String> multiItems = Lists.newArrayList("dt","shanghai");
-        List<List<String>> multiValues = new ArrayList<>();
-        multiValues.add(multiItems);
+    private OlapTableSink buildSinkForReplicaCountTest(TupleDescriptor tuple, short replicationNum) {
+        return buildSinkForReplicaCountTest(tuple, dstTable, replicationNum);
+    }
 
-        listPartitionInfo.setMultiValues(1,multiValues);
-        listPartitionInfo.setReplicationNum(1, (short) 3);
+    private OlapTableSink buildSinkForReplicaCountTest(TupleDescriptor tuple, OlapTable table, short replicationNum) {
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                Lists.newArrayList(new Column("province", StringType.STRING)));
+        listPartitionInfo.setValues(1, Lists.newArrayList("beijing", "shanghai"));
+        listPartitionInfo.setReplicationNum(1, replicationNum);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
-                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
-        Partition partition = new Partition(1, "p1", index, distInfo);
+                3, Lists.newArrayList(new Column("id", IntegerType.BIGINT)));
+        Partition partition = new Partition(1, 11, "p1", index, distInfo);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(1L);
-            result = partition;
-            dstTable.getPartitionInfo();
-            result = listPartitionInfo;
-        }};
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(ColumnId.create("province"), new Column("province", StringType.STRING));
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L),
+        new Expectations() {
+            {
+                table.getId();
+                result = 1;
+                minTimes = 0;
+                table.getPartitions();
+                result = Lists.newArrayList(partition);
+                minTimes = 0;
+                table.getPartition(1L);
+                result = partition;
+                minTimes = 0;
+                table.getPartitionInfo();
+                result = listPartitionInfo;
+                minTimes = 0;
+                table.getIdToColumn();
+                result = idToColumn;
+                minTimes = 0;
+                table.getDefaultDistributionInfo();
+                result = distInfo;
+                minTimes = 0;
+            }
+        };
+
+        return new OlapTableSink(table, tuple, Lists.newArrayList(1L),
                 TWriteQuorumType.MAJORITY, false, false, false);
+    }
+
+    /**
+     * A shared-data table can still carry replication_num > 1 in its persisted PartitionInfo,
+     * typically inherited from a shared-nothing DDL. Shipping that value to the sink raises the
+     * write-quorum threshold to (n + 1) / 2, so a single failed node channel is tolerated even
+     * though, in shared-data, the tablets that node owned have no data anywhere. The sink must
+     * report exactly one replica for cloud-native tables regardless of the stored property.
+     */
+    @Test
+    public void testCloudNativeTableReportsSingleReplica(@Mocked GlobalStateMgr globalStateMgr,
+                                                         @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 3);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
-        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
+        Assertions.assertEquals(1, sink.toThrift().getOlap_table_sink().getNum_replicas(),
+                "shared-data sink must report a single replica so any node channel failure aborts the load");
+    }
+
+    /**
+     * A cross-cluster INSERT whose destination is an ExternalOlapTable backed by a cloud-native
+     * source table is a lake write too -- init() derives is_lake_table from exactly that composite
+     * condition. The replica count has to follow the same predicate: judged only by
+     * isCloudNativeTableOrMaterializedView(), such a destination keeps shipping the source table's
+     * stored replication_num and the quorum threshold stays raised on a single-copy write.
+     */
+    @Test
+    public void testExternalCloudNativeTableReportsSingleReplica(@Injectable ExternalOlapTable extTable,
+                                                                 @Mocked GlobalStateMgr globalStateMgr,
+                                                                 @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                extTable.isCloudNativeTableOrMaterializedView();
+                result = false;
+                minTimes = 0;
+                extTable.isOlapExternalTable();
+                result = true;
+                minTimes = 0;
+                extTable.isSourceTableCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, extTable, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink thriftSink = sink.toThrift().getOlap_table_sink();
+        // Guard the invariant itself: the two must never disagree.
+        Assertions.assertTrue(thriftSink.isIs_lake_table());
+        Assertions.assertEquals(1, thriftSink.getNum_replicas(),
+                "an external destination backed by a cloud-native table is still a single-copy write");
+    }
+
+    /** The shared-nothing path must keep using the table's real replication_num. */
+    @Test
+    public void testSharedNothingTableKeepsReplicationNum(@Mocked GlobalStateMgr globalStateMgr,
+                                                          @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertEquals(3, sink.toThrift().getOlap_table_sink().getNum_replicas());
     }
 
     @Test
-    public void testImmutablePartition() throws UserException {
+    public void testImmutablePartition(@Mocked GlobalStateMgr globalStateMgr,
+                                       @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
-        Partition partition = new Partition(2, "p1", index, distInfo);
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
-        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, 2, 0, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, 2, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartitionImpl(4, 2, 0, index);
+        physicalPartition = new PhysicalPartition(4, 2, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 
         LOG.info("partition is {}", partition);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitionInfo();
-            result = partInfo;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(2L);
-            result = partition;
-        }};
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
                 TWriteQuorumType.MAJORITY, false, false, false);
@@ -497,27 +896,1196 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testCreateLocationException() {
-        new MockUp<PartitionInfo>() {
-            @Mock
-            public int getQuorumNum(long partitionId, TWriteQuorumType writeQuorum) {
-                return 3;
+    public void testInitialOpenPartition(@Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, 2, index);
+        partition.addSubPartition(physicalPartition);
+
+        physicalPartition = new PhysicalPartition(4, 2, index);
+        physicalPartition.setImmutable(true);
+        partition.addSubPartition(physicalPartition);
+
+        LOG.info("partition is {}", partition);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("db2");
-        OlapTable olapTable = (OlapTable) db.getTable("tbl1");
-
-        List<Long> partitionIds = olapTable.getAllPartitionIds();
-
+        long savedMax = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 1;
         try {
-            OlapTableSink.createLocation(olapTable, -1, partitionIds, false);
-        } catch (UserException e) {
-            System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
-            return;
+            OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                    TWriteQuorumType.MAJORITY, false, false, true);
+            sink.setAutomaticBucketSize(1);
+            sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sink.complete();
+            LOG.info("sink is {}", sink.toThrift());
+            LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        } finally {
+            Config.max_load_initial_open_partition_number = savedMax;
         }
-        Assert.fail("must throw UserException");
     }
 
+    @Test
+    public void testGetOpenPartitionsListOpensAllUnderLargeGlobalCap(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        ListPartitionInfo listInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = listInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "LIST should open all partitions when count is below the global cap");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsListCappedByGlobalMax(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        ListPartitionInfo listInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = listInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 2;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(40L, 50L), Sets.newHashSet(open),
+                    "LIST should be capped by max_load_initial_open_partition_number when partitions exceed it");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsTablePropertyCapsTheSet(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = 2;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        List<Long> open = sink.getOpenPartitions();
+        Assertions.assertEquals(Sets.newHashSet(40L, 50L), Sets.newHashSet(open),
+                "Table property load_initial_open_partition_number should cap the open set to the newest N");
+    }
+
+    @Test
+    public void testGetOpenPartitionsTablePropertyBypassesGlobalCap(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = 5;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 2;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "Table property should bypass the global cap and open all 5 partitions");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeStreamingLoadKeeps32(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList();
+        for (long i = 1; i <= 40; i++) {
+            ids.add(i);
+        }
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+        sink.setIsStreamingLoad(true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(32, open.size(),
+                    "RANGE + streaming load should keep the conservative latest-32 cap");
+            Set<Long> expected = Sets.newHashSet();
+            for (long i = 9; i <= 40; i++) {
+                expected.add(i);
+            }
+            Assertions.assertEquals(expected, Sets.newHashSet(open),
+                    "RANGE + streaming load should open the newest 32 partition ids");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeNonStreamingOpensAll(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "RANGE + non-streaming load should open all partitions when below the global cap");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeNonStreamingCappedByGlobalMax(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 3;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(30L, 40L, 50L), Sets.newHashSet(open),
+                    "RANGE + non-streaming load should respect the global cap when set lower");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testSchemaChangeOpenPartition(@Mocked GlobalStateMgr globalStateMgr,
+                                              @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, 2, index);
+        partition.addSubPartition(physicalPartition);
+
+        physicalPartition = new PhysicalPartition(4, 2, index);
+        physicalPartition.setImmutable(true);
+        partition.addSubPartition(physicalPartition);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getState();
+                result = OlapTable.OlapTableState.SCHEMA_CHANGE;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, true);
+        sink.setAutomaticBucketSize(1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        LOG.info("sink is {}", sink.toThrift());
+        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testFindPrimaryReplica() throws StarRocksException {
+
+        //init be node
+        Backend be1 = new Backend(1001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(1002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(1003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(false);
+        be3.setAlive(true);
+
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
+        //init primary replica num for be node
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
+        bePrimaryMap.put(be1.getId(), 2L);
+        bePrimaryMap.put(be2.getId(), 0L);
+        bePrimaryMap.put(be3.getId(), 1L);
+
+        OlapTable olapTable = new OlapTable();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MaterializedIndex index = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        List<Long> selectedBackedIds = Lists.newArrayList();
+
+        //1.check primary replica selection in multiple replica
+        Replica replica1 = new Replica(11L, be1.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica2 = new Replica(22L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica3 = new Replica(33L, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        replica1.setLastWriteFail(false);
+        replica2.setLastWriteFail(false);
+        replica3.setLastWriteFail(false);
+        List<Replica> multipleReplicaList = new ArrayList<>();
+        multipleReplicaList.add(replica1);
+        multipleReplicaList.add(replica2);
+        multipleReplicaList.add(replica3);
+
+        int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, multipleReplicaList);
+        //note: even though in bePrimaryMap, primary replica num in be2 < primary replica num in be3,
+        //      but be2 is in shutting down, so choose replica3 as primary replica.
+        Assertions.assertEquals(multipleReplicaList.get(lowUsageIndex1).getId(), replica3.getId());
+        Assertions.assertEquals(multipleReplicaList.get(lowUsageIndex1).getBackendId(), be3.getId());
+
+        //2.check primary replica selection in single replica
+        Replica replica4 = new Replica(44L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        replica4.setLastWriteFail(false);
+        List<Replica> singleReplicaList = new ArrayList<>();
+        singleReplicaList.add(replica4);
+
+        int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, singleReplicaList);
+        //note: even though be2 is in shutting down, to ensure the load job can be loaded normally,
+        //      be2 SHUTDOWN status could not be checked, so choose replica4 as primary replica. 
+        Assertions.assertEquals(singleReplicaList.get(lowUsageIndex2).getId(), replica4.getId());
+        Assertions.assertEquals(singleReplicaList.get(lowUsageIndex2).getBackendId(), be2.getId());
+    }
+
+    @Test
+    public void testFindPrimaryReplicaSkipDecommission() throws StarRocksException {
+        Backend be1 = new Backend(2001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(2002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(2003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(true);
+        be3.setAlive(true);
+
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
+
+        //be1 hosts the fewest primaries, so without the DECOMMISSION check it would be selected
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
+        bePrimaryMap.put(be1.getId(), 0L);
+        bePrimaryMap.put(be2.getId(), 1L);
+        bePrimaryMap.put(be3.getId(), 2L);
+
+        OlapTable olapTable = new OlapTable();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MaterializedIndex index = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        List<Long> selectedBackedIds = Lists.newArrayList();
+
+        //1.a replica being decommissioned must not be selected while other candidates exist
+        Replica decommissioned = new Replica(55L, be1.getId(), Replica.ReplicaState.DECOMMISSION, 1, 0);
+        Replica normal1 = new Replica(66L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica normal2 = new Replica(77L, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        decommissioned.setLastWriteFail(false);
+        normal1.setLastWriteFail(false);
+        normal2.setLastWriteFail(false);
+        List<Replica> replicaList = new ArrayList<>();
+        replicaList.add(decommissioned);
+        replicaList.add(normal1);
+        replicaList.add(normal2);
+
+        int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, replicaList);
+        Assertions.assertEquals(normal1.getId(), replicaList.get(lowUsageIndex1).getId());
+        Assertions.assertEquals(be2.getId(), replicaList.get(lowUsageIndex1).getBackendId());
+
+        //2.fall back to the decommissioned replica when it is the only candidate
+        List<Replica> onlyDecommissionedList = new ArrayList<>();
+        onlyDecommissionedList.add(decommissioned);
+
+        int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, onlyDecommissionedList);
+        Assertions.assertEquals(decommissioned.getId(), onlyDecommissionedList.get(lowUsageIndex2).getId());
+    }
+
+    @Test
+    public void testCreateLocationWithSharedDataMode(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        // create two ComputeNodes
+        ComputeNode node1 = new ComputeNode(10001L, "127.0.0.1", 9071);
+        node1.updateOnce(1, 2, 3);
+        BackendHbResponse shutdownResponse =
+                new BackendHbResponse(node1.getId(), TStatusCode.SHUTDOWN, "BE is in shutting down");
+        // Set node1 to status:SHUTDOWN
+        Assertions.assertTrue(node1.handleHbResponse(shutdownResponse, false));
+        Assertions.assertEquals(node1.getStatus(), ComputeNode.Status.SHUTDOWN);
+        Assertions.assertFalse(node1.isAlive());
+
+        ComputeNode node2 = new ComputeNode(10002L, "127.0.0.1", 9072);
+        node2.updateOnce(1, 2, 3);
+
+        warehouseManager.setAllComputeNodeIds(Lists.newArrayList(node1.getId(), node2.getId()));
+        warehouseManager.setAliveComputeNodes(Lists.newArrayList(node2));
+        warehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(node1));
+
+        sysInfoService.addComputeNode(node1);
+        sysInfoService.addComputeNode(node2);
+
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tabletId = 5L;
+        long physicalPartitionId = 6L;
+
+        // Columns
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
+        columns.add(k1);
+
+        LakeTablet tablet = new LakeTablet(tabletId);
+        // Partition info and distribution info
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, TStorageMedium.SSD);
+        index.addTablet(tablet, tabletMeta);
+        // Partition
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+        // Table
+        OlapTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartitionId);
+        partitionParam.addToPartitions(tPartition);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(table, partitionParam, false, null);
+        LOG.warn("TableLocationParam: {}", param);
+        // Check
+        List<TTabletLocation> locations = param.getTablets();
+        Assertions.assertEquals(1, locations.size());
+        TTabletLocation location = locations.get(0);
+        List<Long> nodes = location.getNode_ids();
+        Assertions.assertEquals(1, nodes.size());
+        Assertions.assertEquals((Long) node2.getId(), nodes.get(0));
+    }
+
+    // A reshard can install a newer index generation after the first sink is planned. Every later
+    // partition and location build in that transaction must remain on the original tablet layout.
+    @Test
+    public void testCreatePartitionAndLocationReuseLoadedIndexGeneration(
+            @Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        ComputeNode node = new ComputeNode(7010L, "127.0.0.1", 9071);
+        node.updateOnce(1, 2, 3);
+        sysInfoService.addComputeNode(node);
+        warehouseManager.setAllComputeNodeIds(List.of(node.getId()));
+        warehouseManager.setAliveComputeNodes(List.of(node));
+        warehouseManager.setComputeNodeIdsAssignToTablet(Sets.newHashSet(node.getId()));
+
+        long dbId = 7001L;
+        long tableId = 7002L;
+        long partitionId = 7003L;
+        long physicalPartitionId = 7004L;
+        long metaId = 7005L;
+        long oldIndexId = 7006L;
+        long newIndexId = 7007L;
+        long oldTabletId = 7008L;
+        long newTabletId = 7009L;
+
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        HashDistributionInfo distribution = new HashDistributionInfo(1, List.of(k1));
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        MaterializedIndex oldIndex = new MaterializedIndex(
+                oldIndexId, metaId, MaterializedIndex.IndexState.NORMAL, 1L);
+        oldIndex.addTablet(new LakeTablet(oldTabletId), null, false);
+        Partition partition = new Partition(
+                partitionId, physicalPartitionId, "p1", oldIndex, distribution);
+        LakeTable table = new LakeTable(
+                tableId, "pin_layout", List.of(k1), KeysType.PRIMARY_KEYS, partitionInfo, distribution);
+        Deencapsulation.setField(table, "baseIndexMetaId", metaId);
+        table.addPartition(partition);
+        table.setIndexMeta(metaId, "pin_layout", List.of(k1), 0, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.PRIMARY_KEYS);
+
+        TransactionState txn = new TransactionState();
+        TOlapTablePartitionParam first = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), txn, null);
+        Assertions.assertEquals(oldTabletId,
+                first.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        MaterializedIndex newIndex = new MaterializedIndex(
+                newIndexId, metaId, MaterializedIndex.IndexState.NORMAL, 1L);
+        newIndex.addTablet(new LakeTablet(newTabletId), null, false);
+        partition.getDefaultPhysicalPartition().addMaterializedIndex(newIndex, true);
+
+        TOlapTablePartitionParam second = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), txn, null);
+        Assertions.assertEquals(oldTabletId,
+                second.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        TOlapTablePartitionParam fresh = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), new TransactionState(), null);
+        Assertions.assertEquals(newTabletId,
+                fresh.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        TOlapTableLocationParam location = OlapTableSink.createLocation(table, second, false, txn);
+        Assertions.assertEquals(1, location.getTablets().size());
+        Assertions.assertEquals(oldTabletId, location.getTablets().get(0).getTablet_id());
+    }
+
+    // Verifies that `Config.lake_enable_per_partition_coordinator_txn_log` is
+    // propagated verbatim onto `TOlapTableSink.enable_lake_per_partition_coordinator_txn_log`
+    // on every built sink plan. This is the FE-side half of the per-partition
+    // coordinator rollout interlock: BE reads the Thrift field on OpenRequest
+    // build time and forwards it to each target CN.
+    @Test
+    public void testPerPartitionCoordinatorFlagFromConfig(@Mocked GlobalStateMgr globalStateMgr,
+                                                          @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        boolean original = Config.lake_enable_per_partition_coordinator_txn_log;
+        try {
+            Config.lake_enable_per_partition_coordinator_txn_log = true;
+            OlapTableSink sinkOn = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                    TWriteQuorumType.MAJORITY, false, false, false);
+            sinkOn.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sinkOn.complete();
+            TOlapTableSink tSinkOn = sinkOn.toThrift().getOlap_table_sink();
+            Assertions.assertTrue(tSinkOn.isSetEnable_lake_per_partition_coordinator_txn_log(),
+                    "flag must be set on the wire even when true");
+            Assertions.assertTrue(tSinkOn.isEnable_lake_per_partition_coordinator_txn_log());
+
+            Config.lake_enable_per_partition_coordinator_txn_log = false;
+            OlapTableSink sinkOff = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                    TWriteQuorumType.MAJORITY, false, false, false);
+            sinkOff.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sinkOff.complete();
+            TOlapTableSink tSinkOff = sinkOff.toThrift().getOlap_table_sink();
+            Assertions.assertTrue(tSinkOff.isSetEnable_lake_per_partition_coordinator_txn_log());
+            Assertions.assertFalse(tSinkOff.isEnable_lake_per_partition_coordinator_txn_log());
+        } finally {
+            Config.lake_enable_per_partition_coordinator_txn_log = original;
+        }
+    }
+
+    // Build the sink output tuple from the table schema, mirroring how
+    // StreamLoadPlanner/InsertPlanner bind one materialized slot per column.
+    private static TupleDescriptor buildOutputTuple(List<Column> schema) {
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
+        for (Column col : schema) {
+            SlotDescriptor slot = descTable.addSlotDescriptor(tuple);
+            slot.setIsMaterialized(true);
+            slot.setColumn(col);
+            slot.setIsNullable(col.isAllowNull());
+        }
+        descTable.computeMemLayout();
+        return tuple;
+    }
+
+    // A DUP-keys index over (k1, k2, v1) whose sort key is (k1, k2). createSchema reads only
+    // metadata off the table; it never touches the cluster/backends, so a mocked table suffices.
+    private MaterializedIndexMeta rangeIndexMeta(long indexMetaId, List<Column> schema) {
+        return new MaterializedIndexMeta(indexMetaId, schema, 0, 0, (short) 2,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, Lists.newArrayList(0, 1));
+    }
+
+    @Test
+    public void testRangeTableEmitsPerIndexDistributedExprs() {
+        List<Column> schema = Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("k2", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+        long indexMetaId = 100L;
+        MaterializedIndexMeta indexMeta = rangeIndexMeta(indexMetaId, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = indexMetaId;
+                dstTable.getIndexMetaByMetaId(indexMetaId);
+                result = indexMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                dstTable.isRangeDistribution();
+                result = true;
+            }
+        };
+
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null, true);
+
+        // Routing columns are the index sort key (k1, k2).
+        int expectedExprCount = MetaUtils.getRangeDistributionColumns(dstTable, indexMetaId).size();
+        Assertions.assertEquals(1, schemaParam.getIndexes().size());
+        TOlapTableIndexSchema baseIndex = schemaParam.getIndexes().get(0);
+        Assertions.assertTrue(baseIndex.isSetDistributed_exprs(),
+                "range-distribution base index must carry distributed_exprs");
+        List<TExpr> exprs = baseIndex.getDistributed_exprs();
+        Assertions.assertEquals(expectedExprCount, exprs.size(),
+                "one routing expr per range distribution column");
+        for (TExpr expr : exprs) {
+            Assertions.assertEquals(1, expr.getNodes().size(),
+                    "each routing expr is a single slot-ref node");
+            Assertions.assertEquals(TExprNodeType.SLOT_REF, expr.getNodes().get(0).getNode_type());
+        }
+    }
+
+    @Test
+    public void testRangeTableNonWritePathLeavesDistributedExprsUnset() {
+        // Non-write callers (dictionary cache schema building) use the createSchema overload that
+        // does not emit distributed_exprs (emitDistributedExprs = false). Their BE consumers init
+        // OlapTableSchemaParam without a RuntimeState, which cannot build the per-index expr
+        // contexts. Even on a range-distribution table the field must stay unset on this path.
+        List<Column> schema = Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("k2", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+        long indexMetaId = 100L;
+        MaterializedIndexMeta indexMeta = rangeIndexMeta(indexMetaId, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = indexMetaId;
+                dstTable.getIndexMetaByMetaId(indexMetaId);
+                result = indexMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                // isRangeDistribution() is gated out before it is reached on the non-write path,
+                // so it is allowed to be called zero times.
+                dstTable.isRangeDistribution();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        // 4-arg overload == dictionary-style non-write call (emitDistributedExprs defaults to false).
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null);
+
+        Assertions.assertFalse(schemaParam.getIndexes().isEmpty());
+        for (TOlapTableIndexSchema indexSchema : schemaParam.getIndexes()) {
+            Assertions.assertFalse(indexSchema.isSetDistributed_exprs(),
+                    "non-write (dictionary) createSchema must leave distributed_exprs unset on a range table");
+        }
+    }
+
+    @Test
+    public void testRangeTablePerIndexExprsMatchPartitionLevelColumns() {
+        // Behavior-preservation guarantee: for a base-only range table the LIVE per-index routing
+        // path must select exactly the columns (and order) the old partition-level
+        // distributed_columns path used, i.e. MetaUtils.getRangeDistributionColumnIds(table).
+        List<Column> schema = Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("k2", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+        long indexMetaId = 100L;
+        MaterializedIndexMeta indexMeta = rangeIndexMeta(indexMetaId, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = indexMetaId;
+                dstTable.getIndexMetaByMetaId(indexMetaId);
+                result = indexMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                dstTable.isRangeDistribution();
+                result = true;
+            }
+        };
+
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null, true);
+
+        // TSlotRef carries only slot_id (no column-name field); resolve slot_id -> colName via the
+        // schema param's slot descriptors.
+        Map<Integer, String> slotIdToColName = Maps.newHashMap();
+        for (TSlotDescriptor slotDesc : schemaParam.getSlot_descs()) {
+            slotIdToColName.put(slotDesc.getId(), slotDesc.getColName());
+        }
+
+        TOlapTableIndexSchema baseIndex = schemaParam.getIndexes().get(0);
+        List<String> perIndexColumnKeys = new ArrayList<>();
+        for (TExpr expr : baseIndex.getDistributed_exprs()) {
+            TExprNode root = expr.getNodes().get(0);
+            Assertions.assertEquals(TExprNodeType.SLOT_REF, root.getNode_type(),
+                    "each routing expr root must be a slot-ref");
+            int slotId = root.getSlot_ref().getSlot_id();
+            Assertions.assertTrue(slotIdToColName.containsKey(slotId),
+                    "routing slot_id must resolve to a schema slot descriptor");
+            perIndexColumnKeys.add(slotIdToColName.get(slotId));
+        }
+
+        // Per-index routing selects exactly the partition-level range distribution columns,
+        // same columns AND same order.
+        Assertions.assertEquals(MetaUtils.getRangeDistributionColumnIds(dstTable), perIndexColumnKeys,
+                "per-index routing must match partition-level distributed columns (same columns, same order)");
+    }
+
+    @Test
+    public void testNonRangeTableLeavesDistributedExprsUnset() {
+        List<Column> schema = Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("k2", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+        long indexMetaId = 200L;
+        MaterializedIndexMeta indexMeta = rangeIndexMeta(indexMetaId, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = indexMetaId;
+                dstTable.getIndexMetaByMetaId(indexMetaId);
+                result = indexMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                // The 4-arg createSchema overload does not emit distributed_exprs, so the
+                // emitDistributedExprs && isRangeDistribution() guard short-circuits before the
+                // distribution check; allow zero invocations.
+                dstTable.isRangeDistribution();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null);
+
+        Assertions.assertFalse(schemaParam.getIndexes().isEmpty());
+        for (TOlapTableIndexSchema indexSchema : schemaParam.getIndexes()) {
+            Assertions.assertFalse(indexSchema.isSetDistributed_exprs(),
+                    "hash-distribution index must leave distributed_exprs unset");
+        }
+    }
+
+    // A single-partition (UNPARTITIONED) table with a base index plus one rollup index. The
+    // target-write id is the index META id: createSchema and createPartition both filter on the
+    // meta id, so the same index is selected on both sides regardless of MaterializedIndex.getId().
+    // (These constants happen to set getId()==getMetaId(), but that equality is NOT relied on.)
+    private static final long TARGET_BASE_INDEX_ID = 10L;
+    private static final long TARGET_ROLLUP_INDEX_ID = 20L;
+    private static final long TARGET_TABLE_ID = 1L;
+    private static final long TARGET_PHYSICAL_PARTITION_ID = 1100L;
+
+    private List<Column> targetIndexSchema() {
+        return Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+    }
+
+    // Mock the schema-side metadata reads for a base + rollup table.
+    private void expectTargetWriteSchema(List<Column> schema) {
+        MaterializedIndexMeta baseMeta = rangeIndexMeta(TARGET_BASE_INDEX_ID, schema);
+        MaterializedIndexMeta rollupMeta = rangeIndexMeta(TARGET_ROLLUP_INDEX_ID, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(TARGET_BASE_INDEX_ID, baseMeta);
+        indexMetaIdToMeta.put(TARGET_ROLLUP_INDEX_ID, rollupMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = TARGET_TABLE_ID;
+                minTimes = 0;
+                dstTable.getBaseIndexMetaId();
+                result = TARGET_BASE_INDEX_ID;
+                dstTable.getIndexMetaByMetaId(TARGET_BASE_INDEX_ID);
+                result = baseMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                // createSchema is invoked through the 4-arg (non-write) overload here, which short-
+                // circuits the emitDistributedExprs guard before the distribution check.
+                dstTable.isRangeDistribution();
+                result = false;
+                minTimes = 0;
+            }
+        };
+    }
+
+    // Build a real single-partition Partition whose physical partition carries the base index and
+    // one rollup index, and mock the partition-side metadata reads. createPartition then runs its
+    // genuine UNPARTITIONED path (filter + setMaterializedIndexes + loaded-index recording).
+    private Partition expectTargetWritePartition(List<Column> schema) {
+        Column k1 = schema.get(0);
+        HashDistributionInfo distInfo = new HashDistributionInfo(2, Lists.newArrayList(k1));
+        MaterializedIndex baseIndex =
+                new MaterializedIndex(TARGET_BASE_INDEX_ID, MaterializedIndex.IndexState.NORMAL);
+        MaterializedIndex rollupIndex =
+                new MaterializedIndex(TARGET_ROLLUP_INDEX_ID, MaterializedIndex.IndexState.NORMAL);
+        Partition partition = new Partition(900, TARGET_PHYSICAL_PARTITION_ID, "p1", baseIndex, distInfo);
+        partition.getDefaultPhysicalPartition().createRollupIndex(rollupIndex);
+
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(900, (short) 1);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = TARGET_TABLE_ID;
+                minTimes = 0;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(900L);
+                result = partition;
+            }
+        };
+        return partition;
+    }
+
+    @Test
+    public void testTargetWriteIndexFilterRestrictsToOneIndex() throws StarRocksException {
+        List<Column> schema = targetIndexSchema();
+        expectTargetWriteSchema(schema);
+        TupleDescriptor tuple = buildOutputTuple(schema);
+
+        // Schema side: only the base index is emitted.
+        TOlapTableSchemaParam schemaParam =
+                OlapTableSink.createSchema(1L, dstTable, tuple, TARGET_BASE_INDEX_ID);
+        Assertions.assertEquals(1, schemaParam.getIndexes().size(),
+                "filter must restrict the schema to a single index");
+        Assertions.assertEquals(TARGET_BASE_INDEX_ID, schemaParam.getIndexes().get(0).getId());
+
+        // Partition side: every partition lists ONLY the base index, and the txn loaded-index
+        // record agrees (the 1:1 invariant the BE relies on).
+        Partition partition = expectTargetWritePartition(schema);
+        TransactionState txnState = new TransactionState();
+        TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
+                1L, dstTable, tuple, false, 0, Lists.newArrayList(900L), txnState, TARGET_BASE_INDEX_ID);
+
+        Assertions.assertFalse(partitionParam.getPartitions().isEmpty());
+        for (TOlapTablePartition tPartition : partitionParam.getPartitions()) {
+            Assertions.assertEquals(1, tPartition.getIndexes().size(),
+                    "filter must restrict every partition to a single index");
+            Assertions.assertEquals(TARGET_BASE_INDEX_ID, tPartition.getIndexes().get(0).getIndex_id());
+        }
+
+        List<MaterializedIndex> loaded = txnState.getPartitionLoadedIndexes(
+                TARGET_TABLE_ID, partition.getDefaultPhysicalPartition());
+        Assertions.assertEquals(1, loaded.size(), "loaded-index state must record only the target index");
+        Assertions.assertEquals(TARGET_BASE_INDEX_ID, loaded.get(0).getId());
+
+        // Schema and partition must agree on the single index id.
+        Assertions.assertEquals(schemaParam.getIndexes().get(0).getId(),
+                partitionParam.getPartitions().get(0).getIndexes().get(0).getIndex_id(),
+                "schema and partition index lists must stay 1:1");
+    }
+
+    @Test
+    public void testTargetWriteIndexFilterUnsetWritesAllIndexes() throws StarRocksException {
+        List<Column> schema = targetIndexSchema();
+        expectTargetWriteSchema(schema);
+        TupleDescriptor tuple = buildOutputTuple(schema);
+
+        // Schema side: both indexes emitted when no target is set.
+        TOlapTableSchemaParam schemaParam =
+                OlapTableSink.createSchema(1L, dstTable, tuple, null);
+        Assertions.assertEquals(2, schemaParam.getIndexes().size(),
+                "unset filter must emit all indexes in the schema");
+        Set<Long> schemaIndexIds = Sets.newHashSet();
+        for (TOlapTableIndexSchema indexSchema : schemaParam.getIndexes()) {
+            schemaIndexIds.add(indexSchema.getId());
+        }
+        Assertions.assertEquals(Sets.newHashSet(TARGET_BASE_INDEX_ID, TARGET_ROLLUP_INDEX_ID), schemaIndexIds);
+
+        // Partition side: every partition lists ALL indexes when no target is set.
+        Partition partition = expectTargetWritePartition(schema);
+        TransactionState txnState = new TransactionState();
+        TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
+                1L, dstTable, tuple, false, 0, Lists.newArrayList(900L), txnState, null);
+
+        Assertions.assertFalse(partitionParam.getPartitions().isEmpty());
+        for (TOlapTablePartition tPartition : partitionParam.getPartitions()) {
+            Set<Long> partitionIndexIds = Sets.newHashSet();
+            for (TOlapTableIndexTablets tIndex : tPartition.getIndexes()) {
+                partitionIndexIds.add(tIndex.getIndex_id());
+            }
+            Assertions.assertEquals(Sets.newHashSet(TARGET_BASE_INDEX_ID, TARGET_ROLLUP_INDEX_ID),
+                    partitionIndexIds, "unset filter must list all indexes per partition");
+        }
+
+        List<MaterializedIndex> loaded = txnState.getPartitionLoadedIndexes(
+                TARGET_TABLE_ID, partition.getDefaultPhysicalPartition());
+        Assertions.assertEquals(2, loaded.size(), "loaded-index state must record all indexes when unset");
+    }
+
+    @Test
+    public void testTargetWriteIndexFilterThrowsWhenIndexAbsent() {
+        List<Column> schema = targetIndexSchema();
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        expectTargetWritePartition(schema);
+
+        long absentIndexId = 999L;
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                OlapTableSink.createPartition(
+                        1L, dstTable, tuple, false, 0, Lists.newArrayList(900L), null, absentIndexId));
+        Assertions.assertTrue(e.getMessage().contains("not found in partition"),
+                "missing target index must fail with a 'not found in partition' message, got: " + e.getMessage());
+    }
+
+    // Verify that setTargetWriteIndexId() on the sink — which InsertPlanner calls when
+    // insertStmt.getTargetWriteIndexId() is non-null — causes createSchema to emit only the
+    // target index. The OlapTableSinkTest harness does not run a full InsertPlanner pipeline,
+    // so this test exercises the sink-side forwarding contract that InsertPlanner depends on.
+    @Test
+    public void testInsertPlannerForwardsTargetWriteIndexIdToSink() {
+        List<Column> schema = targetIndexSchema();
+        expectTargetWriteSchema(schema);
+        TupleDescriptor tuple = buildOutputTuple(schema);
+
+        // Simulate what InsertPlanner does: create the sink and call setTargetWriteIndexId.
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(900L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.setTargetWriteIndexId(TARGET_ROLLUP_INDEX_ID);
+
+        // Verify that the schema emitted via createSchema (which complete() delegates to) is
+        // restricted to the single target index — the invariant the BE relies on.
+        TOlapTableSchemaParam schema2 =
+                OlapTableSink.createSchema(TARGET_TABLE_ID, dstTable, tuple, TARGET_ROLLUP_INDEX_ID);
+        Assertions.assertEquals(1, schema2.getIndexes().size(),
+                "schema must contain exactly one index when targetWriteIndexId is set");
+        Assertions.assertEquals(TARGET_ROLLUP_INDEX_ID, schema2.getIndexes().get(0).getId(),
+                "the single index in the schema must be the target write index");
+    }
+
+    // Verify that a SHADOW index whose MaterializedIndexMeta carries a reordered sort key emits
+    // distributed_exprs over the NEW key order, so range-routing for double-writes uses the new key.
+    //
+    // Scenario: base sort key is (k1, k2) (sortKeyIdxes=[0,1]); shadow sort key is (k2, k1)
+    // (sortKeyIdxes=[1,0]). The output tuple carries shadow-prefixed columns whose slot-binding key
+    // is the column name (isShadowColumn() == true → getName()). We verify:
+    //   1. MetaUtils.getRangeDistributionColumns returns (shadow_k2, shadow_k1) for the shadow meta.
+    //   2. The TOlapTableIndexSchema for the shadow index has distributed_exprs set.
+    //   3. The exprs have 2 slot-refs in shadow-key order: first points to shadow_k2, second to shadow_k1.
+    @Test
+    public void testShadowIndexEmitsDistributedExprsForNewSortKeyOrder() {
+        // Shadow columns: prefix mirrors SchemaChangeHandler.SHADOW_NAME_PREFIX = "__starrocks_shadow_"
+        String shadowPrefix = "__starrocks_shadow_";
+        Column shadowK1 = new Column(shadowPrefix + "k1", IntegerType.INT, true, null, false, null, "");
+        Column shadowK2 = new Column(shadowPrefix + "k2", IntegerType.INT, true, null, false, null, "");
+        Column v1 = new Column("v1", IntegerType.INT, false, null, true, null, "");
+        // Schema order: [shadowK1(0), shadowK2(1), v1(2)].
+        // sortKeyIdxes=[1,0] → sort key is (shadowK2, shadowK1), i.e. the reordered/permuted new key.
+        List<Column> schema = Lists.newArrayList(shadowK1, shadowK2, v1);
+        long shadowMetaId = 300L;
+        MaterializedIndexMeta shadowMeta = new MaterializedIndexMeta(shadowMetaId, schema, 0, 0, (short) 2,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, Lists.newArrayList(1, 0));
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(shadowMetaId, shadowMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = shadowMetaId;
+                dstTable.getIndexMetaByMetaId(shadowMetaId);
+                result = shadowMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                dstTable.isRangeDistribution();
+                result = true;
+            }
+        };
+
+        // 1. Verify MetaUtils returns the new key order: (shadowK2, shadowK1).
+        List<Column> routingCols = MetaUtils.getRangeDistributionColumns(dstTable, shadowMetaId);
+        Assertions.assertEquals(2, routingCols.size());
+        Assertions.assertEquals(shadowPrefix + "k2", routingCols.get(0).getName(),
+                "first routing column must be shadow_k2 (the reordered new key)");
+        Assertions.assertEquals(shadowPrefix + "k1", routingCols.get(1).getName(),
+                "second routing column must be shadow_k1");
+
+        // 2 & 3. Verify createSchema emits distributed_exprs with slot-refs in the new key order.
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null, true);
+
+        Assertions.assertEquals(1, schemaParam.getIndexes().size());
+        TOlapTableIndexSchema indexSchema = schemaParam.getIndexes().get(0);
+        Assertions.assertTrue(indexSchema.isSetDistributed_exprs(),
+                "shadow range-distribution index must carry distributed_exprs");
+        List<TExpr> exprs = indexSchema.getDistributed_exprs();
+        Assertions.assertEquals(2, exprs.size(), "one routing expr per new sort-key column");
+
+        // Resolve slot_id → column name via the schema param's slot descriptors.
+        Map<Integer, String> slotIdToColName = Maps.newHashMap();
+        for (TSlotDescriptor slotDesc : schemaParam.getSlot_descs()) {
+            slotIdToColName.put(slotDesc.getId(), slotDesc.getColName());
+        }
+
+        // First expr must point to shadow_k2; second to shadow_k1 (the new key order, not the schema order).
+        for (TExpr expr : exprs) {
+            Assertions.assertEquals(1, expr.getNodes().size(), "each routing expr is a single slot-ref node");
+            Assertions.assertEquals(TExprNodeType.SLOT_REF, expr.getNodes().get(0).getNode_type());
+        }
+        int slotId0 = exprs.get(0).getNodes().get(0).getSlot_ref().getSlot_id();
+        int slotId1 = exprs.get(1).getNodes().get(0).getSlot_ref().getSlot_id();
+        Assertions.assertEquals(shadowPrefix + "k2", slotIdToColName.get(slotId0),
+                "first distributed_expr slot must resolve to shadow_k2 (new key order)");
+        Assertions.assertEquals(shadowPrefix + "k1", slotIdToColName.get(slotId1),
+                "second distributed_expr slot must resolve to shadow_k1 (new key order)");
+    }
 }

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "approx_count_distinct 返回类似 COUNT(DISTINCT col) 的近似值，速度更快且使用固定大小内存。"
 ---
 
-# APPROX_COUNT_DISTINCT
+# approx_count_distinct
 
-## 功能
+
 
 返回类似于 `COUNT(DISTINCT col)` 结果的近似值。
 

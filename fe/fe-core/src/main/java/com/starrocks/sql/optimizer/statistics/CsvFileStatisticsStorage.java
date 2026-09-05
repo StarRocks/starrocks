@@ -21,12 +21,12 @@ import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,7 +80,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
                 columnStatisticMap.put(new Pair<>(entry.tableName.split("\\.")[1], entry.columnName), entry);
             }
         } catch (Exception e) {
-            LOG.warn("parse csv file failed, " + e);
+            LOG.warn("parse csv file failed, ", e);
         }
     }
 

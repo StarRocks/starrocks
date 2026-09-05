@@ -35,7 +35,7 @@
 #pragma once
 
 #include "gen_cpp/AgentService_types.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
@@ -48,6 +48,8 @@ public:
     ~ReloadTabletAction() override = default;
 
     void handle(HttpRequest* req) override;
+
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 
 private:
     void reload(const std::string& path, int64_t tablet_id, int32_t schema_hash, HttpRequest* req);

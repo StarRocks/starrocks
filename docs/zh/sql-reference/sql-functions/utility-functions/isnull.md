@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "判断输入值是否为 NULL；是 NULL 返回 1，否则返回 0。"
 ---
 
 # isnull
 
-## 功能
+
 
 判断输入值是否为 `NULL`。如果是 `NULL`，返回 1。如果不是 `NULL`，返回 0。
 

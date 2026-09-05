@@ -14,22 +14,25 @@
 
 #pragma once
 
+#include <algorithm>
 #include <queue>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/global_types.h"
+#include "common/memory/mem_hook_allocator.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
-#include "util/runtime_profile.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
-
-class ManagedFunctionStates;
-using ManagedFunctionStatesPtr = std::unique_ptr<ManagedFunctionStates>;
 
 struct FunctionTypes {
     TypeDescriptor result_type;
@@ -41,10 +44,16 @@ class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
 using Analytors = std::vector<AnalytorPtr>;
 
+template <typename T>
+class ManagedFunctionStates;
+
+template <typename T>
+using ManagedFunctionStatesPtr = std::unique_ptr<ManagedFunctionStates<T>>;
+
 // Component used to do analytic processing
 // it contains common data struct and algorithm of analysis
 class Analytor final : public pipeline::ContextWithDependency {
-    friend class ManagedFunctionStates;
+    friend class ManagedFunctionStates<Analytor>;
 
     // [start, end)
     struct FrameRange {
@@ -98,14 +107,18 @@ class Analytor final : public pipeline::ContextWithDependency {
         int64_t _average_size = 0;
     };
 
+    enum class RangeBoundaryType { UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, CURRENT_ROW, PRECEDING, FOLLOWING };
+
+    struct RangeBoundarySpec {
+        RangeBoundaryType type = RangeBoundaryType::CURRENT_ROW;
+        ExprContext* expr_ctx = nullptr;
+        MutableColumnPtr column;
+        bool has_offset = false;
+    };
+
 public:
-    ~Analytor() override {
-        if (_state != nullptr) {
-            close(_state);
-        }
-    }
-    Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc,
-             bool use_hash_based_partition);
+    ~Analytor() override;
+    Analytor(const TPlanNode& tnode, const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition);
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
@@ -119,9 +132,22 @@ public:
         std::lock_guard<std::mutex> l(_buffer_mutex);
         return _buffer.empty();
     }
-    bool is_chunk_buffer_full() { return _buffer.size() >= config::pipeline_analytic_max_buffer_size; }
+    bool is_chunk_buffer_full();
     bool reached_limit() const { return _limit != -1 && _num_rows_returned >= _limit; }
+
+    void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_sink_observer(state, observer);
+    }
+
+    void attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_source_observer(state, observer);
+    }
+
+    auto defer_notify_source() { return _pip_observable.defer_notify_source(); }
+    auto defer_notify_sink() { return _pip_observable.defer_notify_sink(); }
+
     ChunkPtr poll_chunk_buffer() {
+        auto notify = defer_notify_sink();
         std::lock_guard<std::mutex> l(_buffer_mutex);
         if (_buffer.empty()) {
             return nullptr;
@@ -131,6 +157,7 @@ public:
         return chunk;
     }
     void offer_chunk_to_buffer(const ChunkPtr& chunk) {
+        auto notify = defer_notify_source();
         std::lock_guard<std::mutex> l(_buffer_mutex);
         _buffer.push(chunk);
     }
@@ -187,10 +214,16 @@ private:
     // cannot evaluate window function until all the data of current partition is reached
     // For example, `cume_dist` need all the data to calculate
     void _materializing_process_for_half_unbounded_range_frame(RuntimeState* state);
-    // For window frame `ROWS BETWEEN N PRECEDING AND CURRENT ROW`
+    // For generic RANGE frames materialized and processed by definition.
+    void _materializing_process_for_range_frame(RuntimeState* state);
+    // For RANGE frames whose start is UNBOUNDED PRECEDING and whose finite end bound only grows.
+    void _materializing_process_for_growing_range_frame(RuntimeState* state);
+    // For ROWS frames with finite bounds.
     void _materializing_process_for_sliding_frame(RuntimeState* state);
     ProcessByPartitionFunc _materializing_process_impl = nullptr;
 
+    // Update all window aggregate states from the frame range [frame_start, frame_end) within the current
+    // buffered partition [partition_start, partition_end). Positions are local to the analytor's buffered columns.
     void _update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start, int64_t frame_end);
     void _update_window_batch_removable_cumulatively();
 
@@ -202,10 +235,15 @@ private:
 
     void _find_partition_end();
     void _find_peer_group_end();
-    int64_t _find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end);
     int64_t _find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end);
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();
+    void _compute_range_nonnull_segment();
+    FrameRange _get_frame_for_range();
+    bool _is_growing_range_frame() const;
+    int64_t _resolve_range_offset_boundary(const RangeBoundarySpec& boundary, bool is_start, bool current_row_is_null);
+    int64_t _seek_range_frame_boundary_with_offset(const RangeBoundarySpec& boundary, bool is_start);
+    void _reset_range_frame_cursors();
 
     bool _has_output() const { return _output_chunk_index < _input_chunks.size(); }
     int64_t _first_global_position_of_current_chunk() const {
@@ -217,7 +255,8 @@ private:
     int64_t _window_result_position() const {
         return _get_global_position(_current_row_position) - _first_global_position_of_current_chunk();
     }
-    FrameRange _get_frame_range() const {
+    FrameRange _get_frame_for_rows() const {
+        DCHECK(!_is_range_window);
         if (_is_unbounded_preceding) {
             return {_partition.start, _current_row_position + _rows_end_offset + 1};
         } else {
@@ -242,7 +281,6 @@ private:
     bool _is_closed = false;
     // TPlanNode is only valid in the PREPARE and INIT phase
     const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     const bool _use_hash_based_partition;
 
@@ -258,6 +296,18 @@ private:
     int64_t _rows_end_offset = 0;
 
     bool _is_unbounded_preceding = false;
+    bool _is_range_window = false;
+    bool _is_range_offset_window = false;
+    bool _range_order_is_asc = true;
+    TypeDescriptor _range_order_type;
+    RangeBoundarySpec _range_start_boundary;
+    RangeBoundarySpec _range_end_boundary;
+    bool _range_nonnull_segment_valid = false;
+    int64_t _range_nonnull_start = 0;
+    int64_t _range_nonnull_end = 0;
+    int64_t _range_start_frame_cursor = 0;
+    int64_t _range_end_frame_cursor = 0;
+    int64_t _range_cumulative_frame_end = 0;
 
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;
@@ -268,21 +318,16 @@ private:
     std::vector<bool> _is_lead_lag_functions;
     std::vector<FunctionContext*> _agg_fn_ctxs;
     std::vector<const AggregateFunction*> _agg_functions;
-    std::vector<ManagedFunctionStatesPtr> _managed_fn_states;
+    std::vector<ManagedFunctionStatesPtr<Analytor>> _managed_fn_states;
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_intput_columns;
+    std::vector<Columns> _agg_intput_columns;
     std::vector<FunctionTypes> _agg_fn_types;
 
     std::vector<ExprContext*> _partition_ctxs;
-    Columns _partition_columns;
+    MutableColumns _partition_columns;
 
     std::vector<ExprContext*> _order_ctxs;
-    Columns _order_columns;
-
-    // Tuple id of the buffered tuple (identical to the input child tuple, which is
-    // assumed to come from a single SortNode). NULL if both partition_exprs and
-    // order_by_exprs are empty.
-    TTupleId _buffered_tuple_id = 0;
+    MutableColumns _order_columns;
 
     bool _has_udaf = false;
     // There are many reasons requiring the materializing processing.
@@ -303,6 +348,9 @@ private:
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
     RuntimeProfile::Counter* _partition_search_timer = nullptr;
     RuntimeProfile::Counter* _peer_group_search_timer = nullptr;
+    RuntimeProfile::Counter* _udaf_load_timer = nullptr;
+    RuntimeProfile::Counter* _udaf_cache_hit_count = nullptr;
+    RuntimeProfile::Counter* _udaf_cache_populate_count = nullptr;
 
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
@@ -320,7 +368,7 @@ private:
     bool _input_eos = false;
 
     // Temporary output related structures
-    Columns _result_window_columns;
+    MutableColumns _result_window_columns;
 
     // Assistant structures for removeing unused buffered input chunks
     int64_t _removed_from_buffer_rows = 0;
@@ -336,21 +384,27 @@ private:
     Segment _peer_group;
     SegmentStatistics _peer_group_statistics;
     std::queue<int64_t> _candidate_peer_group_ends;
+    std::unique_ptr<Allocator> _allocator = std::make_unique<MemHookAllocator>();
+
+    bool _is_merge_funcs;
+
+    pipeline::PipeObservable _pip_observable;
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.
+template <typename T>
 class ManagedFunctionStates {
 public:
-    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, AggDataPtr __restrict agg_states, Analytor* agg_node)
-            : _ctxs(ctxs), _agg_states(agg_states), _agg_node(agg_node) {
-        for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
+    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, AggDataPtr __restrict agg_states, T* context)
+            : _ctxs(ctxs), _agg_states(agg_states), _context(context) {
+        for (int i = 0; i < _context->_agg_functions.size(); i++) {
+            _context->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _context->_agg_states_offsets[i]);
         }
     }
 
     ~ManagedFunctionStates() {
-        for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
+        for (int i = 0; i < _context->_agg_functions.size(); i++) {
+            _context->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _context->_agg_states_offsets[i]);
         }
     }
 
@@ -360,18 +414,17 @@ public:
 private:
     std::vector<FunctionContext*>* _ctxs;
     AggDataPtr _agg_states;
-    Analytor* _agg_node;
+    T* _context;
 };
 
 class AnalytorFactory;
 using AnalytorFactoryPtr = std::shared_ptr<AnalytorFactory>;
 class AnalytorFactory {
 public:
-    AnalytorFactory(size_t dop, const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                    const TupleDescriptor* result_tuple_desc, const bool use_hash_based_partition)
+    AnalytorFactory(size_t dop, const TPlanNode& tnode, const TupleDescriptor* result_tuple_desc,
+                    const bool use_hash_based_partition)
             : _analytors(dop),
               _tnode(tnode),
-              _child_row_desc(child_row_desc),
               _result_tuple_desc(result_tuple_desc),
               _use_hash_based_partition(use_hash_based_partition) {}
     AnalytorPtr create(int i);
@@ -379,7 +432,6 @@ public:
 private:
     Analytors _analytors;
     const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     const bool _use_hash_based_partition;
 };

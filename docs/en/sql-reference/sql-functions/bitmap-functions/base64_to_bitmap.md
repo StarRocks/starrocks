@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Before you import bitmap data into StarRocks, you need to serialize the data and encode the data as a Base64 string."
 ---
 
 # base64_to_bitmap
 
-## Description
+
 
 Before you import bitmap data into StarRocks, you need to serialize the data and encode the data as a Base64 string. When you import the Base64 string into StarRocks, you need to convert the string into bitmap data.
 This function is used to convert Base64 strings into bitmap data.
@@ -19,7 +20,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
 
 ## Parameters
 
-`bitmap`: The supported data type is VARCHAR. Before you load Bitmap data into StarRocks, you can use Java or C++ to [create a BitmapValue object](https://github.com/StarRocks/starrocks/blob/main/fe/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/BitmapValueTest.java), add an element, serialize the data, and encode the data as a Base64 string. Then, pass the Base64 string as an input parameter into this function.
+`bitmap`: The supported data type is VARCHAR. Before you load Bitmap data into StarRocks, you can use Java or C++ to [create a BitmapValue object](https://github.com/StarRocks/starrocks/blob/main/fe/plugin-common/src/test/java/com/starrocks/types/BitmapValueTest.java), add an element, serialize the data, and encode the data as a Base64 string. Then, pass the Base64 string as an input parameter into this function.
 
 ## Return value
 
@@ -48,7 +49,7 @@ Create a database named `bitmapdb` and a table named `bitmap`. Use Stream Load t
     );
     ```
 
-2. Use [Stream Load](../../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) to import JSON data into `bitmap_table`.
+2. Use [Stream Load](../../sql-statements/loading_unloading/STREAM_LOAD.md) to import JSON data into `bitmap_table`.
 
     Suppose there is a JSON file named **simpledata**. This file has the following content and `userid` is a Base64-encoded string.
 

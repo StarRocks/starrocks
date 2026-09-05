@@ -1,14 +1,15 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "bitmap 聚合函数用于 Bitmap 数据类型，需要建立聚合表并使用 bitmap_union 聚合函数。"
 ---
 
-# BITMAP
+# bitmap
 
 这里通过一个简单的示例来介绍 Bitmap 中的几个聚合函数的用法，具体的函数定义以及更多 Bitmap 函数请参考 [bitmap-functions](../bitmap-functions/bitmap_and.md)。
 
 ## 建表
 
-建表时需要使用聚合模型，数据类型是 bitmap，聚合函数为 bitmap_union。
+建表时需要使用聚合表，数据类型是 bitmap，聚合函数为 bitmap_union。
 
 ```SQL
 CREATE TABLE `pv_bitmap` (
@@ -35,6 +36,8 @@ ALTER TABLE pv_bitmap ADD ROLLUP pv (page, user_id);
 
 `BITMAP_HASH(expr)`: 将任意类型的列通过 Hash 的方式转为 bitmap。
 
+`BITMAP_HASH64(expr)`: 将任意类型的列通过 Hash64 的方式转为 bitmap。
+
 ### Stream Load
 
 用 Stream Load 方式导入数据时，可按如下方式转换为 Bitmap 字段:
@@ -48,6 +51,12 @@ cat data | curl --location-trusted -u user:passwd -T - \
 ``` bash
 cat data | curl --location-trusted -u user:passwd -T - \
     -H "columns: dt,page,user_id, user_id=bitmap_hash(user_id)" \
+    http://host:8410/api/test/testDb/_stream_load
+```
+
+``` bash
+cat data | curl --location-trusted -u user:passwd -T - \
+    -H "columns: dt,page,user_id, user_id=bitmap_hash64(user_id)" \
     http://host:8410/api/test/testDb/_stream_load
 ```
 
@@ -97,6 +106,13 @@ insert into bitmap_table1
 select id, bitmap_hash(id2) from table;
 ```
 
+* source 表的 id2 的列类型是 String，通过 bitmap_hash64() 生成 bitmap 类型
+
+```SQL
+insert into bitmap_table1
+select id, bitmap_hash64(id2) from table;
+```
+
 ## 语法及对应功能
 
 `BITMAP_UNION(expr)`: 计算输入 Bitmap 的并集，返回新的bitmap。
@@ -114,7 +130,7 @@ bitmap_column_to_count 是 bitmap 类型的列，filter_column 是变化的维�
 
 ## 示例
 
-下面的 SQL 以上面的 pv_bitmap table 为例。
+下面的 SQL 以上面的 `pv_bitmap` table 为例。
 
 计算 user_id 的去重值:
 

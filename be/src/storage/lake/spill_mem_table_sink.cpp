@@ -1,0 +1,250 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/spill_mem_table_sink.h"
+
+#include "base/testutil/sync_point.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/runtime_profile.h"
+#include "compute_env/spill/spiller.h"
+#include "runtime/current_thread.h"
+#include "runtime/runtime_env.h"
+#include "storage/lake/load_spill_pipeline_merge_context.h"
+#include "storage/lake/load_spill_pipeline_merge_iterator.h"
+#include "storage/lake/tablet_internal_parallel_merge_task.h"
+#include "storage/lake/tablet_writer.h"
+
+namespace starrocks::lake {
+
+SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
+                                     RuntimeProfile* profile, bool keep_op_column)
+        : _writer(writer),
+          _keep_op_column(keep_op_column),
+          _pipeline_merge_context(std::make_unique<LoadSpillPipelineMergeContext>(_writer)),
+          _load_chunk_spiller(
+                  std::make_unique<LoadChunkSpiller>(block_manager, profile, _pipeline_merge_context.get())) {
+    std::string tracker_label =
+            "LoadSpillMerge-" + std::to_string(writer->tablet_id()) + "-" + std::to_string(writer->txn_id());
+    _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
+                                                      RuntimeEnv::GetInstance()->compaction_mem_tracker());
+}
+
+SpillMemTableSink::~SpillMemTableSink() {
+    // IMPORTANT: Destruction order matters here!
+    // _pipeline_merge_context holds tasks that access _load_chunk_spiller's data.
+    // We must destroy _pipeline_merge_context first to ensure all parallel merge tasks
+    // complete (via ThreadPoolToken::shutdown()) before destroying _load_chunk_spiller.
+    // Without this explicit order, the default destructor would destroy _load_chunk_spiller
+    // first (reverse declaration order), causing use-after-free when running tasks try to
+    // access the spiller's data (e.g., BlockGroupIterator accessing ColumnarSerde).
+    _pipeline_merge_context.reset();
+    _load_chunk_spiller.reset();
+}
+
+bool SpillMemTableSink::keep_op_column() const {
+    // _keep_op_column is the EFFECTIVE preserve-order snapshot (pk_preserve_txn_delete_order_enabled):
+    // it is already true for the separate-sort-key load-spill path, which MUST run op-aware. That path's
+    // unsort SST writer resolves duplicate primary keys by flush order in its own per-PK reconciliation
+    // (a DELETE loses to a later re-UPSERT of the same key) and routes only winning deletes to a del
+    // file whose del_op_offsets are serialized (also gated by the effective snapshot in finish_with_txnlog),
+    // so a delete-then-reinsert applies consistently even when the two ops split across parallel merge
+    // tasks. The legacy path taken when this returns false (sort-key==PK with preserve off:
+    // _split_upserts_deletes -> flush_chunk_with_deletes) splits deletes off at the memtable and writes a
+    // del file applied "after all segments" -- unchanged from before this feature.
+    return _keep_op_column;
+}
+
+Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
+                                      int64_t* flush_data_size, int64_t slot_idx) {
+    if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
+        // Only one flush: write directly to a segment without the spill/merge round trip. A single flush
+        // is unique-by-PK (memtable dedup), so no cross-flush merge/dedup is needed; write_single_flush
+        // writes a plain segment with the eager PK-index SST skipped (publish rebuilds it lazily), which
+        // also lets a separate-sort-key eager load take this path -- the unsort SST writer is only needed
+        // for the multi-flush spill+merge.
+        RETURN_IF_ERROR(_writer->write_single_flush(chunk, segment, eos));
+        return _writer->flush(segment);
+    }
+    return _spill_and_maybe_eager_merge(chunk, slot_idx, flush_data_size);
+}
+
+Status SpillMemTableSink::flush_chunk_with_op(const Chunk& chunk_with_op, starrocks::SegmentPB* segment, bool eos,
+                                              int64_t* flush_data_size, int64_t slot_idx) {
+    // The chunk carries the trailing __op column. A single memtable flush is already unique-by-PK
+    // (last-op-wins), so the unsort SST writer's cross-flush duplicate-key resolution -- the only reason
+    // a separate-sort-key load must otherwise take the spill+merge path -- is unnecessary for it. So on a
+    // single flush, write directly: split __op (upserts -> plain sort-key-ordered segment with the eager
+    // PK-index SST skipped so publish rebuilds the index lazily; deletes -> del file), avoiding the
+    // spill + unsort-SST merge round trip that makes small (e.g. realtime) batches far slower.
+    if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
+        RETURN_IF_ERROR(_writer->write_single_flush_with_op(chunk_with_op, segment, eos));
+        return _writer->flush(segment);
+    }
+    // Multi-flush (bulk) load: the op-aware merge resolves upsert/delete order per key by slot, then
+    // splits the merged output into segments + del files (see TabletInternalParallelMergeTask) and keeps
+    // the eager-SST speedup. This is the authoritative op-aware signal handed to the merge tasks.
+    _op_aware = true;
+    return _spill_and_maybe_eager_merge(chunk_with_op, slot_idx, flush_data_size);
+}
+
+Status SpillMemTableSink::_spill_and_maybe_eager_merge(const Chunk& chunk, int64_t slot_idx, int64_t* flush_data_size) {
+    // Spill chunk to temporary storage with slot_idx for ordering
+    auto res = _load_chunk_spiller->spill(chunk, slot_idx);
+    RETURN_IF_ERROR(res.status());
+    // record append bytes to `flush_data_size`
+    if (flush_data_size != nullptr) {
+        *flush_data_size = res.value();
+    }
+
+    // EAGER MERGE OPTIMIZATION: When spilled data accumulates to a threshold, proactively
+    // start merging blocks in the background BEFORE all flushes complete. This provides:
+    // 1. Better parallelism - merge tasks run concurrently with ongoing memtable flushes
+    // 2. Reduced final merge time - much of the merge work completes during the load phase
+    // 3. Lower memory pressure - blocks get merged and reclaimed earlier
+    //
+    // WHY THIS THRESHOLD: pk_index_eager_build_threshold_bytes indicates bulk load scenario
+    // where parallel merge benefits outweigh task coordination overhead.
+    if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
+        config::enable_load_spill_parallel_merge) {
+        _pipeline_merge_context->init_parallel_merge();
+        if (!_pipeline_merge_context->token()) {
+            // Thread pool exhausted - cannot submit merge tasks now
+            // Skip eager merge for this flush
+            return Status::OK();
+        }
+
+        // Generate ONE merge task eagerly (not all tasks). This allows pipeline execution
+        // where merge tasks are generated and submitted incrementally as resources allow,
+        // rather than all upfront which would consume excessive memory.
+        // final_round=false means this merges to intermediate blocks, not final tablet.
+        LoadSpillPipelineMergeIterator task_iterator(_load_chunk_spiller.get(), _writer,
+                                                     _pipeline_merge_context->quit_flag(), false /* final_round */,
+                                                     _op_aware);
+        task_iterator.init();
+        if (task_iterator.has_more()) {
+            auto current_task = task_iterator.current_task();
+            _pipeline_merge_context->add_merge_task(current_task);
+            auto submit_st = _pipeline_merge_context->token()->submit(current_task);
+            if (!submit_st.ok()) {
+                // Submit failure doesn't fail the flush - task will report error when checked later
+                current_task->update_status(submit_st);
+            }
+        }
+        RETURN_IF_ERROR(task_iterator.status());
+    }
+    return Status::OK();
+}
+
+Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
+                                                   starrocks::SegmentPB* segment, bool eos, int64_t* flush_data_size,
+                                                   int64_t slot_idx) {
+    if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
+        // Only one flush: write directly (deletes were already split out by the memtable). Upserts go
+        // through write_single_flush -> plain segment, eager SST skipped, lazy publish rebuild (see
+        // flush_chunk).
+        RETURN_IF_ERROR(_writer->flush_del_file(deletes, kUnknownDelOpOffset));
+        RETURN_IF_ERROR(_writer->write_single_flush(upserts, segment, eos));
+        return _writer->flush(segment);
+    }
+    // 1. flush upsert
+    RETURN_IF_ERROR(flush_chunk(upserts, segment, eos, flush_data_size, slot_idx));
+    // 2. flush deletes
+    // Concurrent/merge spill flush: the final merged segment indices do not map to flush order,
+    // so the in-transaction op_offset cannot be determined here. Fall back to "after all segments"
+    // (handled in PR2). See kUnknownDelOpOffset.
+    RETURN_IF_ERROR(_writer->flush_del_file(deletes, kUnknownDelOpOffset));
+    return Status::OK();
+}
+
+Status SpillMemTableSink::merge_blocks_to_segments() {
+    TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
+    if (_load_chunk_spiller->empty()) {
+        // Eager merge in flush_chunk() may have already consumed all block groups.
+        // Must merge their results into the parent writer before returning.
+        return _pipeline_merge_context->merge_task_results();
+    }
+
+    // Manual flush control needed because we're coordinating multiple parallel writers
+    _writer->set_auto_flush(false);
+
+    if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes ||
+        _writer->tablet_schema()->has_separate_sort_key()) {
+        // When bulk load happens, try to enable eager PK index build.
+        // For separate-sort-key PK tables eager build is MANDATORY regardless of size: the
+        // sort-key-ordered merge cannot collapse duplicate primary keys, so the unsort SST writer
+        // must run to resolve them (last-flushed wins) and emit the per-segment dedup delvec.
+        _writer->try_enable_pk_index_eager_build();
+    }
+
+    SCOPED_TIMER(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"));
+
+    // Lazy token creation: may already exist from eager merge in flush_chunk()
+    if (config::enable_load_spill_parallel_merge) {
+        _pipeline_merge_context->create_thread_pool_token();
+    }
+
+    // FINAL MERGE PHASE: Merge all remaining spilled blocks to final tablet segments.
+    // final_round=true ensures ALL remaining blocks are consumed (no partial batches left).
+    // This iterator generates tasks lazily - one at a time as we iterate, enabling
+    // dynamic load balancing and memory control.
+    LoadSpillPipelineMergeIterator task_iterator(_load_chunk_spiller.get(), _writer,
+                                                 _pipeline_merge_context->quit_flag(), true /* final_round */,
+                                                 _op_aware);
+
+    // PIPELINE EXECUTION MODEL: Generate tasks on-demand and submit for parallel execution.
+    // Each task processes a batch of block groups (up to load_spill_max_merge_bytes).
+    // This approach balances parallelism (multiple tasks running concurrently) with
+    // memory efficiency (not creating all tasks upfront).
+    for (task_iterator.init(); task_iterator.has_more(); task_iterator.next()) {
+        auto current_task = task_iterator.current_task();
+        _pipeline_merge_context->add_merge_task(current_task);
+
+        if (_pipeline_merge_context->token()) {
+            // PARALLEL PATH: Submit to thread pool for async execution
+            auto submit_st = _pipeline_merge_context->token()->submit(current_task);
+            if (!submit_st.ok()) {
+                current_task->update_status(submit_st);
+                break; // Stop submitting new tasks if thread pool is unavailable
+            }
+        } else {
+            // SERIAL PATH: Fallback when parallel merge is disabled or token unavailable.
+            // Executes task synchronously in current thread. This ensures correctness
+            // even if thread pool is exhausted or config disables parallelism.
+            current_task->run();
+            if (!current_task->status().ok()) {
+                break; // Stop on first error
+            }
+        }
+    }
+
+    // RESULT CONSOLIDATION: Check all task statuses and merge their tablet writer results
+    // into the parent writer. This is the critical phase that combines all parallel work.
+    // Any task failure here will cause the entire load to fail.
+    RETURN_IF_ERROR(_pipeline_merge_context->merge_task_results());
+
+    // Return iterator status to catch any errors during task generation
+    return task_iterator.status();
+}
+
+int64_t SpillMemTableSink::txn_id() {
+    return _writer->txn_id();
+}
+
+int64_t SpillMemTableSink::tablet_id() {
+    return _writer->tablet_id();
+}
+
+} // namespace starrocks::lake

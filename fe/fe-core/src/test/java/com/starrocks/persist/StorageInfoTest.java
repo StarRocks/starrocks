@@ -17,24 +17,13 @@
 
 package com.starrocks.persist;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class StorageInfoTest {
     @Test
     public void test() {
-        StorageInfo info = new StorageInfo();
-        Assert.assertEquals(-1, info.getClusterID());
-        Assert.assertEquals(0, info.getImageJournalId());
-
-        info = new StorageInfo(10, 20);
-        Assert.assertEquals(10, info.getClusterID());
-        Assert.assertEquals(20, info.getImageJournalId());
-
-        info.setClusterID(100);
-        info.setImageJournalId(200);
-
-        Assert.assertEquals(100, info.getClusterID());
-        Assert.assertEquals(200, info.getImageJournalId());
+        StorageInfo info = new StorageInfo(20, ImageFormatVersion.v2);
+        Assertions.assertEquals(20, info.getImageJournalId());
     }
 }

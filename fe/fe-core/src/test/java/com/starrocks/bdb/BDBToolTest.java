@@ -43,15 +43,17 @@ import com.sleepycat.je.Environment;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.OperationStatus;
 import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.io.Text;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.ReplicaPersistInfo;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import com.starrocks.persist.gson.GsonUtils;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -63,7 +65,7 @@ public class BDBToolTest {
     private static Database db;
     private static String dbName = "12345";
 
-    @BeforeClass
+    @BeforeAll
     public static void setEnv() {
         try {
             File file = new File("./bdb");
@@ -90,9 +92,7 @@ public class BDBToolTest {
 
             // write something
             ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(1, 2, 3, 4, 5, 6, 7, 8, 0, 10, 11, 12, 14, 0);
-            JournalEntity entity = new JournalEntity();
-            entity.setOpCode(OperationType.OP_ADD_REPLICA);
-            entity.setData(info);
+            JournalEntity entity = new JournalEntity(OperationType.OP_ADD_REPLICA_V2, info);
 
             // id is the key
             Long journalId = 23456L;
@@ -103,7 +103,8 @@ public class BDBToolTest {
             // entity is the value
             DataOutputBuffer buffer = new DataOutputBuffer(128);
             try {
-                entity.write(buffer);
+                buffer.writeShort(entity.opCode());
+                Text.writeString(buffer, GsonUtils.GSON.toJson(entity.data(), ReplicaPersistInfo.class));
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -129,7 +130,7 @@ public class BDBToolTest {
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static void deleteEnv() {
         File file = new File(path);
         if (file.isDirectory()) {
@@ -147,7 +148,7 @@ public class BDBToolTest {
     public void testList() {
         BDBToolOptions options = new BDBToolOptions(true, "", false, "", "", 0, 0);
         BDBTool tool = new BDBTool(path, options);
-        Assert.assertTrue(tool.run());
+        Assertions.assertTrue(tool.run());
     }
 
     @Test
@@ -155,27 +156,27 @@ public class BDBToolTest {
         // wrong db name
         BDBToolOptions options = new BDBToolOptions(false, "12346", true, "", "", 0, 0);
         BDBTool tool = new BDBTool(path, options);
-        Assert.assertFalse(tool.run());
+        Assertions.assertFalse(tool.run());
 
         // right db name
         options = new BDBToolOptions(false, "12345", true, "", "", 0, 0);
         tool = new BDBTool(path, options);
-        Assert.assertTrue(tool.run());
+        Assertions.assertTrue(tool.run());
     }
 
     @Test
     public void testGetKey() {
         BDBToolOptions options = new BDBToolOptions(false, "12345", false, "", "", 0, 0);
         BDBTool tool = new BDBTool(path, options);
-        Assert.assertTrue(tool.run());
+        Assertions.assertTrue(tool.run());
 
         options = new BDBToolOptions(false, "12345", false, "23456", "12345", 0, 0);
         tool = new BDBTool(path, options);
-        Assert.assertFalse(tool.run());
+        Assertions.assertFalse(tool.run());
 
         options = new BDBToolOptions(false, "12345", false, "23456", "", 0, 0);
         tool = new BDBTool(path, options);
-        Assert.assertTrue(tool.run());
+        Assertions.assertTrue(tool.run());
     }
 
 }

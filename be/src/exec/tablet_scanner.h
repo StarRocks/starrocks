@@ -21,14 +21,14 @@
 #include "column/chunk.h"
 #include "column/column_access_path.h"
 #include "common/status.h"
-#include "exec/olap_utils.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/runtime_state.h"
-#include "storage/conjunctive_predicates.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/olap_scan_range.h"
 
 namespace starrocks {
 
@@ -84,13 +84,13 @@ private:
     RuntimeState* _runtime_state = nullptr;
     OlapScanNode* _parent = nullptr;
 
-    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     ObjectPool _pool;
     std::vector<ExprContext*> _conjunct_ctxs;
-    ConjunctivePredicates _predicates;
-    std::vector<uint8_t> _selection;
+    PredicateTree _pred_tree;
+    Filter _selection;
 
     // for release memory.
+    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     std::vector<PredicatePtr> _predicate_free_pool;
 
     bool _is_open = false;
@@ -104,7 +104,7 @@ private:
     std::shared_ptr<TabletReader> _reader;
 
     TabletSharedPtr _tablet;
-    TabletSchemaSPtr _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
     int64_t _version = 0;
 
     // output columns of `this` TabletScanner, i.e, the final output columns of `get_chunk`.

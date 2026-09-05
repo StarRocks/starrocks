@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.validate;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -24,16 +23,20 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -51,7 +54,7 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     public void validate(OptExpression root) {
-        root.initRowOutputInfo();
+        AIFunctionPlacementValidator.validate(root);
         visit(root, null);
     }
 
@@ -66,6 +69,17 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
             Map<ColumnRefOperator, ScalarOperator> map = ((LogicalProjectOperator) optExpression.getOp())
                     .getColumnRefMap();
             validateProjectionMap(map);
+        }
+        validateChildOpt(optExpression);
+        return optExpression;
+    }
+
+    @Override
+    public OptExpression visitLogicalAIProject(OptExpression optExpression, Void context) {
+        if (needValidate) {
+            LogicalAIProjectOperator aiProject = optExpression.getOp().cast();
+            validateProjectionMap(aiProject.getColumnRefMap());
+            validateProjectionMap(aiProject.getCommonSubOperatorMap());
         }
         validateChildOpt(optExpression);
         return optExpression;
@@ -124,6 +138,10 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     public OptExpression visitLogicalUnion(OptExpression optExpression, Void context) {
         LogicalUnionOperator unionOperator = (LogicalUnionOperator) optExpression.getOp();
         List<ColumnRefOperator> resultCols = unionOperator.getOutputColumnRefOp();
+        if (optExpression.getInputs().isEmpty()) {
+            ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
+                    ErrorType.INTERNAL_ERROR, optExpression, "union operator has no child");
+        }
         for (List<ColumnRefOperator> childCols : unionOperator.getChildOutputColumns()) {
             if (resultCols.size() != childCols.size()) {
                 ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
@@ -155,6 +173,19 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
 
     @Override
     public OptExpression visitLogicalValues(OptExpression optExpression, Void context) {
+        if (needValidate) {
+            LogicalValuesOperator valuesOperator = (LogicalValuesOperator) optExpression.getOp();
+            for (List<ScalarOperator> row : valuesOperator.getRows()) {
+                for (ScalarOperator scalarOperator : row) {
+                    validateScalarOperator(scalarOperator);
+                }
+            }
+        }
+        return commonValidate(optExpression);
+    }
+
+    @Override
+    public OptExpression visitLogicalRawValues(OptExpression optExpression, Void context) {
         return commonValidate(optExpression);
     }
 
@@ -237,7 +268,7 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
             if (needDateValidate()
                     && ("str_to_date".equals(fnName) || "str2date".equals(fnName))
                     && call.getChild(0).isConstantRef()) {
-                checkDateType((ConstantOperator) call.getChild(0), Type.DATETIME);
+                checkDateType((ConstantOperator) call.getChild(0), DateType.DATETIME);
             } else {
                 super.visitCall(call, context);
             }

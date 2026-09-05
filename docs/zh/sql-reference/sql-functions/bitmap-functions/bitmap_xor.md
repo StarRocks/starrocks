@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算两个 Bitmap 中不重复元素所构成的集合。"
 ---
 
 # bitmap_xor
 
-## 功能
+
 
 计算两个 Bitmap 中不重复元素所构成的集合，逻辑上等价于 `bitmap_andnot(bitmap_or(lhs, rhs), bitmap_and(lhs, rhs))`(补集)。
 

@@ -17,6 +17,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -30,6 +32,7 @@ import java.util.regex.Pattern;
  * This class is used for reconstruct RuntimeProfile from plain text
  */
 public class RuntimeProfileParser {
+    private static final Logger LOG = LogManager.getLogger(RuntimeProfileParser.class);
     private static final Pattern NONE_COUNTER_PATTERN =
             Pattern.compile("^- (.*?): $");
     private static final Pattern BYTE_COUNTER_PATTERN =
@@ -48,8 +51,10 @@ public class RuntimeProfileParser {
             Pattern.compile("^- (.*?): (.*?)$");
     private static final Pattern INFO_KEY_STRING_PATTERN =
             Pattern.compile("^- (.*?)$");
+    private static final BigDecimal UNIT_COUNTER_VALUE_LIMIT = BigDecimal.valueOf(1000);
 
     public static RuntimeProfile parseFrom(String content) {
+        LOG.debug("Parse runtime profile from content: {}", content);
         BufferedReader bufferedReader = new BufferedReader(new StringReader(content));
         // (profile, profileIndent, counterStack(name, counter, counterIndent))
         LinkedList<ProfileTuple> profileStack = Lists.newLinkedList();
@@ -109,6 +114,7 @@ public class RuntimeProfileParser {
                 }
             }
         } catch (IOException e) {
+            LOG.error("Failed to parse runtime profile from content: {}, {}", content, DebugUtil.getStackTrace(e));
             return null;
         }
 
@@ -228,20 +234,7 @@ public class RuntimeProfileParser {
         if (!matcher.matches()) {
             return null;
         }
-
-        String name = matcher.group(1);
-        String value = matcher.group(2);
-        String preciseValue = matcher.group(6);
-
-        if (StringUtils.isNotBlank(preciseValue)) {
-            return new CounterTuple(name, TUnit.UNIT, Long.parseLong(preciseValue));
-        } else {
-            long lValue = Long.parseLong(value);
-            if (lValue > 1000) {
-                return null;
-            }
-            return new CounterTuple(name, TUnit.UNIT, lValue);
-        }
+        return buildUnitCounter(matcher, TUnit.UNIT);
     }
 
     private static CounterTuple tryParseUnitPerSecCounter(String item) {
@@ -249,20 +242,21 @@ public class RuntimeProfileParser {
         if (!matcher.matches()) {
             return null;
         }
+        return buildUnitCounter(matcher, TUnit.UNIT_PER_SECOND);
+    }
 
+    private static CounterTuple buildUnitCounter(Matcher matcher, TUnit unit) {
         String name = matcher.group(1);
-        String value = matcher.group(2);
         String preciseValue = matcher.group(6);
-
+        // Both regex groups admit decimals; use BigDecimal so Long.parseLong won't throw.
         if (StringUtils.isNotBlank(preciseValue)) {
-            return new CounterTuple(name, TUnit.UNIT_PER_SECOND, Long.parseLong(preciseValue));
-        } else {
-            long lValue = Long.parseLong(value);
-            if (lValue > 1000) {
-                return null;
-            }
-            return new CounterTuple(name, TUnit.UNIT_PER_SECOND, lValue);
+            return new CounterTuple(name, unit, new BigDecimal(preciseValue).longValue());
         }
+        BigDecimal value = new BigDecimal(matcher.group(2));
+        if (value.compareTo(UNIT_COUNTER_VALUE_LIMIT) > 0) {
+            return null;
+        }
+        return new CounterTuple(name, unit, value.longValue());
     }
 
     private static CounterTuple tryParseTimer(String item) {

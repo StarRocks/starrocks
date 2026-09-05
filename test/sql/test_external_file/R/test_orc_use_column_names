@@ -1,0 +1,60 @@
+-- name: testORCUseColumNames
+shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/multi_stripes.orc oss://${oss_bucket}/test_orc_use_column_names/${uuid0}/multi_stripes.orc | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 4,070. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE test_orc_column
+(
+    c1 string,
+    c0 string,
+    none_existed string
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_orc_use_column_names/${uuid0}/",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from test_orc_column where c0 = '199994';
+-- result:
+c	199994	None
+-- !result
+select * from test_orc_column where none_existed is not null;
+-- result:
+-- !result
+SELECT * FROM FILES(
+     "path" = "oss://${oss_bucket}/test_orc_use_column_names/${uuid0}/multi_stripes.orc",
+     "format" = "orc",
+     "aws.s3.access_key" = "${oss_ak}",
+     "aws.s3.secret_key" = "${oss_sk}",
+     "aws.s3.endpoint" = "${oss_endpoint}") where c0='199994';
+-- result:
+199994	c
+-- !result
+set orc_use_column_names = true;
+-- result:
+-- !result
+select * from test_orc_column where c0 = '199994';
+-- result:
+c	199994	None
+-- !result
+select * from test_orc_column where none_existed is not null;
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_orc_use_column_names/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

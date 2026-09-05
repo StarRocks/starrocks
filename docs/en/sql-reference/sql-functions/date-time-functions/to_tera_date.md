@@ -1,57 +1,82 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Parses a date or time string according to the specified format and converts the string to a DATE value."
 ---
 
-# to_date
+# to_tera_date
 
-## Description
 
- Converts a VARCHAR value into a date from an input format.
+
+Parses a date or time string according to the specified format and converts the string to a DATE value.
 
 ## Syntax
 
 ```Haskell
-
-Converts a VARCHAR value into a date from an input format.
-
 DATE to_tera_date(VARCHAR str, VARCHAR format)
 ```
 
 ## Parameters
 
-Converts a VARCHAR value into a date from an input format.
+- `str`: the time expression to convert. It must be of the VARCHAR type.
 
-- `str`: the time expression you want to convert. It must be of the VARCHAR type.
-- `format`: the DateTime format as below:
+- `format`: the date format specifier for `str`. It is used to parse and convert the input string. `format` must match `string`. Otherwise, NULL is returned. If `format` is invalid, an error is returned.
 
-```
-[ \r \n \t - / , . ;] :	Punctuation characters are ignored
-dd	                  : Day of month (1-31)
-hh	                  : Hour of day (1-12)
-hh24                  : Hour of the day (0-23)
-mi                    : Minute (0-59)
-mm                    : Month (01-12)
-ss                    : Second (0-59)
-yyyy                  : 4-digit year
-yy                    : 2-digit year
-am                    : Meridian indicator
-pm                    : Meridian indicator
-```
+  The following table describes the format elements.
+
+  | **Element**           | **Description**                             |
+  | --------------------- | ------------------------------------------- |
+  | [ \r \n \t - / , . ;] | Punctuation characters that are ignored in conversion       |
+  | dd                    | Day of month (1 - 31)                       |
+  | hh                    | Hour of day (1 - 12)                        |
+  | hh24                  | Hour of day (0 - 23)                        |
+  | mi                    | Minute (0 - 59)                             |
+  | mm                    | Month (01 - 12)                             |
+  | ss                    | Second (0 - 59)                             |
+  | yyyy                  | 4-digit year.                               |
+  | yy                    | 2-digit year.                               |
+  | am                    | Meridian indicator.                         |
+  | pm                    | Meridian indicator.                         |
 
 ## Examples
 
-```Plain Text
-Converts a VARCHAR value into a date from an input format.
+```SQL
+select to_tera_date("1988/04/08","yyyy/mm/dd");
++------------------------------------------+
+| to_tera_date('1988/04/08', 'yyyy/mm/dd') |
++------------------------------------------+
+| 1988-04-08                               |
++------------------------------------------+
 
-mysql> select to_date("1988/04/08","yyyy/mm/dd");
-+-------------------------------------+
-| to_date('1988/04/08', 'yyyy/mm/dd') |
-+-------------------------------------+
-| 1988-04-08                          |
-+-------------------------------------+
+select to_tera_date("04-08-1988","mm-dd-yyyy");
++------------------------------------------+
+| to_tera_date('04-08-1988', 'mm-dd-yyyy') |
++------------------------------------------+
+| 1988-04-08                               |
++------------------------------------------+
 
+select to_tera_date(";198804:08",";yyyymm:dd");
++------------------------------------------+
+| to_tera_date(';198804:08', ';yyyymm:dd') |
++------------------------------------------+
+| 1988-04-08                               |
++------------------------------------------+
+
+select to_tera_date("2020-02-02 00:00:00", "yyyy-mm-dd");
++---------------------------------------------------+
+| to_tera_date('2020-02-02 00:00:00', 'yyyy-mm-dd') |
++---------------------------------------------------+
+| 2020-02-02                                        |
++---------------------------------------------------+
+
+-- The input is year and does not contain the month or date part. The first day in that year is returned.
+select to_tera_date("1988","yyyy");
++------------------------------+
+| to_tera_date('1988', 'yyyy') |
++------------------------------+
+| 1988-01-01                   |
++------------------------------+
 ```
 
-## keyword
+## Keywords
 
 TO_TERA_DATE

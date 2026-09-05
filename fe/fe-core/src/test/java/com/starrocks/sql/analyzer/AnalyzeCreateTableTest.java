@@ -16,21 +16,23 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
-import org.apache.iceberg.hive.RuntimeMetaException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeCreateTableTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -40,9 +42,9 @@ public class AnalyzeCreateTableTest {
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap " +
                         "duplicate key(col1, col2) distributed by hash(col1) buckets 10");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("table1", stmt.getTableName());
-        Assert.assertNull(stmt.getProperties());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("table1", stmt.getTableName());
+        Assertions.assertNull(stmt.getProperties());
     }
 
     @Test
@@ -51,9 +53,9 @@ public class AnalyzeCreateTableTest {
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10 rollup ( index1(col1, col2), index2(col2, col3))";
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(sql);
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("table1", stmt.getTableName());
-        Assert.assertNull(stmt.getProperties());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("table1", stmt.getTableName());
+        Assertions.assertNull(stmt.getProperties());
     }
 
     @Test
@@ -62,10 +64,35 @@ public class AnalyzeCreateTableTest {
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10 rollup ( index1(col1, col2), index2(col2, col3))";
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(sql);
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("table1", stmt.getTableName());
-        Assert.assertNull(stmt.getPartitionDesc());
-        Assert.assertNull(stmt.getProperties());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("table1", stmt.getTableName());
+        Assertions.assertNull(stmt.getPartitionDesc());
+        Assertions.assertNull(stmt.getProperties());
+    }
+
+    @Test
+    public void testVarbinaryWithoutLengthMaterializesDefaultLength() {
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create table test.table_varbinary_default (col1 int, col2 varbinary) engine=olap " +
+                        "duplicate key(col1) distributed by hash(col1) buckets 10");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), type.getLength());
+        Assertions.assertEquals("varbinary(" + TypeFactory.getOlapMaxVarcharLength() + ")",
+                type.toSql());
+    }
+
+    @Test
+    public void testExternalFileTableVarbinaryKeepsUnspecifiedLength() {
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create external table test.file_varbinary (col1 int, col2 varbinary) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"parquet\")");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(-1, type.getLength());
+        Assertions.assertEquals("varbinary", type.toSql());
     }
 
     @Test
@@ -278,9 +305,9 @@ public class AnalyzeCreateTableTest {
 
     @Test
     public void testRandomDistributionForAggKey() {
-        analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
                 "distributed by random");
-        analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
                 "distributed by random buckets 10");
         analyzeFail("create table table1 (col1 char(10) not null, col2 bigint replace) engine=olap aggregate key(col1) " +
                 "distributed by random buckets 10");
@@ -327,7 +354,7 @@ public class AnalyzeCreateTableTest {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadata) {
             {
-                metadata.getDb("iceberg_catalog", "not_exist_db");
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "not_exist_db");
                 result = null;
                 minTimes = 0;
             }
@@ -336,9 +363,12 @@ public class AnalyzeCreateTableTest {
 
         new Expectations(metadata) {
             {
-                metadata.getDb("iceberg_catalog", "iceberg_db");
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
                 result = new Database();
                 minTimes = 0;
+
+                metadata.tableExists((ConnectContext) any, "iceberg_catalog", "iceberg_db", anyString);
+                result = false;
             }
         };
 
@@ -354,15 +384,6 @@ public class AnalyzeCreateTableTest {
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog("iceberg_catalog");
         analyzeSuccess("create external table iceberg_db.iceberg_table (k1 int, k2 int) partition by (k2)");
 
-        try {
-            String stmt = "create external table iceberg_table (k1 int, k2 int) partition by (k2)";
-            UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e instanceof RuntimeMetaException);
-            Assert.assertTrue(e.getMessage().contains("Failed to connect to Hive Metastore"));
-        }
-
         AnalyzeTestUtil.getConnectContext().setDatabase("iceberg_db");
         analyzeSuccess("create external table iceberg_table (k1 int, k2 int) partition by (k2)");
         analyzeSuccess("create external table iceberg_table (k1 int, k2 int) engine=iceberg partition by (k2)");
@@ -372,31 +393,231 @@ public class AnalyzeCreateTableTest {
         AnalyzeTestUtil.getStarRocksAssert().withCatalog(createHiveCatalogStmt);
         new Expectations(metadata) {
             {
-                metadata.getDb("hive_catalog", "hive_db");
+                metadata.getDb((ConnectContext) any, "hive_catalog", "hive_db");
                 result = new Database();
                 minTimes = 0;
             }
         };
 
-        analyzeFail("create external table hive_catalog.hive_db.hive_table (k1 int, k2 int) engine=iceberg partition by (k2)");
+        AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        AnalyzeTestUtil.getConnectContext().setDatabase("test");
+
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 date) partition by year(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 date) partition by month(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 date) partition by day(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 datetime) partition by hour(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int) partition by bucket(k2, 10)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 varchar(10)) partition by truncate(k2, 1)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 varbinary(10)) partition by truncate(k2, 1)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 date) partition by bucket(k2, 1)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 datetime) partition by bucket(k2, 1)");
+
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int, k3 int) partition by (k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int, k3 int) partition by (k1)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int, k3 int) partition by (k3)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int, k3 int, k4 int) partition by (k2, k3)");
+
+        // Test PARTITION BY single column
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int) partition by k2");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int) partition by (k2)");
+
+        // Test PARTITION BY multiple columns
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int, k3 int) partition by k2, k3");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int, k3 int) partition by (k2, k3)");
+
+        // Test PARTITION BY three columns
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int, k3 int, k4 int) partition by k2, k3, k4");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int, k3 int, k4 int) partition by (k2, k3, k4)");
+
+        // Test PARTITION BY with partition transforms
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 date) partition by year(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 date) partition by month(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 date) partition by day(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 datetime) partition by year(k2), bucket(k1, 5)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int) partition by bucket(k1, 10), bucket(k2, 10)");
+
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 datetime) partition by (year(k2), bucket(k1, 5))");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int) partition by (bucket(k1, 10), bucket(k2, 10))");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int, k3 string) partition by (bucket(k1, 10), bucket(k2, 10), truncate(k3, 3))");
+
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
+    }
+
+    @Test
+    public void testIcebergPartitionTransformError() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
+                result = new Database();
+                minTimes = 0;
+
+                metadata.tableExists((ConnectContext) any, "iceberg_catalog", "iceberg_db", anyString);
+                result = false;
+            }
+        };
 
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         AnalyzeTestUtil.getConnectContext().setDatabase("test");
+
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int) partition by bucket(k2)",
+                "Function 'bucket' requires exactly 2 arguments: column and number, but got 1 argument(s)");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 varchar(10)) partition by truncate(k2)",
+                "Function 'truncate' requires exactly 2 arguments: column and number, but got 1 argument(s)");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 varchar(10)) partition by bucket(4, k2)",
+                "No matching function with signature: bucket(tinyint(4), varchar(10))");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 varchar(10)) partition by truncate(4, k2)",
+                "No matching function with signature: truncate(tinyint(4), varchar(10))");
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
+    }
+
+    @Test
+    public void testIcebergPartitionTransformOnDecimalsWithDifferentScales() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
+                result = new Database();
+                minTimes = 0;
+
+                metadata.tableExists((ConnectContext) any, "iceberg_catalog", "iceberg_db", anyString);
+                result = false;
+            }
+        };
+
+        AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        AnalyzeTestUtil.getConnectContext().setDatabase("test");
+
+        // Analyzing a transform on one decimal column must not prevent later analyses on
+        // decimal columns with a different scale in the same FE process: the resolved builtin
+        // is a shared singleton whose wildcard decimal signature has to stay intact.
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(18, 4)) partition by truncate(d1, 5)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(12, 2)) partition by truncate(d2, 3)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(12, 2)) partition by bucket(d1, 8)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(18, 4)) partition by bucket(d2, 8)");
+        // decimal128 goes through a separate builtin singleton
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(38, 6)) partition by truncate(d1, 5)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(30, 2)) partition by truncate(d2, 3)");
+
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 
     @Test
     public void testGeneratedColumnWithExternalTable() throws Exception {
-        analyzeFail("create external table ex_hive_tbl0 (col_tinyint tinyint null comment \"column tinyint\"," + 
-                    "col_varchar varchar(5), col_boolean boolean null comment \"column boolean\", col_new int" + 
-                    "as col_tinyint+1) ENGINE=hive properties (\"resource\" = \"hive_resource\"," +
-                    "\"table\" = \"hive_hdfs_orc_nocompress\"," +
-                    "\"database\" = \"hive_extbl_test\");");
+        analyzeFail("create external table ex_hive_tbl0 (col_tinyint tinyint null comment \"column tinyint\"," +
+                "col_varchar varchar(5), col_boolean boolean null comment \"column boolean\", col_new int" +
+                "as col_tinyint+1) ENGINE=hive properties (\"resource\" = \"hive_resource\"," +
+                "\"table\" = \"hive_hdfs_orc_nocompress\"," +
+                "\"database\" = \"hive_extbl_test\");");
     }
 
     @Test
     public void testGeneratedColumnOnAGGTable() throws Exception {
         analyzeFail("CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, v1 BIGINT SUM as id)" +
-                    "AGGREGATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 " +
-                    "PROPERTIES(\"replication_num\" = \"1\", \"replicated_storage\"=\"true\");");
+                "AGGREGATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\", \"replicated_storage\"=\"true\");");
+    }
+
+    @Test
+    public void testNgrambloomIndex() throws Exception {
+        // create index with non-existent column
+        String sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL3) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "INDEX1 column does not exist in table.");
+
+        // create index in non-string column
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 INT," +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "Invalid ngram bloom filter column 'COL2': unsupported type INT");
+
+        // create index with multiple columns
+        sql = "CREATE TABLE TABLE1 (COL1 VARCHAR(10), COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL1, COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "INDEX1 index can only apply to a single column");
+
+        // create index with wrong fpp
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '1', 'GRAM_NUM' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "Bloom filter fpp should in [1.0E-4, 0.05]");
+
+        // create index with wrong gram num
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '0'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "Ngram Bloom filter's gram_num should be positive number");
+
+        // create index with agg mode's non-key column, col3 use sum as agg function
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10), COL3 VARCHAR(10) REPLACE," +
+                "INDEX INDEX1(COL3) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "Ngram Bloom filter index only used in columns of " +
+                "DUP_KEYS/PRIMARY table or key columns of UNIQUE_KEYS/AGG_KEYS table");
+
+        // create index with invalid properties
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2', 'CASE_SENSITIVE' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "Ngram Bloom filter's case_sensitive should be true or false");
+
+        // create index with correct fpp and gram num and case-insensitive
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2', 'CASE_SENSITIVE' = 'false'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeSuccess(sql);
+
+        // create index with default valus
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF)" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeSuccess(sql);
     }
 }

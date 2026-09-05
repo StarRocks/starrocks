@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回x的y次方。"
 ---
 
 # pow, power, dpow, fpow
 
-## 功能
+
 
 返回参数 `x` 的 `y` 次方。
 

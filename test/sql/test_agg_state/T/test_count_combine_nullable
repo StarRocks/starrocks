@@ -1,0 +1,41 @@
+-- name: test_count_combine_nullable
+-- Regression for the BE count dispatch bug: count_combine(nullable_col) must
+-- skip NULLs like count(col), not count every row like count(*).
+DROP DATABASE IF EXISTS test_count_combine_nullable_${uuid0};
+CREATE DATABASE test_count_combine_nullable_${uuid0};
+USE test_count_combine_nullable_${uuid0};
+
+CREATE TABLE t (
+    region VARCHAR(8),
+    nullable_score INT
+) DUPLICATE KEY(region) DISTRIBUTED BY HASH(region) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t VALUES
+    ('CN', 5),
+    ('US', NULL),
+    ('CN', NULL),
+    ('US', 8),
+    ('CN', 12);
+
+SELECT region, COUNT(*) AS c_all, COUNT(nullable_score) AS c_non_null
+FROM t GROUP BY region ORDER BY region;
+
+SELECT region,
+       count_state_merge(count_combine())               AS via_star,
+       count_state_merge(count_combine(nullable_score)) AS via_col
+FROM t GROUP BY region ORDER BY region;
+
+SELECT count_state_merge(count_combine(region)) AS via_combine_nonnull,
+       COUNT(region) AS direct_nonnull
+FROM t;
+
+-- force_streaming routes count_combine through the streaming serialize path; its
+-- output column must stay non-nullable and still skip NULLs (matches count(col)).
+SET streaming_preaggregation_mode = 'force_streaming';
+SELECT region,
+       count_state_merge(count_combine(nullable_score)) AS via_col_streaming,
+       count(nullable_score)                            AS direct
+FROM t GROUP BY region ORDER BY region;
+
+DROP DATABASE test_count_combine_nullable_${uuid0};

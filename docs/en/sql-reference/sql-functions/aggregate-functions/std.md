@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the standard deviation of an expression."
 ---
 
-# STD
+# std
 
-## Description
+
 
 Returns the standard deviation of an expression. Since v2.5.10, this function can also be used as a window function.
 

@@ -1,0 +1,53 @@
+-- name: test_write_orc_file
+create external catalog hive_sink_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+set catalog hive_sink_test_${uuid0};
+-- result:
+-- !result
+create database hive_db_${uuid0};
+-- result:
+-- !result
+use hive_db_${uuid0};
+-- result:
+-- !result
+create table t1(c1 int, c2 map<int, string>) properties("file_format"="orc");
+-- result:
+-- !result
+insert into t1 values (1, null), (2, map{22:"v22", 222:"v222"}), (3, map{33:"v33"}), (4, map{44:null, 444:"v444"});
+-- result:
+-- !result
+select * from t1;
+-- result:
+1	None
+2	{22:"v22",222:"v222"}
+3	{33:"v33"}
+4	{44:null,444:"v444"}
+-- !result
+drop table t1 force;
+-- result:
+-- !result
+create table t2(c1 int, c2 map<int, map<int, string>>) properties("file_format"="orc");
+-- result:
+-- !result
+insert into t2 values (1, null), (2, map{22: map{"222": "v222"}}), (3, map{33: map{"333": null}});
+-- result:
+-- !result
+select * from t2;
+-- result:
+1	None
+2	{22:{222:"v222"}}
+3	{33:{333:null}}
+-- !result
+drop table t2 force;
+-- result:
+-- !result
+drop database hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_test_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result

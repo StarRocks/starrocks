@@ -14,9 +14,20 @@
 
 #pragma once
 
+#include <string>
+
+#include "cache/cache_options.h"
+#include "cache/mem_cache/page_handle_fwd.h"
 #include "common/status.h"
 #include "formats/parquet/schema.h"
+#include "formats/scan_context.h"
+#include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
+#include "types/logical_type.h"
+
+namespace starrocks {
+class StoragePageCache;
+} // namespace starrocks
 
 namespace starrocks::parquet {
 
@@ -65,8 +76,24 @@ public:
     // Returns true if version is strictly equal with other_version
     bool VersionEq(const ApplicationVersion& other_version) const;
 
+    // Returns true if the writer is one that computes statistics correctly for all types:
+    // parquet-cpp from 1.3.0 and parquet-mr from 1.10.0 onwards. A writer we do not recognise
+    // keeps the benefit of the doubt, since VersionLt() only compares like with like.
+    bool HasFixedStatsVersion() const;
+
     // Checks if the Version has the correct statistics for a given column
     bool HasCorrectStatistics(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
+
+    // Checks if the Version computes `null_count` correctly. `null_count` is a plain counter, so
+    // none of the sort-order or byte-array concerns that HasCorrectStatistics() weighs on top of
+    // the writer version apply to it -- only the writer version itself does.
+    bool HasCorrectNullCount() const;
+
+    // ARROW-17100: [C++][Parquet] Fix backwards compatibility for ParquetV2 data pages written prior to 3.0.0 per ARROW-10353 #13665
+    // https://github.com/apache/arrow/pull/13665/files
+    // Prior to Arrow 3.0.0, is_compressed was always set to false in column headers,
+    // even if compression was used. See ARROW-17100.
+    bool IsAlwaysCompressed() const;
 };
 
 // Class corresponding to FileMetaData in thrift
@@ -92,6 +119,39 @@ private:
     uint64_t _num_rows{0};
     SchemaDescriptor _schema;
     ApplicationVersion _writer_version;
+};
+
+using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
+
+// FileMetaDataParser parse FileMetaData through below way:
+// 1. try to reuse SplitContext's FileMetaData
+// 2. if DataCache is enabled, retrieve FileMetaData from DataCache. Otherwise, parse FileMetaData normally
+class FileMetaDataParser {
+public:
+    FileMetaDataParser(RandomAccessFile* file, const FormatScanContext* scanner_context, StoragePageCache* cache,
+                       const DataCacheOptions* datacache_options, uint64_t file_size)
+            : _file(file),
+              _scanner_ctx(scanner_context),
+              _cache(cache),
+              _datacache_options(datacache_options),
+              _file_size(file_size) {}
+    StatusOr<FileMetaDataPtr> get_file_metadata();
+
+private:
+    Status _parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size);
+    StatusOr<uint32_t> _get_footer_read_size() const;
+    StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
+    RandomAccessFile* _file = nullptr;
+    const FormatScanContext* _scanner_ctx = nullptr;
+    StoragePageCache* _cache = nullptr;
+    const DataCacheOptions* _datacache_options = nullptr;
+    uint64_t _file_size = 0;
+
+    // contains magic number (4 bytes) and footer length (4 bytes)
+    constexpr static const uint32_t PARQUET_FOOTER_SIZE = 8;
+    constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 48 * 1024;
+    constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
+    constexpr static const char* PARQUET_EMAIC_NUMBER = "PARE";
 };
 
 SortOrder sort_order_of_logical_type(LogicalType type);

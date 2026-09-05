@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns bitmap values that exist in lhs but do not exist in rhs, and returns the new bitmap."
 ---
 
 # bitmap_andnot
 
-## Description
+
 
 Returns bitmap values that exist in `lhs` but do not exist in `rhs`, and returns the new bitmap.
 

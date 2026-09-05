@@ -31,9 +31,9 @@ public class ListPartitionPersistInfo extends PartitionPersistInfoV2 {
 
     public ListPartitionPersistInfo(Long dbId, Long tableId, Partition partition,
                                     DataProperty dataProperty, short replicationNum,
-                                    boolean isInMemory, boolean isTempPartition,
+                                    boolean isTempPartition,
                                     List<String> values, List<List<String>> multiValues, DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, dataCacheInfo);
+        super(dbId, tableId, partition, dataProperty, replicationNum, isTempPartition, dataCacheInfo);
         this.multiValues = multiValues;
         this.values = values;
     }

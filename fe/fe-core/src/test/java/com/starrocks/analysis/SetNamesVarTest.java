@@ -23,8 +23,10 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetStmt;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SetNamesVarTest {
 
@@ -32,24 +34,26 @@ public class SetNamesVarTest {
     public void testNormal() throws AnalysisException {
         SetNamesVar var = new SetNamesVar(null, null);
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
-        Assert.assertEquals("utf8", var.getCharset().toLowerCase());
-        Assert.assertEquals("DEFAULT", var.getCollate());
+        Assertions.assertEquals("utf8", var.getCharset().toLowerCase());
+        Assertions.assertEquals("DEFAULT", var.getCollate());
 
         var = new SetNamesVar("UTf8", null);
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
-        Assert.assertEquals("utf8", var.getCharset().toLowerCase());
-        Assert.assertEquals("DEFAULT", var.getCollate());
+        Assertions.assertEquals("utf8", var.getCharset().toLowerCase());
+        Assertions.assertEquals("DEFAULT", var.getCollate());
 
         var = new SetNamesVar("UTf8", "aBc");
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
-        Assert.assertEquals("utf8", var.getCharset().toLowerCase());
-        Assert.assertEquals("aBc", var.getCollate());
+        Assertions.assertEquals("utf8", var.getCharset().toLowerCase());
+        Assertions.assertEquals("aBc", var.getCollate());
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testUnsupported()  {
-        SetNamesVar var = new SetNamesVar("gbk");
-        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
-        Assert.fail("No exception throws.");
+        assertThrows(SemanticException.class, () -> {
+            SetNamesVar var = new SetNamesVar("gbk");
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
+            Assertions.fail("No exception throws.");
+        });
     }
 }

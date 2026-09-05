@@ -37,22 +37,27 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.catalog.Partition;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.type.CharType;
+import com.starrocks.type.DateType;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class HashDistributionPrunerTest {
+public class HashDistributionPrunerTest extends PlanTestBase {
 
     @Test
     public void test() {
@@ -62,11 +67,11 @@ public class HashDistributionPrunerTest {
         }
 
         // distribution columns
-        Column dealDate = new Column("dealDate", Type.DATE, false);
-        Column mainBrandId = new Column("main_brand_id", Type.CHAR, false);
-        Column itemThirdCateId = new Column("item_third_cate_id", Type.CHAR, false);
-        Column channel = new Column("channel", Type.CHAR, false);
-        Column shopType = new Column("shop_type", Type.CHAR, false);
+        Column dealDate = new Column("dealDate", DateType.DATE, false);
+        Column mainBrandId = new Column("main_brand_id", CharType.CHAR, false);
+        Column itemThirdCateId = new Column("item_third_cate_id", CharType.CHAR, false);
+        Column channel = new Column("channel", CharType.CHAR, false);
+        Column shopType = new Column("shop_type", CharType.CHAR, false);
         List<Column> columns = Lists.newArrayList(dealDate, mainBrandId, itemThirdCateId, channel, shopType);
 
         // filters
@@ -107,18 +112,18 @@ public class HashDistributionPrunerTest {
         filters.put("channel", channelFilter);
         filters.put("shop_type", shopTypeFilter);
 
-        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters, tabletIds.size());
+        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
         // 20 = 1 * 5 * 2 * 2 * 1 (element num of each filter)
-        Assert.assertEquals(20, results.size());
+        Assertions.assertEquals(20, results.size());
 
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("4"));
         filters.get("shop_type").setInPredicate(filters.get("shop_type").getInPredicate());
         results = pruner.prune();
         // 40 = 1 * 5 * 2 * 2 * 2 (element num of each filter)
         // 39 is because these is hash conflict
-        Assert.assertEquals(39, results.size());
+        Assertions.assertEquals(39, results.size());
 
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("5"));
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("6"));
@@ -127,21 +132,21 @@ public class HashDistributionPrunerTest {
         filters.get("shop_type").setInPredicate(filters.get("shop_type").getInPredicate());
         results = pruner.prune();
         // 120 = 1 * 5 * 2 * 2 * 6 (element num of each filter) > 100
-        Assert.assertEquals(300, results.size());
+        Assertions.assertEquals(300, results.size());
 
         // check hash conflict
         inList4.add(new StringLiteral("4"));
         HashDistributionKey hashKey = new HashDistributionKey();
         Set<Long> tablets = Sets.newHashSet();
-        hashKey.pushColumn(new StringLiteral("2019-08-22"), Type.DATE);
+        hashKey.pushColumn(new StringLiteral("2019-08-22"), DateType.DATE);
         for (Expr inLiteral : inList) {
-            hashKey.pushColumn((StringLiteral) inLiteral, Type.CHAR);
+            hashKey.pushColumn((StringLiteral) inLiteral, CharType.CHAR);
             for (Expr inLiteral2 : inList2) {
-                hashKey.pushColumn((StringLiteral) inLiteral2, Type.CHAR);
+                hashKey.pushColumn((StringLiteral) inLiteral2, CharType.CHAR);
                 for (Expr inLiteral3 : inList3) {
-                    hashKey.pushColumn((StringLiteral) inLiteral3, Type.CHAR);
+                    hashKey.pushColumn((StringLiteral) inLiteral3, CharType.CHAR);
                     for (Expr inLiteral4 : inList4) {
-                        hashKey.pushColumn((StringLiteral) inLiteral4, Type.CHAR);
+                        hashKey.pushColumn((StringLiteral) inLiteral4, CharType.CHAR);
                         long hashValue = hashKey.getHashValue();
                         tablets.add(tabletIds.get((int) ((hashValue & 0xffffffff) % tabletIds.size())));
                         hashKey.popColumn();
@@ -153,7 +158,7 @@ public class HashDistributionPrunerTest {
             hashKey.popColumn();
         }
 
-        Assert.assertEquals(39, tablets.size());
+        Assertions.assertEquals(39, tablets.size());
     }
 
     @Test
@@ -164,11 +169,11 @@ public class HashDistributionPrunerTest {
         }
 
         // distribution columns
-        Column dealDate = new Column("dealDate", Type.DATE, false);
-        Column mainBrandId = new Column("main_brand_id", Type.CHAR, false);
-        Column itemThirdCateId = new Column("item_third_cate_id", Type.CHAR, false);
-        Column channel = new Column("channel", Type.CHAR, false);
-        Column shopType = new Column("shop_type", Type.CHAR, false);
+        Column dealDate = new Column("dealDate", DateType.DATE, false);
+        Column mainBrandId = new Column("main_brand_id", CharType.CHAR, false);
+        Column itemThirdCateId = new Column("item_third_cate_id", CharType.CHAR, false);
+        Column channel = new Column("channel", CharType.CHAR, false);
+        Column shopType = new Column("shop_type", CharType.CHAR, false);
         List<Column> columns = Lists.newArrayList(dealDate, mainBrandId, itemThirdCateId, channel, shopType);
 
         // filters
@@ -186,10 +191,43 @@ public class HashDistributionPrunerTest {
         Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
         filters.put("main_brand_id", mainBrandFilter);
 
-        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters, tabletIds.size());
+        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
-        Assert.assertEquals(tabletIds.size(), results.size());
+        Assertions.assertEquals(tabletIds.size(), results.size());
     }
 
+    @Test
+    public void testPruneTablet() throws Exception {
+        new MockUp<Partition>() {
+            @Mock
+            public boolean hasData() {
+                return true;
+            }
+        };
+
+        starRocksAssert.withTable("CREATE TABLE `test_bucket_prune` (\n" +
+                "  `dim_dt` date NOT NULL COMMENT \"\",\n" +
+                "  `dim_class_id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `dim_week_start_time` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `deleted` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`dim_dt`, `dim_class_id`, `dim_week_start_time`)\n" +
+                "PARTITION BY RANGE(`dim_dt`)\n" +
+                "(PARTITION p20241227 VALUES [(\"2024-12-27\"), (\"2024-12-28\")),\n" +
+                "PARTITION p20241228 VALUES [(\"2024-12-28\"), (\"2024-12-29\")),\n" +
+                "PARTITION p20241229 VALUES [(\"2024-12-29\"), (\"2024-12-30\")),\n" +
+                "PARTITION p20241230 VALUES [(\"2024-12-30\"), (\"2024-12-31\")),\n" +
+                "PARTITION p20241231 VALUES [(\"2024-12-31\"), (\"2025-01-01\")),\n" +
+                "PARTITION p20250101 VALUES [(\"2025-01-01\"), (\"2025-01-02\")),\n" +
+                "PARTITION p20250102 VALUES [(\"2025-01-02\"), (\"2025-01-03\")),\n" +
+                "PARTITION p20250103 VALUES [(\"2025-01-03\"), (\"2025-01-04\")))\n" +
+                "DISTRIBUTED BY HASH(`dim_dt`, `dim_class_id`) BUCKETS 8 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.query("select * from test_bucket_prune where dim_dt = '2024-12-29' and dim_class_id = 1")
+                .explainContains("tabletRatio=1/8");
+    }
 }

@@ -19,7 +19,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
@@ -47,6 +47,12 @@ public class SemanticException extends StarRocksPlannerException {
         this.detailMsg = detailMsg;
         this.pos = pos;
         this.canAppend = canAppend;
+    }
+
+    public SemanticException(String detailMsg, Exception cause) {
+        super(detailMsg, ErrorType.USER_ERROR, cause);
+        this.detailMsg = detailMsg;
+        this.pos = NodePosition.ZERO;
     }
 
     public SemanticException(String formatString, Object... args) {

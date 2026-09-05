@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将以度数表示的角度x转换为弧度。"
 ---
 
 # radians
 
-## 功能
+
 
 将参数 `x`转为弧度，`x` 是角度。
 

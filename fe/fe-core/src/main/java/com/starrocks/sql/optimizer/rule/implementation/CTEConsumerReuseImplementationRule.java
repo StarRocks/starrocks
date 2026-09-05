@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
+import java.util.Map;
 
 public class CTEConsumerReuseImplementationRule extends ImplementationRule {
     public CTEConsumerReuseImplementationRule() {
@@ -37,7 +38,7 @@ public class CTEConsumerReuseImplementationRule extends ImplementationRule {
         LogicalCTEConsumeOperator logical = (LogicalCTEConsumeOperator) input.getOp();
         PhysicalCTEConsumeOperator consume =
                 new PhysicalCTEConsumeOperator(logical.getCteId(), logical.getCteOutputColumnRefMap(),
-                        logical.getLimit(), logical.getPredicate(), logical.getProjection());
+                        logical.getLimit(), logical.getPredicate(), logical.getProjection(), Map.of());
         return Lists.newArrayList(OptExpression.create(consume));
     }
 }

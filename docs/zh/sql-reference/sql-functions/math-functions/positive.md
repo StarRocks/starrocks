@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回表达式x的结果。"
 ---
 
 # positive
 
-## 功能
+
 
 返回表达式 `x` 的结果。
 

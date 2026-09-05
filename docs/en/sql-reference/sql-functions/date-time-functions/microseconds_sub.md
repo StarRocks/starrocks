@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Subtracts a time interval from a date value."
 ---
 
 # microseconds_sub
 
-## Description
+
 
 Subtracts a time interval from a date value. The time interval is in microseconds.
 

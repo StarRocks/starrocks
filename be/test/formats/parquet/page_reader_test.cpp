@@ -18,12 +18,13 @@
 
 #include <iostream>
 
-#include "exec/hdfs_scanner.h"
+#include "cache/scan/shared_buffered_input_stream.h"
+#include "common/util/thrift_util.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
+#include "formats/parquet/column_reader.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"
-#include "io/shared_buffered_input_stream.h"
 #include "io/string_input_stream.h"
-#include "util/thrift_util.h"
 namespace starrocks::parquet {
 
 class ParquetPageReaderTest : public testing::Test {
@@ -34,11 +35,7 @@ public:
 
 TEST_F(ParquetPageReaderTest, Normal) {
     std::string buffer;
-    HdfsScanStats stats;
-
-    std::vector<uint8_t> read_buffer;
-    read_buffer.reserve(1024);
-    uint8_t* data = read_buffer.data();
+    FormatScannerStats stats;
 
     // page 0
     {
@@ -79,9 +76,11 @@ TEST_F(ParquetPageReaderTest, Normal) {
 
     RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
 
-    io::SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
+    SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
 
-    PageReader reader(&stream, 0, total_size, 30, &stats);
+    ColumnReaderOptions opts;
+    opts.stats = &stats;
+    PageReader reader(&stream, 0, total_size, 30, opts, tparquet::CompressionCodec::ZSTD);
 
     // read page 1
     auto st = reader.next_header();
@@ -94,24 +93,15 @@ TEST_F(ParquetPageReaderTest, Normal) {
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(200, reader.current_header()->uncompressed_page_size);
 
-    st = reader.read_bytes(data, 100);
-    ASSERT_TRUE(st.ok());
-
-    st = reader.read_bytes(data, 250);
-    ASSERT_FALSE(st.ok());
-
     // read out-of-page
+    reader.seek_to_offset(total_size);
     st = reader.next_header();
     ASSERT_FALSE(st.ok());
 }
 
 TEST_F(ParquetPageReaderTest, ExtraBytes) {
     std::string buffer;
-    HdfsScanStats stats;
-
-    std::vector<uint8_t> read_buffer;
-    read_buffer.reserve(1024);
-    uint8_t* data = read_buffer.data();
+    FormatScannerStats stats;
 
     // page 0
     {
@@ -147,6 +137,7 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
 
         buffer.resize(buffer.size() + page_header.compressed_page_size);
     }
+    size_t page_2_size = buffer.size();
 
     size_t extra_nbytes = 10;
     buffer.resize(buffer.size() + extra_nbytes);
@@ -154,9 +145,11 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
 
     RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
 
-    io::SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
+    SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
 
-    PageReader reader(&stream, 0, total_size, 30, &stats);
+    ColumnReaderOptions opts;
+    opts.stats = &stats;
+    PageReader reader(&stream, 0, total_size, 30, opts, tparquet::CompressionCodec::ZSTD);
 
     // read page 1
     auto st = reader.next_header();
@@ -169,13 +162,8 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(200, reader.current_header()->uncompressed_page_size);
 
-    st = reader.read_bytes(data, 100);
-    ASSERT_TRUE(st.ok());
-
-    st = reader.read_bytes(data, 250);
-    ASSERT_FALSE(st.ok());
-
     // read out-of-page
+    ASSERT_TRUE(reader.seek_to_offset(page_2_size).ok());
     st = reader.next_header();
     ASSERT_FALSE(st.ok());
 }

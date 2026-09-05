@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 10
+displayed_sidebar: docs
+description: "FAQ for common StarRocks deployment questions."
 ---
 
 # Deployment
@@ -30,50 +32,38 @@ This error occurs because the web services port of the BE is occupied. Try to mo
 
 ## What do I do when the error occurs: ERROR 1064 (HY000): Could not initialize class com.starrocks.rpc.BackendServiceProxy?
 
-This error occurs when you run programs in Java Runtime Environment (JRE). To solve this problem, replace JRE with Java Development Kit (JDK). We recommend that you use Oracle's JDK 1.8 or later.
+This error occurs when you run programs in Java Runtime Environment (JRE). To solve this problem, replace JRE with Java Development Kit (JDK). We recommend that you use Oracle's JDK 17 or later.
 
-## Why does the error "Failed to Distribute files to node" occur when I deploy StarRocks of Enterprise Edition and configure nodes?
+## Can FE and BE configuration items be modified and then take effect without restarting the cluster?
 
-This error occurs when Setuptools versions installed on multiple frontends (FEs) are inconsistent. To solve this problem, you can execute the following command as a root user.
-
-```plaintext
-yum remove python-setuptools
-
-rm /usr/lib/python2.7/site-packages/setuptool* -rf
-
-wget https://bootstrap.pypa.io/ez_setup.py -O - | python
-```
-
-## Can FE and BE configurations of StarRocks be modified and then take effect without restarting the cluster?
-
-Yes. Perform the following steps to complete the modifications for an FE and a BE:
+Yes. Perform the following steps to complete the modifications for an FE and a BE configuration item:
 
 - FE: You can complete the modification for an FE in one of the following ways:
   - SQL
 
-```plaintext
-ADMIN SET FRONTEND CONFIG ("key" = "value");
-```
+  ```plaintext
+  ADMIN SET FRONTEND CONFIG ("key" = "value");
+  ```
 
-Example:
+  Example:
 
-```plaintext
-ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
-```
+  ```plaintext
+  ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
+  ```
 
-- Shell
+  - Shell
 
-```plaintext
-curl --location-trusted -u username:password \
-http://<ip>:<fe_http_port/api/_set_config?key=value>
-```
+  ```plaintext
+  curl --location-trusted -u username:password \
+  http://<ip>:<fe_http_port/api/_set_config?key=value>
+  ```
 
-Example:
+  Example:
 
-```plaintext
-curl --location-trusted -u <username>:<password> \
-http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
-```
+  ```plaintext
+  curl --location-trusted -u <username>:<password> \
+  http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
+  ```
 
 - BE: You can complete the modification for a BE in the following way:
 
@@ -87,21 +77,8 @@ http://<ip>:<be_http_port>/api/update_config?key=value
 ```plaintext
 CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 
-GRANT SELECT_PRIV ON . TO 'test'@'%';
+GRANT SELECT ON . TO 'test'@'%';
 ```
-
-## What do I do if the error "Failed to get scan range, no queryable replica found in tablet:xxxxx" occurs after I extend the BE disk space?
-
-### Problem description
-
-This error may occur during data loading into Primary Key tables. During data loading, the destination BE does not have enough disk space for the loaded data and the BE crashes. New disks are then added to extend the disk space. However, Primary Key tables do not support disk space re-balancing and the data cannot be offloaded to other disks.
-
-### Solution
-
-Patches to this bug (Primary Key tables do not support BE disk space re-balancing) is still under active development. Currently, you can fix it in either of the following two ways:
-
-- Manually distribute data among disks. For example, copy the directory from the disk with a high space usage to a disk with a larger space.
-- If the data on these disks is not important, we recommend you delete the disks and modify the disk path. If this error persists, use [TRUNCATE TABLE](../sql-reference/sql-statements/data-definition/TRUNCATE_TABLE.md) to clear data in the table to free up some space.
 
 ## Why does the error "Fe type:unknown ,is ready :false." occur when I start an FE during the cluster restart?
 
@@ -114,10 +91,6 @@ Check if OpenSSH Daemon (sshd) is enabled. If not, run the `/etc/init.d/sshd`` s
 ## Why does the error "Fail to get master client from `cache. ``host= port=0 code=THRIFT_RPC_ERROR`" occur when I start a BE?
 
 Run the `netstat -anp |grep port` command to check whether the ports in the `be.conf` file are occupied. If so, replace the occupied port with a free port and then restart the BE.
-
-## Why does the error "Failed to transport upgrade files to agent host. src:…" occur when I upgrade a cluster of the Enterprise Edition?
-
-This error occurs when the disk space specified in the deployment directory is insufficient. During the cluster upgrade, the StarRocks Manager distributes the binary file of the new version to each node. If the disk space specified in the deployment directory is insufficient, the file cannot be distributed to each node. To solve this problem, add data disks.
 
 ## Why does the FE node log on the diagnostics page of StarRocks Manager display "Search log failed." for a newly deployed FE node that is running properly?
 
@@ -140,3 +113,43 @@ If you do not add the `--helper` option for this FE when starting your cluster f
 ## Why Alive is `false` when an FE is running and prints log `transfer: follower`?
 
 This issue occurs when more than half of memory of Java Virtual Machine (JVM) is used and no checkpoint is marked. In general, a checkpoint will be marked after the system accumulates 50,000 pieces of log. We recommend that you modify the JVM's parameters of each FE and restarting these FEs when they are not heavily loaded.
+
+## Query error: “could not initialize class com.starrocks.rpc.BackendServiceProxy”. How do I resolve this?
+
+- Verify that the environment variable `$JAVA_HOME` points to the correct JDK path.
+- Ensure all nodes use the same JDK version. All nodes must use the identical JDK version.
+
+## What are the MySQL version requirements for installing StarRocks?
+
+MySQL 5.7 or later is recommended to connect to StarRocks.
+
+## If FE and BE are deployed on the same machine, how can I separate them?
+
+It is recommended to scale out a BE node first. After the cluster finishes balancing, you can then scale in the original BE node.
+
+## What should I do when FE fails to start with the error “Replica exceeds max permissible delta:5000ms”?
+
+The clocks between FE nodes are not synchronized. The time difference between FE nodes must be less than 5 seconds.
+
+## If I have five physical machines in a production environment, what is the recommended StarRocks deployment?
+
+A recommended deployment is 3 FE nodes and 5 BE nodes.
+
+## Should I use the root user to install StarRocks?
+
+It is not recommended to use the root user because it has excessive privileges. Create a dedicated user for installing StarRocks.
+
+## Can I install the MySQL client on any machine?
+
+Yes. It is simply a client tool and does not need to run on the same machine as StarRocks. Make sure the MySQL client can access the cluster.
+
+## Is there a limit to the number of tablets on a BE node? For example, for a server with 64 GB RAM and 16 cores, what is the reasonable range of tablet count?
+There is no strict limit for the tablet number. However, for the tablet size, it is recommended to keep each tablet around 1 GB. Proper partitioning and bucketing strategies will help improve query performance. Tablet size planning is important.
+
+## When starting BE, I see the error “error while loading shared libraries: libjvm.so: cannot open shared object file: No such file or directory”. And after manually creating the directory `lib/starrocks_be`, I get a permission denied error. What should I do?
+
+There is an issue with the JDK installation. Please reinstall and properly configure your JDK environment.
+
+## Does StarRocks support running on AMD AVX2? Will mixing Intel and AMD servers cause problems?
+
+StarRocks can run on AMD. Mixing Intel and AMD servers is not recommended because hardware heterogeneity may cause issues. It is suggested to fully test StarRocks on AMD before migrating.

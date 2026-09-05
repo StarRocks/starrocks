@@ -16,9 +16,10 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +36,11 @@ public class SyntaxSugars {
         FUNCTION_PARSER = ImmutableMap.<String, Function<FunctionCallExpr, FunctionCallExpr>>builder()
                 .put(FunctionSet.ILIKE, SyntaxSugars::ilike)
                 .put(FunctionSet.STRUCT, SyntaxSugars::struct)
+                .put(FunctionSet.BOOLOR_AGG, SyntaxSugars::boolOrAgg)
+                .put(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH, SyntaxSugars::hllSketchCount)
+                .put(FunctionSet.DS_HLL_ACCUMULATE, SyntaxSugars::dsHllCountDistinctStateUnion)
+                .put(FunctionSet.DS_HLL_COMBINE, SyntaxSugars::dsHllCountDistinctUnion)
+                .put(FunctionSet.DS_HLL_ESTIMATE, SyntaxSugars::dsHllCountDistinctMerge)
                 .build();
     }
 
@@ -45,7 +51,7 @@ public class SyntaxSugars {
      * - window functions
      */
     public static FunctionCallExpr parse(FunctionCallExpr call) {
-        return FUNCTION_PARSER.getOrDefault(call.getFnName().getFunction(), SyntaxSugars::defaultParse).apply(call);
+        return FUNCTION_PARSER.getOrDefault(call.getFunctionName(), SyntaxSugars::defaultParse).apply(call);
     }
 
     private static FunctionCallExpr defaultParse(FunctionCallExpr call) {
@@ -69,5 +75,33 @@ public class SyntaxSugars {
      */
     private static FunctionCallExpr struct(FunctionCallExpr call) {
         return new FunctionCallExpr(FunctionSet.ROW, call.getChildren());
+    }
+
+    /*
+     * approx_count_distinct_hll_sketch(col) -> ds_hll_count_distinct(col)
+     */
+    private static FunctionCallExpr hllSketchCount(FunctionCallExpr call) {
+        return new FunctionCallExpr(FunctionSet.DS_HLL_COUNT_DISTINCT, call.getChildren());
+    }
+
+    private static FunctionCallExpr boolOrAgg(FunctionCallExpr call) {
+        return new FunctionCallExpr(FunctionSet.BOOL_OR, call.getChildren());
+    }
+
+    private static FunctionCallExpr dsHllCountDistinctStateUnion(FunctionCallExpr call) {
+        final FunctionCallExpr aggStateFuncExpr =
+                new FunctionCallExpr(AggStateUtils.aggStateFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT), call.getChildren());
+        return new FunctionCallExpr(AggStateUtils.aggStateUnionFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT),
+                Lists.newArrayList(aggStateFuncExpr));
+    }
+
+    private static FunctionCallExpr dsHllCountDistinctUnion(FunctionCallExpr call) {
+        return new FunctionCallExpr(AggStateUtils.aggStateUnionFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT),
+                call.getChildren());
+    }
+
+    private static FunctionCallExpr dsHllCountDistinctMerge(FunctionCallExpr call) {
+        return new FunctionCallExpr(AggStateUtils.aggStateMergeFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT),
+                call.getChildren());
     }
 }

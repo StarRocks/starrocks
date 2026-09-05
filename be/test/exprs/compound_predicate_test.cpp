@@ -18,7 +18,9 @@
 #include <gtest/gtest.h>
 
 #include "column/fixed_length_column.h"
+#include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -35,6 +37,7 @@ public:
     }
 
 public:
+    RuntimeState runtime_state;
     TExprNode expr_node;
 };
 
@@ -51,16 +54,17 @@ TEST_F(VectorizedCompoundPredicateTest, andExpr) {
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_FALSE(ptr->is_nullable());
+            ASSERT_TRUE(ptr->is_numeric());
 
-        ASSERT_FALSE(ptr->is_nullable());
-        ASSERT_TRUE(ptr->is_numeric());
+            auto v = BooleanColumn::static_pointer_cast(ptr);
+            ASSERT_EQ(10, v->size());
 
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
-        ASSERT_EQ(10, v->size());
-
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(0, (int)v->get_data()[j]);
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(0, (int)v->get_data()[j]);
+            }
+        });
     }
 }
 
@@ -77,21 +81,23 @@ TEST_F(VectorizedCompoundPredicateTest, orExpr) {
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_FALSE(ptr->is_nullable());
+            ASSERT_TRUE(ptr->is_numeric());
 
-        ASSERT_FALSE(ptr->is_nullable());
-        ASSERT_TRUE(ptr->is_numeric());
+            auto v = BooleanColumn::static_pointer_cast(ptr);
+            ASSERT_EQ(10, v->size());
 
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
-        ASSERT_EQ(10, v->size());
-
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1, v->get_data()[j]);
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(1, v->get_data()[j]);
+            }
+        });
     }
 }
 
 TEST_F(VectorizedCompoundPredicateTest, nullAndExpr) {
     expr_node.opcode = TExprOpcode::COMPOUND_AND;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
@@ -114,9 +120,9 @@ TEST_F(VectorizedCompoundPredicateTest, nullAndExpr) {
             }
         }
 
-        auto ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        auto ptr = NullableColumn::static_pointer_cast(v)->data_column();
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+            ASSERT_EQ(1, (int)BooleanColumn::static_pointer_cast(ptr)->get_data()[j]);
         }
     }
 
@@ -135,26 +141,30 @@ TEST_F(VectorizedCompoundPredicateTest, nullAndExpr) {
     }
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        auto ptr = ColumnHelper::cast_to<TYPE_BOOLEAN>(std::static_pointer_cast<NullableColumn>(v)->data_column());
+        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
+            auto ptr = ColumnHelper::cast_to<TYPE_BOOLEAN>(NullableColumn::static_pointer_cast(v)->data_column());
 
-        ASSERT_TRUE(v->is_nullable());
-        ASSERT_FALSE(v->is_numeric());
+            ASSERT_TRUE(v->is_nullable());
+            ASSERT_FALSE(v->is_numeric());
 
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_EQ(1, (int)ptr->get_data()[j]);
-        }
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_EQ(1, (int)ptr->get_data()[j]);
+            }
 
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_TRUE(v->is_null(j));
-        }
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_TRUE(v->is_null(j));
+            }
+        });
     }
 }
 
 TEST_F(VectorizedCompoundPredicateTest, nullAndTrueExpr) {
     expr_node.opcode = TExprOpcode::COMPOUND_AND;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
+    expr_node.is_nullable = false;
     MockVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
 
     expr->_children.push_back(&col1);
@@ -162,28 +172,32 @@ TEST_F(VectorizedCompoundPredicateTest, nullAndTrueExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
-
-        ASSERT_TRUE(v->is_nullable());
-        ASSERT_FALSE(v->is_numeric());
-
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
-        }
-
         ColumnPtr colv1 = col1.evaluate(nullptr, nullptr);
 
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_EQ(v->is_null(j), colv1->is_null(j));
-        }
+        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [&colv1](ColumnPtr const& v) {
+            ColumnPtr ptr = NullableColumn::static_pointer_cast(v)->data_column();
+
+            ASSERT_TRUE(v->is_nullable());
+            ASSERT_FALSE(v->is_numeric());
+
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_EQ(1, (int)BooleanColumn::static_pointer_cast(ptr)->get_data()[j]);
+            }
+
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_EQ(v->is_null(j), colv1->is_null(j));
+            }
+        });
     }
 }
 
 TEST_F(VectorizedCompoundPredicateTest, constAndExpr) {
     expr_node.opcode = TExprOpcode::COMPOUND_AND;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
+    expr_node.is_nullable = false;
     MockConstVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 0);
 
     expr->_children.push_back(&col1);
@@ -191,26 +205,30 @@ TEST_F(VectorizedCompoundPredicateTest, constAndExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
+            ColumnPtr ptr = NullableColumn::static_pointer_cast(v)->data_column();
 
-        ASSERT_TRUE(v->is_nullable());
-        ASSERT_FALSE(v->is_numeric());
+            ASSERT_TRUE(v->is_nullable());
+            ASSERT_FALSE(v->is_numeric());
 
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_EQ(0, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
-        }
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_EQ(0, (int)BooleanColumn::static_pointer_cast(ptr)->get_data()[j]);
+            }
 
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_FALSE(v->is_null(j));
-        }
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_FALSE(v->is_null(j));
+            }
+        });
     }
 }
 
 TEST_F(VectorizedCompoundPredicateTest, nullAndFalseExpr) {
     expr_node.opcode = TExprOpcode::COMPOUND_AND;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
+    expr_node.is_nullable = false;
     MockVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 0);
 
     expr->_children.push_back(&col1);
@@ -218,26 +236,31 @@ TEST_F(VectorizedCompoundPredicateTest, nullAndFalseExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
+            ColumnPtr ptr = NullableColumn::static_pointer_cast(v)->data_column();
 
-        ASSERT_TRUE(v->is_nullable());
-        ASSERT_FALSE(v->is_numeric());
+            ASSERT_TRUE(v->is_nullable());
+            ASSERT_FALSE(v->is_numeric());
 
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_EQ(0, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
-        }
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_EQ(0, (int)BooleanColumn::static_pointer_cast(ptr)->get_data()[j]);
+            }
 
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_FALSE(v->is_null(j));
-        }
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_FALSE(v->is_null(j));
+            }
+        });
     }
 }
 
 TEST_F(VectorizedCompoundPredicateTest, mergeNullOrExpr) {
     expr_node.opcode = TExprOpcode::COMPOUND_OR;
+    expr_node.is_nullable = false;
     std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
 
+    expr_node.is_nullable = false;
     MockVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
+    expr_node.is_nullable = true;
     MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 0);
     ++col2.flag;
 
@@ -271,24 +294,29 @@ TEST_F(VectorizedCompoundPredicateTest, mergeNullOrExpr) {
     col2.flag = 1;
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ASSERT_TRUE(v->is_numeric());
-        ASSERT_EQ(10, v->size());
+        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
+            ASSERT_TRUE(v->is_numeric());
+            ASSERT_EQ(10, v->size());
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(v)->get_data()[j]);
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(1, (int)BooleanColumn::static_pointer_cast(v)->get_data()[j]);
+            }
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_FALSE(v->is_null(j));
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_FALSE(v->is_null(j));
+            }
+        });
     }
 }
 
 TEST_F(VectorizedCompoundPredicateTest, FalseNullOrExpr) {
     expr_node.opcode = TExprOpcode::COMPOUND_OR;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
 
+    expr_node.is_nullable = false;
     MockVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 0);
+    expr_node.is_nullable = true;
     MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
     ++col2.flag;
 
@@ -297,19 +325,21 @@ TEST_F(VectorizedCompoundPredicateTest, FalseNullOrExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ASSERT_FALSE(v->is_numeric());
-        ASSERT_EQ(10, v->size());
+        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
+            ASSERT_FALSE(v->is_numeric());
+            ASSERT_EQ(10, v->size());
 
-        auto p = std::static_pointer_cast<BooleanColumn>(ColumnHelper::as_raw_column<NullableColumn>(v)->data_column());
+            auto p = BooleanColumn::static_pointer_cast(ColumnHelper::as_raw_column<NullableColumn>(v)->data_column());
 
-        for (int j = 0; j < v->size(); ++j) {
-            if (j % 2) {
-                ASSERT_FALSE(v->is_null(j));
-                ASSERT_TRUE(p->get_data()[j]);
-            } else {
-                ASSERT_TRUE(v->is_null(j));
+            for (int j = 0; j < v->size(); ++j) {
+                if (j % 2) {
+                    ASSERT_FALSE(v->is_null(j));
+                    ASSERT_TRUE(p->get_data()[j]);
+                } else {
+                    ASSERT_TRUE(v->is_null(j));
+                }
             }
-        }
+        });
     }
 }
 
@@ -329,15 +359,16 @@ TEST_F(VectorizedCompoundPredicateTest, OnlyNullOrExpr) {
         ASSERT_TRUE(v->only_null());
         ASSERT_EQ(1, v->size());
 
-        ASSERT_TRUE(nullptr != std::dynamic_pointer_cast<ConstColumn>(v));
-        ASSERT_TRUE(nullptr == std::dynamic_pointer_cast<NullableColumn>(v));
-        ASSERT_TRUE(nullptr != std::dynamic_pointer_cast<NullableColumn>(
-                                       std::dynamic_pointer_cast<ConstColumn>(v)->data_column()));
+        ASSERT_TRUE(nullptr != ConstColumn::dynamic_pointer_cast(v));
+        ASSERT_TRUE(nullptr == NullableColumn::dynamic_pointer_cast(v));
+        ASSERT_TRUE(nullptr !=
+                    NullableColumn::dynamic_pointer_cast(ConstColumn::dynamic_pointer_cast(v)->data_column()));
     }
 }
 
 TEST_F(VectorizedCompoundPredicateTest, notExpr) {
     expr_node.opcode = TExprOpcode::COMPOUND_NOT;
+    expr_node.is_nullable = false;
     std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
     {
         MockVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
@@ -345,16 +376,17 @@ TEST_F(VectorizedCompoundPredicateTest, notExpr) {
 
         // normal int8
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_FALSE(ptr->is_nullable());
+            ASSERT_TRUE(ptr->is_numeric());
 
-        ASSERT_FALSE(ptr->is_nullable());
-        ASSERT_TRUE(ptr->is_numeric());
+            auto v = BooleanColumn::static_pointer_cast(ptr);
+            ASSERT_EQ(10, v->size());
 
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
-        ASSERT_EQ(10, v->size());
-
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(0, v->get_data()[j]);
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(0, v->get_data()[j]);
+            }
+        });
     }
 
     {
@@ -364,21 +396,23 @@ TEST_F(VectorizedCompoundPredicateTest, notExpr) {
 
         // normal int8
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_FALSE(ptr->is_nullable());
+            ASSERT_TRUE(ptr->is_numeric());
 
-        ASSERT_FALSE(ptr->is_nullable());
-        ASSERT_TRUE(ptr->is_numeric());
+            auto v = BooleanColumn::static_pointer_cast(ptr);
+            ASSERT_EQ(10, v->size());
 
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
-        ASSERT_EQ(10, v->size());
-
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1, v->get_data()[j]);
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(1, v->get_data()[j]);
+            }
+        });
     }
 }
 
 TEST_F(VectorizedCompoundPredicateTest, testOnlyNullAndZeroRow) {
     expr_node.opcode = TExprOpcode::COMPOUND_AND;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 0, 0);
@@ -393,7 +427,8 @@ TEST_F(VectorizedCompoundPredicateTest, testOnlyNullAndZeroRow) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ASSERT_EQ(0, v->size());
+        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state,
+                                         [](ColumnPtr const& v) { ASSERT_EQ(0, v->size()); });
     }
 }
 

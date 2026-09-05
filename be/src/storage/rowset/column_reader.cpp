@@ -36,77 +36,130 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "common/compiler_util.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/logging.h"
-#include "storage/column_predicate.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "fs/fs.h"
+#include "fs/fs_factory.h"
+#include "gen_cpp/segment.pb.h"
+#include "platform/key_cache.h"
+#include "runtime/current_thread.h"
+#include "runtime/runtime_env.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_file_reader.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "types/type_descriptor.h"
+#ifndef __APPLE__
+#include "storage/index/inverted/builtin/builtin_inverted_reader.h"
+#include "storage/index/inverted/inverted_plugin_factory.h"
+#endif
+#include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
+#include "base/compression/zstd_dict.h"
+#include "cache/mem_cache/page_handle.h"
+#include "common/bloom_filter.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
-#include "storage/rowset/page_handle.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/rowset/struct_column_iterator.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
-#include "util/compression/block_compression.h"
-#include "util/rle_encoding.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment) {
+StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment,
+                                                             const TabletColumn* column) {
     auto r = std::make_unique<ColumnReader>(private_type(0), segment);
-    RETURN_IF_ERROR(r->_init(meta));
+    RETURN_IF_ERROR(r->_init(meta, column));
     return std::move(r);
 }
 
 ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(segment) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 ColumnReader::~ColumnReader() {
     if (_segment_zone_map != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                  _segment_zone_map->SpaceUsedLong());
         _segment_zone_map.reset(nullptr);
     }
     if (_ordinal_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset(nullptr);
     }
     if (_zonemap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset(nullptr);
     }
     if (_bitmap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset(nullptr);
     }
     if (_bloom_filter_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
     }
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+    if (_builtin_inverted_index_meta != nullptr) {
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                 _builtin_inverted_index_meta->SpaceUsedLong());
+        _builtin_inverted_index_meta.reset(nullptr);
+    }
+    if (_zstd_compression_ddict != nullptr) {
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(),
+                                 _zstd_compression_ddict->mem_usage());
+        // Free under the same tracker the allocation was charged to. Eviction runs on
+        // whatever thread happened to trigger it, so without this the process tracker
+        // would keep the charge while an unrelated query's tracker went negative.
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker());
+        _zstd_compression_ddict.reset();
+    }
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
-Status ColumnReader::_init(ColumnMetaPB* meta) {
+Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
+    _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
+    // pick up the compression-dict page pointer if present (unset -> size 0 ->
+    // has_zstd_compression_dict() is false and the read path is unchanged).
+    if (meta->has_zstd_compression_dict_page()) {
+        _zstd_compression_dict_page_pointer = PagePointer(meta->zstd_compression_dict_page());
+    }
     _total_mem_footprint = meta->total_mem_footprint();
+    if (column == nullptr) {
+        _name = meta->has_name() ? meta->name() : "None";
+    } else {
+        _name = meta->has_name() ? meta->name() : column->name();
+    }
+    _column_unique_id = meta->unique_id();
 
     if (meta->is_nullable()) _flags |= kIsNullableMask;
     if (meta->has_all_dict_encoded()) _flags |= kHasAllDictEncodedMask;
@@ -115,7 +168,16 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     if (_column_type == TYPE_JSON && meta->has_json_meta()) {
         // TODO(mofei) store format_version in ColumnReader
         const JsonMetaPB& json_meta = meta->json_meta();
-        CHECK_EQ(kJsonMetaDefaultFormatVersion, json_meta.format_version()) << "Only format_version=1 is supported";
+        _is_flat_json = json_meta.is_flat();
+        _has_remain = json_meta.has_remain();
+
+        if (json_meta.has_remain_filter() && config::enable_json_flat_remain_filter) {
+            DCHECK(_has_remain);
+            DCHECK(!json_meta.remain_filter().empty());
+            RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &_remain_filter));
+            RETURN_IF_ERROR(_remain_filter->init(json_meta.remain_filter().data(), json_meta.remain_filter().size(),
+                                                 HASH_MURMUR3_X64_64));
+        }
     }
     if (is_scalar_field_type(delegate_type(_column_type))) {
         RETURN_IF_ERROR(EncodingInfo::get(delegate_type(_column_type), meta->encoding(), &_encoding_info));
@@ -126,7 +188,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             switch (index_meta->type()) {
             case ORDINAL_INDEX:
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
                                          _ordinal_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
@@ -144,29 +206,35 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                     delete _segment_zone_map->release_min();
                     delete _segment_zone_map->release_max();
                 }
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                          _zonemap_index_meta->SpaceUsedLong())
                 _meta_mem_usage.fetch_add(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 // the segment zone map will release from zonemap_index_map,
                 // so we should calc mem usage after release.
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                          _segment_zone_map->SpaceUsedLong())
                 _meta_mem_usage.fetch_add(_segment_zone_map->SpaceUsedLong(), std::memory_order_relaxed);
                 _zonemap_index = std::make_unique<ZoneMapIndexReader>();
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bitmap_index = std::make_unique<BitmapIndexReader>();
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                          _bloom_filter_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
+                break;
+            case BUILTIN_INVERTED_INDEX:
+                _builtin_inverted_index_meta.reset(index_meta->release_builtin_inverted_index());
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                         _builtin_inverted_index_meta->SpaceUsedLong());
+                _meta_mem_usage.fetch_add(_builtin_inverted_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 break;
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
@@ -176,6 +244,25 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             return Status::Corruption(
                     fmt::format("Bad file {}: missing ordinal index for column {}", file_name(), meta->column_id()));
         }
+
+        if (_column_type == LogicalType::TYPE_JSON) {
+            _sub_readers = std::make_unique<SubReaderList>();
+            for (int i = 0; i < meta->children_columns_size(); ++i) {
+                auto sub_column = (column != nullptr) ? column->subcolumn_ptr(i) : nullptr;
+                auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
+                RETURN_IF_ERROR(res);
+                _sub_readers->emplace_back(std::move(res).value());
+            }
+            // Flat JSON segments written before the root footprint was persisted have a zero root
+            // value even though their child readers have valid footprints. Recover the aggregate
+            // at read time so compaction can size chunks correctly for existing data.
+            if (_is_flat_json && _total_mem_footprint == 0) {
+                for (const auto& sub_reader : *_sub_readers) {
+                    _total_mem_footprint += sub_reader->total_mem_footprint();
+                }
+            }
+            return Status::OK();
+        }
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         _sub_readers = std::make_unique<SubReaderList>();
@@ -183,35 +270,39 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("nullable array should have 3 children columns");
             }
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
             _sub_readers->reserve(3);
 
+            auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
             // elements
-            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // null flags
-            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         } else {
             if (meta->children_columns_size() != 2) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
             }
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
             _sub_readers->reserve(2);
 
+            auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
             // elements
-            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         }
@@ -225,22 +316,22 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->reserve(4);
 
             // keys
-            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // values
-            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // null flags
-            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(meta->mutable_children_columns(3), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(3), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         } else {
@@ -250,17 +341,17 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->reserve(3);
 
             // keys
-            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // values
-            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         }
@@ -268,9 +359,24 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         _sub_readers = std::make_unique<SubReaderList>();
         for (int i = 0; i < meta->children_columns_size(); ++i) {
-            auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment);
+            auto sub_column = (column != nullptr) ? column->subcolumn_ptr(i) : nullptr;
+            if (sub_column != nullptr) {
+                // the type of unique_id in meta is uint32_t and the default value is -1(4294967295), but the type of
+                // unique id in tablet column is int32_t. so cast to int32 to compare
+                int32_t uid_in_meta = static_cast<int32_t>(meta->mutable_children_columns(i)->unique_id());
+                int32_t uid_in_col = sub_column->unique_id();
+                if (uid_in_meta != uid_in_col) {
+                    std::string msg =
+                            strings::Substitute("sub_column($0) unique id in meta($1) is not equal to schema($2)",
+                                                sub_column->name(), uid_in_meta, uid_in_col);
+                    LOG(ERROR) << msg;
+                    return Status::InternalError(msg);
+                }
+            }
+            auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
+            _update_sub_reader_pos(sub_column, i);
         }
         return Status::OK();
     } else {
@@ -279,8 +385,115 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
 }
 
 Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator) {
+    // Lake ADD INDEX fast-path: if the IDG loader has an active entry for
+    // this (segment, col_unique_id, BITMAP), prefer the standalone .idx
+    // file over the segment-footer-embedded bitmap. The footer bitmap is
+    // typically absent in the fast-path case (it was added post-segment),
+    // so without this branch the call would fail at _load_bitmap_index.
+    if (opts.idg_loader != nullptr) {
+        TabletSegmentId tsid(opts.tablet_id, opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status load_st = opts.idg_loader->load(tsid, opts.query_version, &list);
+        if (load_st.ok() && !list.empty()) {
+            // entries are returned newest-first; pick the first match.
+            for (const auto& e : list) {
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id == opts.col_unique_id && k.index_type == IndexType::BITMAP) {
+                        return _new_idg_backed_bitmap_index_iterator(opts, e.index_file, e.encryption_meta, iterator);
+                    }
+                }
+            }
+        }
+    }
+
+    // No IDG entry; fall back to the segment-footer-embedded bitmap. If the
+    // footer does not carry a bitmap either (e.g. the column simply has no
+    // bitmap index at all), leave `*iterator` null and return OK so the
+    // caller treats this column as "no bitmap filter".
+    if (_bitmap_index == nullptr) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_load_bitmap_index(opts));
     RETURN_IF_ERROR(_bitmap_index->new_iterator(opts, iterator));
+    return Status::OK();
+}
+
+Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts,
+                                                           const std::string& idx_filename,
+                                                           const std::string& encryption_meta,
+                                                           BitmapIndexIterator** iterator) {
+    // Resolve the .idx file path. IDG entries store relative filenames
+    // (matching the gen_idx_filename UUID-based scheme) under the same
+    // segment directory as the source segment data file.
+    const std::string& seg_path = _segment->file_name();
+    auto pos = seg_path.find_last_of('/');
+    std::string idx_path = (pos == std::string::npos) ? idx_filename : seg_path.substr(0, pos + 1) + idx_filename;
+
+    // When transparent data encryption is on, AddIndexSchemaChange writes
+    // the .idx file with an EncryptionMetaPB and stores the serialized
+    // bytes on the IDG entry. The read side must unwrap the meta back
+    // into a FileEncryptionInfo and pass it through RandomAccessFileOptions,
+    // otherwise the underlying file is read raw and the .idx footer parse
+    // sees ciphertext.
+    RandomAccessFileOptions raf_opts;
+    if (!encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(raf_opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
+    ASSIGN_OR_RETURN(auto idx_file, fs->new_random_access_file(raf_opts, idx_path));
+
+    // Parse the .idx footer and look up the bitmap meta for this column.
+    lake::IndexFileReader idx_reader;
+    RETURN_IF_ERROR(idx_reader.init(idx_file.get()));
+    const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, IndexType::BITMAP);
+    if (meta == nullptr || !meta->has_bitmap_index()) {
+        return Status::Corruption("IDG entry references missing bitmap index in .idx file");
+    }
+
+    // Build a transient BitmapIndexReader backed by the .idx file. The
+    // upstream IndexReadOptions points at the original segment data; swap
+    // in the .idx file so the underlying page reads come from the right
+    // file. Stats / cache options are inherited.
+    //
+    // Use the RandomAccessFile WRAPPER (not idx_file->stream(), the inner
+    // SeekableInputStream): the page cache key is derived from
+    // read_file->page_cache_key(), and only the wrapper carries the unique
+    // .idx path. The inner stream (e.g. lake StarletInputStream) leaves
+    // filename() empty, which collapses every .idx page key to ("", offset)
+    // and makes the global StoragePageCache return a CRC-valid page from an
+    // unrelated .idx file/column -> "Failed to decode value at position 0"
+    // or wrong rows. The wrapper outlives the reader: idx_file is moved into
+    // the OwningBitmapIndexIterator below and its object address is stable.
+    IndexReadOptions sub_opts = opts;
+    sub_opts.read_file = idx_file.get();
+
+    auto bitmap_reader = std::make_unique<BitmapIndexReader>();
+    ASSIGN_OR_RETURN(auto first_load, bitmap_reader->load(sub_opts, meta->bitmap_index()));
+    (void)first_load;
+    SegmentBitmapIndexIterator* inner = nullptr;
+    RETURN_IF_ERROR(bitmap_reader->new_iterator(sub_opts, &inner));
+
+    // Wrap the inner iterator so destruction tears down its backing reader
+    // and file handle deterministically. BitmapIndexIterator has a virtual
+    // destructor, so the caller's `delete iterator` correctly dispatches
+    // into the wrapper's dtor.
+    class OwningBitmapIndexIterator final : public SegmentBitmapIndexIterator {
+    public:
+        OwningBitmapIndexIterator(SegmentBitmapIndexIterator&& base, std::unique_ptr<BitmapIndexReader> reader,
+                                  std::unique_ptr<RandomAccessFile> file)
+                : SegmentBitmapIndexIterator(std::move(base)), _reader(std::move(reader)), _file(std::move(file)) {}
+        ~OwningBitmapIndexIterator() override = default;
+
+    private:
+        std::unique_ptr<BitmapIndexReader> _reader;
+        std::unique_ptr<RandomAccessFile> _file;
+    };
+
+    // Transfer inner iterator state into the wrapper. `inner` was allocated
+    // by BitmapIndexReader::new_iterator via `new`, so we take ownership
+    // through a unique_ptr and move-construct into the wrapper.
+    std::unique_ptr<SegmentBitmapIndexIterator> inner_owned(inner);
+    *iterator = new OwningBitmapIndexIterator(std::move(*inner_owned), std::move(bitmap_reader), std::move(idx_file));
     return Status::OK();
 }
 
@@ -295,9 +508,76 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.verify_checksum = true;
     opts.use_page_cache = iter_opts.use_page_cache;
     opts.encoding_type = _encoding_info->encoding();
-    opts.kept_in_memory = false;
+
+    // this is the single choke point for all column data-page reads (seek /
+    // fetch_by_rowid / scans / compaction). Ensure the shared DDict is loaded
+    // and reference it; a no-dict frame (raw page / value-dict page) decodes
+    // identically under the referenced raw-content DDict (I5), so this is safe
+    // for every page of a compression-dict column.
+    if (has_zstd_compression_dict()) {
+        RETURN_IF_ERROR(_ensure_zstd_compression_ddict(iter_opts));
+        opts.dict = _zstd_compression_ddict.get();
+    }
 
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
+}
+
+Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions& iter_opts) {
+    return success_once(
+                   _zstd_compression_ddict_once,
+                   [&]() -> Status {
+                       // Bootstrap-read the compression-dict page directly through
+                       // PageIO (NOT read_page: that would re-enter
+                       // _ensure_zstd_compression_ddict on this same thread and deadlock
+                       // the OnceFlag). The dict page is a no-dict ZSTD frame,
+                       // so codec is set but dict stays null (self-decoding).
+                       PageReadOptions opts;
+                       opts.read_file = iter_opts.read_file;
+                       opts.page_pointer = _zstd_compression_dict_page_pointer;
+                       opts.codec = _compress_codec;
+                       opts.stats = iter_opts.stats;
+                       opts.verify_checksum = true;
+                       opts.use_page_cache = iter_opts.use_page_cache;
+                       opts.encoding_type = _encoding_info->encoding();
+                       opts.dict = nullptr;
+
+                       PageHandle handle;
+                       Slice body;
+                       PageFooterPB footer;
+                       RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
+                       // ZSTD copies the dictionary bytes internally, so the
+                       // page handle may be released after create().
+                       //
+                       // That copy is a plain malloc, and malloc is hooked, so without
+                       // a scope it is charged to whatever tracker the first reader of
+                       // this segment happens to be running under -- usually a query's.
+                       // The dictionary then outlives that query, for as long as the
+                       // segment stays in the metacache, and is freed on whichever
+                       // thread evicts it. Pointing the allocation at the process
+                       // tracker moves the charge to where the memory actually lives
+                       // instead of adding a second one; the explicit consume below is
+                       // on the parentless metadata tree, which is what sizes the
+                       // metacache and does not participate in process accounting.
+                       // ~ColumnReader releases under the same scope.
+                       StatusOr<std::unique_ptr<compression::ZstdDDict>> ddict_or;
+                       {
+                           SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker());
+                           ddict_or = compression::ZstdDDict::create(body);
+                       }
+                       RETURN_IF_ERROR(ddict_or.status());
+                       _zstd_compression_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
+                       // The DDict holds its own copy of the dictionary and lives as long
+                       // as this reader does, which for a cached segment means as long as
+                       // the segment stays in the metacache. Report it the way every other
+                       // lazily loaded per-column structure here does, or the metacache
+                       // sizes itself against a number that leaves these dictionaries out.
+                       const size_t ddict_bytes = _zstd_compression_ddict->mem_usage();
+                       MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), ddict_bytes);
+                       _meta_mem_usage.fetch_add(ddict_bytes, std::memory_order_relaxed);
+                       _segment->update_cache_size();
+                       return Status::OK();
+                   })
+            .status();
 }
 
 Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges) {
@@ -309,13 +589,42 @@ Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_ind
     return Status::OK();
 }
 
-Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const {
+LogicalType ColumnReader::_get_zone_map_parse_type(const ColumnPredicate* predicate) const {
+    DCHECK(predicate != nullptr);
+    // The type of the predicate may be different from the data type in the segment
+    // file, often seen after fast schema evolution, e.g., the predicate type may be
+    // 'BIGINT' while the data type is 'INT', so it's necessary to use the type of
+    // the predicate to parse the zone map string.
+    LogicalType type = predicate->type_info()->type();
+
+    // This addresses a zone map filtering issue that occurs when converting a CHAR columna
+    // to VARCHAR. The zone map may still contain CHAR values with padding bytes (e.g., "abc\0\0\0\0\0\0\0").
+    // If these values are parsed as VARCHAR, the padding bytes are preserved, leading to incorrect
+    // comparisons with VARCHAR predicates (e.g., "abc"). By forcing the parsing type to CHAR,
+    // `datum_from_string` in `_parse_zone_map()` strips these padding bytes, ensuring consistent
+    // comparison semantics between zone map entries and predicate values.
+    if (_column_type == TYPE_CHAR && type == TYPE_VARCHAR) {
+        type = TYPE_CHAR;
+    }
+
+    return type;
+}
+
+Status ColumnReader::_parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     // DECIMAL32/DECIMAL64/DECIMAL128 stored as INT32/INT64/INT128
     // The DECIMAL type will be delegated to INT type.
-    TypeInfoPtr type_info = get_type_info(delegate_type(_column_type));
+    TypeInfoPtr type_info = get_type_info(delegate_type(type));
+    return _parse_zone_map(type_info, zm, detail);
+}
+
+Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     detail->set_has_null(zm.has_null());
 
     if (zm.has_not_null()) {
+        if (UNLIKELY(!zm.has_min() || !zm.has_max())) {
+            LOG(ERROR) << "Corrupted zone map protobuf detected: " << zm.ShortDebugString();
+            return Status::Corruption("Corrupted zone map data: missing min or max values");
+        }
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
@@ -323,13 +632,89 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail)
     return Status::OK();
 }
 
-// prerequisite: at least one predicate in |predicates| support bloom filter.
+template <bool is_original_bf>
 Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
                                   const IndexReadOptions& opts) {
-    RETURN_IF_ERROR(_load_bloom_filter_index(opts));
-    SparseRange<> bf_row_ranges;
+    // Lake ADD INDEX fast-path for bloom filters: if the IDG loader has an
+    // active entry for this (segment, col_unique_id, <BF flavor>), open a
+    // transient BloomFilterIndexReader from the .idx file. Holders are
+    // kept on this function's stack so they outlive the iterator without
+    // needing a virtual destructor on BloomFilterIndexIterator.
+    //
+    // The IDG key type disambiguates the two flavors. `is_original_bf=true`
+    // (plain BF, driven by the `bloom_filter_columns` table property) looks
+    // for IndexType::BLOOM_FILTER entries; `is_original_bf=false` (NGRAMBF)
+    // looks for IndexType::NGRAMBF. Only one flavor can exist per column at
+    // a time, mirroring the footer constraint.
+    std::unique_ptr<RandomAccessFile> idg_file_holder;
+    std::unique_ptr<BloomFilterIndexReader> idg_reader_holder;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
-    RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+
+    bool used_idg = false;
+    if (opts.idg_loader != nullptr) {
+        const IndexType wanted = is_original_bf ? IndexType::BLOOM_FILTER : IndexType::NGRAMBF;
+        TabletSegmentId tsid(opts.tablet_id, opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status load_st = opts.idg_loader->load(tsid, opts.query_version, &list);
+        if (load_st.ok() && !list.empty()) {
+            for (const auto& e : list) {
+                bool match = false;
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id == opts.col_unique_id && k.index_type == wanted) {
+                        match = true;
+                        break;
+                    }
+                }
+                if (!match) continue;
+
+                // Resolve .idx path under the segment directory and parse footer.
+                const std::string& seg_path = _segment->file_name();
+                auto pos = seg_path.find_last_of('/');
+                std::string idx_path =
+                        (pos == std::string::npos) ? e.index_file : seg_path.substr(0, pos + 1) + e.index_file;
+                // Same encryption plumbing as the bitmap IDG path: when the
+                // entry carries a non-empty EncryptionMetaPB, unwrap it back
+                // into a FileEncryptionInfo so the .idx file is decrypted at
+                // read time.
+                RandomAccessFileOptions raf_opts;
+                if (!e.encryption_meta.empty()) {
+                    ASSIGN_OR_RETURN(raf_opts.encryption_info,
+                                     KeyCache::instance().unwrap_encryption_meta(e.encryption_meta));
+                }
+                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
+                ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_path));
+
+                lake::IndexFileReader idx_reader;
+                RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
+                const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, wanted);
+                if (meta == nullptr || !meta->has_bloom_filter_index()) {
+                    return Status::Corruption("IDG entry references missing bloom filter in .idx file");
+                }
+                // Use the RandomAccessFile WRAPPER, not its inner stream: the
+                // page cache key comes from read_file->page_cache_key(), and
+                // only the wrapper carries the unique .idx path. Passing the
+                // inner stream (whose filename() is empty on lake) collapses
+                // all .idx page keys to ("", offset) and returns the wrong
+                // file's cached page. idg_file_holder outlives bf_iter (both
+                // are stack locals; the holder is declared first so it is
+                // destroyed last).
+                IndexReadOptions sub_opts = opts;
+                sub_opts.read_file = idg_file_holder.get();
+                idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
+                ASSIGN_OR_RETURN(auto bf_first_load, idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
+                (void)bf_first_load;
+                RETURN_IF_ERROR(idg_reader_holder->new_iterator(sub_opts, &bf_iter));
+                used_idg = true;
+                break;
+            }
+        }
+    }
+
+    if (!used_idg) {
+        RETURN_IF_ERROR(_load_bloom_filter_index(opts));
+        RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+    }
+    SparseRange<> bf_row_ranges;
     size_t range_size = row_ranges->size();
     // get covered page ids
     std::set<int32_t> page_ids;
@@ -343,18 +728,47 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
             iter.next();
         }
     }
+
     for (const auto& pid : page_ids) {
         std::unique_ptr<BloomFilter> bf;
-        RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
-        for (const auto* pred : predicates) {
-            if (pred->support_bloom_filter() && pred->bloom_filter(bf.get())) {
-                bf_row_ranges.add(
-                        Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+        if (Status st = bf_iter->read_bloom_filter(pid, &bf); !st.ok()) {
+            // Defensive: a bloom filter for this data page is unavailable (e.g. a
+            // build-vs-read granularity mismatch left fewer bloom filters than
+            // data pages). Degrade to NO pruning for this page instead of failing
+            // the query or reading out of bounds: keep the page's full row range
+            // so no matching row can be lost.
+            LOG_EVERY_N(WARNING, 100) << "skip bloom-filter pruning for data page " << pid << ": " << st;
+            bf_row_ranges.add(
+                    Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+            continue;
+        }
+
+        const bool satisfy = std::ranges::any_of(predicates, [&](const ColumnPredicate* pred) {
+            if constexpr (is_original_bf) {
+                return pred->support_original_bloom_filter() && pred->original_bloom_filter(bf.get());
+            } else {
+                return pred->support_ngram_bloom_filter() &&
+                       pred->ngram_bloom_filter(bf.get(), _get_reader_options_for_ngram());
             }
+        });
+        if (satisfy) {
+            bf_row_ranges.add(
+                    Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
         }
     }
     *row_ranges = row_ranges->intersection(bf_row_ranges);
     return Status::OK();
+}
+
+// prerequisite: at least one predicate in |predicates| support bloom filter.
+Status ColumnReader::original_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                           SparseRange<>* row_ranges, const IndexReadOptions& opts) {
+    return bloom_filter<true>(predicates, row_ranges, opts);
+}
+
+Status ColumnReader::ngram_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
+                                        SparseRange<>* ranges, const IndexReadOptions& opts) {
+    return bloom_filter<false>(p, ranges, opts);
 }
 
 Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
@@ -363,7 +777,7 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     auto meta = _ordinal_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
         _meta_mem_usage.fetch_sub(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _meta_mem_usage.fetch_add(_ordinal_index->mem_usage(), std::memory_order_relaxed);
@@ -379,7 +793,7 @@ Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
     auto meta = _zonemap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
         _meta_mem_usage.fetch_sub(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _meta_mem_usage.fetch_add(_zonemap_index->mem_usage());
@@ -395,7 +809,7 @@ Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
     auto meta = _bitmap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
         _meta_mem_usage.fetch_sub(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _meta_mem_usage.fetch_add(_bitmap_index->mem_usage(), std::memory_order_relaxed);
@@ -411,13 +825,60 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
     auto meta = _bloom_filter_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bloom_filter_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _meta_mem_usage.fetch_sub(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _meta_mem_usage.fetch_add(_bloom_filter_index->mem_usage(), std::memory_order_relaxed);
         _bloom_filter_index_meta.reset();
         _segment->update_cache_size();
     }
+    return Status::OK();
+}
+
+Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta,
+                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts,
+                                                 const IndexReadOptions& index_opt) {
+    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts, index_opt));
+    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator, index_opt));
+    return Status::OK();
+}
+
+Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
+                                          const SegmentReadOptions& opts, const IndexReadOptions& index_opt) {
+    if (index_meta == nullptr || _inverted_index_loaded()) {
+        return Status::OK();
+    }
+
+#ifndef __APPLE__
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+    return success_once(
+                   _inverted_index_load_once,
+                   [&]() {
+                       LogicalType type = _column_type;
+                       ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
+                       std::string index_path = IndexDescriptor::inverted_index_file_path(
+                               opts.rowset_path, opts.rowsetid.to_string(), _segment->id(), index_meta->index_id());
+                       ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
+                       RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
+                                                                                     &_inverted_index));
+                       RETURN_IF_ERROR(_inverted_index->load(index_opt, _builtin_inverted_index_meta.get()));
+                       if (_builtin_inverted_index_meta != nullptr) {
+                           auto* builtin_inverted_index = dynamic_cast<BuiltinInvertedReader*>(_inverted_index.get());
+                           RETURN_IF(builtin_inverted_index == nullptr,
+                                     Status::Corruption("Inverted index reader type mismatch"));
+
+                           MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                                    _builtin_inverted_index_meta->SpaceUsedLong());
+                           _meta_mem_usage.fetch_sub(_builtin_inverted_index_meta->SpaceUsedLong(),
+                                                     std::memory_order_relaxed);
+                           _meta_mem_usage.fetch_add(builtin_inverted_index->mem_usage(), std::memory_order_relaxed);
+                           _builtin_inverted_index_meta.reset();
+                           _segment->update_cache_size();
+                       }
+                       return Status::OK();
+                   })
+            .status();
+#endif
     return Status::OK();
 }
 
@@ -437,35 +898,114 @@ Status ColumnReader::seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterat
     return Status::OK();
 }
 
+Status ColumnReader::seek_by_page_index(int page_index, OrdinalPageIndexIterator* iter) {
+    *iter = _ordinal_index->seek_by_page_index(page_index);
+    if (!iter->valid()) {
+        return Status::NotFound(fmt::format("Failed to seek page_index {}, out of bound", page_index));
+    }
+    return Status::OK();
+}
+
+std::pair<ordinal_t, ordinal_t> ColumnReader::get_page_range(size_t page_index) {
+    DCHECK(_ordinal_index);
+    return std::make_pair(_ordinal_index->get_first_ordinal(page_index), _ordinal_index->get_last_ordinal(page_index));
+}
+
+// Iterate the oridinal index to get the total size of all data pages
+int64_t ColumnReader::data_page_footprint() const {
+    RETURN_IF(_ordinal_index == nullptr, 0);
+    int64_t total_size = 0;
+    auto iter = _ordinal_index->begin();
+    while (iter.valid()) {
+        total_size += iter.page().size;
+        iter.next();
+    }
+    return total_size;
+}
+
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                     SparseRange<>* row_ranges, const IndexReadOptions& opts) {
+                                     SparseRange<>* row_ranges, const IndexReadOptions& opts,
+                                     CompoundNodeType pred_relation, const Range<>* src_range) {
     RETURN_IF_ERROR(_load_zonemap_index(opts));
+
     std::vector<uint32_t> page_indexes;
-    RETURN_IF_ERROR(_zone_map_filter(predicates, del_predicate, del_partial_filtered_pages, &page_indexes));
+    if (pred_relation == CompoundNodeType::AND) {
+        RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::AND>(predicates, del_predicate, del_partial_filtered_pages,
+                                                                &page_indexes, src_range));
+    } else {
+        RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::OR>(predicates, del_predicate, del_partial_filtered_pages,
+                                                               &page_indexes, src_range));
+    }
+
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
     return Status::OK();
 }
 
+StatusOr<std::vector<ZoneMapDetail>> ColumnReader::get_raw_zone_map(const IndexReadOptions& opts) {
+    RETURN_IF_ERROR(_load_zonemap_index(opts));
+    DCHECK(_zonemap_index);
+    DCHECK(_zonemap_index->loaded());
+
+    LogicalType type = _encoding_info->type();
+    int32_t num_pages = _zonemap_index->num_pages();
+    std::vector<ZoneMapDetail> result;
+    result.reserve(num_pages);
+
+    for (const auto& zm : _zonemap_index->page_zone_maps()) {
+        ZoneMapDetail detail;
+        RETURN_IF_ERROR(_parse_zone_map(type, zm, &detail));
+        result.emplace_back(std::move(detail));
+    }
+    return result;
+}
+
+template <CompoundNodeType PredRelation>
 Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                      std::vector<uint32_t>* pages) {
+                                      std::vector<uint32_t>* pages, const Range<>* src_range) {
+    const ColumnPredicate* predicate;
+    if (!predicates.empty()) {
+        predicate = predicates[0];
+    } else if (del_predicate) {
+        predicate = del_predicate;
+    } else {
+        return Status::OK();
+    }
+    LogicalType lt = _get_zone_map_parse_type(predicate);
+
+    auto page_satisfies_zone_map_filter = [&](const ZoneMapDetail& detail) {
+        if constexpr (PredRelation == CompoundNodeType::AND) {
+            return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        } else {
+            return predicates.empty() ||
+                   std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        }
+    };
+
+    const TypeInfoPtr type_info = get_type_info(delegate_type(lt));
+
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
-    int32_t page_size = _zonemap_index->num_pages();
-    for (int32_t i = 0; i < page_size; ++i) {
+    const int32_t num_pages = _zonemap_index->num_pages();
+
+    int32_t i = 0;
+    int32_t end_page = num_pages;
+    if (src_range != nullptr && src_range->end() != 0) {
+        i = _ordinal_index->seek_at_or_before(src_range->begin()).page_index();
+        end_page = _ordinal_index->seek_at_or_before(src_range->end() - 1).page_index();
+        if (end_page + 1 <= num_pages) {
+            end_page++;
+        }
+    }
+
+    for (; i < end_page; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
-        RETURN_IF_ERROR(_parse_zone_map(zm, &detail));
-        bool matched = true;
-        for (const auto* predicate : predicates) {
-            if (!predicate->zone_map_filter(detail)) {
-                matched = false;
-                break;
-            }
-        }
-        if (!matched) {
+        RETURN_IF_ERROR(_parse_zone_map(type_info, zm, &detail));
+
+        if (!page_satisfies_zone_map_filter(detail)) {
             continue;
         }
         pages->emplace_back(i);
@@ -478,18 +1018,74 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
 }
 
 bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates) const {
-    if (_segment_zone_map == nullptr) {
+    if (_segment_zone_map == nullptr || predicates.empty()) {
         return true;
     }
+    LogicalType lt = _get_zone_map_parse_type(predicates[0]);
     ZoneMapDetail detail;
-    auto st = _parse_zone_map(*_segment_zone_map, &detail);
+    auto st = _parse_zone_map(lt, *_segment_zone_map, &detail);
     CHECK(st.ok()) << st;
     auto filter = [&](const ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path) {
-    if (is_scalar_field_type(delegate_type(_column_type))) {
+void ColumnReader::_update_sub_reader_pos(const TabletColumn* column, int pos) {
+    if (column == nullptr) {
+        return;
+    }
+    auto name = column->name();
+    int id = column->unique_id();
+    _sub_reader_pos[{std::string(name), id}] = pos;
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_iter(ColumnAccessPath* path,
+                                                                                  const TabletColumn* column) {
+    DCHECK(_column_type == LogicalType::TYPE_STRUCT);
+    DCHECK(column != nullptr);
+    auto num_fields = column->subcolumn_count();
+
+    std::unique_ptr<ColumnIterator> null_iter;
+    if (is_nullable()) {
+        ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[_sub_readers->size() - 1]->new_iterator());
+    }
+
+    std::vector<ColumnAccessPath*> child_paths(num_fields, nullptr);
+    if (path != nullptr && !path->children().empty()) {
+        for (const auto& child : path->children()) {
+            child_paths[child->index()] = child.get();
+        }
+    }
+
+    std::vector<std::unique_ptr<ColumnIterator>> field_iters;
+    for (int i = 0; i < num_fields; ++i) {
+        auto sub_column = column->subcolumn_ptr(i);
+        auto iter = _sub_reader_pos.find({std::string(sub_column->name()), sub_column->unique_id()});
+        if (iter != _sub_reader_pos.end()) {
+            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[iter->second]->new_iterator(child_paths[i], sub_column));
+            field_iters.emplace_back(std::move(iter));
+        } else {
+            if (!sub_column->has_default_value() && !sub_column->is_nullable()) {
+                return Status::InternalError(
+                        fmt::format("invalid nonexistent column({}) without default value.", sub_column->name()));
+            } else {
+                const TypeInfoPtr& type_info = get_type_info(*sub_column);
+                auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                        sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),
+                        type_info, sub_column->length(), num_rows(), child_paths[i]);
+                ColumnIteratorOptions iter_opts;
+                RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+                field_iters.emplace_back(std::move(default_value_iter));
+            }
+        }
+    }
+    return create_struct_iter(this, std::move(null_iter), std::move(field_iters), path);
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path,
+                                                                     const TabletColumn* column) {
+    if (_column_type == LogicalType::TYPE_JSON) {
+        return _new_json_iterator(path, column);
+    } else if (is_scalar_field_type(delegate_type(_column_type))) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;
@@ -507,7 +1103,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             }
         }
 
-        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator(value_path));
+        auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
+        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator(value_path, sub_column));
 
         std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
@@ -535,7 +1132,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
 
         // key must scalar type now
         ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
-        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator(value_path));
+        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator(value_path, nullptr));
         std::unique_ptr<ColumnIterator> nulls;
         if (is_nullable()) {
             ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
@@ -544,6 +1141,9 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         return std::make_unique<MapColumnIterator>(this, std::move(nulls), std::move(offsets), std::move(keys),
                                                    std::move(values), path);
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
+        if (column != nullptr) {
+            return _create_merge_struct_iter(path, column);
+        }
         auto num_fields = _sub_readers->size();
 
         std::unique_ptr<ColumnIterator> null_iter;
@@ -570,6 +1170,151 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
     }
 }
 
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(ColumnAccessPath* path,
+                                                                           const TabletColumn* column) {
+    DCHECK(_column_type == LogicalType::TYPE_JSON);
+    auto json_iter = std::make_unique<ScalarColumnIterator>(this);
+    // access sub columns
+    std::vector<ColumnAccessPath*> target_leafs;
+    std::vector<std::string> target_paths;
+    std::vector<LogicalType> target_types;
+    if (path != nullptr && !path->children().empty()) {
+        auto field_name = path->absolute_path();
+        path->get_all_leafs(&target_leafs);
+        for (auto& p : target_leafs) {
+            // use absolute path, not relative path
+            // root path is field name, we remove it
+            target_paths.emplace_back(p->absolute_path().substr(field_name.size() + 1));
+            target_types.emplace_back(p->value_type().type);
+        }
+    }
+
+    if (!_is_flat_json) {
+        if (path == nullptr || path->children().empty()) {
+            return json_iter;
+        }
+        // dynamic flattern
+        // we must dynamic flat json, because we don't know other segment wasn't the paths
+        return create_json_dynamic_flat_iterator(
+                std::move(json_iter), target_paths, target_types,
+                path->is_from_compaction() || (column != nullptr && column->is_extended()));
+    }
+
+    std::vector<std::string> source_paths;
+    std::vector<LogicalType> source_types;
+    std::unique_ptr<ColumnIterator> null_iter;
+    std::vector<std::unique_ptr<ColumnIterator>> all_iters;
+    size_t start = is_nullable() ? 1 : 0;
+    size_t end = _has_remain ? _sub_readers->size() - 1 : _sub_readers->size();
+    if (is_nullable()) {
+        ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[0]->new_iterator());
+    }
+
+    if (path == nullptr || path->children().empty() || path->is_from_compaction()) {
+        DCHECK(_is_flat_json);
+        for (size_t i = start; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            std::string name = rd->name();
+            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+            source_paths.emplace_back(name);
+            source_types.emplace_back(rd->column_type());
+            all_iters.emplace_back(std::move(iter));
+        }
+
+        if (_has_remain) {
+            const auto& rd = (*_sub_readers)[end];
+            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+            all_iters.emplace_back(std::move(iter));
+        }
+
+        if (path == nullptr || path->children().empty()) {
+            // access whole json
+            return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), source_paths,
+                                              source_types);
+        } else {
+            DCHECK(path->is_from_compaction());
+            return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths,
+                                             target_types, source_paths, source_types, true);
+        }
+    }
+
+    bool need_remain = false;
+    std::set<std::string> check_paths;
+    for (size_t k = 0; k < target_paths.size(); k++) {
+        auto& target = target_paths[k];
+        size_t i = start;
+        for (; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            std::string name = rd->name();
+            if (check_paths.contains(name)) {
+                continue;
+            }
+            // target: b.b2.b3
+            // source: b.b2
+            if (target == name || target.starts_with(name + ".")) {
+                ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+                source_paths.emplace_back(name);
+                source_types.emplace_back(rd->column_type());
+                all_iters.emplace_back(std::move(iter));
+                check_paths.emplace(name);
+                break;
+            } else if (name.starts_with(target + ".")) {
+                // target: b.b2
+                // source: b.b2.b3
+                if (target_types[k] != TYPE_JSON && !is_string_type(target_types[k])) {
+                    // don't need column and remain
+                    break;
+                }
+
+                if (_remain_filter != nullptr &&
+                    !_remain_filter->test_bytes(target_leafs[k]->path().data(), target_leafs[k]->path().size())) {
+                    need_remain = false;
+                } else {
+                    need_remain = true;
+                }
+
+                ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+                source_paths.emplace_back(name);
+                source_types.emplace_back(rd->column_type());
+                all_iters.emplace_back(std::move(iter));
+                check_paths.emplace(name);
+            }
+        }
+        need_remain |= (i == end);
+    }
+
+    if (_has_remain && need_remain) {
+        const auto& rd = (*_sub_readers)[end];
+        ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+        all_iters.emplace_back(std::move(iter));
+    }
+
+    if (all_iters.empty()) {
+        DCHECK(!_sub_readers->empty());
+        DCHECK(source_paths.empty());
+        // has none remain and can't hit any column, we read any one
+        // why not return null directly, segemnt iterater need ordinal index...
+        // it's canbe optimized
+        size_t index = start;
+        LogicalType type = (*_sub_readers)[start]->column_type();
+        for (size_t i = start + 1; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            if (type < rd->column_type()) {
+                index = i;
+                type = rd->column_type();
+            }
+        }
+        const auto& rd = (*_sub_readers)[index];
+        ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+        all_iters.emplace_back(std::move(iter));
+        source_paths.emplace_back(rd->name());
+        source_types.emplace_back(rd->column_type());
+    }
+
+    return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths, target_types,
+                                     source_paths, source_types);
+}
+
 size_t ColumnReader::mem_usage() const {
     size_t size = sizeof(ColumnReader) + _meta_mem_usage.load(std::memory_order_relaxed);
 
@@ -580,6 +1325,34 @@ size_t ColumnReader::mem_usage() const {
     }
 
     return size;
+}
+
+NgramBloomFilterReaderOptions ColumnReader::_get_reader_options_for_ngram() const {
+    // initialize with invalid number
+    NgramBloomFilterReaderOptions reader_options;
+    std::shared_ptr<TabletIndex> ngram_bf_index;
+
+    Status status = _segment->tablet_schema().get_indexes_for_column(_column_unique_id, NGRAMBF, ngram_bf_index);
+    if (!status.ok() || ngram_bf_index.get() == nullptr) {
+        return reader_options;
+    }
+
+    const std::map<std::string, std::string>& index_properties = ngram_bf_index->index_properties();
+    auto it = index_properties.find(GRAM_NUM_KEY);
+    if (it != index_properties.end()) {
+        // Found the key "ngram_size"
+        const std::string& gram_num_str = it->second; // The value corresponding to the key "ngram_size"
+        reader_options.index_gram_num = std::stoi(gram_num_str);
+    }
+
+    it = index_properties.find(CASE_SENSITIVE_KEY);
+    if (it != index_properties.end()) {
+        // Found the key "case_sensitive"
+        const std::string& case_sensitive_str = it->second; // The value corresponding to the key "case_sensitive"
+        reader_options.index_case_sensitive = (case_sensitive_str == "true");
+    }
+
+    return reader_options;
 }
 
 } // namespace starrocks

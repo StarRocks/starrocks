@@ -16,18 +16,23 @@ package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.RowOutputInfo;
+import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -35,7 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
-import com.starrocks.sql.optimizer.validate.InputDependenciesChecker;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -308,66 +313,151 @@ public abstract class JoinOrder {
     protected Optional<ExpressionInfo> buildJoinExpr(GroupInfo leftGroup, GroupInfo rightGroup) {
         ExpressionInfo leftExprInfo = leftGroup.bestExprInfo;
         ExpressionInfo rightExprInfo = rightGroup.bestExprInfo;
-        ScalarOperator onPredicates = buildInnerJoinPredicate(leftGroup.atoms, rightGroup.atoms);
-
-        LogicalJoinOperator newJoin;
-
-        if (onPredicates != null) {
-            newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN, onPredicates);
-        } else {
-            newJoin = new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null);
-        }
+        List<ScalarOperator> onPredicates = buildInnerJoinPredicate(leftGroup.atoms, rightGroup.atoms);
 
         Map<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
-        if (onPredicates != null) {
-            ColumnRefSet useColumns = onPredicates.getUsedColumns();
+        if (!onPredicates.isEmpty()) {
+            ColumnRefSet allChildColumns = new ColumnRefSet();
+            allChildColumns.union(leftExprInfo.expr.getOutputColumns());
+            allChildColumns.union(rightExprInfo.expr.getOutputColumns());
 
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
-                if (!useColumns.contains(entry.getKey())) {
-                    continue;
-                }
+            for (int i = 0; i < onPredicates.size(); i++) {
+                ScalarOperator predicate = onPredicates.get(i);
+                ColumnRefSet useColumns = predicate.getUsedColumns();
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
+                    if (!useColumns.contains(entry.getKey())) {
+                        continue;
+                    }
 
-                if (entry.getValue().isConstantRef()) {
-                    // constant always on left
-                    leftExpression.put(entry.getKey(), entry.getValue());
-                    continue;
-                }
+                    if (entry.getValue().isConstantRef()) {
+                        // constant always on left
+                        leftExpression.put(entry.getKey(), entry.getValue());
+                        continue;
+                    }
 
-                ColumnRefSet valueUseColumns = entry.getValue().getUsedColumns();
-                if (leftExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
-                    leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
-                    rightExpression.put(entry.getKey(), entry.getValue());
+                    ColumnRefSet valueUseColumns = entry.getValue().getUsedColumns();
+                    if (leftExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
+                        leftExpression.put(entry.getKey(), entry.getValue());
+                        continue;
+                    } else if (rightExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
+                        rightExpression.put(entry.getKey(), entry.getValue());
+                        continue;
+                    }
+
+                    if (allChildColumns.containsAll(valueUseColumns)) {
+                        // depend on two children, must rewrite to origin expression
+                        ReplaceColumnRefRewriter rewriter =
+                                new ReplaceColumnRefRewriter(Map.of(entry.getKey(), entry.getValue()));
+                        predicate = rewriter.rewrite(predicate);
+                        onPredicates.set(i, predicate);
+                    } else {
+                        return Optional.empty();
+                    }
                 }
             }
+        }
+
+        LogicalJoinOperator newJoin;
+        if (!onPredicates.isEmpty()) {
+            newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN, Utils.compoundAnd(onPredicates));
+        } else {
+            newJoin = new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null);
         }
 
         pushRequiredColumns(leftExprInfo, leftExpression);
         pushRequiredColumns(rightExprInfo, rightExpression);
 
+        UKFKConstraints.JoinProperty joinProperty = null;
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        if (sessionVariable.isEnableUKFKJoinReorder()) {
+            // enable_ukfk_join_reorder is an independent switch from enable_ukfk_opt, so the constraints have to be
+            // collected unconditionally here. collectColumnConstraints() is a no-op when enable_ukfk_opt is off,
+            // which would leave both children without constraints and make buildJoinColumnConstraint dereference
+            // null. EliminateAggRule uses the force variant for the same reason.
+            UKFKConstraintsCollector.collectColumnConstraintsForce(leftExprInfo.expr);
+            UKFKConstraintsCollector.collectColumnConstraintsForce(rightExprInfo.expr);
+            UKFKConstraints constraint = UKFKConstraintsCollector.buildJoinColumnConstraint(newJoin,
+                    newJoin.getJoinType(), newJoin.getOnPredicate(), leftExprInfo.expr, rightExprInfo.expr);
+            joinProperty = constraint.getJoinProperty();
+        }
+
         // use small table as right child
         OptExpression joinExpr;
-        if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
-            joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
-                    leftExprInfo.expr);
+        boolean reverse = false;
+        if (joinProperty != null && joinProperty.ukConstraint.isIntact) {
+            if (joinProperty.isLeftUK) {
+                if (allowFKAsRightTable(joinProperty, leftExprInfo, rightExprInfo)) {
+                    // Use the fk table as the right table
+                    joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
+                            rightExprInfo.expr);
+                } else {
+                    // If the uk table is too small or the fk table is too large, then use it as right table
+                    reverse = true;
+                    joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
+                            leftExprInfo.expr);
+                }
+            } else {
+                if (allowFKAsRightTable(joinProperty, rightExprInfo, leftExprInfo)) {
+                    // Use the fk table as the right table
+                    reverse = true;
+                    joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
+                            leftExprInfo.expr);
+                } else {
+                    // If the uk table is too small or the fk table is too large, then use it as right table
+                    joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
+                            rightExprInfo.expr);
+                }
+            }
         } else {
-            joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
-                    rightExprInfo.expr);
+            if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
+                reverse = true;
+                joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
+                        leftExprInfo.expr);
+            } else {
+                joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
+                        rightExprInfo.expr);
+            }
         }
 
-        try {
-            InputDependenciesChecker.getInstance().validate(joinExpr, context.getTaskContext());
-        } catch (Exception e) {
-            LOGGER.debug("the reorder result is not a valid plan.", e);
-            return Optional.empty();
-        }
-
-        if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
+        if (reverse) {
             return Optional.of(new ExpressionInfo(joinExpr, rightGroup, leftGroup));
         } else {
             return Optional.of(new ExpressionInfo(joinExpr, leftGroup, rightGroup));
         }
+    }
+
+    private boolean allowFKAsRightTable(UKFKConstraints.JoinProperty joinProperty,
+                                        ExpressionInfo ukExprInfo, ExpressionInfo fkExprInfo) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        if (!sessionVariable.isEnableUKFKJoinReorder()) {
+            return false;
+        }
+        // If the fk table is ordered by the fk column, then it's more efficient to use it as the left table
+        if (joinProperty.fkConstraint.isOrderByFK) {
+            return false;
+        }
+        RowOutputInfo ukRowOutputInfo = ukExprInfo.expr.getRowOutputInfo();
+        RowOutputInfo fkRowOutputInfo = fkExprInfo.expr.getRowOutputInfo();
+
+        double ukNormalizedRows = ukExprInfo.rowCount;
+        double ukTypeSize = ukRowOutputInfo.getColumnOutputInfo().stream()
+                .map(ColumnOutputInfo::getColumnRef)
+                .map(ColumnRefOperator::getType)
+                .map(Type::getTypeSize)
+                .reduce(1, Integer::sum);
+        double fkTypeSize = fkRowOutputInfo.getColumnOutputInfo().stream()
+                .map(ColumnOutputInfo::getColumnRef)
+                .map(ColumnRefOperator::getType)
+                .map(Type::getTypeSize)
+                .reduce(1, Integer::sum);
+        double fkNormalizedRows = fkExprInfo.rowCount * fkTypeSize / ukTypeSize;
+
+        double scaleRatio = fkNormalizedRows / Math.max(1, ukNormalizedRows);
+
+        SessionVariable variable = ConnectContext.get().getSessionVariable();
+        return scaleRatio < variable.getMaxUKFKJoinReorderScaleRatio()
+                && fkNormalizedRows < variable.getMaxUKFKJoinReorderFKRows();
     }
 
     private void pushRequiredColumns(ExpressionInfo exprInfo, Map<ColumnRefOperator, ScalarOperator> expression) {
@@ -399,7 +489,7 @@ public abstract class JoinOrder {
         exprInfo.expr.deriveLogicalPropertyItself();
     }
 
-    private ScalarOperator buildInnerJoinPredicate(BitSet left, BitSet right) {
+    protected List<ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {
         List<ScalarOperator> onPredicates = Lists.newArrayList();
         BitSet joinBitSet = new BitSet();
         joinBitSet.or(left);
@@ -412,7 +502,7 @@ public abstract class JoinOrder {
                 onPredicates.add(edge.predicate);
             }
         }
-        return Utils.compoundAnd(onPredicates);
+        return onPredicates;
     }
 
     public boolean canBuildInnerJoinPredicate(GroupInfo leftGroup, GroupInfo rightGroup) {
@@ -437,10 +527,15 @@ public abstract class JoinOrder {
     }
 
     private boolean contains(BitSet left, BitSet right) {
-        return right.stream().allMatch(left::get);
+        for (int b = right.nextSetBit(0); b >= 0; b = right.nextSetBit(b + 1)) {
+            if (!left.get(b)) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    private boolean existsEqOnPredicate(OptExpression optExpression) {
+    protected boolean existsEqOnPredicate(OptExpression optExpression) {
         LogicalJoinOperator joinOp = optExpression.getOp().cast();
         List<ScalarOperator> onPredicates = Utils.extractConjuncts(joinOp.getOnPredicate());
 
@@ -450,5 +545,24 @@ public abstract class JoinOrder {
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                 leftChildColumns, rightChildColumns, onPredicates);
         return !eqOnPredicates.isEmpty();
+    }
+
+    public static double saturatingAdd(double a, double b) {
+        double max = StatisticsEstimateCoefficient.MAXIMUM_COST;
+        if (a >= max || b >= max) {
+            return max;
+        }
+        return a > (max - b) ? max : (a + b);
+    }
+
+    public static double saturatingMul(double a, double b) {
+        double max = StatisticsEstimateCoefficient.MAXIMUM_COST;
+        if (a <= 0 || b <= 0) {
+            return 0;
+        }
+        if (a >= max || b >= max) {
+            return max;
+        }
+        return a > (max / b) ? max : (a * b);
     }
 }

@@ -17,39 +17,40 @@
 #include <string>
 #include <utility>
 
-#include "common/statusor.h"
+#include "storage_primitive/predicate_parser.h"
 #include "tablet_schema.h"
 
 namespace starrocks {
 
 class TabletSchema;
-class TCondition;
-class ExprContext;
-class SlotDescriptor;
-class RuntimeState;
-
-class ColumnPredicate;
-
-class PredicateParser {
+class OlapPredicateParser final : public PredicateParser {
 public:
-    explicit PredicateParser(TabletSchemaCSPtr schema) : _schema(std::move(schema)) {}
+    explicit OlapPredicateParser(TabletSchemaCSPtr schema) : _schema(std::move(schema)) {}
+    // explicit PredicateParser(const std::vector<SlotDescriptor*>* slot_descriptors) : _slot_desc(slot_descriptors) {}
 
     // check if an expression can be pushed down to the storage level
-    bool can_pushdown(const ColumnPredicate* predicate) const;
+    bool can_pushdown(const ColumnPredicate* predicate) const override;
 
-    bool can_pushdown(const SlotDescriptor* slot_desc) const;
+    bool can_pushdown(const ConstPredicateNodePtr& pred_tree) const override;
+
+    bool can_pushdown(const SlotDescriptor* slot_desc) const override;
 
     // Parse |condition| into a predicate that can be pushed down.
     // return nullptr if parse failed.
-    ColumnPredicate* parse_thrift_cond(const TCondition& condition) const;
+    StatusOr<ColumnPredicate*> parse_thrift_cond(const TCondition& condition) const override;
+    StatusOr<ColumnPredicate*> parse_thrift_cond(const GeneralCondition& condition) const override;
 
     StatusOr<ColumnPredicate*> parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*,
-                                              ExprContext* expr_ctx) const;
+                                              ExprContext* expr_ctx) const override;
 
-    uint32_t column_id(const SlotDescriptor& slot_desc);
+    uint32_t column_id(const SlotDescriptor& slot_desc) const override;
 
 private:
-    const TabletSchemaCSPtr _schema;
+    template <typename ConditionType>
+    StatusOr<ColumnPredicate*> t_parse_thrift_cond(const ConditionType& condition) const;
+
+    const TabletSchemaCSPtr _schema = nullptr;
+    // const std::vector<SlotDescriptor*>* _slot_desc = nullptr;
 };
 
 } // namespace starrocks

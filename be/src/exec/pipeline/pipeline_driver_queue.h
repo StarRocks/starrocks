@@ -16,37 +16,14 @@
 
 #include <queue>
 
-#include "exec/pipeline/pipeline_driver.h"
-#include "exec/workgroup/work_group_fwd.h"
-#include "util/factory_method.h"
+#include "base/concurrency/moodycamel/concurrentqueue.h"
+#include "base/utility/factory_method.h"
+#include "compute_env/workgroup/work_group_fwd.h"
+#include "compute_env/workgroup/work_group_schedule_policy.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 
 namespace starrocks::pipeline {
-
-class DriverQueue;
-using DriverQueuePtr = std::unique_ptr<DriverQueue>;
-
-class DriverQueue {
-public:
-    virtual ~DriverQueue() = default;
-    virtual void close() = 0;
-
-    virtual void put_back(const DriverRawPtr driver) = 0;
-    virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
-    // *from_executor* means that the executor thread puts the driver back to the queue.
-    virtual void put_back_from_executor(const DriverRawPtr driver) = 0;
-
-    virtual StatusOr<DriverRawPtr> take(const bool block) = 0;
-    virtual void cancel(DriverRawPtr driver) = 0;
-
-    // Update statistics of the driver's workgroup,
-    // when yielding the driver in the executor thread.
-    virtual void update_statistics(const DriverRawPtr driver) = 0;
-
-    virtual size_t size() const = 0;
-    bool empty() const { return size() == 0; }
-
-    virtual bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const = 0;
-};
 
 // SubQuerySharedDriverQueue is used to store the driver waiting to be executed.
 // It guarantees the following characteristics:
@@ -82,6 +59,7 @@ public:
     inline bool empty() const { return num_drivers == 0; }
 
     inline size_t size() const { return num_drivers; }
+    void set_metrics(DriverQueueMetrics* metrics) { _metrics = metrics; }
 
     std::deque<DriverRawPtr> queue;
     std::queue<DriverRawPtr> pending_cancel_queue;
@@ -93,13 +71,14 @@ public:
 
 private:
     std::atomic<int64_t> _accu_consume_time = 0;
+    DriverQueueMetrics* _metrics;
 };
 
 class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriverQueue> {
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
 public:
-    QuerySharedDriverQueue();
+    QuerySharedDriverQueue(DriverQueueMetrics* metrics);
     ~QuerySharedDriverQueue() override = default;
     void close() override;
     void put_back(const DriverRawPtr driver) override;
@@ -117,7 +96,7 @@ public:
 
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
 
-    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
+    static double ratio_of_adjacent_queue();
     static constexpr size_t QUEUE_SIZE = 8;
 
 private:
@@ -129,8 +108,8 @@ private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
     // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2.0s, 3.0s, 4.2s, 5.6s, 7.4s.
     // it will move to next level.
-    const int64_t LEVEL_TIME_SLICE_BASE_NS = config::pipeline_driver_queue_level_time_slice_base_ns;
-    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
+    const int64_t LEVEL_TIME_SLICE_BASE_NS;
+    const double RATIO_OF_ADJACENT_QUEUE;
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
@@ -149,6 +128,8 @@ class WorkGroupDriverQueue : public FactoryMethod<DriverQueue, WorkGroupDriverQu
     friend class FactoryMethod<DriverQueue, WorkGroupDriverQueue>;
 
 public:
+    WorkGroupDriverQueue(DriverQueueMetrics* metrics, const workgroup::WorkGroupSchedulePolicy& schedule_policy)
+            : FactoryMethod(metrics), _schedule_policy(schedule_policy) {}
     ~WorkGroupDriverQueue() override = default;
     void close() override;
 
@@ -177,25 +158,18 @@ private:
     /// These methods should be guarded by the outside _global_mutex.
     template <bool from_executor>
     void _put_back(const DriverRawPtr driver);
-    workgroup::WorkGroupDriverSchedEntity* _take_next_wg();
+    workgroup::WorkGroupDriverSchedEntity* _pick_next_wg() const;
     // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
-    // Apply hard bandwidth control to non-short-query workgroups, when there are queries of the short-query workgroup.
-    bool _throttled(const workgroup::WorkGroupDriverSchedEntity* wg_entity, int64_t unaccounted_runtime_ns = 0) const;
-    // _update_bandwidth_control_period resets period_end_ns and period_usage_ns, when a new period comes.
-    // It is invoked when taking a task to execute or an executed task is finished.
-    void _update_bandwidth_control_period();
     template <bool from_executor>
     void _enqueue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity);
     void _dequeue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity);
 
-    int64_t _bandwidth_quota_ns() const;
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroupDriverSchedEntity* wg_entity) const;
 
 private:
     static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
-    static constexpr int64_t BANDWIDTH_CONTROL_PERIOD_NS = 100'000'000;
 
     struct WorkGroupDriverSchedEntityComparator {
         using WorkGroupDriverSchedEntityPtr = workgroup::WorkGroupDriverSchedEntity*;
@@ -206,6 +180,7 @@ private:
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
+    std::condition_variable _cv_for_borrowed_cpus;
     bool _is_closed = false;
 
     // Contains the workgroups which include the drivers ready to be run.
@@ -213,25 +188,16 @@ private:
     // MUST guarantee the entity is not in set, when updating its vruntime.
     WorkgroupSet _wg_entities;
 
-    size_t _sum_cpu_limit = 0;
+    size_t _sum_cpu_weight = 0;
 
     size_t _num_drivers = 0;
 
     // Cache the minimum entity, used to check should_yield() without lock.
     std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity = nullptr;
+    const workgroup::WorkGroupSchedulePolicy& _schedule_policy;
 
-    // Hard bandwidth control to non-short-query workgroups.
-    // - The control period is 100ms, and the total quota of non-short-query workgroups is 100ms*(vCPUs-rt_wg.cpu_limit).
-    // - The non-short-query workgroups cannot be executed in the current period, if their usage exceeds quota.
-    // - When a new period comes, penalize the non-short-query workgroups according to the previous bandwidth usage.
-    //     - If usage <= quota, don't penalize it.
-    //     - If quota < usage <= 2*quota, set the new usage to `usage-quota`.
-    //     - Otherwise, set the new usage to quota to prevent them from being executed in the new period.
-    // Whether to apply the bandwidth control is decided by whether there are queries of the short-query workgroup.
-    // - If there are queries of the short-query workgroup, apply the control.
-    // - Otherwise, don't apply the control.
-    int64_t _bandwidth_control_period_end_ns = 0;
-    std::atomic<int64_t> _bandwidth_usage_ns = 0;
+    moodycamel::ConcurrentQueue<DriverRawPtr> _local_queue;
+    std::atomic_int32_t _local_queue_cntl{};
 };
 
 } // namespace starrocks::pipeline

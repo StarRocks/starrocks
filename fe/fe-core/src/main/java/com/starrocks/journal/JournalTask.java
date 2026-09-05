@@ -16,6 +16,8 @@
 package com.starrocks.journal;
 
 import com.starrocks.common.io.DataOutputBuffer;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CountDownLatch;
@@ -25,6 +27,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class JournalTask implements Future<Boolean> {
+    private static final Logger LOG = LogManager.getLogger(JournalTask.class);
+
     // serialized JournalEntity
     private final DataOutputBuffer buffer;
     // write result
@@ -32,10 +36,16 @@ public class JournalTask implements Future<Boolean> {
     // count down latch, the producer which called logEdit() will wait on it.
     // JournalWriter will call notify() after log is committed.
     protected CountDownLatch latch;
+    private Exception executeException;
     // JournalWrite will commit immediately if received a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTimeInNano;
+    private final long startTimeNano;
+    // Optional one-shot callback, run exactly once when this task completes (commit or abort). Used by
+    // split submit-then-wait-later callers to release the EditLog WAL admission fence at durability.
+    private Runnable onDone;
 
-    public JournalTask(DataOutputBuffer buffer, long maxWaitIntervalMs) {
+    public JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs) {
+        this.startTimeNano = startTimeNano;
         this.buffer = buffer;
         this.latch = new CountDownLatch(1);
         if (maxWaitIntervalMs > 0) {
@@ -45,14 +55,61 @@ public class JournalTask implements Future<Boolean> {
         }
     }
 
+    public long getStartTimeNano() {
+        return startTimeNano;
+    }
+
     public void markSucceed() {
         isSucceed = true;
         latch.countDown();
+        runOnDone();
     }
 
     public void markAbort() {
+        markAbort(null);
+    }
+
+    public void markAbort(Exception e) {
+        executeException = e;
         isSucceed = false;
         latch.countDown();
+        runOnDone();
+    }
+
+    /**
+     * Register a one-shot completion callback. Runs immediately if the task already completed, otherwise
+     * runs once on the JournalWriter thread when the task is marked succeeded/aborted.
+     */
+    public void setOnDone(Runnable callback) {
+        boolean runNow = false;
+        synchronized (this) {
+            if (isDone()) {
+                runNow = true;
+            } else {
+                this.onDone = callback;
+            }
+        }
+        if (runNow) {
+            callback.run();
+        }
+    }
+
+    private void runOnDone() {
+        Runnable callback;
+        synchronized (this) {
+            callback = onDone;
+            onDone = null;
+        }
+        if (callback != null) {
+            try {
+                callback.run();
+            } catch (Throwable t) {
+                // Settlement must never be blockable by a callback: markCurrentBatchSucceed() marks a whole
+                // batch in a loop, and a throwing callback would leave the REST of the batch unresolved -
+                // their waiters block uninterruptibly on task completion and would be pinned forever.
+                LOG.error("journal task onDone callback failed; ignored so the batch keeps settling", t);
+            }
+        }
     }
 
     public long getBetterCommitBeforeTimeInNano() {
@@ -60,6 +117,9 @@ public class JournalTask implements Future<Boolean> {
     }
 
     public long estimatedSizeByte() {
+        if (buffer == null) {
+            return 0L;
+        }
         // journal id + buffer
         return Long.SIZE / 8 + (long) buffer.getLength();
     }
@@ -76,6 +136,9 @@ public class JournalTask implements Future<Boolean> {
     @Override
     public Boolean get() throws InterruptedException, ExecutionException {
         latch.await();
+        if (executeException != null) {
+            throw new ExecutionException(executeException);
+        }
         return isSucceed;
     }
 
@@ -83,20 +146,23 @@ public class JournalTask implements Future<Boolean> {
     public Boolean get(long timeout, @NotNull TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
         if (!latch.await(timeout, unit)) {
-            return false;
+            throw new TimeoutException("journal task wait timed out");
+        }
+        if (executeException != null) {
+            throw new ExecutionException(executeException);
         }
         return isSucceed;
     }
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
-        // cannot canceled for now
+        // cannot be canceled for now
         return false;
     }
 
     @Override
     public boolean isCancelled() {
-        // cannot canceled for now
+        // cannot be canceled for now
         return false;
     }
 }

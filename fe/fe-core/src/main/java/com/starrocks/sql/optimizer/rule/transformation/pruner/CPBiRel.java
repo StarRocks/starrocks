@@ -15,14 +15,13 @@
 package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ForeignKeyConstraint;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +29,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 // Cardinality-preserving bi-relation, two scan operator form a CPBiRel instance
-// when their underlying OlapTable has {foreign,primary,unique} key constraints and
+// when their underlying Table has {foreign,primary,unique} key constraints and
 // the join equality predicates can match these constraints.
 public class CPBiRel {
     // CPBiRel is a bi-relation consisting OptExpression
@@ -85,26 +84,24 @@ public class CPBiRel {
 
     // check if referencing table's foreign key constraint aims at referenced Table
     public static boolean isForeignKeyConstraintReferenceToUniqueKey(
+            Table baseTable,
             ForeignKeyConstraint foreignKeyConstraint,
-            OlapTable referencedTable) {
-        if (foreignKeyConstraint.getParentTableInfo().getTableId() != referencedTable.getId()) {
+            Table referencedTable) {
+        if (!foreignKeyConstraint.getParentTableInfo().matchTable(referencedTable)) {
             return false;
         }
         Set<String> referencedColumnNames =
-                foreignKeyConstraint.getColumnRefPairs().stream().map(p -> p.second).collect(Collectors.toSet());
+                foreignKeyConstraint.getColumnNameRefPairs(baseTable).stream().map(p -> p.second).collect(Collectors.toSet());
         return referencedTable.getUniqueConstraints().stream()
-                .anyMatch(uk -> new HashSet<>(uk.getUniqueColumns()).equals(referencedColumnNames));
+                .anyMatch(uk -> new HashSet<>(uk.getUniqueColumnNames(referencedTable)).equals(referencedColumnNames));
     }
 
     public static List<CPBiRel> extractCPBiRels(OptExpression lhs, OptExpression rhs,
                                                 boolean leftToRight) {
         LogicalScanOperator lhsScanOp = lhs.getOp().cast();
         LogicalScanOperator rhsScanOp = rhs.getOp().cast();
-        if (!(lhsScanOp.getTable() instanceof OlapTable) || !(rhsScanOp.getTable() instanceof OlapTable)) {
-            return Collections.emptyList();
-        }
-        OlapTable lhsTable = (OlapTable) lhsScanOp.getTable();
-        OlapTable rhsTable = (OlapTable) rhsScanOp.getTable();
+        Table lhsTable = lhsScanOp.getTable();
+        Table rhsTable = rhsScanOp.getTable();
         Map<String, ColumnRefOperator> lhsColumnName2ColRef =
                 lhsScanOp.getColumnMetaToColRefMap().entrySet().stream()
                         .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
@@ -114,15 +111,15 @@ public class CPBiRel {
         List<CPBiRel> biRels = Lists.newArrayList();
         if (lhsTable.hasForeignKeyConstraints() && rhsTable.hasUniqueConstraints()) {
             lhsTable.getForeignKeyConstraints().stream()
-                    .filter(fk -> isForeignKeyConstraintReferenceToUniqueKey(fk, rhsTable)).forEach(fk -> {
+                    .filter(fk -> isForeignKeyConstraintReferenceToUniqueKey(lhsTable, fk, rhsTable)).forEach(fk -> {
                         Set<String> lhsColumNames =
-                                fk.getColumnRefPairs().stream().map(p -> p.first).collect(Collectors.toSet());
+                                fk.getColumnNameRefPairs(lhsTable).stream().map(p -> p.first).collect(Collectors.toSet());
                         Set<String> rhsColumNames =
-                                fk.getColumnRefPairs().stream().map(p -> p.second).collect(Collectors.toSet());
+                                fk.getColumnNameRefPairs(lhsTable).stream().map(p -> p.second).collect(Collectors.toSet());
                         if (lhsColumnName2ColRef.keySet().containsAll(lhsColumNames) &&
                                 rhsColumnName2ColRef.keySet().containsAll(rhsColumNames)) {
                             Set<Pair<ColumnRefOperator, ColumnRefOperator>> fkColumnRefPairs =
-                                    fk.getColumnRefPairs().stream()
+                                    fk.getColumnNameRefPairs(lhsTable).stream()
                                             .map(p ->
                                                     Pair.create(
                                                             lhsColumnName2ColRef.get(p.first),
@@ -135,10 +132,10 @@ public class CPBiRel {
 
         if (lhsTable.getId() == rhsTable.getId() && lhsTable.hasUniqueConstraints()) {
             lhsTable.getUniqueConstraints().stream().filter(uk ->
-                            lhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumns()) &&
-                                    rhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumns())
+                            lhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames(lhsTable)) &&
+                                    rhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames(lhsTable))
                     ).map(uk ->
-                            uk.getUniqueColumns().stream().map(colName ->
+                            uk.getUniqueColumnNames(lhsTable).stream().map(colName ->
                                     Pair.create(
                                             lhsColumnName2ColRef.get(colName),
                                             rhsColumnName2ColRef.get(colName))

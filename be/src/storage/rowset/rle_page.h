@@ -34,15 +34,16 @@
 
 #pragma once
 
+#include "base/bit/rle_encoding.h"
+#include "base/coding.h"
+#include "base/string/slice.h"
 #include "column/column.h"
-#include "storage/range.h"
+#include "common/status.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/type_traits.h"
-#include "util/coding.h"
-#include "util/rle_encoding.h"
-#include "util/slice.h"
+#include "storage_primitive/range.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -149,8 +150,8 @@ public:
     }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     PageBuilderOptions _options;
     uint32_t _count{0};
@@ -167,7 +168,7 @@ class RlePageDecoder final : public PageDecoder {
 public:
     RlePageDecoder(Slice slice) : _data(slice) {}
 
-    [[nodiscard]] Status init() override {
+    Status init() override {
         CHECK(!_parsed);
 
         if (_data.size < RLE_PAGE_HEADER_SIZE) {
@@ -182,7 +183,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init()";
         DCHECK_LE(pos, _num_elements) << "Tried to seek to " << pos << " which is > number of elements ("
                                       << _num_elements << ") in the block!";
@@ -193,19 +194,24 @@ public:
         if (_cur_index == pos) {
             // No need to seek.
             return Status::OK();
-        } else if (_cur_index < pos) {
-            uint nskip = pos - _cur_index;
-            _rle_decoder.Skip(nskip);
         } else {
-            _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
-                                               _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
-            _rle_decoder.Skip(pos);
+            size_t to_skip;
+            if (_cur_index < pos) {
+                to_skip = pos - _cur_index;
+            } else {
+                _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
+                                                   _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
+                to_skip = pos;
+            }
+            if (PREDICT_FALSE(!_rle_decoder.Skip(to_skip))) {
+                return Status::InternalError("RlePageDecoder seek error");
+            }
         }
         _cur_index = pos;
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override {
+    Status next_batch(size_t* n, Column* dst) override {
         SparseRange<> read_range;
         uint32_t begin = current_index();
         read_range.add(Range<>(begin, begin + *n));
@@ -214,12 +220,15 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed);
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
             return Status::OK();
         }
-        CppType value{};
+
+        // Use batch decoding for better performance
+        constexpr size_t kBatchSize = 1024;
+        CppType batch_buffer[kBatchSize];
 
         size_t to_read =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
@@ -227,13 +236,18 @@ public:
         while (to_read > 0) {
             RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
             Range<> r = iter.next(to_read);
-            for (size_t i = 0; i < r.span_size(); ++i) {
-                if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {
+            size_t remaining = r.span_size();
+
+            while (remaining > 0) {
+                size_t batch_count = std::min(remaining, kBatchSize);
+                if (PREDICT_FALSE(!_rle_decoder.GetBatch(batch_buffer, batch_count))) {
                     return Status::Corruption("RLE decode failed");
                 }
-                [[maybe_unused]] int p = dst->append_numbers(&value, sizeof(value));
-                DCHECK_EQ(1, p);
+                [[maybe_unused]] int p = dst->append_numbers(batch_buffer, batch_count * sizeof(CppType));
+                DCHECK_EQ(batch_count, p);
+                remaining -= batch_count;
             }
+
             _cur_index += r.span_size();
             to_read -= r.span_size();
         }
@@ -247,8 +261,8 @@ public:
     EncodingTypePB encoding_type() const override { return RLE; }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     Slice _data;
     bool _parsed{false};

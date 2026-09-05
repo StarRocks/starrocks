@@ -1,0 +1,115 @@
+-- name: test_skew_join_with_pre_topn
+
+CREATE TABLE IF NOT EXISTS skew_customer (
+    c_custkey     INT NOT NULL,
+    c_name        VARCHAR(25) NOT NULL,
+    c_address     VARCHAR(40) NOT NULL,
+    c_nationkey   INT NOT NULL,
+    c_phone       CHAR(15) NOT NULL,
+    c_acctbal     DECIMAL(15,2)   NOT NULL,
+    c_mktsegment  CHAR(10) NOT NULL,
+    c_comment     VARCHAR(117) NOT NULL
+)
+DUPLICATE KEY(c_custkey)
+DISTRIBUTED BY HASH(c_custkey) BUCKETS 3
+PROPERTIES (
+    "replication_num"="1"
+);
+
+CREATE TABLE IF NOT EXISTS nation (
+    n_nationkey INT NOT NULL,
+    n_name      CHAR(25) NOT NULL,
+    n_regionkey INT NOT NULL,
+    n_comment   VARCHAR(256)
+)
+DUPLICATE KEY(n_nationkey)
+DISTRIBUTED BY HASH(n_nationkey) BUCKETS 3
+PROPERTIES (
+    "replication_num"="1"
+);
+
+INSERT INTO nation VALUES
+(0, 'ALGERIA', 0, 'haggle. carefully final deposits detect slyly ag'),
+(1, 'ARGENTINA', 1, 'al foxes promise slyly according to the regular accounts. bold requests alon'),
+(2, 'BRAZIL', 1, 'y alongside of the pending deposits. carefully special packages are about the ironic forges. slyly special'),
+(3, 'CANADA', 1, 'eas hang ironic, silent packages. slyly regular packages are furiously over the tithes. fluffily bold'),
+(4, 'EGYPT', 4, 'y above the carefully unusual theodolites. final dugouts are quickly across the furiously regular d'),
+(5, 'ETHIOPIA', 0, 'ven packages wake quickly. regu'),
+(6, 'FRANCE', 3, 'refully final requests. regular, ironi'),
+(7, 'GERMANY', 3, 'l platelets. regular accounts x-ray: unusual, regular acco'),
+(8, 'INDIA', 2, 'ss excuses cajole slyly across the packages. deposits print aroun'),
+(9, 'INDONESIA', 2, ' slyly express asymptotes. regular deposits haggle. slyly regular accounts across the expedited theodolite'),
+(10, 'IRAN', 4, 'efully alongside of the slyly final dependence'),
+(11, 'IRAQ', 4, 'nic deposits boost atop the quickly final requests? quickly regula'),
+(12, 'JAPAN', 2, 'ously. final, express gifts cajole a'),
+(13, 'JORDAN', 4, 'ic deposits are blithely about the carefully regular pa'),
+(14, 'KENYA', 0, ' pending excuses haggle furiously deposits. pending, express pinto beans wake fluffily past t'),
+(15, 'MOROCCO', 0, 'rns. blithely bold courts among the closely regular packages use furiously bold platelets?'),
+(16, 'MOZAMBIQUE', 0, 's. ironic, unusual asymptotes wake blithely r'),
+(17, 'PERU', 1, 'platelets. blithely pending dependencies use fluffily across the even pinto beans. carefully silent accoun'),
+(18, 'CHINA', 2, 'c dependencies. furiously careful notornis and slyly final packages. slyly bold accounts sleep a'),
+(19, 'ROMANIA', 3, 'ular asymptotes are about the furious multipliers. express dependencies nag above the ironically ironic account'),
+(20, 'SAUDI ARABIA', 4, 'ts. silent requests haggle. closely express packages sleep across the blithely'),
+(21, 'VIETNAM', 2, 'hely enticingly express accounts. even, final'),
+(22, 'RUSSIA', 3, ' requests against the platelets use never according to the quickly regular pint'),
+(23, 'UNITED KINGDOM', 3, 'eans boost carefully special requests. accounts are. carefull'),
+(24, 'UNITED STATES', 1, 'y final packages. slow foxes cajole quickly. quickly silent platelets breach ironic accounts. unusual pinto be');
+
+INSERT INTO skew_customer 
+SELECT 1, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment 
+FROM (
+    SELECT 'Customer#Skew001' as c_name, 'SkewAddr001' as c_address, 1 as c_nationkey, 
+           '11-111-111-1111' as c_phone, 1000.00 as c_acctbal, 'BUILDING' as c_mktsegment, 'skew data' as c_comment
+    UNION ALL
+    SELECT 'Customer#Skew002', 'SkewAddr002', 2, '22-222-222-2222', 2000.00, 'AUTOMOBILE', 'skew data'
+    UNION ALL
+    SELECT 'Customer#Skew003', 'SkewAddr003', 3, '33-333-333-3333', 3000.00, 'MACHINERY', 'skew data'
+    UNION ALL
+    SELECT 'Customer#Skew004', 'SkewAddr004', 4, '44-444-444-4444', 4000.00, 'HOUSEHOLD', 'skew data'
+    UNION ALL
+    SELECT 'Customer#Skew005', 'SkewAddr005', 5, '55-555-555-5555', 5000.00, 'FURNITURE', 'skew data'
+) t;
+
+SELECT COUNT(*) as total_customers FROM skew_customer;
+
+set topn_push_down_agg_mode=1;
+set enable_optimize_skew_join_v1=false;
+set enable_optimize_skew_join_v2=false;
+
+SELECT c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, SUM(c_custkey) as sum_custkey FROM nation JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey LIMIT 3;
+
+SELECT c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, SUM(c_custkey) as sum_custkey FROM nation JOIN skew_customer ON c_custkey = n_nationkey GROUP BY c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey LIMIT 3;
+
+SELECT n_nationkey, COUNT(*) as cnt FROM nation JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey;
+
+SELECT n_name, COUNT(*) as cnt, SUM(c_acctbal) as total_bal, AVG(c_acctbal) as avg_bal, MAX(c_acctbal) as max_bal, MIN(c_acctbal) as min_bal FROM nation JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_name ORDER BY n_name;
+
+SELECT n_nationkey, n_name, COUNT(c_custkey) as customer_count FROM nation LEFT JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_nationkey = n_nationkey GROUP BY n_nationkey, n_name ORDER BY n_nationkey, n_name LIMIT 10;
+
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|nation.n_nationkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|nation.n_nationkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|nation.n_nationkey(1)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|nation.n_nationkey(1, NULL)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|nation.n_nationkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|nation.n_nationkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|nation.n_nationkey(1)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|nation.n_nationkey(1, NULL)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|skew_customer.c_custkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|skew_customer.c_custkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|skew_customer.c_custkey(1)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|skew_customer.c_custkey(1, NULL)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|skew_customer.c_custkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|skew_customer.c_custkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|skew_customer.c_custkey(1)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|skew_customer.c_custkey(1, NULL)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+
+SELECT n_nationkey, BOOL_OR(c_custkey), MIN_BY(c_name, c_acctbal), MAX_BY(c_name, c_acctbal) FROM nation LEFT JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey LIMIT 10;
+
+SELECT n_nationkey, BOOL_OR(c_custkey), MIN_BY(c_name, c_acctbal), MAX_BY(c_name, c_acctbal), MAP_SIZE(MAP_AGG(n_nationkey, c_name)) FROM nation LEFT JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey LIMIT 10;
+
+-- Cleanup
+drop table skew_customer;
+drop table nation;

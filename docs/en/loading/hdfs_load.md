@@ -1,22 +1,22 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 40
+displayed_sidebar: docs
+toc_max_heading_level: 4
+keywords: ['Broker Load']
+description: "How to load data from HDFS into StarRocks using INSERT+FILES(), Broker Load, or Spark Load."
 ---
 
 # Load data from HDFS
 
+import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.mdx'
+
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
+
+import PipeAdvantages from '../_assets/commonMarkdown/pipeAdvantages.mdx'
+
 StarRocks provides the following options for loading data from HDFS:
 
-- Synchronous loading using [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md)
-- Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
-- Continuous asynchronous loading using [Pipe](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
-
-Each of these options has its own advantages, which are detailed in the following sections.
-
-In most cases, we recommend that you use the INSERT+`FILES()` method, which is much easier to use.
-
-However, the INSERT+`FILES()` method currently supports only the Parquet and ORC file formats. Therefore, if you need to load data of other file formats such as CSV, or [perform data changes such as DELETE during data loading](../loading/Load_to_Primary_Key_tables.md), you can resort to Broker Load.
-
-If you need to load a large number of data files with a significant data volume in total (for example, more than 100 GB or even 1 TB), we recommend that you use the Pipe method. Pipe can split the files based on their number or size, breaking down the load job into smaller, sequential tasks. This approach ensures that errors in one file do not impact the entire load job and minimizes the need for retries due to data errors.
+<LoadMethodIntro />
 
 ## Before you begin
 
@@ -26,15 +26,15 @@ Make sure the source data you want to load into StarRocks is properly stored in 
 
 ### Check privileges
 
-You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+<InsertPrivNote />
 
-### Gather connection details
+### Gather authentication details
 
 You can use the simple authentication method to establish connections with your HDFS cluster. To use simple authentication, you need to gather the username and password of the account that you can use to access the NameNode of the HDFS cluster.
 
 ## Use INSERT+FILES()
 
-This method is available from v3.1 onwards and currently supports only the Parquet and ORC file formats.
+This method is available from v3.1 onwards and currently supports only the Parquet, ORC, and CSV (from v3.3.0 onwards) file formats.
 
 ### Advantages of INSERT+FILES()
 
@@ -42,9 +42,9 @@ This method is available from v3.1 onwards and currently supports only the Parqu
 
 With `FILES()`, you can:
 
-- Query the data directly from HDFS using [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
-- Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) (CTAS).
-- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
+- Query the data directly from HDFS using [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md).
+- Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS).
+- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md).
 
 ### Typical examples
 
@@ -92,10 +92,10 @@ This is a continuation of the previous example. The previous query is wrapped in
 
 > **NOTE**
 >
-> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with a single replica:
+> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with three replicas:
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
 Create a database and switch to it:
@@ -119,7 +119,7 @@ SELECT * FROM FILES
 );
 ```
 
-After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md):
+After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md):
 
 ```SQL
 DESCRIBE user_behavior_inferred;
@@ -127,25 +127,17 @@ DESCRIBE user_behavior_inferred;
 
 The system returns the following query result:
 
-```Plaintext
-+--------------+------------------+------+-------+---------+-------+
-| Field        | Type             | Null | Key   | Default | Extra |
-+--------------+------------------+------+-------+---------+-------+
-| UserID       | bigint           | YES  | true  | NULL    |       |
-| ItemID       | bigint           | YES  | true  | NULL    |       |
-| CategoryID   | bigint           | YES  | true  | NULL    |       |
-| BehaviorType | varchar(1048576) | YES  | false | NULL    |       |
-| Timestamp    | varchar(1048576) | YES  | false | NULL    |       |
-+--------------+------------------+------+-------+---------+-------+
+```Plain
++--------------+-----------+------+-------+---------+-------+
+| Field        | Type      | Null | Key   | Default | Extra |
++--------------+-----------+------+-------+---------+-------+
+| UserID       | bigint    | YES  | true  | NULL    |       |
+| ItemID       | bigint    | YES  | true  | NULL    |       |
+| CategoryID   | bigint    | YES  | true  | NULL    |       |
+| BehaviorType | varbinary | YES  | false | NULL    |       |
+| Timestamp    | varbinary | YES  | false | NULL    |       |
++--------------+-----------+------+-------+---------+-------+
 ```
-
-Compare the inferred schema with the schema created by hand:
-
-- data types
-- nullable
-- key fields
-
-To better control the schema of the destination table and for better query performance, we recommend that you specify the table schema by hand in production environments.
 
 Query the table to verify that the data has been loaded into it. Example:
 
@@ -179,7 +171,7 @@ You may want to customize the table that you are inserting into, for example, th
 
 In this example, we are creating a table based on knowledge of how the table will be queried and the data in the Parquet file. The knowledge of the data in the Parquet file can be gained by querying the file directly in HDFS.
 
-- Since a query of the dataset in HDFS indicates that the `Timestamp` column contains data that matches a `datetime` data type, the column type is specified in the following DDL.
+- Since a query of the dataset in HDFS indicates that the `Timestamp` column contains data that matches a VARBINARY data type, the column type is specified in the following DDL.
 - By querying the data in HDFS, you can find that there are no `NULL` values in the dataset, so the DDL does not set any columns as nullable.
 - Based on knowledge of the expected query types, the sort key and bucketing column are set to the column `UserID`. Your use case might be different for this data, so you might decide to use `ItemID` in addition to or instead of `UserID` for the sort key.
 
@@ -199,16 +191,43 @@ CREATE TABLE user_behavior_declared
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
+
+Display the schema so that you can compare it with the inferred schema produced by the `FILES()` table function:
+
+```sql
+DESCRIBE user_behavior_declared;
+```
+
+```plaintext
++--------------+----------------+------+-------+---------+-------+
+| Field        | Type           | Null | Key   | Default | Extra |
++--------------+----------------+------+-------+---------+-------+
+| UserID       | int            | NO   | true  | NULL    |       |
+| ItemID       | int            | NO   | false | NULL    |       |
+| CategoryID   | int            | NO   | false | NULL    |       |
+| BehaviorType | varchar(65533) | NO   | false | NULL    |       |
+| Timestamp    | varbinary      | NO   | false | NULL    |       |
++--------------+----------------+------+-------+---------+-------+
+5 rows in set (0.00 sec)
+```
+
+:::tip
+
+Compare the schema you just created with the schema inferred earlier using the `FILES()` table function. Look at:
+
+- data types
+- nullable
+- key fields
+
+To better control the schema of the destination table and for better query performance, we recommend that you specify the table schema by hand in production environments.
+
+:::
 
 After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
 
@@ -244,11 +263,13 @@ The following query result is returned, indicating that the data has been succes
 
 #### Check load progress
 
-You can query the progress of INSERT jobs from the `information_schema.loads` view. This feature is supported from v3.1 onwards. Example:
+You can query the progress of INSERT jobs from the [`loads`](../sql-reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards. Example:
 
 ```SQL
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
+
+For information about the fields provided in the `loads` view, see [`loads`](../sql-reference/information_schema/loads.md).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
@@ -280,8 +301,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md).
-
 > **NOTE**
 >
 > INSERT is a synchronous command. If an INSERT job is still running, you need to open another session to check its execution status.
@@ -290,22 +309,26 @@ For information about the fields provided in the `loads` view, see [Information 
 
 An asynchronous Broker Load process handles making the connection to HDFS, pulling the data, and storing the data in StarRocks.
 
-This method supports the Parquet, ORC, and CSV file formats.
+This method supports the following file formats:
+
+- Parquet
+- ORC
+- CSV
+- JSON (supported from v3.2.3 onwards)
 
 ### Advantages of Broker Load
 
-- Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes](../loading/Load_to_Primary_Key_tables.md) such as UPSERT and DELETE operations during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
-- In addition to Parquet and ORC file formats, Broker Load supports CSV files.
+- In addition to Parquet and ORC file format, Broker Load supports CSV file format and JSON file format (JSON file format is supported from v3.2.3 onwards).
 
 ### Data flow
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 1. The user creates a load job.
-2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BEs).
-3. The BEs pull the data from the source and load the data into StarRocks.
+2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BEs) or compute nodes (CNs).
+3. The BEs or CNs pull the data from the source and load the data into StarRocks.
 
 ### Typical example
 
@@ -329,15 +352,11 @@ CREATE TABLE user_behavior
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Broker Load
@@ -370,7 +389,7 @@ This job has four main sections:
 - `BROKER`: The connection details for the source.
 - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 #### Check load progress
 
@@ -380,7 +399,7 @@ You can query the progress of Broker Load jobs from the `information_schema.load
 SELECT * FROM information_schema.loads;
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md)).
+For information about the fields provided in the `loads` view, see [Information Schema](../sql-reference/information_schema/loads.md)).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
@@ -420,11 +439,13 @@ The following query result is returned, indicating that the data has been succes
 
 ## Use Pipe
 
-Starting from v3.2, StarRocks supports using Pipe to continuously load data from HDFS in micro-batches, allowing for quick access to the loaded data within minutes. This method eliminates the need to manually run load commands on a scheduled basis, making it ideal for continuous data loading and large-scale data loading.
-
-The Pipe method currently supports only the Parquet and ORC file formats.
+Starting from v3.2, StarRocks provides the Pipe loading method, which currently supports only the Parquet and ORC file formats.
 
 ### Advantages of Pipe
+
+<PipeAdvantages menu=" HDFS uses LastModifiedTime "/>
+
+Pipe is ideal for continuous data loading and large-scale data loading:
 
 - **Large-scale data loading in micro-batches helps reduce the cost of retries caused by data errors.**
 
@@ -432,13 +453,15 @@ The Pipe method currently supports only the Parquet and ORC file formats.
 
 - **Continuous data loading helps reduce manpower.**
 
-  Pipe helps you write new or updated data files to a specific location and continuously load the new data from these files into StarRocks. Once a Pipe job is created, it will constantly monitor changes in the data files stored under a specific directory and automatically load new or updated data from the data files into the destination StarRocks table.
+  Pipe helps you write new or updated data files to a specific location and continuously load the new data from these files into StarRocks. After you create a Pipe job with `"AUTO_INGEST" = "TRUE"` specified, it will constantly monitor changes to the data files stored in the specified path and automatically load new or updated data from the data files into the destination StarRocks table.
 
-- **File uniqueness check helps prevent duplicate data loading.**
-
-  During the loading process, Pipe checks the uniqueness of each data file based on the file name and digest. If a file with a specific file name and digest has already been processed by a Pipe job, the Pipe job will skip all subsequent files with the same file name and digest. Note that HDFS uses `LastModifiedTime` as file digest.
+Additionally, Pipe performs file uniqueness checks to help prevent duplicate data loading. During the loading process, Pipe checks the uniqueness of each data file based on the file name and digest. If a file with a specific file name and digest has already been processed by a Pipe job, the Pipe job will skip all subsequent files with the same file name and digest. Note that HDFS uses `LastModifiedTime` as file digest.
 
 The load status of each data file is recorded and saved to the `information_schema.pipe_files` view. After a Pipe job associated with the view is deleted, the records about the files loaded in that job will also be deleted.
+
+### Data flow
+
+![Pipe data flow](../_assets/pipe_data_flow.png)
 
 ### Differences between Pipe and INSERT+FILES()
 
@@ -468,15 +491,11 @@ CREATE TABLE user_behavior_replica
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Pipe job
@@ -507,11 +526,11 @@ This job has four main sections:
 - `INSERT_SQL`: The INSERT INTO SELECT FROM FILES statement that is used to load data from the specified source data file to the destination table.
 - `PROPERTIES`: A set of optional parameters that specify how to execute the pipe. These include `AUTO_INGEST`, `POLL_INTERVAL`, `BATCH_SIZE`, and `BATCH_FILES`. Specify these properties in the `"key" = "value"` format.
 
-For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md).
+For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md).
 
 #### Check load progress
 
-- Query the progress of Pipe jobs by using [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md).
+- Query the progress of Pipe jobs by using [SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md).
 
   ```SQL
   SHOW PIPES;
@@ -520,7 +539,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
   If you have submitted multiple load jobs, you can filter on the `NAME` associated with the job. Example:
 
   ```SQL
-  SHOW PIPES WHERE NAME = "user_behavior_replica" \G
+  SHOW PIPES WHERE NAME = 'user_behavior_replica' \G
   *************************** 1. row ***************************
   DATABASE_NAME: mydatabase
         PIPE_ID: 10252
@@ -533,7 +552,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
   1 row in set (0.00 sec)
   ```
 
-- Query the progress of Pipe jobs from the [`information_schema.pipes`](../reference/information_schema/pipes.md) view.
+- Query the progress of Pipe jobs from the [`pipes`](../sql-reference/information_schema/pipes.md) view in the StarRocks Information Schema.
 
   ```SQL
   SELECT * FROM information_schema.pipes;
@@ -557,7 +576,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
 
 #### Check file status
 
-You can query the load status of the files loaded from the [`information_schema.pipe_files`](../reference/information_schema/pipe_files.md) view.
+You can query the load status of the files loaded from the [`pipe_files`](../sql-reference/information_schema/pipe_files.md) view in the StarRocks Information Schema.
 
 ```SQL
 SELECT * FROM information_schema.pipe_files;
@@ -585,4 +604,4 @@ FINISH_LOAD_TIME: 2023-11-17 16:13:22
 
 #### Manage Pipes
 
-You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/data-manipulation/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/data-manipulation/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/data-manipulation/RETRY_FILE.md).
+You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/loading_unloading/pipe/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/loading_unloading/pipe/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/loading_unloading/pipe/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/loading_unloading/pipe/RETRY_FILE.md).

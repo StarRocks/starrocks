@@ -16,15 +16,16 @@
 
 #include "column/binary_column.h"
 #include "column/json_column.h"
+#include "common/simdjson_util.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
 // The value must be in type simdjson::ondemand::json_type::number;
 static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                            const std::string& name, simdjson::ondemand::value* value) {
+                                            std::string_view name, simdjson::ondemand::value* value) {
     std::string_view sv = value->raw_json_token();
 
     if (type_desc.len < sv.size()) {
@@ -38,10 +39,11 @@ static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDesc
 }
 
 // The value must be in type simdjson::ondemand::json_type::string;
-static Status add_column_with_string_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                           const std::string& name, simdjson::ondemand::value* value) {
+static Status add_column_with_string_value(BinaryColumn* column, const TypeDescriptor& type_desc, std::string_view name,
+                                           simdjson::ondemand::value* value) {
     // simdjson::value::get_string() returns string without quotes.
-    std::string_view sv = value->get_string();
+    faststring buffer;
+    std::string_view sv = value_get_string_safe(value, &buffer);
 
     if (type_desc.len < sv.size()) {
         auto err_msg =
@@ -55,7 +57,7 @@ static Status add_column_with_string_value(BinaryColumn* column, const TypeDescr
 
 // The value must be in type simdjson::ondemand::json_type::number;
 static Status add_column_with_boolean_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                            const std::string& name, simdjson::ondemand::value* value) {
+                                            std::string_view name, simdjson::ondemand::value* value) {
     bool ok = value->get_bool();
     if (ok) {
         column->append(Slice{"1"});
@@ -67,7 +69,7 @@ static Status add_column_with_boolean_value(BinaryColumn* column, const TypeDesc
 
 // The value must be in type simdjson::ondemand::json_type::string;
 static Status add_column_with_array_object_value(BinaryColumn* column, const TypeDescriptor& type_desc,
-                                                 const std::string& name, simdjson::ondemand::value* value) {
+                                                 std::string_view name, simdjson::ondemand::value* value) {
     std::string_view sv = simdjson::to_json_string(*value);
     std::unique_ptr<char[]> buf{new char[sv.size()]};
     size_t new_length{};
@@ -88,7 +90,7 @@ static Status add_column_with_array_object_value(BinaryColumn* column, const Typ
     return Status::OK();
 }
 
-Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_binary_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                          simdjson::ondemand::value* value) {
     auto binary_column = down_cast<BinaryColumn*>(column);
 
@@ -124,7 +126,7 @@ Status add_binary_column(Column* column, const TypeDescriptor& type_desc, const 
     }
 }
 
-Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                               simdjson::ondemand::value* value) {
     auto json_column = down_cast<JsonColumn*>(column);
 
@@ -134,7 +136,7 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
     return Status::OK();
 }
 
-Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                               simdjson::ondemand::object* value) {
     auto json_column = down_cast<JsonColumn*>(column);
 
@@ -144,7 +146,7 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
     return Status::OK();
 }
 
-Status add_binary_column_from_json_object(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_binary_column_from_json_object(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                           simdjson::ondemand::object* obj) {
     auto binary_column = down_cast<BinaryColumn*>(column);
     std::string_view json_str = simdjson::to_json_string(*obj);

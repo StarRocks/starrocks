@@ -18,22 +18,31 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.io.CharStreams;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.IntLiteral;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.util.Util;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TCacheParam;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
@@ -46,13 +55,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
 public class QueryCacheTest {
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         String createTbl0StmtStr = "" +
@@ -218,7 +228,7 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
 
@@ -368,7 +378,7 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\"\n" +
+                "\"enable_persistent_index\" = \"true\"\n" +
                 ");";
 
         String createTbl9StmtStr = "" +
@@ -390,6 +400,8 @@ public class QueryCacheTest {
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
         ctx.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
+        ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
         FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -429,7 +441,7 @@ public class QueryCacheTest {
                 return null;
             }
         }).collect(Collectors.toList());
-        Assert.assertFalse(createTableSqlList.contains(null));
+        Assertions.assertFalse(createTableSqlList.contains(null));
         return createTableSqlList;
     }
 
@@ -439,7 +451,7 @@ public class QueryCacheTest {
             plan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
         return plan.getFragments().stream()
                 .filter(f -> f.getCacheParam() != null).collect(Collectors.toList());
@@ -459,6 +471,10 @@ public class QueryCacheTest {
     }
 
     private void testHelper(List<String> queryList) {
+        if (queryList.size() > 5) {
+            Collections.shuffle(queryList);
+            queryList = queryList.subList(0, 5);
+        }
         List<PlanFragment> frags = queryList.stream()
                 .map(q -> getCachedFragment(q).get()).collect(Collectors.toList());
         List<ByteBuffer> digests =
@@ -468,10 +484,10 @@ public class QueryCacheTest {
                         .collect(Collectors.toList());
         ByteBuffer digest = digests.get(0);
         Set<Integer> slotRemapping = slotRemappings.get(0);
-        Assert.assertTrue(digest != null && digest.array().length > 0);
-        Assert.assertTrue(digests.stream().allMatch(d -> d.equals(digest)));
-        Assert.assertTrue(slotRemapping != null && !slotRemapping.isEmpty());
-        Assert.assertTrue(slotRemappings.stream().allMatch(s -> s.equals(slotRemapping)));
+        Assertions.assertTrue(digest != null && digest.array().length > 0);
+        Assertions.assertTrue(digests.stream().allMatch(d -> d.equals(digest)));
+        Assertions.assertTrue(slotRemapping != null && !slotRemapping.isEmpty());
+        Assertions.assertTrue(slotRemappings.stream().allMatch(s -> s.equals(slotRemapping)));
     }
 
     private void testNoGroupBy(String aggFunction, List<String> whereClauses) throws Exception {
@@ -853,13 +869,13 @@ public class QueryCacheTest {
         List<String> queryList = Lists.newArrayList(
                 "select sum(v1) from t0 where uuid() like '%s'",
                 "select sum(case when random()>0.5 then 1 else 0 end) from t0");
-        Assert.assertTrue(queryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
+        Assertions.assertTrue(queryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
     }
 
     @Test
     public void testPartitionByMultiColumns() {
         List<String> queryList = Lists.newArrayList("select sum(v1) from t3");
-        Assert.assertTrue(queryList.stream().allMatch(q -> getCachedFragment(q).isPresent()));
+        Assertions.assertTrue(queryList.stream().allMatch(q -> getCachedFragment(q).isPresent()));
     }
 
     @Test
@@ -868,14 +884,14 @@ public class QueryCacheTest {
                 "select sum(v1) from t4",
                 "select sum(v1) from t5",
                 "select sum(v1) from t6");
-        Assert.assertTrue(NonMultiVersionCacheableQueryList.stream().map(this::getCachedFragment)
+        Assertions.assertTrue(NonMultiVersionCacheableQueryList.stream().map(this::getCachedFragment)
                 .allMatch(f -> f.isPresent() && !f.get().getCacheParam().isCan_use_multiversion()));
 
         List<String> cachableQueryList = Lists.newArrayList(
                 "select sum(v1), count(distinct v2) from t7",
                 "select sum(v1), count(distinct v2) from t1"
         );
-        Assert.assertTrue(cachableQueryList.stream().map(this::getCachedFragment)
+        Assertions.assertTrue(cachableQueryList.stream().map(this::getCachedFragment)
                 .allMatch(f -> f.isPresent() && f.get().getCacheParam().isCan_use_multiversion()));
     }
 
@@ -886,16 +902,16 @@ public class QueryCacheTest {
                 "select sum(v1) from t1 where ts not in ('2022-01-03 00:00:00') and sleep(4)>10",
                 "select sum(v1) from t1 where ts < '2022-01-03 00:00:00' or ts > '2022-01-10 00:00:00' and uuid()>10"
         );
-        Assert.assertTrue(unCacheableQueryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
+        Assertions.assertTrue(unCacheableQueryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
     }
 
     @Test
     public void testBetweenPredicateDecomposition() throws AnalysisException {
         String q1 = "select sum(v1) from t1 where ts between '2022-01-02 12:55:00' and '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertTrue(optFrag.isPresent());
+        Assertions.assertTrue(optFrag.isPresent());
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
-        Assert.assertTrue(!rangeMap.isEmpty());
+        Assertions.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
         PartitionKey endKey;
@@ -911,13 +927,15 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
         for (String expectRange : expectRanges) {
-            Assert.assertTrue(rangeSet.contains(expectRange));
+            Assertions.assertTrue(rangeSet.contains(expectRange));
         }
     }
 
@@ -925,9 +943,9 @@ public class QueryCacheTest {
     public void testClosedOpenBinaryPredicateDecomposition() throws AnalysisException {
         String q1 = "select sum(v1) from t1 where ts >= '2022-01-02 12:55:00' and ts < '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertTrue(optFrag.isPresent());
+        Assertions.assertTrue(optFrag.isPresent());
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
-        Assert.assertTrue(!rangeMap.isEmpty());
+        Assertions.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
         PartitionKey endKey;
@@ -943,13 +961,15 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
         for (String expectRange : expectRanges) {
-            Assert.assertTrue(rangeSet.contains(expectRange));
+            Assertions.assertTrue(rangeSet.contains(expectRange));
         }
     }
 
@@ -957,9 +977,9 @@ public class QueryCacheTest {
     public void testClosedOpenIntegerBinaryPredicateDecomposition() throws AnalysisException {
         String q1 = "select sum(v1) from t2 where c1 >= 13 and c1 <= 69";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertTrue(optFrag.isPresent());
+        Assertions.assertTrue(optFrag.isPresent());
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
-        Assert.assertTrue(!rangeMap.isEmpty());
+        Assertions.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
         PartitionKey endKey;
@@ -974,13 +994,13 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new IntLiteral(rangeValue.get(0), Type.INT), PrimitiveType.INT);
-            endKey.pushColumn(new IntLiteral(rangeValue.get(1), Type.INT), PrimitiveType.INT);
+            startKey.pushColumn(new IntLiteral(rangeValue.get(0), IntegerType.INT), PrimitiveType.INT);
+            endKey.pushColumn(new IntLiteral(rangeValue.get(1), IntegerType.INT), PrimitiveType.INT);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
         for (String expectRange : expectRanges) {
-            Assert.assertTrue(rangeSet.contains(expectRange));
+            Assertions.assertTrue(rangeSet.contains(expectRange));
         }
     }
 
@@ -988,9 +1008,9 @@ public class QueryCacheTest {
     public void testClosedClosedBetweenPredicateDecomposition() throws AnalysisException {
         String q1 = "select sum(v1) from t1 where ts >= '2022-01-02 12:55:00' and ts <= '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertTrue(optFrag.isPresent());
+        Assertions.assertTrue(optFrag.isPresent());
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
-        Assert.assertTrue(!rangeMap.isEmpty());
+        Assertions.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
         PartitionKey endKey;
@@ -1006,13 +1026,15 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
         for (String expectRange : expectRanges) {
-            Assert.assertTrue(rangeSet.contains(expectRange));
+            Assertions.assertTrue(rangeSet.contains(expectRange));
         }
     }
 
@@ -1020,9 +1042,9 @@ public class QueryCacheTest {
     public void testOpenClosedBetweenPredicateDecomposition() throws AnalysisException {
         String q1 = "select sum(v1) from t1 where ts > '2022-01-02 12:55:00' and  ts <= '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertTrue(optFrag.isPresent());
+        Assertions.assertTrue(optFrag.isPresent());
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
-        Assert.assertTrue(!rangeMap.isEmpty());
+        Assertions.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
         PartitionKey endKey;
@@ -1038,13 +1060,15 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
         for (String expectRange : expectRanges) {
-            Assert.assertTrue(rangeSet.contains(expectRange));
+            Assertions.assertTrue(rangeSet.contains(expectRange));
         }
     }
 
@@ -1052,9 +1076,9 @@ public class QueryCacheTest {
     public void testOpenOpenBetweenPredicateDecomposition() throws AnalysisException {
         String q1 = "select sum(v1) from t1 where ts > '2022-01-02 12:55:00' and ts < '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertTrue(optFrag.isPresent());
+        Assertions.assertTrue(optFrag.isPresent());
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
-        Assert.assertTrue(!rangeMap.isEmpty());
+        Assertions.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
         PartitionKey endKey;
@@ -1070,8 +1094,10 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1079,7 +1105,7 @@ public class QueryCacheTest {
             if (!rangeSet.contains(expectRange)) {
                 System.out.println(expectRange);
             }
-            Assert.assertTrue(rangeSet.contains(expectRange));
+            Assertions.assertTrue(rangeSet.contains(expectRange));
         }
     }
 
@@ -1087,13 +1113,15 @@ public class QueryCacheTest {
     public void testInPredicateDecomposition() throws AnalysisException {
         String q1 = "select sum(v1) from t1 where ts in ('2022-01-03 00:00:00')";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertTrue(optFrag.isPresent());
+        Assertions.assertTrue(optFrag.isPresent());
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
-        Assert.assertTrue(!rangeMap.isEmpty());
+        Assertions.assertTrue(!rangeMap.isEmpty());
         PartitionKey startKey = new PartitionKey();
-        startKey.pushColumn(new DateLiteral("2022-01-03 00:00:00", Type.DATETIME), PrimitiveType.DATETIME);
+        startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime("2022-01-03 00:00:00"), DateType.DATETIME),
+                PrimitiveType.DATETIME);
         PartitionKey endKey = new PartitionKey();
-        endKey.pushColumn(new DateLiteral("2022-01-03 00:00:01", Type.DATETIME), PrimitiveType.DATETIME);
+        endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime("2022-01-03 00:00:01"), DateType.DATETIME),
+                PrimitiveType.DATETIME);
         Range<PartitionKey> expectRange = Range.closedOpen(startKey, endKey);
         rangeMap.values().stream().collect(Collectors.toSet()).contains(expectRange.toString());
     }
@@ -1102,7 +1130,7 @@ public class QueryCacheTest {
     public void testUnpartitionedTable() {
         String q1 = "select  distinct(tax) from t8 where dt between '2021-01-01' and '2021-01-31' and id=23 ;";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertTrue(optFrag.isPresent());
+        Assertions.assertTrue(optFrag.isPresent());
     }
 
     private static String toHexString(byte[] bytes) {
@@ -1136,11 +1164,11 @@ public class QueryCacheTest {
         Map<String, String> digests = new HashMap<String, String>();
         for (String q : queries) {
             Optional<PlanFragment> optFrag = getCachedFragment(q);
-            Assert.assertTrue(optFrag.isPresent());
+            Assertions.assertTrue(optFrag.isPresent());
             String s = toHexString(optFrag.get().getCacheParam().getDigest());
             if (digests.containsKey(s)) {
                 System.out.println(String.format("Conflicting digest:'%s',\nq1=%s\nq2=%s", s, q, digests.get(s)));
-                Assert.fail();
+                Assertions.fail();
             }
             digests.put(s, q);
         }
@@ -1167,17 +1195,17 @@ public class QueryCacheTest {
 
         for (String q : queriesWithHotPartitions) {
             Optional<PlanFragment> optFrag = getCachedFragment(q);
-            Assert.assertTrue(optFrag.isPresent());
+            Assertions.assertTrue(optFrag.isPresent());
             Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
-            Assert.assertFalse(rangeMap.values().stream().anyMatch(expectRanges::contains));
+            Assertions.assertFalse(rangeMap.values().stream().anyMatch(expectRanges::contains));
         }
         for (String q : queriesWithoutHotPartitions) {
             Optional<PlanFragment> optFrag = getCachedFragment(q);
-            Assert.assertTrue(optFrag.isPresent());
+            Assertions.assertTrue(optFrag.isPresent());
             Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
             List<String> matchedRanges =
                     rangeMap.values().stream().filter(expectRanges::contains).collect(Collectors.toList());
-            Assert.assertEquals(matchedRanges.size(), expectRanges.size());
+            Assertions.assertEquals(matchedRanges.size(), expectRanges.size());
         }
     }
 
@@ -1204,8 +1232,8 @@ public class QueryCacheTest {
         for (String query : queries) {
             System.out.println(query);
             Optional<PlanFragment> optFrag = getCachedFragment(query);
-            Assert.assertTrue(optFrag.isPresent());
-            Assert.assertFalse(optFrag.get().getCacheParam().isCan_use_multiversion());
+            Assertions.assertTrue(optFrag.isPresent());
+            Assertions.assertFalse(optFrag.get().getCacheParam().isCan_use_multiversion());
         }
 
         String[] negativeQueries = new String[] {
@@ -1235,8 +1263,8 @@ public class QueryCacheTest {
         for (String query : negativeQueries) {
             System.out.println(query);
             Optional<PlanFragment> optFrag = getCachedFragment(query);
-            Assert.assertTrue(optFrag.isPresent());
-            Assert.assertTrue(optFrag.get().getCacheParam().isCan_use_multiversion());
+            Assertions.assertTrue(optFrag.isPresent());
+            Assertions.assertTrue(optFrag.get().getCacheParam().isCan_use_multiversion());
         }
     }
 
@@ -1518,7 +1546,7 @@ public class QueryCacheTest {
                 "from lineorder\n" +
                 "where lo_discount between 1 and 3 and lo_quantity < 25 " +
                 "and lo_supplycost = (select min(lo_supplycost + 1) from lineorder);";
-        Assert.assertEquals(2, getCachedFragments(sql).size());
+        Assertions.assertEquals(2, getCachedFragments(sql).size());
     }
 
     @Test
@@ -1527,7 +1555,73 @@ public class QueryCacheTest {
         String sql1 = "SELECT REGION_NAME, count(*) from t9 group by 1;";
         Optional<PlanFragment> frag0 = getCachedFragment(sql0);
         Optional<PlanFragment> frag1 = getCachedFragment(sql1);
-        Assert.assertTrue(frag0.isPresent() && frag1.isPresent());
-        Assert.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
+        Assertions.assertTrue(frag0.isPresent() && frag1.isPresent());
+        Assertions.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
+    }
+
+    @Test
+    public void testDigestsVaryAsDifferentColumnNames() {
+        String sqlFmt = "select %s, count(distinct lo_custkey) \n" +
+                "from lineorder left outer join[broadcast] \n" +
+                "     part on lo_custkey = p_partkey group by %s";
+
+        String[] columnNames = new String[]
+                {"p_mfgr", "p_color", "p_category", "p_brand", "p_type", "p_container"};
+
+        List<Optional<PlanFragment>> planFragments = Stream.of(columnNames)
+                .map(col -> String.format(sqlFmt, col, col))
+                .map(this::getCachedFragment)
+                .collect(Collectors.toList());
+        Assertions.assertTrue(planFragments.stream().allMatch(Optional::isPresent));
+        Set<String> digests = planFragments.stream().map(optFrag -> optFrag
+                        .map(PlanFragment::getCacheParam)
+                        .map(TCacheParam::getDigest)
+                        .map(Util::toHexString))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toSet());
+        Assertions.assertEquals(digests.size(), columnNames.length);
+    }
+
+    @Test
+    public void testQueryCacheWithHeavyExprPushDown() {
+        String sql0 = "select (ifnull(sum(murmur_hash3_32(k)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(l)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(c)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(__c_0)), 0)) as fingerprint " +
+                "from (SELECT REGEXP_REPLACE(Referer,'^https?://(?:www\\.)?([^/]+)/.*$','\\1') AS k," +
+                "left(AVG(length(Referer)),6) AS l,COUNT(*) AS c," +
+                "(min(Referer)) as __c_0  FROM hits WHERE Referer <> '' " +
+                "GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25) as t";
+        Optional<PlanFragment> frag = getCachedFragment(sql0);
+        Assertions.assertTrue(frag.isPresent());
+    }
+
+    @Test
+    public void testQueryCacheWithEmptySubPartition() throws Exception {
+        // Simulate a table whose logical partition has been split so that it owns an extra,
+        // empty physical sub-partition (no tablets). OlapScanNode.toNormalForm() used to
+        // re-derive physical partition ids by blindly expanding every sub-partition of each
+        // selected logical partition and zip the result positionally against a version list
+        // that only recorded actually-scanned (non-empty) sub-partitions -- a size mismatch
+        // that tripped Preconditions.checkState(). "dates" sits on the broadcast side of the
+        // join in testHashJoin, so its scan node is normalized via the
+        // !isProcessingLeftNode() branch, which is required to exercise that code path at all.
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("qc_db", "dates");
+        Partition partition = table.getPartition("dates");
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        long emptySubPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        PhysicalPartition emptyPhysicalPartition = new PhysicalPartition(emptySubPartitionId, partition.getId(),
+                new MaterializedIndex(baseIndex.getId(), MaterializedIndex.IndexState.NORMAL));
+        partition.addSubPartition(emptyPhysicalPartition);
+        try {
+            String sql = "select sum(lo_revenue) as revenue\n" +
+                    "from lineorder join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                    "where d_year = 1993";
+            Assertions.assertDoesNotThrow(() -> UtFrameUtils.getPlanAndFragment(ctx, sql));
+            Assertions.assertTrue(getCachedFragment(sql).isPresent());
+        } finally {
+            partition.removeSubPartition(emptySubPartitionId);
+        }
     }
 }

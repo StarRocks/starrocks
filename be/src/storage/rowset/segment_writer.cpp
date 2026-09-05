@@ -37,23 +37,34 @@
 #include <memory>
 #include <utility>
 
+#include "base/hash/crc32c.h"
+#include "base/string/faststring.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
+#include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/segment.pb.h"
+#include "runtime/current_thread.h"
+#include "storage/base/short_key_index.h"
+#include "storage/chunk_variant_helper.h"
+#include "storage/full_sort_key_codec.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
+#include "storage/rowset/json_column_writer.h"
 #include "storage/rowset/page_io.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/seek_tuple.h"
-#include "storage/short_key_index.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/crc32c.h"
-#include "util/faststring.h"
-#include "util/json.h"
 
 namespace starrocks {
 
@@ -65,13 +76,16 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
         : _segment_id(segment_id),
           _tablet_schema(std::move(tablet_schema)),
           _opts(std::move(opts)),
-          _wfile(std::move(wfile)) {
+          _wfile(std::move(wfile)),
+          _full_sort_key_index(
+                  config::enable_full_sort_key_index &&
+                  is_full_sort_key_encodable(*_tablet_schema->schema(), _tablet_schema->sort_key_idxes())) {
     CHECK_NOTNULL(_wfile.get());
 }
 
 SegmentWriter::~SegmentWriter() = default;
 
-std::string SegmentWriter::segment_path() const {
+const std::string& SegmentWriter::segment_path() const {
     return _wfile->filename();
 }
 
@@ -86,12 +100,15 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // copy the contents of the slice `nullmap` into the slice `encoded values`, but the cost of copying is still not small.
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
     meta->set_compression(_tablet_schema->compression_type());
+    meta->set_compression_level(_tablet_schema->compression_level());
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column
     if (column.type() == TYPE_JSON) {
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
+        json_meta->set_has_remain(false);
+        json_meta->set_is_flat(false);
     }
 
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
@@ -105,6 +122,7 @@ Status SegmentWriter::init() {
 
 Status SegmentWriter::init(bool has_key) {
     std::vector<uint32_t> all_column_indexes;
+    all_column_indexes.reserve(_tablet_schema->num_columns());
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }
@@ -126,6 +144,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (footer->has_short_key_index_page()) {
             *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
         }
+        if (footer->has_full_sort_key_index_page()) {
+            *_footer.mutable_full_sort_key_index_page() = footer->full_sort_key_index_page();
+        }
+        _verify_footer();
         // in partial update, key columns have been written in partial segment
         // set _num_rows as _num_rows in partial segment
         _num_rows = footer->num_rows();
@@ -163,11 +185,63 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         const bool enable_dup_zone_map =
                 _tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type());
         opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map || column.is_sort_key();
+        // Create prefix zonemap for string type, but only truncate it for non-key columns
+        opts.need_zone_map |= config::enable_string_prefix_zonemap && is_string_type(column.type());
+        opts.zone_map_truncate_string =
+                config::enable_string_prefix_zonemap && is_string_type(column.type()) && !column.is_key();
         if (column.type() == LogicalType::TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
         opts.need_bloom_filter = column.is_bf_column();
         opts.need_bitmap_index = column.has_bitmap_index();
+        opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
+        opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
+        // Bundle-file segments (shared-data) suppress per-column .vi generation: the
+        // segment filename in metadata is the bundle filename, not the per-segment
+        // name used to derive .vi paths, so producing per-segment .vi here would
+        // generate paths that don't match what readers look up. Disable need_vector_index
+        // before the column writers are constructed so ArrayColumnWriter does not try
+        // to spin up a VectorIndexWriter and look up a non-existent entry in
+        // standalone_index_file_paths. Async mode also skips per-column writer creation;
+        // .vi files are produced later by the deferred build task.
+        if (opts.need_vector_index && (_opts.skip_vector_index || _opts.defer_vector_index_build)) {
+            opts.need_vector_index = false;
+        }
+
+        RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index && _opts.segment_file_mark.rowset_path_prefix.empty()) {
+            // Writers that produce auxiliary segments without a segment file mark (e.g. the
+            // column-mode partial update .cols writer) cannot derive a valid standalone index
+            // path: the path built below would be malformed and readers never look it up.
+            // Skip standalone (CLucene) index generation there instead of writing it to a
+            // bogus location; readers fall back to evaluating predicates on the data.
+            // Footer-inlined implementations (builtin) need no path and are kept.
+            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(opts.tablet_index.at(GIN)));
+            if (imp_type != InvertedImplementType::BUILTIN) {
+                opts.need_inverted_index = false;
+            }
+        }
+        if (opts.need_inverted_index) {
+            opts.standalone_index_file_paths.emplace(
+                    GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
+                                                                   _opts.segment_file_mark.rowset_id, _segment_id,
+                                                                   opts.tablet_index.at(GIN).index_id()));
+        } else if (opts.need_vector_index) {
+            int64_t index_id = opts.tablet_index.at(IndexType::VECTOR).index_id();
+            // Shared-data mode: tablet writer pre-populates vector_index_file_paths with
+            // location-provider-resolved paths. Shared-nothing mode: the map is empty and
+            // we fall back to the IndexDescriptor-based path.
+            auto it = _opts.vector_index_file_paths.find(index_id);
+            if (it != _opts.vector_index_file_paths.end()) {
+                opts.standalone_index_file_paths.emplace(IndexType::VECTOR, it->second);
+            } else {
+                opts.standalone_index_file_paths.emplace(
+                        IndexType::VECTOR, IndexDescriptor::vector_index_file_path(
+                                                   _opts.segment_file_mark.rowset_path_prefix,
+                                                   _opts.segment_file_mark.rowset_id, _segment_id, index_id));
+            }
+        }
+
         if (column.type() == LogicalType::TYPE_ARRAY) {
             if (opts.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");
@@ -184,6 +258,28 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                 _global_dict_columns_valid_info[iter->first] = true;
             }
         }
+        if (column.type() == LogicalType::TYPE_JSON && _opts.global_dicts != nullptr) {
+            opts.field_name = column.name();
+            std::string_view col_name = column.name();
+            for (auto& [k, dict_v] : *_opts.global_dicts) {
+                // k can be a.b.c, we must check the first token matches column.name()
+                size_t dot_pos = k.find('.');
+                std::string first_token = (dot_pos == std::string::npos) ? k : k.substr(0, dot_pos);
+                if (first_token == col_name) {
+                    opts.flat_json_dicts.emplace(k, dict_v.dict);
+                    _global_dict_columns_valid_info[k] = true;
+                    VLOG(2) << "set global dict for json column: " << k;
+                }
+            }
+        }
+
+        opts.need_flat = config::enable_json_flat;
+        opts.is_compaction = _opts.is_compaction;
+
+        if (column.type() == LogicalType::TYPE_JSON && _opts.flat_json_config != nullptr) {
+            opts.need_flat = _opts.flat_json_config->is_flat_json_enabled();
+            opts.flat_json_config = _opts.flat_json_config.get();
+        }
 
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
@@ -192,7 +288,13 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             sort_column_idx_by_column_index[column_index] = i;
         }
     }
-    if (!sort_column_idx_by_column_index.empty()) {
+    // Only a key-columns pass builds the short key / full sort key index out of these positions (see
+    // the `if (_has_key)` branch of append_chunk), so only it needs the whole sort key present. A
+    // value-only pass -- a partial-update segment rewrite, or a vertical writer's value column group
+    // -- never touches _sort_column_indexes, and demanding the full sort key there is a false alarm:
+    // fatal once ORDER BY puts value columns into a primary key table's sort key, since the pass then
+    // holds SOME sort key columns (map non-empty) but not the key ones.
+    if (has_key && !sort_column_idx_by_column_index.empty()) {
         for (auto& column_idx : _tablet_schema->sort_key_idxes()) {
             auto iter = sort_column_idx_by_column_index.find(column_idx);
             if (iter != sort_column_idx_by_column_index.end()) {
@@ -212,17 +314,54 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
     _has_key = has_key;
     if (_has_key) {
+        // The legacy truncated short key index is ALWAYS built (footer field 9).
         _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
+        // Additionally build the full sort key index (footer field 11) when enabled.
+        if (_full_sort_key_index) {
+            _full_sort_key_index_builder =
+                    std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
+        }
+    }
+
+    // Sort-key sampler one-shot init: arm only on the first key-columns pass.
+    // The vertical writer (general_tablet_writer.cpp) re-enters this init() for
+    // each non-key column group on the same SegmentWriter; we must preserve the
+    // previously armed state and the already-collected samples. Use the
+    // `has_key` parameter rather than the `_has_key` member so the check is
+    // independent of assignment ordering above.
+    //
+    // The vertical writer's invariant (general_tablet_writer.cpp:247) requires
+    // the first write_columns() call to have is_key=true, so _num_rows_written
+    // must be 0 here when has_key first becomes true. The DCHECK makes this
+    // contract crash-loud in debug/test builds; in release we fall back to
+    // leaving the sampler disabled instead of sampling mid-stream.
+    if (!_full_sort_key_index && has_key && !_sort_column_indexes.empty() && _sort_key_sample_row_interval == 0) {
+        DCHECK_EQ(_num_rows_written, 0) << "sampler arm requires fresh writer";
+        const int64_t row_interval = config::segment_sort_key_sample_row_interval;
+        if (_num_rows_written == 0 && row_interval > 0) {
+            _sort_key_sample_row_interval = row_interval;
+            _next_sort_key_sample_row_index = row_interval;
+        }
     }
     const auto& column = _tablet_schema->columns().back();
-    if (column.name() == "__row") {
+    if (column.name() == Schema::FULL_ROW_COLUMN) {
         std::vector<ColumnId> cids(_tablet_schema->num_columns() - 1);
         for (int i = 0; i < _tablet_schema->num_columns() - 1; i++) {
             cids[i] = i;
         }
         _schema_without_full_row_column = std::make_unique<Schema>(_tablet_schema->schema(), cids);
     }
+
+    _verify_footer();
+
     return Status::OK();
+}
+
+void SegmentWriter::write_sort_key_fields_to(SegmentFileInfo& file_info) {
+    file_info.sort_key_min = _sort_key_min;
+    file_info.sort_key_max = _sort_key_max;
+    file_info.sort_key_samples = std::move(_sort_key_samples);
+    file_info.sort_key_sample_row_interval = file_info.sort_key_samples.empty() ? 0 : _sort_key_sample_row_interval;
 }
 
 // TODO(lingbin): Currently this function does not include the size of various indexes,
@@ -236,7 +375,14 @@ uint64_t SegmentWriter::estimate_segment_size() {
         size += column_writer->estimate_buffer_size();
     }
     size += _index_builder->size();
+    if (_full_sort_key_index_builder != nullptr) {
+        size += _full_sort_key_index_builder->size();
+    }
     return size;
+}
+
+uint64_t SegmentWriter::current_filesz() const {
+    return _wfile->size();
 }
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {
@@ -273,14 +419,32 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
-        *index_size += _wfile->size() - index_offset;
+        RETURN_IF_ERROR(column_writer->write_inverted_index());
+
+        uint64_t standalone_index_size = 0;
+        RETURN_IF_ERROR(column_writer->write_vector_index(&standalone_index_size));
+        *index_size += _wfile->size() - index_offset + standalone_index_size;
+
+        // The footer's vector_index_storage_type is a segment-level flag: any column that
+        // produced a standalone .vi file makes the whole segment STANDALONE. Only upgrade
+        // to STANDALONE here; never reset back to NONE for subsequent non-vector columns.
+        if (standalone_index_size > 0) {
+            _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_STANDALONE);
+            _has_vector_index_written = true;
+        } else if (!_has_vector_index_written &&
+                   _tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR)) {
+            // No .vi was produced inline. In async/deferred mode the build task will produce one
+            // later iff this segment has enough rows (bundle segments included now -- their .vi is
+            // named per-tablet). Mark STANDALONE so the read path looks for the .vi when it lands;
+            // otherwise mark NONE so readers fall back to brute-force instead of waiting forever.
+            const bool will_build_async =
+                    _opts.defer_vector_index_build && _num_rows >= _opts.vector_index_build_threshold;
+            _footer.set_vector_index_storage_type(will_build_async ? VECTOR_INDEX_STORAGE_STANDALONE
+                                                                   : VECTOR_INDEX_STORAGE_NONE);
+        }
 
         // check global dict valid
-        const auto& column = _tablet_schema->column(column_index);
-        if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
-            std::string col_name(column.name());
-            _global_dict_columns_valid_info[col_name] = false;
-        }
+        _check_column_global_dict_valid(column_writer.get(), column_index);
 
         // reset to release memory
         column_writer.reset();
@@ -293,6 +457,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(_write_short_key_index());
         *index_size += _wfile->size() - index_offset;
         _index_builder.reset();
+        _full_sort_key_index_builder.reset();
     }
     return Status::OK();
 }
@@ -307,19 +472,36 @@ Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* foo
 }
 
 Status SegmentWriter::_write_short_key_index() {
-    std::vector<Slice> body;
-    PageFooterPB footer;
-    RETURN_IF_ERROR(_index_builder->finalize(_num_rows, &body, &footer));
-    PagePointer pp;
-    // short key index page is not compressed right now
-    RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp));
-    pp.to_proto(_footer.mutable_short_key_index_page());
+    // The legacy truncated short key index is ALWAYS written to footer field 9, so old binaries and
+    // read-OFF queries keep working.
+    {
+        std::vector<Slice> body;
+        PageFooterPB footer;
+        RETURN_IF_ERROR(_index_builder->finalize(_num_rows, &body, &footer));
+        PagePointer pp;
+        // short key index page is not compressed right now
+        RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp));
+        pp.to_proto(_footer.mutable_short_key_index_page());
+    }
+    // Additionally write the full, untruncated, all-sort-column order-preserving sort key index to
+    // footer field 11 when enabled.
+    if (_full_sort_key_index) {
+        std::vector<Slice> body;
+        PageFooterPB footer;
+        RETURN_IF_ERROR(_full_sort_key_index_builder->finalize_full_sort_key(
+                _num_rows, &body, &footer, /*num_sort_key_columns=*/_sort_column_indexes.size()));
+        PagePointer pp;
+        RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp));
+        pp.to_proto(_footer.mutable_full_sort_key_index_page());
+    }
     return Status::OK();
 }
 
 Status SegmentWriter::_write_footer() {
     _footer.set_version(2);
     _footer.set_num_rows(_num_rows);
+
+    _verify_footer();
 
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     std::string footer_buf;
@@ -346,17 +528,45 @@ Status SegmentWriter::_write_raw_data(const std::vector<Slice>& slices) {
     return Status::OK();
 }
 
+// Sort-key positions only: materializing the whole row allocates tens of GB when a value column holds a huge ARRAY.
+Status SegmentWriter::_append_sort_key_index_entry(const Chunk& chunk, size_t row) {
+    TRY_CATCH_BAD_ALLOC({
+        std::vector<Datum> values(chunk.num_columns());
+        for (uint32_t idx : _sort_column_indexes) {
+            // SeekTuple encodes an out-of-range sort column as NULL; leave the slot unset rather than indexing OOB.
+            if (idx < values.size()) {
+                values[idx] = chunk.get_column_by_index(idx)->get(row);
+            }
+        }
+        SeekTuple tuple(*chunk.schema(), std::move(values));
+        // The legacy truncated short key index is ALWAYS built (footer field 9).
+        size_t keys = _tablet_schema->num_short_key_columns();
+        RETURN_IF_ERROR(_index_builder->add_item(tuple.short_key_encode(keys, _sort_column_indexes, 0)));
+        // When enabled, ADDITIONALLY record the full untruncated sort key at the SAME block boundary.
+        if (_full_sort_key_index) {
+            RETURN_IF_ERROR(
+                    _full_sort_key_index_builder->add_item(tuple.full_sort_key_encode(_sort_column_indexes, 0)));
+        }
+    });
+    return Status::OK();
+}
+
 Status SegmentWriter::append_chunk(const Chunk& chunk) {
     size_t chunk_num_rows = chunk.num_rows();
     size_t chunk_num_columns = chunk.num_columns();
     for (size_t i = 0; i < chunk_num_columns; ++i) {
-        const Column* col = chunk.get_column_by_index(i).get();
+        const Column* col = chunk.get_column_raw_ptr_by_index(i);
         RETURN_IF_ERROR(_column_writers[i]->append(*col));
     }
 
-    if (chunk_num_columns + 1 == _tablet_schema->num_columns() && _tablet_schema->columns().back().name() == "__row") {
+    // TODO(cbl): put the fill full row column logic here is a bit hacky, this segment writer is used in many other
+    //            situations(compaction etc.), so better to put it into somewhere early in the write pipeline
+    //            likely in _sink->flush_chunk at MemTable::flush
+    if (_column_writers.size() == _tablet_schema->num_columns() &&
+        _tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN &&
+        chunk_num_columns + 1 == _column_writers.size()) {
         // just missing full row column, generate it and write to file
-        auto full_row_col = std::make_unique<BinaryColumn>();
+        auto full_row_col = BinaryColumn::create();
         auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
         RETURN_IF_ERROR(row_encoder->encode_chunk_to_full_row_column(*_schema_without_full_row_column, chunk,
                                                                      full_row_col.get()));
@@ -366,14 +576,29 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     }
 
     if (_has_key) {
+        if (chunk_num_rows > 0) {
+            if (_sort_key_min.empty()) {
+                // The append_chunk is ordered, so the first is min
+                _sort_key_min = build_variant_tuple_from_chunk_row(chunk, 0, _sort_column_indexes);
+            }
+            // The append_chunk is ordered, so the last is max
+            _sort_key_max = build_variant_tuple_from_chunk_row(chunk, chunk_num_rows - 1, _sort_column_indexes);
+        }
+
         for (size_t i = 0; i < chunk_num_rows; i++) {
             // At the begin of one block, so add a short key index entry
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
-                size_t keys = _tablet_schema->num_short_key_columns();
-                SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
-                std::string encoded_key;
-                encoded_key = tuple.short_key_encode(keys, _sort_column_indexes, 0);
-                RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
+                RETURN_IF_ERROR(_append_sort_key_index_entry(chunk, i));
+            }
+            // Sort-key sample: take one tuple every _sort_key_sample_row_interval
+            // rows. Samples are at 0-indexed rows interval, 2*interval, 3*interval,
+            // ... so samples[k] is the key at row (k+1) * interval. The producer
+            // invariant samples.size() * interval < num_rows holds strictly
+            // because the last sample lands at row N*interval (< num_rows).
+            if (!_full_sort_key_index && _sort_key_sample_row_interval > 0 &&
+                _num_rows_written == _next_sort_key_sample_row_index) {
+                _sort_key_samples.emplace_back(build_variant_tuple_from_chunk_row(chunk, i, _sort_column_indexes));
+                _next_sort_key_sample_row_index += _sort_key_sample_row_interval;
             }
             ++_num_rows_written;
         }
@@ -381,6 +606,46 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
         _num_rows_written += chunk_num_rows;
     }
     return Status::OK();
+}
+
+void SegmentWriter::_verify_footer() {
+#if !defined(NDEBUG) || defined(BE_TEST)
+    std::set<uint32_t> unique_ids;
+    for (auto&& col : _footer.columns()) {
+        [[maybe_unused]] auto [iter, ok] = unique_ids.emplace(col.unique_id());
+        CHECK(ok) << "Segment footer contains duplicate column id=" << col.unique_id() << ": " << _footer.DebugString();
+    }
+#endif
+}
+
+int64_t SegmentWriter::bundle_file_offset() const {
+    return _wfile->bundle_file_offset();
+}
+
+StatusOr<std::unique_ptr<io::NumericStatistics>> SegmentWriter::get_numeric_statistics() {
+    return _wfile->get_numeric_statistics();
+}
+
+void SegmentWriter::_check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index) {
+    const auto& column = _tablet_schema->column(column_index);
+
+    // Check global dict valid for string types
+    if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
+        std::string col_name(column.name());
+        _global_dict_columns_valid_info[col_name] = false;
+    }
+
+    // Check global dict valid for JSON type and collect sub-column dict info
+    if (column.type() == LogicalType::TYPE_JSON) {
+        auto* flat_json_writer = dynamic_cast<FlatJsonColumnWriter*>(column_writer);
+        if (flat_json_writer != nullptr) {
+            // Collect dict validity for each sub-column
+            const auto& subcolumn_dict_valid = flat_json_writer->get_subcolumn_dict_valid();
+            for (const auto& kv : subcolumn_dict_valid) {
+                _global_dict_columns_valid_info[kv.first] = kv.second;
+            }
+        }
+    }
 }
 
 } // namespace starrocks

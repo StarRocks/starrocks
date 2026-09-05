@@ -77,6 +77,27 @@ public:
     // object directly with a single GET OBJECT call, without the need
     // to first send a HEAD OBJECT request to get the object size.
     virtual StatusOr<std::string> read_all();
+
+    // if cache in [offset, offset+length] exists, refresh it
+    // if not, read from remote and write to cache system
+    // stream offset will not change
+    virtual Status touch_cache(int64_t offset, size_t length) { return Status::OK(); }
+
+    virtual const std::string& filename() const { return _filename; };
+
+    virtual bool is_cache_hit() const { return false; };
+
+    virtual bool is_encrypted() const { return false; };
+
+    // Cache key for the page hosted at `stream_offset` bytes within this stream. The default
+    // encodes (filename, stream_offset). Streams whose `filename()` is shared with other streams
+    // (e.g. BundleSeekableInputStream slices of one physical file) must override to fold their
+    // disambiguator into the key, so callers never need to know whether the underlying stream
+    // is a slice.
+    virtual std::string page_cache_key(int64_t stream_offset) const;
+
+protected:
+    std::string _filename = "";
 };
 
 class SeekableInputStreamWrapper : public SeekableInputStream {
@@ -109,6 +130,8 @@ public:
         return _impl->get_numeric_statistics();
     }
 
+    IoStatsSnapshot get_io_stats_snapshot() const override;
+
     StatusOr<int64_t> position() override { return _impl->position(); }
 
     StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
@@ -126,6 +149,15 @@ public:
     void set_size(int64_t value) override { return _impl->set_size(value); }
 
     StatusOr<std::string> read_all() override { return _impl->read_all(); }
+
+    bool is_encrypted() const override { return _impl->is_encrypted(); };
+
+    Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
+
+    // Intentionally do NOT forward page_cache_key to _impl. Wrappers like RandomAccessFile carry
+    // the path on themselves (overriding filename() but leaving _impl's _filename empty), so
+    // delegating would lose the name and return a key like (empty, offset). Inheriting the base
+    // default makes virtual filename() dispatch back to this wrapper and pick up the right name.
 
 private:
     SeekableInputStream* _impl;

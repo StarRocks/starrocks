@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算参数x的自然对数（以e为底）。"
 ---
 
 # ln, dlog1, log
 
-## 功能
+
 
 返回参数 `x` 的自然对数，以 e 为底数。
 

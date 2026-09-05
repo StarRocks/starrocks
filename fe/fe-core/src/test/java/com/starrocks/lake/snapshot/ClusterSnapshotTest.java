@@ -1,0 +1,1230 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.lake.snapshot;
+
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.AlterTest;
+import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.fs.HdfsUtil;
+import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.journal.CheckpointException;
+import com.starrocks.journal.CheckpointWorker;
+import com.starrocks.journal.GlobalStateCheckpointWorker;
+import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
+import com.starrocks.leader.CheckpointController;
+import com.starrocks.persist.ClusterSnapshotLog;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.ClusterSnapshotAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
+import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.thrift.TBrokerFD;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+
+public class ClusterSnapshotTest {
+    private StarOSAgent starOSAgent = new StarOSAgent();
+
+    private String storageVolumeName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
+    private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+    private boolean initSv = false;
+
+    private AtomicLong nextId = new AtomicLong(0);
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        AlterTest.beforeClass();
+        AnalyzeTestUtil.init();
+    }
+
+    @BeforeEach
+    public void setUp() {
+        try {
+            initStorageVolume();
+        } catch (Exception ignore) {
+        }
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return clusterSnapshotMgr;
+            }
+
+            @Mock
+            public long getNextId() {
+                long id = nextId.incrementAndGet();
+                return id;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public String getRawServiceId() {
+                return "qwertty";
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<HdfsFsManager>() {
+            @Mock
+            public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) {
+                return;
+            } // IOException
+
+            @Mock
+            public void deletePath(String path, Map<String, String> loadProperties) {
+                return;
+            } // IOException
+
+            @Mock
+            public TBrokerFD openWriter(String path, Map<String, String> loadProperties) {
+                return new TBrokerFD();
+            }
+
+            @Mock
+            public void pwrite(TBrokerFD fd, long offset, byte[] data) {
+                return;
+            }
+
+            @Mock
+            public void closeWriter(TBrokerFD fd) {
+                return;
+            }
+        };
+
+        setAutomatedSnapshotOff(false);
+    }
+
+    private void setAutomatedSnapshotOn(boolean testReplay) {
+        if (!testReplay) {
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotOn(
+                    new AdminSetAutomatedSnapshotOnStmt(storageVolumeName, null));
+        } else {
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotOn(storageVolumeName);
+        }
+    }
+
+    private void setAutomatedSnapshotOff(boolean testReplay) {
+        if (!testReplay) {
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotOff(
+                    new AdminSetAutomatedSnapshotOffStmt());
+        } else {
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotOff();
+        }
+    }
+
+    private void initStorageVolume() throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        if (!initSv) {
+            List<String> locations = Arrays.asList("s3://abc");
+            Map<String, String> storageParams = new HashMap<>();
+            storageParams.put(AWS_S3_REGION, "region");
+            storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+            storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+            String svKey = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                    .createStorageVolume(storageVolumeName, "S3", locations, storageParams, Optional.empty(), "");
+            Assertions.assertEquals(true,
+                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr().exists(storageVolumeName));
+            Assertions.assertEquals(storageVolumeName,
+                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(svKey));
+            initSv = true;
+        }
+    }
+
+    @Test
+    public void testOperationOfAutomatedSnapshot() throws DdlException {
+        // 1. test analyer and execution
+        String turnOnSql = "ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON";
+        // no sv
+        analyzeFail(turnOnSql + " STORAGE VOLUME testSv");
+        analyzeFail(turnOnSql + " INTERVAL 0 SECOND");
+
+        analyzeSuccess(turnOnSql);
+        setAutomatedSnapshotOn(false);
+        // duplicate creation
+        analyzeFail(turnOnSql);
+
+        setAutomatedSnapshotOff(false);
+
+        String turnOFFSql = "ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF";
+        analyzeFail(turnOFFSql);
+        setAutomatedSnapshotOn(false);
+        analyzeSuccess(turnOFFSql);
+        setAutomatedSnapshotOff(false);
+
+        String turnOnWithIntervalSql = "ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON INTERVAL 10 SECOND";
+        analyzeSuccess(turnOnWithIntervalSql);
+        setAutomatedSnapshotOn(false);
+        setAutomatedSnapshotOff(false);
+
+        String alterIntervalSql = "ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 5 MINUTE";
+        analyzeFail(alterIntervalSql);
+        setAutomatedSnapshotOn(false);
+        analyzeSuccess(alterIntervalSql);
+        setAutomatedSnapshotOff(false);
+
+        // 2. test getInfo and network utils
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        ClusterSnapshot snapshot = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot();
+        Assertions.assertTrue(job.getInfo() != null);
+        Assertions.assertTrue(snapshot.getInfo() != null);
+        Assertions.assertTrue(
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotsInfo().getItemsSize() == 1);
+        Assertions.assertTrue(
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo().getItemsSize() == 1);
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job));
+        ExceptionChecker.expectThrowsNoException(
+                () -> ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testUploadWritesMetaFile() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        List<String> writeFilePaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) {
+                return;
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties) {
+                writeFilePaths.add(destFilePath);
+            }
+        };
+
+        ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
+
+        Assertions.assertEquals(1, writeFilePaths.size());
+        Assertions.assertTrue(writeFilePaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testClearDeletesMetaFileFirst() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.FINISHED);
+
+        List<String> deletedPaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void deletePath(String path, Map<String, String> loadProperties) {
+                deletedPaths.add(path);
+            }
+        };
+
+        ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
+
+        Assertions.assertEquals(2, deletedPaths.size());
+        // First deletion should be the meta file
+        Assertions.assertTrue(deletedPaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        // Second deletion should be the snapshot directory
+        Assertions.assertFalse(deletedPaths.get(1).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testCheckSnapshotMetaFileExist() throws Exception {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public boolean checkPathExist(String remotePath, Map<String, String> properties) {
+                return remotePath.endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            }
+        };
+
+        Assertions.assertTrue(ClusterSnapshotUtils.checkSnapshotMetaFileExist(
+                "s3://bucket/path/snapshot1", new HashMap<>()));
+        Assertions.assertEquals("s3://bucket/path/snapshot1/" + ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME,
+                ClusterSnapshotUtils.getSnapshotMetaFilePath("s3://bucket/path/snapshot1"));
+    }
+
+    @Test
+    public void testDeleteSnapshotMetaFileException() {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                throw new StarRocksException("delete failed");
+            }
+        };
+
+        // Should not throw, just log warning
+        ExceptionChecker.expectThrowsNoException(
+                () -> ClusterSnapshotUtils.deleteSnapshotMetaFile("s3://bucket/path/snapshot1", new HashMap<>()));
+    }
+
+    @Test
+    public void testReadLocalSnapshotMetaFile() throws Exception {
+        Path tempDir = Files.createTempDirectory("snapshot_read_test");
+        try {
+            // Case 1: file does not exist — returns null
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 2: valid meta file — returns ClusterSnapshot
+            ClusterSnapshot snapshot = new ClusterSnapshot(1L, "test_snapshot",
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 100L, 200L);
+            File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8));
+
+            ClusterSnapshot result = ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString());
+            Assertions.assertNotNull(result);
+            Assertions.assertEquals("test_snapshot", result.getSnapshotName());
+            Assertions.assertEquals(100L, result.getFeJournalId());
+            Assertions.assertEquals(200L, result.getStarMgrJournalId());
+
+            // Case 3: corrupted file — returns null
+            Files.write(metaFile.toPath(), "invalid json".getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 4: valid JSON but missing snapshotName — returns null
+            ClusterSnapshot incomplete = new ClusterSnapshot(1L, null,
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 100L, 200L);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(incomplete).getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 5: valid JSON but zero journalId — returns null
+            ClusterSnapshot zeroJournal = new ClusterSnapshot(1L, "test",
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 0L, 200L);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(zeroJournal).getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+        } finally {
+            File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            metaFile.delete();
+            tempDir.toFile().delete();
+        }
+    }
+
+    @Test
+    public void testDeleteLocalSnapshotMetaFile() throws Exception {
+        // Create a temp directory and a snapshot_meta.json file
+        Path tempDir = Files.createTempDirectory("snapshot_test");
+        File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+        Assertions.assertTrue(metaFile.createNewFile());
+        Assertions.assertTrue(metaFile.exists());
+
+        ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(tempDir.toString());
+        Assertions.assertFalse(metaFile.exists());
+
+        // Call again on non-existing file — should be a no-op
+        ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(tempDir.toString());
+
+        tempDir.toFile().delete();
+    }
+
+    @Test
+    public void testIntervalLiteralConversionInAnalyzer() {
+        setAutomatedSnapshotOff(false);
+        AdminSetAutomatedSnapshotOnStmt onStmt = (AdminSetAutomatedSnapshotOnStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON INTERVAL 2 MINUTE");
+        Assertions.assertEquals(120, onStmt.getIntervalSeconds());
+
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt alterStmt = (AdminAlterAutomatedSnapshotIntervalStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 3 HOUR");
+        Assertions.assertEquals(10800, alterStmt.getIntervalSeconds());
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAutomatedSnapshotIntervalScheduling() {
+        setAutomatedSnapshotOn(false);
+        long oldValue = Config.automated_cluster_snapshot_interval_seconds;
+        Config.automated_cluster_snapshot_interval_seconds = 30;
+        try {
+            Assertions.assertEquals(30,
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .getEffectiveAutomatedSnapshotIntervalSeconds());
+
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotInterval(120);
+            Assertions.assertEquals(120,
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .getEffectiveAutomatedSnapshotIntervalSeconds());
+
+            long now = System.currentTimeMillis();
+            Assertions.assertFalse(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .canScheduleNextJob(now));
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .canScheduleNextJob(now - 120_000L - 1));
+        } finally {
+            Config.automated_cluster_snapshot_interval_seconds = oldValue;
+            setAutomatedSnapshotOff(false);
+        }
+    }
+
+    @Test
+    public void testAlterIntervalThroughExecutor() throws Exception {
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt stmt = (AdminAlterAutomatedSnapshotIntervalStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 2 SECOND");
+        DDLStmtExecutor.execute(stmt, AnalyzeTestUtil.getConnectContext());
+        Assertions.assertEquals(2,
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotIntervalSeconds());
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAlterIntervalAnalyzerValidation() {
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt nullIntervalStmt =
+                new AdminAlterAutomatedSnapshotIntervalStmt(null);
+        Assertions.assertThrows(SemanticException.class,
+                () -> ClusterSnapshotAnalyzer.analyze(nullIntervalStmt, AnalyzeTestUtil.getConnectContext()));
+
+        IntervalLiteral invalidLiteral = new IntervalLiteral(new StringLiteral("x"), new UnitIdentifier("SECOND"));
+        AdminAlterAutomatedSnapshotIntervalStmt invalidIntervalStmt =
+                new AdminAlterAutomatedSnapshotIntervalStmt(invalidLiteral);
+        Assertions.assertThrows(SemanticException.class,
+                () -> ClusterSnapshotAnalyzer.analyze(invalidIntervalStmt, AnalyzeTestUtil.getConnectContext()));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAlterIntervalAnalyzerRunModeValidation() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return false;
+            }
+        };
+
+        AnalyzeTestUtil.analyzeFail("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 1 SECOND",
+                "Automated snapshot only support share data mode");
+    }
+
+    @Test
+    public void testReplayClusterSnapshotLog() {
+        // create atuomated snapshot request log
+        ClusterSnapshotLog logCreate = new ClusterSnapshotLog();
+        logCreate.setAutomatedSnapshotOn(storageVolumeName, 0);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logCreate);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
+
+        // drop automated snapshot request log
+        ClusterSnapshotLog logDrop = new ClusterSnapshotLog();
+        logDrop.setAutomatedSnapshotOff();
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logDrop);
+        Assertions.assertTrue(!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
+
+        ClusterSnapshotLog logInterval = new ClusterSnapshotLog();
+        logInterval.setAutomatedSnapshotInterval(120);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logInterval);
+        Assertions.assertEquals(120,
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotIntervalSeconds());
+
+        // create snapshot job log
+        ClusterSnapshotLog logSnapshotJob = new ClusterSnapshotLog();
+        ClusterSnapshotJob job = clusterSnapshotMgr.createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.INITIALIZING);
+        logSnapshotJob.setSnapshotJob(job);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+                .getItems().get(0).state == "INITIALIZING");
+        job.setState(ClusterSnapshotJobState.SNAPSHOTING);
+        logSnapshotJob.setSnapshotJob(job);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+                .getItems().get(0).state == "SNAPSHOTING");
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+        Assertions.assertTrue(job.isUploading());
+        logSnapshotJob.setSnapshotJob(job);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+                .getItems().get(0).state == "UPLOADING");
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        logSnapshotJob.setSnapshotJob(job);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+                .getItems().get(0).state == "FINISHED");
+        job.setState(ClusterSnapshotJobState.ERROR);
+        logSnapshotJob.setSnapshotJob(job);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+                .getItems().get(0).state == "ERROR");
+    }
+
+    public void testCheckpointScheduler() {
+        new MockUp<CheckpointController>() {
+            @Mock
+            public long getImageJournalId() {
+                return 1L;
+            }
+
+            @Mock
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(true, "");
+            }
+        };
+
+        new MockUp<BDBJEJournal>() {
+            @Mock
+            public long getMaxJournalId() {
+                return 10;
+            }
+        };
+
+        setAutomatedSnapshotOn(false);
+        Config.automated_cluster_snapshot_interval_seconds = 1;
+        CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController,
+                starMgrController);
+        scheduler.start();
+
+        while (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot() == null) {
+            try {
+                Thread.sleep(100);
+            } catch (Exception e) {
+            }
+        }
+
+        scheduler.setStop();
+
+        while (scheduler.isRunning()) {
+            try {
+                Thread.sleep(100);
+            } catch (Exception e) {
+            }
+        }
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testSnapshotHealthAccessors() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        Assertions.assertEquals(0, mgr.getConsecutiveFailureCount());
+        Assertions.assertEquals(0L, mgr.getLastSuccessTimeMs());
+
+        mgr.setAutomatedSnapshotOn(storageVolumeName);
+        ClusterSnapshotJob ok = mgr.createAutomatedSnapshotJob();
+        ok.setState(ClusterSnapshotJobState.FINISHED);
+        ClusterSnapshotJob e1 = mgr.createAutomatedSnapshotJob();
+        e1.setState(ClusterSnapshotJobState.ERROR);
+        ClusterSnapshotJob e2 = mgr.createAutomatedSnapshotJob();
+        e2.setState(ClusterSnapshotJobState.ERROR);
+        // A newer in-progress job must not be counted as a failure nor stop the count.
+        mgr.createAutomatedSnapshotJob(); // stays INITIALIZING (in-progress)
+
+        Assertions.assertEquals(2, mgr.getConsecutiveFailureCount());
+        Assertions.assertTrue(mgr.getLastSuccessTimeMs() > 0);
+        mgr.setAutomatedSnapshotOff();
+    }
+
+    @Test
+    public void testDeletionControl() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        {
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            // snapshot OFF -> no constraint
+            Assertions.assertEquals(Long.MAX_VALUE, mgr.getSafeDeletionTimeMs());
+
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            // ON, zero jobs -> nothing to protect -> ~now (recycle bin free)
+            long before = System.currentTimeMillis();
+            long safe0 = mgr.getSafeDeletionTimeMs();
+            Assertions.assertTrue(safe0 >= before && safe0 <= System.currentTimeMillis() + 5000,
+                    "expected ~now, got " + safe0);
+
+            // exactly one FINISHED -> protect it
+            ClusterSnapshotJob job1 = mgr.createAutomatedSnapshotJob();
+            job1.setState(ClusterSnapshotJobState.FINISHED);
+            Assertions.assertEquals(job1.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+
+            // two FINISHED -> protect the 2nd-newest (unchanged behavior)
+            ClusterSnapshotJob job2 = mgr.createAutomatedSnapshotJob();
+            job2.setState(ClusterSnapshotJobState.FINISHED);
+            Assertions.assertEquals(job1.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // all-ERROR history (production scenario) -> ~now (recycle bin free, not frozen)
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob jobE = mgr.createAutomatedSnapshotJob();
+            jobE.setState(ClusterSnapshotJobState.ERROR);
+            long before2 = System.currentTimeMillis();
+            long safeE = mgr.getSafeDeletionTimeMs();
+            Assertions.assertTrue(safeE >= before2 && safeE <= System.currentTimeMillis() + 5000,
+                    "expected ~now, got " + safeE);
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // zero finished + an in-progress job -> protect the in-progress job's createdTime
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob init = mgr.createAutomatedSnapshotJob(); // stays INITIALIZING (unfinished)
+            Assertions.assertEquals(init.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // one FINISHED + a newer in-progress job -> min(finished, in-progress) = the FINISHED createdTime
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob good = mgr.createAutomatedSnapshotJob();
+            good.setState(ClusterSnapshotJobState.FINISHED);
+            mgr.createAutomatedSnapshotJob(); // INITIALIZING, created after good
+            Assertions.assertEquals(good.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // one FINISHED followed by a newer ERROR -> still protect the last good snapshot
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob good = mgr.createAutomatedSnapshotJob();
+            good.setState(ClusterSnapshotJobState.FINISHED);
+            ClusterSnapshotJob failAfter = mgr.createAutomatedSnapshotJob();
+            failAfter.setState(ClusterSnapshotJobState.ERROR);
+            Assertions.assertEquals(good.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // newer FINISHED with an older EXPIRED below it -> 2nd-completed boundary = the EXPIRED createdTime
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob older = mgr.createAutomatedSnapshotJob();
+            older.setState(ClusterSnapshotJobState.FINISHED);
+            older.setState(ClusterSnapshotJobState.EXPIRED);
+            ClusterSnapshotJob newer = mgr.createAutomatedSnapshotJob();
+            newer.setState(ClusterSnapshotJobState.FINISHED);
+            Assertions.assertEquals(older.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // production lifecycle: an old snapshot fully retired (FINISHED -> EXPIRED -> DELETED), a newer
+            // FINISHED, then a trailing ERROR. The DELETED job still anchors the 2nd-completed boundary
+            // (historical behavior); the trailing ERROR protects nothing.
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob retired = mgr.createAutomatedSnapshotJob();
+            retired.setState(ClusterSnapshotJobState.FINISHED);
+            retired.setState(ClusterSnapshotJobState.EXPIRED);
+            retired.setState(ClusterSnapshotJobState.DELETED);
+            ClusterSnapshotJob newer = mgr.createAutomatedSnapshotJob();
+            newer.setState(ClusterSnapshotJobState.FINISHED);
+            ClusterSnapshotJob failAfter = mgr.createAutomatedSnapshotJob();
+            failAfter.setState(ClusterSnapshotJobState.ERROR);
+            Assertions.assertEquals(retired.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+
+        AlterJobV2 alterjob1 = new SchemaChangeJobV2(1, 2, 10, "table1", 100000);
+        AlterJobV2 alterjob2 = new SchemaChangeJobV2(2, 2, 11, "table2", 100000);
+        alterjob1.setJobState(AlterJobV2.JobState.FINISHED);
+        alterjob1.setFinishedTimeMs(1000); // ancient alter (table 10): older than any snapshot boundary
+        alterjob2.setJobState(AlterJobV2.JobState.FINISHED);
+        alterjob2.setFinishedTimeMs(Long.MAX_VALUE); // "future" alter (table 11): newer than any boundary
+        MaterializedViewHandler rollupHandler = new MaterializedViewHandler();
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        schemaChangeHandler.addAlterJobV2(alterjob1);
+        schemaChangeHandler.addAlterJobV2(alterjob2);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SchemaChangeHandler getSchemaChangeHandler() {
+                return schemaChangeHandler;
+            }
+
+            @Mock
+            public MaterializedViewHandler getRollupHandler() {
+                return rollupHandler;
+            }
+        };
+
+        {
+            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+            // snapshot OFF -> always safe to delete tablets
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+
+            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+            // ON but no successful snapshot -> recycle bin is NOT frozen: an alter older than the
+            // safe-deletion boundary (table 10, finished at epoch 1000) is safe to delete; an alter
+            // newer than the boundary (table 11, finished in the future) is still protected.
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+
+            ClusterSnapshotJob j1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            j1.setState(ClusterSnapshotJobState.FINISHED);
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+
+            ClusterSnapshotJob j2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            j2.setState(ClusterSnapshotJobState.FINISHED);
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+            localClusterSnapshotMgr.setAutomatedSnapshotOff();
+        }
+    }
+
+    @Test
+    public void testResetStateAfterRestore() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+
+        ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        RestoredSnapshotInfo restoredSnapshotInfo = new RestoredSnapshotInfo(job2.getSnapshotName(), 666L, 6666L);
+        localClusterSnapshotMgr.setJobFinishedIfRestoredFromIt(restoredSnapshotInfo);
+
+        Assertions.assertTrue(job2.getFeJournalId() == 666L);
+        Assertions.assertTrue(job2.getStarMgrJournalId() == 6666L);
+        Assertions.assertTrue(job2.isFinished());
+        localClusterSnapshotMgr.setAutomatedSnapshotOff();
+    }
+
+    @Test
+    public void testRunAfterCatalogReady() {
+        CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController,
+                starMgrController);
+        long beginTime = scheduler.lastAutomatedJobStartTimeMs;
+
+        setAutomatedSnapshotOn(false);
+        scheduler.runAfterLeaseValid();
+        scheduler.runAfterLeaseValid();
+
+        new MockUp<ClusterSnapshotJobScheduler>() {
+            @Mock
+            protected void runCheckpointScheduler(ClusterSnapshotJob job) {
+                Assertions.assertTrue(job != null);
+            }
+        };
+
+        long oldValue = Config.automated_cluster_snapshot_interval_seconds;
+        Config.automated_cluster_snapshot_interval_seconds = 0L;
+        scheduler.runAfterLeaseValid();
+        long endTime = scheduler.lastAutomatedJobStartTimeMs;
+        Config.automated_cluster_snapshot_interval_seconds = oldValue;
+
+        Assertions.assertTrue(beginTime != endTime);
+    }
+
+    @Test
+    public void testGetClusterSnapshotInfoFromCheckpoint() throws Exception {
+        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        final CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
+        final CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""),
+                "");
+        final ClusterSnapshotInfo info = new ClusterSnapshotInfo(new HashMap<>());
+        ClusterSnapshotJob job = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        Assertions.assertTrue(!job.needClusterSnapshotInfo());
+        Assertions.assertTrue(job.isAutomated());
+        job.setClusterSnapshotInfo(null);
+
+        CheckpointWorker worker = GlobalStateMgr.getCurrentState().getCheckpointWorker();
+        Deencapsulation.setField(worker, "servingGlobalState", GlobalStateMgr.getCurrentState());
+        worker.setNextCheckpoint(GlobalStateMgr.getCurrentState().getEpoch(), 0L, true);
+
+        {
+            new MockUp<ClusterSnapshotJob>() {
+                @Mock
+                public boolean needClusterSnapshotInfo() {
+                    return true;
+                }
+            };
+
+            new MockUp<CheckpointController>() {
+                @Mock
+                public long getImageJournalId() {
+                    return -10L;
+                }
+            };
+
+            new MockUp<CheckpointWorker>() {
+                @Mock
+                public void setNextCheckpoint(long epoch, long journalId,
+                        boolean needClusterSnapshotInfo) throws CheckpointException {
+                    Deencapsulation.setField(feController, "workerNodeName", "workerNodeName");
+                    feController.finishCheckpoint(-1L, "workerNodeName", new ClusterSnapshotInfo(new HashMap<>()));
+                }
+            };
+
+            new MockUp<GlobalStateCheckpointWorker>() {
+                @Mock
+                void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception {
+                    Deencapsulation.setField(info, "dbInfos", new HashMap<>());
+                }
+            };
+
+            ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController,
+                    starMgrController);
+            Assertions.assertTrue(feController != null);
+            try {
+                job.run(scheduler);
+            } catch (Exception ignore) {
+            }
+
+            Assertions.assertTrue(feController.getClusterSnapshotInfo() != null);
+        }
+
+        new MockUp<BDBJEJournal>() {
+            @Mock
+            public long getMaxJournalId() {
+                return 0L;
+            }
+        };
+        new MockUp<CheckpointWorker>() {
+            @Mock
+            protected boolean preCheckParamValid(long epoch, long journalId) {
+                return true;
+            }
+        };
+        try {
+            Deencapsulation.invoke(worker, "runAfterCatalogReady");
+        } catch (Exception ignore) {
+        }
+        Assertions.assertTrue(info.isEmpty());
+    }
+
+    @Test
+    public void testRunInitializingJobThrowsWhenNoConsistentIds() {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(1L, "init_fail", storageVolumeName, System.currentTimeMillis());
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return null;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return null;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return null;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "failed to capture consistent journal id for checkpoint",
+                () -> Deencapsulation.invoke(job, "runInitializingJob", context));
+    }
+
+    @Test
+    public void testRunSnapshottingJobSuccess() throws Exception {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(2L, "snap_success", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.SNAPSHOTING);
+        job.setJournalIds(10L, 20L);
+
+        final ClusterSnapshotInfo info = new ClusterSnapshotInfo(new HashMap<>());
+        CheckpointController feController = new CheckpointController("fe", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 5L;
+            }
+
+            @Override
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(true, "");
+            }
+
+            @Override
+            public ClusterSnapshotInfo getClusterSnapshotInfo() {
+                return info;
+            }
+        };
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 15L;
+            }
+
+            @Override
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(true, "");
+            }
+        };
+
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return feController;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return starMgrController;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(10L, 20L);
+            }
+        };
+
+        Deencapsulation.invoke(job, "runSnapshottingJob", context);
+        Assertions.assertEquals(ClusterSnapshotJob.ClusterSnapshotJobState.UPLOADING, job.getState());
+        Assertions.assertNotNull(feController.getClusterSnapshotInfo());
+    }
+
+    @Test
+    public void testRunSnapshottingJobFeCheckpointFail() throws Exception {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(3L, "snap_fe_fail", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.SNAPSHOTING);
+        job.setJournalIds(10L, 20L);
+
+        CheckpointController feController = new CheckpointController("fe", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 5L;
+            }
+
+            @Override
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(false, "fe_error");
+            }
+        };
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 15L;
+            }
+        };
+
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return feController;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return starMgrController;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(10L, 20L);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "checkpoint failed for FE image: fe_error",
+                () -> Deencapsulation.invoke(job, "runSnapshottingJob", context));
+    }
+
+    @Test
+    public void testRunSnapshottingJobStarMgrCheckpointFail() throws Exception {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(4L, "snap_starmgr_fail", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.SNAPSHOTING);
+        job.setJournalIds(10L, 20L);
+
+        CheckpointController feController = new CheckpointController("fe", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 15L;
+            }
+
+            @Override
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(false, "starmgr_error");
+            }
+        };
+
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return feController;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return starMgrController;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(10L, 20L);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "checkpoint failed for starMgr image: starmgr_error",
+                () -> Deencapsulation.invoke(job, "runSnapshottingJob", context));
+    }
+
+    @Test
+    public void testRunSnapshottingJobStarMgrImageGreaterThanCheckpoint() throws Exception {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(5L, "snap_starmgr_gt", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.SNAPSHOTING);
+        job.setJournalIds(10L, 20L);
+
+        CheckpointController feController = new CheckpointController("fe", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 30L;
+            }
+        };
+
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return feController;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return starMgrController;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(10L, 20L);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "checkpoint journal id for starMgr is smaller than image version",
+                () -> Deencapsulation.invoke(job, "runSnapshottingJob", context));
+    }
+
+    @Test
+    public void testRunUploadingJobSuccessAndFailure() throws Exception {
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+
+        SnapshotJobContext context = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        ClusterSnapshotJob job = new ClusterSnapshotJob(6L, "upload", storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.UPLOADING);
+
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public static void uploadClusterSnapshotToRemote(ClusterSnapshotJob j) throws StarRocksException {
+                // succeed
+            }
+        };
+
+        Deencapsulation.invoke(job, "runUploadingJob", context);
+        Assertions.assertEquals(ClusterSnapshotJob.ClusterSnapshotJobState.FINISHED, job.getState());
+
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.UPLOADING);
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public static void uploadClusterSnapshotToRemote(ClusterSnapshotJob j) throws StarRocksException {
+                throw new StarRocksException("orig");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "upload image failed, err msg: orig",
+                () -> Deencapsulation.invoke(job, "runUploadingJob", context));
+    }
+
+    private static class DummyClusterSnapshotJob extends ClusterSnapshotJob {
+        int initCnt;
+        int snapCnt;
+        int uploadCnt;
+        int finishedCnt;
+
+        DummyClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
+            super(id, snapshotName, storageVolumeName, createdTimeMs);
+        }
+
+        @Override
+        protected void runInitializingJob(SnapshotJobContext context) {
+            initCnt++;
+            setState(ClusterSnapshotJobState.SNAPSHOTING);
+        }
+
+        @Override
+        protected void runSnapshottingJob(SnapshotJobContext context) {
+            snapCnt++;
+            setState(ClusterSnapshotJobState.UPLOADING);
+        }
+
+        @Override
+        protected void runUploadingJob(SnapshotJobContext context) {
+            uploadCnt++;
+            setState(ClusterSnapshotJobState.FINISHED);
+        }
+
+        @Override
+        protected void runFinishedJob() {
+            finishedCnt++;
+        }
+    }
+
+    private static class FailingClusterSnapshotJob extends ClusterSnapshotJob {
+        FailingClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
+            super(id, snapshotName, storageVolumeName, createdTimeMs);
+        }
+
+        @Override
+        protected void runInitializingJob(SnapshotJobContext context) {
+            throw new RuntimeException("boom");
+        }
+    }
+
+    @Test
+    public void testRunStateMachineAndExceptionHandling() {
+        DummyClusterSnapshotJob job = new DummyClusterSnapshotJob(7L, "dummy", storageVolumeName,
+                System.currentTimeMillis());
+        job.run(null);
+        Assertions.assertEquals(1, job.initCnt);
+        Assertions.assertEquals(1, job.snapCnt);
+        Assertions.assertEquals(1, job.uploadCnt);
+        Assertions.assertEquals(1, job.finishedCnt);
+        Assertions.assertTrue(job.isFinished());
+
+        FailingClusterSnapshotJob failingJob = new FailingClusterSnapshotJob(8L, "dummy_fail", storageVolumeName,
+                System.currentTimeMillis());
+        failingJob.run(null);
+        Assertions.assertTrue(failingJob.isError());
+        String err = Deencapsulation.getField(failingJob, "errMsg");
+        Assertions.assertEquals("boom", err);
+    }
+
+    @Test
+    public void testStopBestEffortNullsOutSchedulerSoStartRebuilds() {
+        // After demotion the inner ClusterSnapshotJobScheduler must be nulled out so that the
+        // next start() rebuilds it with fresh CheckpointController references; otherwise the
+        // re-elected leader silently never restarts snapshot scheduling.
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        ClusterSnapshotJobScheduler injected = new ClusterSnapshotJobScheduler(null, null);
+        Deencapsulation.setField(mgr, "clusterSnapshotJobScheduler", injected);
+        Assertions.assertNotNull(Deencapsulation.getField(mgr, "clusterSnapshotJobScheduler"));
+
+        mgr.stopBestEffort();
+
+        Assertions.assertNull(Deencapsulation.getField(mgr, "clusterSnapshotJobScheduler"),
+                "scheduler reference must be cleared so start() rebuilds it on re-election");
+    }
+
+    @Test
+    public void testStopBestEffortIsNoOpWhenSchedulerNeverStarted() {
+        // Followers / non-shared-data clusters never instantiate the scheduler. stopBestEffort
+        // must tolerate that and not throw.
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        Assertions.assertDoesNotThrow(() -> mgr.stopBestEffort());
+    }
+
+    @Test
+    public void testSchedulerInterruptOnStopOptedOut() {
+        // The scheduler's worker drives checkpoints inline (BDBJE getMaxJournalId /
+        // deleteJournals + image I/O), where an interrupt can invalidate the environment -
+        // it must opt out of the default interrupt-based stop and rely on cooperative
+        // isStopRequested() polling.
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(null, null);
+        Assertions.assertFalse(scheduler.interruptOnStop());
+    }
+
+}

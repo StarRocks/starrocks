@@ -16,8 +16,8 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
-#include "runtime/types.h"
+#include "formats/io/formatted_output_stream_string.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 
@@ -47,6 +47,43 @@ TEST_F(StringConverterTest, test_read_string) {
     EXPECT_EQ("Bar", col->get(1).get_slice());
     EXPECT_EQ("\"Database\"", col->get(2).get_slice());
     EXPECT_EQ("String with escape \\", col->get(3).get_slice());
+}
+
+// NOLINTNEXTLINE
+TEST_F(StringConverterTest, test_read_hive_string) {
+    TypeDescriptor type = TypeDescriptor::create_varchar_type(5);
+    auto conv = csv::get_converter(type, true);
+    Converter::Options options{};
+    options.type_desc = &type;
+
+    {
+        auto col = ColumnHelper::create_column(type, true);
+        EXPECT_TRUE(conv->read_string(col.get(), "abcde", options));
+        EXPECT_TRUE(conv->read_string(col.get(), "abcdefg", options));
+
+        EXPECT_EQ(2, col->size());
+        EXPECT_EQ("abcde", col->get(0).get_slice());
+        EXPECT_TRUE(col->get(1).is_null());
+    }
+
+    // test for hive
+    {
+        auto col = ColumnHelper::create_column(type, true);
+        options.is_hive = true;
+        EXPECT_TRUE(conv->read_string(col.get(), "abcde", options));
+        EXPECT_TRUE(conv->read_string(col.get(), "abcdefg", options));
+        // test for utf-8
+        EXPECT_TRUE(conv->read_string(col.get(), "斯密斯", options));
+        EXPECT_TRUE(conv->read_string(col.get(), "白嫖斯密斯", options));
+        EXPECT_TRUE(conv->read_string(col.get(), "白嫖斯密斯哈", options));
+
+        EXPECT_EQ(5, col->size());
+        EXPECT_EQ("abcde", col->get(0).get_slice());
+        EXPECT_EQ("abcde", col->get(1).get_slice());
+        EXPECT_EQ("斯密斯", col->get(2).get_slice());
+        EXPECT_EQ("白嫖斯密斯", col->get(3).get_slice());
+        EXPECT_EQ("白嫖斯密斯", col->get(4).get_slice());
+    }
 }
 
 // NOLINTNEXTLINE
@@ -162,9 +199,10 @@ TEST_F(StringConverterTest, test_read_large_quoted_string04) {
 TEST_F(StringConverterTest, test_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
-    (void)col->append_strings({"aaaaaaaaaaaa", "bbbbbbbb", "\"\"", "ccccc"});
+    std::vector<Slice> strings = {"aaaaaaaaaaaa", "bbbbbbbb", "\"\"", "ccccc"};
+    (void)col->append_strings(strings.data(), strings.size());
 
-    csv::OutputStreamString buff;
+    formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
@@ -172,7 +210,7 @@ TEST_F(StringConverterTest, test_write_string) {
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("aaaaaaaaaaaabbbbbbbb\"\"ccccc", buff.as_string());
 
-    csv::OutputStreamString buff2;
+    formats::FormattedOutputStreamString buff2;
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());

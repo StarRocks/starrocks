@@ -1,41 +1,3 @@
-[sql]
-select
-    s_name,
-    s_address
-from
-    supplier,
-    nation
-where
-        s_suppkey in (
-        select
-            ps_suppkey
-        from
-            partsupp
-        where
-                ps_partkey in (
-                select
-                    p_partkey
-                from
-                    part
-                where
-                        p_name like 'sienna%'
-            )
-          and ps_availqty > (
-            select
-                    0.5 * sum(l_quantity)
-            from
-                lineitem
-            where
-                    l_partkey = ps_partkey
-              and l_suppkey = ps_suppkey
-              and l_shipdate >= date '1993-01-01'
-              and l_shipdate < date '1994-01-01'
-        )
-    )
-  and s_nationkey = n_nationkey
-  and n_name = 'ARGENTINA'
-order by
-    s_name ;
 [fragment statistics]
 PLAN FRAGMENT 0(F14)
 Output Exprs:2: s_name | 3: s_address
@@ -139,6 +101,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 4: s_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=73.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 3, probe_expr = (4: s_nationkey)
@@ -167,6 +130,7 @@ NON-PARTITION PREDICATES: 9: n_name = 'ARGENTINA'
 MIN/MAX PREDICATES: 9: n_name <= 'ARGENTINA', 9: n_name >= 'ARGENTINA'
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -193,7 +157,7 @@ OutPut Exchange Id: 15
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (12: ps_partkey), remote = true
 |  - filter_id = 2, build_expr = (13: ps_suppkey), remote = false
-|  output columns: 13, 14, 43
+|  output columns: 13
 |  cardinality: 39032168
 |  column statistics:
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -283,6 +247,7 @@ TABLE: part
 NON-PARTITION PREDICATES: 17: p_partkey IS NOT NULL, 18: p_name LIKE 'sienna%'
 partitions=1/1
 avgRowSize=63.0
+dataCacheOptions={populate: false}
 cardinality: 5000000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -299,6 +264,7 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 13: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=20.0
+dataCacheOptions={populate: false}
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (12: ps_partkey)
@@ -341,6 +307,7 @@ NON-PARTITION PREDICATES: 29: l_suppkey IS NOT NULL, 37: l_shipdate >= '1993-01-
 MIN/MAX PREDICATES: 37: l_shipdate >= '1993-01-01', 37: l_shipdate < '1994-01-01'
 partitions=1/1
 avgRowSize=24.0
+dataCacheOptions={populate: false}
 cardinality: 86738152
 probe runtime filters:
 - filter_id = 1, probe_expr = (28: l_partkey)

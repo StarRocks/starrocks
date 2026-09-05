@@ -21,18 +21,26 @@ import java.util.List;
 import java.util.Map;
 
 public class MockIcebergTable extends IcebergTable {
-    private final String tableIdentifier;
+
+    // Hold the synthesized native table separately from IcebergTable's own (clearable) field.
+    private final org.apache.iceberg.Table mockNativeTable;
 
     public MockIcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
                         String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
-                        Map<String, String> icebergProperties, String tableIdentifier) {
-        super(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName, schema,
+                        Map<String, String> icebergProperties, String comment) {
+        super(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName, comment, schema,
                 nativeTable, icebergProperties);
-        this.tableIdentifier = tableIdentifier;
+        this.mockNativeTable = nativeTable;
     }
 
+    // The offline replay table always serves its pre-built native iceberg table. Bypass IcebergTable's lazy
+    // getNativeTable(), which reloads through MetadataMgr.getTable whenever the field is null:
+    // IcebergScanNode.clear() calls clearMetadata() (nulling that field) after a scan, and in the replay env
+    // the reload resolves back to THIS same mock (whose field is now null), so the lazy path recurses into a
+    // StackOverflowError. Returning the stored reference keeps the table usable across repeated scans (e.g. an
+    // MV over iceberg base tables, which scans them during refresh and rewrite).
     @Override
-    public String getTableIdentifier() {
-        return this.tableIdentifier;
+    public org.apache.iceberg.Table getNativeTable() {
+        return mockNativeTable;
     }
 }

@@ -26,12 +26,13 @@
 
 #include <string>
 
-#include "common/config.h"
+#include "base/metrics.h"
+#include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/tracer.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "util/metrics.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
 
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
@@ -127,6 +128,7 @@ void PrometheusMetricsVisitor::visit(const std::string& prefix, const std::strin
     } else {
         metric_name = prefix + "_" + name;
     }
+
     // Output metric type
     _ss << "# TYPE " << metric_name << " " << collector->type() << "\n";
     switch (collector->type()) {
@@ -159,6 +161,16 @@ void PrometheusMetricsVisitor::_visit_simple_metric(const std::string& name, con
     _ss << " " << metric->to_string() << "\n";
 }
 
+// bRPC method error bvars is a counter type, instead of a gauge one.
+// https://github.com/apache/brpc/blob/1.9.0/src/brpc/details/method_status.h#L108
+// TODO: refactor and ensure all counter-typed bvars are correctly reported, including those exposed by StarRocks
+static const char* bvar_metric_type(const butil::StringPiece& name) {
+    if (name.starts_with("rpc_server_") && name.ends_with("_error")) {
+        return "counter";
+    }
+    return "gauge";
+}
+
 bool PrometheusMetricsVisitor::dump(const std::string& name, const butil::StringPiece& desc) {
     if (!desc.empty() && desc[0] == '"') {
         // there is no necessary to monitor string in prometheus
@@ -169,7 +181,9 @@ bool PrometheusMetricsVisitor::dump(const std::string& name, const butil::String
         // Leave it to _dump_latency_recorder_suffix to output Summary.
         return true;
     }
-    _ss << "# HELP " << name << '\n' << "# TYPE " << name << " gauge" << '\n' << name << " " << desc << '\n';
+    _ss << "# HELP " << name << '\n'
+        << "# TYPE " << name << " " << bvar_metric_type(name) << '\n'
+        << name << " " << desc << '\n';
     return true;
 }
 
@@ -238,7 +252,6 @@ bool PrometheusMetricsVisitor::_dump_latency_recorder_suffix(const butil::String
         << si->metric_name << "{quantile=\"0.999\"} " << si->latency_percentiles[3] << '\n'
         << si->metric_name << "{quantile=\"0.9999\"} " << si->latency_percentiles[4] << '\n'
         << si->metric_name << "{quantile=\"1\"} " << si->latency_percentiles[5] << '\n'
-        << si->metric_name << "{quantile=\"avg\"} " << si->latency_avg << '\n'
         << si->metric_name
         << "_sum "
         // There is no sum of latency in bvar output, just use
@@ -291,7 +304,6 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
     if (collector->empty() || name.empty()) {
         return;
     }
-
     rapidjson::Document::AllocatorType& allocator = doc.GetAllocator();
     switch (collector->type()) {
     case MetricType::COUNTER:
@@ -321,24 +333,31 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
     }
 }
 
+bool MetricsAction::need_auth() const {
+    return true;
+}
+
 void MetricsAction::handle(HttpRequest* req) {
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_metrics"));
     const std::string& type = req->param("type");
     std::string str;
     if (type == "core") {
         SimpleCoreMetricsVisitor visitor;
-        _metrics->collect(&visitor);
+        _process_metrics_registry->collect_root(&visitor);
         str.assign(visitor.to_string());
     } else if (type == "json") {
         JsonMetricsVisitor visitor;
-        _metrics->collect(&visitor);
+        _process_metrics_registry->collect_root(&visitor);
+        _collect_table_metrics(&visitor);
         str.assign(visitor.to_string());
     } else {
         PrometheusMetricsVisitor visitor;
-        _metrics->collect(&visitor);
+        _process_metrics_registry->collect_root(&visitor);
+        _collect_table_metrics(&visitor);
         if (config::dump_metrics_with_bvar) {
-            bvar::Variable::dump_exposed(&visitor, nullptr);
+            bvar::Variable::dump_exposed(&visitor, &_options);
         }
+
 #ifdef USE_STAROS
 #ifdef BE_TEST
         if (!sDisableStarOSMetrics) {
@@ -356,6 +375,12 @@ void MetricsAction::handle(HttpRequest* req) {
         HttpChannel::send_reply(req, str);
     } else {
         (*_mock_func)(str);
+    }
+}
+
+void MetricsAction::_collect_table_metrics(starrocks::MetricsVisitor* visitor) {
+    if (config::enable_collect_table_metrics) {
+        _process_metrics_registry->collect_table(visitor);
     }
 }
 

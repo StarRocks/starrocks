@@ -16,7 +16,7 @@
 
 #include "exec/meta_scan_node.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 class MetaScanPrepareOperator : public SourceOperator {
@@ -50,7 +50,7 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 protected:
     std::shared_ptr<MetaScanContextFactory> _scan_ctx_factory;

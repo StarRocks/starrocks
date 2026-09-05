@@ -1,0 +1,123 @@
+-- name: test_schema_change_with_sync_mv
+CREATE TABLE IF NOT EXISTS t1
+(
+    `id` bigint(20) NULL,
+    `k2` datetime NULL,
+    `k3` varchar(32),
+    `k4` int(11) NULL,
+    `k5` bigint(20),
+    `k6` double NULL,
+    `k7` varchar(255) NULL
+    ) ENGINE = OLAP
+    DUPLICATE KEY(id, k2, k3)
+    PARTITION BY RANGE(k2)(
+    START ("2022-04-17") END ("2022-05-01") EVERY (INTERVAL 1 day))
+    DISTRIBUTED BY HASH(id)
+    PROPERTIES
+(
+    "replication_num" = "1",
+    "dynamic_partition.enable" = "true",
+    "dynamic_partition.time_unit" = "DAY",
+    "dynamic_partition.end" = "2",
+    "dynamic_partition.prefix" = "p"
+);
+-- result:
+-- !result
+INSERT INTO t1 values(1, '2022-04-17 00:00:00', 'k3', 1, 1, 1.0, 'k7'), (2, '2022-04-20 00:00:00', 'k4', 1, 1, 1.0, 'k7');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_t1 AS
+SELECT k2,k3,id,k4,k5,k6,k7 FROM t1 ORDER BY k2,k3,id;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+                 
+alter table t1 drop column id;
+-- result:
+E: (1064, 'Distribution column[id] cannot be dropped. index[t1]')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+select * from t1 order by id;
+-- result:
+1	2022-04-17 00:00:00	k3	1	1	1.0	k7
+2	2022-04-20 00:00:00	k4	1	1	1.0	k7
+-- !result
+alter table t1 drop column k2;
+-- result:
+E: (1064, 'Partition column[k2] cannot be dropped. index[t1]')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+select * from t1 order by id;
+-- result:
+1	2022-04-17 00:00:00	k3	1	1	1.0	k7
+2	2022-04-20 00:00:00	k4	1	1	1.0	k7
+-- !result
+alter table t1 drop column k3;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+1	2022-04-17 00:00:00	1	1	1.0	k7
+2	2022-04-20 00:00:00	1	1	1.0	k7
+-- !result
+alter table t1 drop column k4;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+1	2022-04-17 00:00:00	1	1.0	k7
+2	2022-04-20 00:00:00	1	1.0	k7
+-- !result
+alter table t1 drop column k5;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+1	2022-04-17 00:00:00	1.0	k7
+2	2022-04-20 00:00:00	1.0	k7
+-- !result
+alter table t1 drop column k6;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+1	2022-04-17 00:00:00	k7
+2	2022-04-20 00:00:00	k7
+-- !result
+alter table t1 drop column k7;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t1 order by id;
+-- result:
+1	2022-04-17 00:00:00
+2	2022-04-20 00:00:00
+-- !result

@@ -1,0 +1,216 @@
+-- name: test_array_sort_lambda
+
+SELECT array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)));
+create table t0 (
+    k0 int,
+    c0 array<tinyint>,
+    c1 array<smallint>,
+    c2 array<int>,
+    c3 array<bigint>,
+    c4 array<largeint>,
+    c5 array<double>,
+    c6 array<float>
+)
+properties(
+   "replication_num" = "1"
+);
+
+insert into t0 select i
+       ,[3,2,5,1,2] as c0
+       ,[3,2,5,1,2] as c1
+       ,[3,2,5,1,2] as c2
+       ,[3,2,5,1,2] as c3
+       ,[3,2,5,1,2] as c4
+       ,[3,2,5,1,2] as c5
+       ,[3,2,5,1,2] as c6
+from table(generate_series(0,10000)) t(i);
+
+
+SELECT distinct array_sort(c0, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(c1, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(c2, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(c3, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(c4, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(c5, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(c6, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(array_map(x->cast(x as decimal(7,2)),c6), (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(array_map(x->cast(x as decimal(19,5)),c6), (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
+SELECT distinct array_sort([], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
+SELECT distinct array_sort([5], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
+SELECT distinct array_sort([1, 1, 1, 1], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
+
+SELECT distinct array_min(array_sort([3, 2, 5, 1, 2], (x, y) -> k0%3-2)) <=3 from t0;
+SELECT distinct array_min(array_sort(c0, (x, y) -> k0%3-2))<=array_max(c0) from t0;
+
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN x = 1 THEN -1 ELSE x - y END);
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN (x = 1 and y = 2) or (y = 1 and x = 2) THEN -1 ELSE x - y END);
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE  WHEN x = 1 and y = 2 THEN -1 WHEN x <= 6 and y <= 6 THEN 1  ELSE x - y END);
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN (x = 1 and y = 2) or (x = 2 and y = 3) or (x = 3 and y = 1) THEN -1 WHEN x = 1 and y = 3 THEN 1 ELSE x - y END);
+
+with cte as (
+select array_agg(k0) as arr
+from t0
+)
+select array_sort(arr, (x,y)->rand()-0.5)[1] <= array_max(arr) from cte;
+
+with cte as (
+select array_agg(k0) as arr
+from t0
+)
+select array_sort(arr, (x,y)->-1)[1] <= array_max(arr) from cte;
+
+with cte as (
+select array_agg(k0) as arr
+from t0
+)
+select array_sort(arr, (x,y)->1)[1] <= array_max(arr) from cte;
+
+drop table t0;
+
+SELECT array_sort(['bc', 'ab', 'dc'], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)));
+SELECT array_sort(['a', 'abcd', 'abc'], (x, y) -> IF(length(x) < length(y), -1, IF(length(x) = length(y), 0, 1)));
+
+create table t0 (
+    k0 int,
+    c0 array<string>,
+    c1 array<string>
+)
+properties(
+   "replication_num" = "1"
+);
+
+insert into t0 select i
+       ,['bc','ab','dc'] as c0
+       ,['a','abcd','abc'] as c1
+from table(generate_series(0,10000)) t(i);
+
+SELECT distinct array_sort(['bc', 'ab', 'dc'], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(['a', 'abcd', 'abc'], (x, y) -> IF(length(x) < length(y), -1, IF(length(x) = length(y), 0, 1))) from t0;
+SELECT distinct array_sort(c0, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+SELECT distinct array_sort(c1, (x, y) -> IF(length(x) < length(y), -1, IF(length(x) = length(y), 0, 1))) from t0;
+
+drop table t0;
+
+
+SELECT array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END);
+SELECT array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END);
+
+create table t0 (
+    k0 int,
+    c0 array<int>
+)
+properties(
+   "replication_num" = "1"
+);
+
+insert into t0 select i
+       ,[3,2,null,5,null,1,2] as c0
+from table(generate_series(0,10000)) t(i);
+
+SELECT distinct  array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
+SELECT distinct array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
+SELECT distinct array_sort(c0, (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
+SELECT distinct array_sort(c0, (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
+drop table t0;
+
+SELECT array_sort([[2, 3, 1], [4, 2, 1, 4], [1, 2]], (x, y) -> IF(cardinality(x) < cardinality(y), -1, IF(cardinality(x) = cardinality(y), 0, 1)));
+
+create table t0 (
+    k0 int,
+    c0 array<array<int>>
+)
+properties(
+   "replication_num" = "1"
+);
+
+insert into t0 select i
+      ,[[2, 3, 1], [4, 2, 1, 4], [1, 2]] c0
+from table(generate_series(0,10000)) t(i);
+
+SELECT distinct array_sort([[2, 3, 1], [4, 2, 1, 4], [1, 2]], (x, y) -> IF(cardinality(x) < cardinality(y), -1, IF(cardinality(x) = cardinality(y), 0, 1))) from t0;
+SELECT distinct array_sort(c0, (x, y) -> IF(cardinality(x) < cardinality(y), -1, IF(cardinality(x) = cardinality(y), 0, 1))) from t0;
+drop table t0;
+select array_sort([1,3,2,1,3,6,100,200],(x,y)->rand()-0.5)[1] <= array_max([1,3,2,1,3,6,100,200]);
+select array_sort([1,3,2,1,3,6,100,200],(x,y)->0)[1] <= array_max([1,3,2,1,3,6,100,200]);
+select array_sort([1,3,2,1,3,6,100,200],(x,y)->1)[1] <= array_max([1,3,2,1,3,6,100,200]);
+select array_sort([1,3,2,1,3,6,100,200],(x,y)->-1)[1] <= array_max([1,3,2,1,3,6,100,200]);
+
+-- name: test_array_sort_lambda_inconsistent_comparator
+-- The lambda comparator is validated by sampling a bounded number of elements, so one that
+-- only breaks strict weak ordering outside that sample still reaches the sort. The sort must
+-- stay in bounds for such a comparator: it used to walk off both ends of its index vector and
+-- corrupt the heap, which crashed the BE either right away or later, while freeing unrelated
+-- memory during query teardown.
+create table t0 (
+    k0 int,
+    c0 array<int>
+)
+properties(
+   "replication_num" = "1"
+);
+
+-- the first 10 distinct values are the ones the validator samples, and the comparator is a
+-- well-formed ascending order on them; it only breaks down on the values above 100
+insert into t0 select i, [1,2,3,4,5,6,7,8,9,10,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160]
+from table(generate_series(0,199)) t(i);
+
+-- an inconsistent comparator may return an arbitrary permutation, but never anything else
+SELECT distinct cardinality(array_sort(c0, (x, y) -> if(x > 100 and y > 100, -1, if(x < y, -1, if(x = y, 0, 1))))) from t0;
+SELECT distinct array_max(array_sort(c0, (x, y) -> if(x > 100 and y > 100, -1, if(x < y, -1, if(x = y, 0, 1))))) = array_max(c0) from t0;
+SELECT distinct array_min(array_sort(c0, (x, y) -> if(x > 100 and y > 100, -1, if(x < y, -1, if(x = y, 0, 1))))) = array_min(c0) from t0;
+SELECT distinct array_sum(array_sort(c0, (x, y) -> if(x > 100 and y > 100, -1, if(x < y, -1, if(x = y, 0, 1))))) = array_sum(c0) from t0;
+drop table t0;
+
+-- the same comparator is rejected outright once the broken region is inside the sample
+SELECT array_sort([101, 102, 103, 104, 105], (x, y) -> if(x > 100 and y > 100, -1, if(x < y, -1, if(x = y, 0, 1))));
+
+-- duplicates must not crowd the distinct values out of the sample: the leading run of equal
+-- elements compares consistently, the comparator only breaks on pairs of different values
+SELECT array_sort([7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,1,2,3,4,5], (x, y) -> if(x = y, 0, -1));
+
+-- name: test_array_sort_lambda_inconsistent_comparator_concurrent
+-- Regression test for a data race in the comparator validation. The validation verdict used
+-- to be cached in two mutable members of the ArraySortLambdaExpr. A fragment's pipeline
+-- drivers each clone their ExprContext but share the one Expr tree, so when the comparator is
+-- invalid several drivers would reach the error path at once: one assigned the cached error
+-- Status (freeing the previous one's heap state) while another read it, a double-free that
+-- corrupts the heap and crashes the BE (often later, while a fragment tears down). The fix
+-- stops caching the error and keeps only an atomic "validated OK" flag, so no heap-owning
+-- state is shared. After the fix every driver returns the same plain error, no matter the
+-- parallelism. The window is widened here with a comparator that only breaks strict weak
+-- ordering on the last (transitivity) check - so every driver grinds through the whole
+-- O(n^3) validation and they collide on the verdict - and a high pipeline_dop. This is a
+-- timing-dependent crash on a release build; the deterministic reproducer is the unit test
+-- ArraySortLambdaExprTest.invalid_comparator_rejected_concurrently, and it is caught on every
+-- run under ASan (the configuration the fuzzer uses).
+set pipeline_dop = 64;
+create table t0 (
+    k0 int,
+    c0 array<int>
+)
+duplicate key(k0)
+distributed by hash(k0) buckets 32
+properties(
+   "replication_num" = "1"
+);
+
+-- the validator samples the first 10 distinct values, so give it exactly 10
+insert into t0 select i, [1,2,3,4,5,6,7,8,9,10] from table(generate_series(1, 200000)) t(i);
+
+-- passes irreflexivity and asymmetry, violates transitivity: cmp(1,2), cmp(2,3), cmp(3,1) are
+-- all "true" (a cycle), which the validator only catches at its final, most expensive check -
+-- so every driver stays in the validation until they reach the error together.
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+
+-- a valid comparator on the same shape still sorts correctly under the same parallelism
+SELECT distinct array_sort(c0, (x, y) -> x < y) from t0;
+drop table t0;

@@ -40,15 +40,18 @@
 #include <string>
 #include <vector>
 
+#include "base/logging.h"
+#include "base/testutil/assert.h"
+#include "common/config_memory_allocator_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
+#include "common/system/mem_info.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/logging.h"
-#include "util/mem_info.h"
 
 using namespace std;
 using namespace starrocks;
@@ -63,7 +66,6 @@ static std::string k_default_storage_root_path = "";
 
 static void set_up(const std::string& sub_path) {
     config::mem_limit = "10g";
-    CHECK(GlobalEnv::GetInstance()->init().ok());
     k_default_storage_root_path = config::storage_root_path;
     config::storage_root_path = std::filesystem::current_path().string() + "/" + sub_path;
     fs::remove_all(config::storage_root_path);
@@ -196,6 +198,19 @@ void set_key_columns(TCreateTabletReq* request) {
     k13.__set_is_key(true);
     set_varchar_type(&k13, TPrimitiveType::CHAR, 64);
     request->tablet_schema.columns.push_back(k13);
+
+    TColumn k14;
+    k14.column_name = "k14";
+    k14.__set_is_key(true);
+    set_varchar_type(&k14, TPrimitiveType::VARCHAR, 64);
+    request->tablet_schema.columns.push_back(k14);
+
+    // column name length: 90
+    TColumn k15;
+    k15.column_name = "k15aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    k15.__set_is_key(true);
+    set_varchar_type(&k15, TPrimitiveType::VARCHAR, 64);
+    request->tablet_schema.columns.push_back(k15);
 }
 
 void set_default_create_tablet_request(TCreateTabletReq* request) {
@@ -330,24 +345,90 @@ TEST_F(TestDeleteConditionHandler, StoreCondSucceed) {
     condition.condition_values.emplace_back("3");
     conditions.push_back(condition);
 
+    condition.column_name = "k14";
+    condition.condition_op = "=";
+    condition.condition_values.clear();
+    condition.condition_values.emplace_back(" a");
+    conditions.push_back(condition);
+
+    condition.column_name =
+            "k15aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    condition.condition_op = "=";
+    condition.condition_values.clear();
+    condition.condition_values.emplace_back(" a");
+    conditions.push_back(condition);
+
     DeletePredicatePB del_pred;
     success_res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
                                                                       &del_pred);
     ASSERT_EQ(true, success_res.ok());
 
     // Verify that the filter criteria stored in the header are correct
-    ASSERT_EQ(size_t(6), del_pred.sub_predicates_size());
+    ASSERT_EQ(size_t(8), del_pred.sub_predicates_size());
     EXPECT_STREQ("k1=1", del_pred.sub_predicates(0).c_str());
     EXPECT_STREQ("k2>>3", del_pred.sub_predicates(1).c_str());
     EXPECT_STREQ("k3<=5", del_pred.sub_predicates(2).c_str());
     EXPECT_STREQ("k4 IS NULL", del_pred.sub_predicates(3).c_str());
     EXPECT_STREQ("k5=7", del_pred.sub_predicates(4).c_str());
     EXPECT_STREQ("k12!=9", del_pred.sub_predicates(5).c_str());
+    EXPECT_STREQ("k14= a", del_pred.sub_predicates(6).c_str());
+    EXPECT_STREQ("k15aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa= a",
+                 del_pred.sub_predicates(7).c_str());
 
     ASSERT_EQ(size_t(1), del_pred.in_predicates_size());
     ASSERT_FALSE(del_pred.in_predicates(0).is_not_in());
     EXPECT_STREQ("k13", del_pred.in_predicates(0).column_name().c_str());
     ASSERT_EQ(std::size_t(2), del_pred.in_predicates(0).values().size());
+
+    // Test parse_condition
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(0), &condition));
+    EXPECT_STREQ("k1", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ("1", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(1), &condition));
+    EXPECT_STREQ("k2", condition.column_name.c_str());
+    EXPECT_STREQ(">>", condition.condition_op.c_str());
+    EXPECT_STREQ("3", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(2), &condition));
+    EXPECT_STREQ("k3", condition.column_name.c_str());
+    EXPECT_STREQ("<=", condition.condition_op.c_str());
+    EXPECT_STREQ("5", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(3), &condition));
+    EXPECT_STREQ("k4", condition.column_name.c_str());
+    EXPECT_STREQ("IS", condition.condition_op.c_str());
+    EXPECT_STREQ("NULL", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(4), &condition));
+    EXPECT_STREQ("k5", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ("7", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(5), &condition));
+    EXPECT_STREQ("k12", condition.column_name.c_str());
+    EXPECT_STREQ("!=", condition.condition_op.c_str());
+    EXPECT_STREQ("9", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(6), &condition));
+    EXPECT_STREQ("k14", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ(" a", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(7), &condition));
+    EXPECT_STREQ("k15aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                 condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ(" a", condition.condition_values[0].c_str());
 }
 
 // empty string
@@ -764,6 +845,88 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
                                                               &del_pred_24);
     ASSERT_TRUE(res.is_invalid_argument());
+}
+
+// Builds a schema with two key columns (k1, k2) and two value columns (v1, v2).
+static TabletSchemaSPtr make_schema(KeysType keys_type) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(keys_type);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(65535);
+    const char* names[] = {"k1", "k2", "v1", "v2"};
+    for (int i = 0; i < 4; ++i) {
+        auto* col = schema_pb.add_column();
+        col->set_unique_id(i);
+        col->set_name(names[i]);
+        col->set_type("INT");
+        col->set_is_nullable(false);
+        col->set_is_key(i < 2);
+        if (i >= 2) {
+            col->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        }
+    }
+    return TabletSchema::create(schema_pb);
+}
+
+static DeletePredicatePB* add_pred(DelPredicateArray* preds, int32_t version) {
+    auto* pred = preds->Add();
+    pred->set_version(version);
+    return pred;
+}
+
+TEST(DeletePredicateColumnIdsTest, CollectsKeyAndValueColumnsOnDupKeys) {
+    auto schema = make_schema(DUP_KEYS);
+    DelPredicateArray preds;
+    auto* pred = add_pred(&preds, 2);
+    pred->add_sub_predicates("k1=1");
+    pred->add_sub_predicates("v1=2");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(DeleteHandler::delete_predicate_column_ids(preds, *schema, 10, &cids));
+    // A DUP table evaluates delete conditions on value columns too, so both are read.
+    ASSERT_EQ((std::set<ColumnId>{0, 2}), cids);
+}
+
+TEST(DeletePredicateColumnIdsTest, SkipsPredicatesNewerThanTheReadVersion) {
+    auto schema = make_schema(DUP_KEYS);
+    DelPredicateArray preds;
+    add_pred(&preds, 3)->add_sub_predicates("k1=1");
+    add_pred(&preds, 11)->add_sub_predicates("k2=2");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(DeleteHandler::delete_predicate_column_ids(preds, *schema, 10, &cids));
+    ASSERT_EQ((std::set<ColumnId>{0}), cids);
+}
+
+TEST(DeletePredicateColumnIdsTest, NonKeySubPredicateIsDroppedButInPredicateIsKept) {
+    auto schema = make_schema(AGG_KEYS);
+    DelPredicateArray preds;
+    auto* pred = add_pred(&preds, 2);
+    // The reader drops a non-key column's sub predicate on a non-DUP table, but applies no such filter to
+    // IN predicates; this asymmetry is pre-existing behaviour that the helper must mirror exactly.
+    pred->add_sub_predicates("v1=1");
+    auto* in_pred = pred->add_in_predicates();
+    in_pred->set_column_name("v2");
+    in_pred->set_is_not_in(false);
+    in_pred->add_values("7");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(DeleteHandler::delete_predicate_column_ids(preds, *schema, 10, &cids));
+    ASSERT_EQ((std::set<ColumnId>{3}), cids);
+}
+
+TEST(DeletePredicateColumnIdsTest, IgnoresUnknownColumns) {
+    auto schema = make_schema(DUP_KEYS);
+    DelPredicateArray preds;
+    auto* pred = add_pred(&preds, 2);
+    pred->add_sub_predicates("nosuchcol=1");
+    auto* in_pred = pred->add_in_predicates();
+    in_pred->set_column_name("alsomissing");
+    in_pred->add_values("7");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(DeleteHandler::delete_predicate_column_ids(preds, *schema, 10, &cids));
+    ASSERT_TRUE(cids.empty());
 }
 
 } // namespace starrocks

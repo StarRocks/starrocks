@@ -93,7 +93,7 @@ public class MysqlCapability {
     private static final int DEFAULT_FLAGS = Flag.CLIENT_PROTOCOL_41.getFlagBit()
             | Flag.CLIENT_CONNECT_WITH_DB.getFlagBit() | Flag.CLIENT_SECURE_CONNECTION.getFlagBit()
             | Flag.CLIENT_PLUGIN_AUTH.getFlagBit() | Flag.CLIENT_LONG_FLAG.getFlagBit()
-            | Flag.CLIENT_CONNECT_ATTRS.getFlagBit();
+            | Flag.CLIENT_CONNECT_ATTRS.getFlagBit() | Flag.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA.getFlagBit();
     public static final MysqlCapability DEFAULT_CAPABILITY = new MysqlCapability(DEFAULT_FLAGS);
 
     private int flags;
@@ -125,6 +125,10 @@ public class MysqlCapability {
         }
 
         return sb.toString();
+    }
+
+    public boolean isDeprecateEof() {
+        return (flags & Flag.CLIENT_DEPRECATE_EOF.getFlagBit()) != 0;
     }
 
     public boolean isProtocol41() {

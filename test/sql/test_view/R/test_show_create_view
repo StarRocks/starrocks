@@ -1,0 +1,43 @@
+-- name: test_show_create_view
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create or replace view test_view comment 'test comment 1' as ( select 
+"test" as test_column  -- this is a comment
+);
+-- result:
+-- !result
+select TABLE_NAME, TABLE_COMMENT from information_schema.tables WHERE TABLE_NAME = 'test_view' and TABLE_SCHEMA = 'db_${uuid0}';
+-- result:
+test_view	test comment 1
+-- !result
+show create view test_view;
+-- result:
+test_view	CREATE VIEW `test_view` (`test_column`)
+COMMENT "test comment 1" SECURITY NONE AS ( select 
+"test" as test_column  -- this is a comment
+);	utf8	utf8_general_ci
+-- !result
+create table t1(c1 bigint, c2 bigint);
+-- result:
+-- !result
+create or replace view test_view as select 
+c1, -- this is a comment
+c2 -- this is a comment
+from t1;
+-- result:
+-- !result
+select TABLE_NAME, TABLE_COMMENT from information_schema.tables WHERE TABLE_NAME = 'test_view' and TABLE_SCHEMA = 'db_${uuid0}';
+-- result:
+test_view	
+-- !result
+show create view test_view;
+-- result:
+test_view	CREATE VIEW `test_view` (`c1`, `c2`) SECURITY NONE AS select 
+c1, -- this is a comment
+c2 -- this is a comment
+from t1;	utf8	utf8_general_ci
+-- !result

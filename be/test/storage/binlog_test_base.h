@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "base/testutil/assert.h"
 #include "gtest/gtest.h"
 #include "storage/binlog_file_reader.h"
 #include "storage/binlog_file_writer.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

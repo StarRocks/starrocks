@@ -15,6 +15,9 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.ColumnId;
+
 import java.util.Objects;
 
 /**
@@ -22,27 +25,35 @@ import java.util.Objects;
  * so we use table id + column name to identify one column
  */
 public final class ColumnIdentifier {
-    private final long tableId;
-    private final String columnName;
+    private final Long tableId;
+    private final String tableUuid;
+    private final ColumnId columnName;
 
     private long dbId = -1;
 
-    public ColumnIdentifier(long tableId, String columnName) {
+    public ColumnIdentifier(long tableId, ColumnId columnName) {
+        this.tableUuid = null; // tableUuid is not used in this context
         this.tableId = tableId;
         this.columnName = columnName;
     }
 
-    public ColumnIdentifier(long dbId, long tableId, String columnName) {
-        this.dbId = dbId;
-        this.tableId = tableId;
+    public ColumnIdentifier(String tableUuid, ColumnId columnName) {
+        this.tableUuid = tableUuid;
+        this.tableId = null;
         this.columnName = columnName;
     }
 
     public long getTableId() {
+        Preconditions.checkState(tableId != null);
         return tableId;
     }
 
-    public String getColumnName() {
+    public String getTableUuid() {
+        Preconditions.checkState(tableUuid != null);
+        return tableUuid;
+    }
+
+    public ColumnId getColumnName() {
         return columnName;
     }
 
@@ -56,19 +67,28 @@ public final class ColumnIdentifier {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof ColumnIdentifier)) {
+        if (!(o instanceof ColumnIdentifier columnIdentifier)) {
             return false;
         }
 
-        ColumnIdentifier columnIdentifier = (ColumnIdentifier) o;
         if (this == columnIdentifier) {
             return true;
         }
-        return tableId == columnIdentifier.tableId && columnName.equalsIgnoreCase(columnIdentifier.columnName);
+        return Objects.equals(tableUuid, columnIdentifier.tableUuid) && Objects.equals(tableId,
+                columnIdentifier.tableId) && columnName.equalsIgnoreCase(columnIdentifier.columnName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(tableId, columnName);
+        return Objects.hash(tableUuid, tableId, columnName);
+    }
+
+    @Override
+    public String toString() {
+        if (tableUuid != null) {
+            return "(uuid)" + dbId + ":" + tableUuid + ":" + columnName;
+        } else {
+            return "(id)" + dbId + ":" + tableId + ":" + columnName;
+        }
     }
 }

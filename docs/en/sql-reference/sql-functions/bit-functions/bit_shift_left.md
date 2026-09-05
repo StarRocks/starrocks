@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Shifts the binary representation of a numeric expression to the left by a specified number of bits."
 ---
 
 # bit_shift_left
 
-## Description
+
 
 Shifts the binary representation of a numeric expression to the left by a specified number of bits.
 

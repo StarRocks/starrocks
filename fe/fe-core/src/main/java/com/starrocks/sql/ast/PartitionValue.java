@@ -15,18 +15,23 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 public class PartitionValue implements ParseNode {
+    // default partition value for `NULL` value
+    public static final String STARROCKS_DEFAULT_PARTITION_VALUE = "__STARROCKS_DEFAULT_PARTITION__";
+
     public static final PartitionValue MAX_VALUE = new PartitionValue();
 
     private final NodePosition pos;
@@ -54,21 +59,29 @@ public class PartitionValue implements ParseNode {
         return ofDateTime(LocalDateTime.of(date, LocalTime.MIN));
     }
 
+    /**
+     * Convert to string value to literal expr which needs to handle null value
+     * @param type partition column type
+     */
     public LiteralExpr getValue(Type type) throws AnalysisException {
+        if (value != null && value.equalsIgnoreCase(STARROCKS_DEFAULT_PARTITION_VALUE)) {
+            return NullLiteral.create(type);
+        }
+
         if (isMax()) {
-            return LiteralExpr.createInfinity(type, true);
+            return LiteralExprFactory.createInfinity(type, true);
         } else {
-            if (type == Type.DATETIME) {
+            if (type.isDatetime()) {
                 try {
-                    return LiteralExpr.create(value, type);
+                    return LiteralExprFactory.create(value, type);
                 } catch (AnalysisException ex) {
                     // partition value allowed DATETIME type like DATE
-                    LiteralExpr literalExpr = LiteralExpr.create(value, Type.DATE);
-                    literalExpr.setType(Type.DATETIME);
+                    LiteralExpr literalExpr = LiteralExprFactory.create(value, DateType.DATE);
+                    literalExpr.setType(DateType.DATETIME);
                     return literalExpr;
                 }
             } else {
-                return LiteralExpr.create(value, type);
+                return LiteralExprFactory.create(value, type);
             }
         }
     }

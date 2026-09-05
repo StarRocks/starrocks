@@ -1,0 +1,7 @@
+position: 30 # float position is supported
+label: '资源组'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: resource_group

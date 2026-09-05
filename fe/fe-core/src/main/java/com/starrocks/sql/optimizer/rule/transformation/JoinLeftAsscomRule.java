@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -84,7 +84,7 @@ public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
             return false;
         }
 
-        return JoinReorderHelper.isLeftAsscom(input.inputAt(0), input);
+        return JoinReorderHelper.isLeftAsscom(input.inputAt(0), input, isInnerMode);
     }
 
     @Override

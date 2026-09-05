@@ -14,18 +14,22 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
+#include <random>
 #include <string>
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/walltime.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -37,14 +41,27 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
 class GetUsePkIndexTest : public testing::Test {
 public:
     using Row = std::vector<Datum>;
+
+    void TearDown() override { drop_current_tablet(); }
+
+    // Every helper call below replaces _tablet, and the test binary shares one StorageEngine, so a
+    // tablet that is not dropped stays a live update-compaction candidate for all later suites (it
+    // then wins TabletManager::find_best_tablet_to_do_update_compaction() over their own tablets).
+    void drop_current_tablet() {
+        if (_tablet != nullptr) {
+            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
+            _tablet.reset();
+        }
+    }
+
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const std::vector<std::vector<Row>>& segments,
                                   SegmentsOverlapPB overlap) {
         RowsetWriterContext writer_context;
@@ -64,12 +81,12 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         for (size_t i = 0; i < segments.size(); i++) {
             auto& segment = segments[i];
-            auto chunk = ChunkHelper::new_chunk(schema, segment.size());
-            auto& cols = chunk->columns();
+            auto chunk = ChunkFactory::new_chunk(schema, segment.size());
+            auto cols = chunk->columns();
             for (auto& row : segment) {
                 CHECK(cols.size() == row.size());
                 for (size_t j = 0; j < row.size(); j++) {
-                    cols[j]->append_datum(row[j]);
+                    cols[j]->as_mutable_ptr()->append_datum(row[j]);
                 }
             }
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -92,7 +109,8 @@ public:
         for (size_t i = 0; i < num_row; i++) {
             keys[i] = key_start + i;
         }
-        std::random_shuffle(keys.begin(), keys.end());
+        std::mt19937 rng(static_cast<std::mt19937::result_type>(std::rand()));
+        std::shuffle(keys.begin(), keys.end(), rng);
         for (size_t i = 0; i < num_segment; i++) {
             auto& segment = segments.emplace_back();
             size_t start = i * num_row_per_segment;
@@ -225,15 +243,17 @@ public:
         std::string pk2_str = std::to_string(get_pk2(key));
         std::unique_ptr<ColumnPredicate> pk2_eq(
                 new_column_eq_predicate(get_type_info(LogicalType::TYPE_BIGINT), 1, pk2_str));
+        PredicateAndNode pred_root;
         if (multi_column_pk) {
-            params.predicates.emplace_back(pk2_eq.get());
-            params.predicates.emplace_back(pk1_eq.get());
+            pred_root.add_child(PredicateColumnNode(pk2_eq.get()));
+            pred_root.add_child(PredicateColumnNode(pk1_eq.get()));
         } else {
-            params.predicates.emplace_back(pk_eq.get());
+            pred_root.add_child(PredicateColumnNode(pk_eq.get()));
         }
+        params.pred_tree = PredicateTree::create(std::move(pred_root));
         ASSERT_OK(reader.prepare());
         ASSERT_OK(reader.open(params));
-        auto chunk = ChunkHelper::new_chunk(reader.schema(), 1);
+        auto chunk = ChunkFactory::new_chunk(reader.schema(), 1);
         if (expect_exist) {
             ASSERT_OK(reader.do_get_next(chunk.get()));
             ASSERT_EQ(1, chunk->num_rows());
@@ -263,6 +283,7 @@ public:
                   << ", multi_column_pk=" << multi_column_pk << ", sort_key=" << sort_key << ", "
                   << "num_row=" << num_row << ", num_get=" << num_get;
         srand(GetCurrentTimeMicros());
+        drop_current_tablet();
         _tablet = create_tablet(rand(), rand(), multi_column_pk, sort_key);
         std::vector<std::vector<Row>> segments;
         std::srand(seed);
@@ -287,6 +308,7 @@ public:
                   << ", multi_column_pk=" << multi_column_pk << ", sort_key=" << sort_key << ", "
                   << "num_row=" << num_row << ", num_get=" << num_get;
         srand(GetCurrentTimeMicros());
+        drop_current_tablet();
         _tablet = create_tablet(rand(), rand(), multi_column_pk, sort_key);
         std::srand(seed);
         std::vector<std::vector<Row>> segments1;

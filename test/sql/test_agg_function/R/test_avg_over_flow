@@ -1,0 +1,29 @@
+-- name: test_agg_over_flow
+CREATE TABLE `t1` (
+  `v1` varchar(65533) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 8
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values ('a', 10000000, 3), ('a', 40000000, 5), ('a', 40000000, 5), ('a', 40000000, 5),
+('b', 10000000, 3), ('b', 40000000, 5), ('b', 40000000, 5), ('b', 40000000, 5);
+-- result:
+-- !result
+insert into t1 values ('a', 10000000, 3), ('a', 40000000, 5), ('a', 40000000, 5), ('a', 40000000, 5),
+('b', 10000000, 3), ('b', 40000000, 5), ('b', 40000000, 5), ('b', 40000000, 5);
+-- result:
+-- !result
+select avg(v2 - 1.86659630566164 * (v3 - 3.062175673706)) from t1 group by v1;
+-- result:
+32499997.316162424349183169
+32499997.316162424349183169
+-- !result

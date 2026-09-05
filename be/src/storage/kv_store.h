@@ -53,6 +53,7 @@ namespace starrocks {
 
 using ColumnFamilyHandle = rocksdb::ColumnFamilyHandle;
 using WriteBatch = rocksdb::WriteBatch;
+class MemTracker;
 
 class KVStore {
 public:
@@ -71,11 +72,19 @@ public:
     Status remove(ColumnFamilyIndex column_family_index, const std::string& key);
 
     Status iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                   std::function<bool(std::string_view, std::string_view)> const& func, int64_t timeout_sec = -1);
+                   std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                   int64_t timeout_sec = -1);
+
+    // Iterates through rocksdb with timeout. If the iteration times out,
+    // it triggers a compaction of rocksdb and retries the iteration
+    // from the last processed key without timeout.
+    Status iterate_with_compact_on_timeout(
+            ColumnFamilyIndex column_family_index, const std::string& prefix,
+            std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func, int64_t timeout_sec = -1);
 
     Status iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
                          const std::string& upper_bound,
-                         std::function<bool(std::string_view, std::string_view)> const& func);
+                         std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func);
 
     const std::string& root_path() const { return _root_path; }
 
@@ -93,9 +102,23 @@ public:
 
     ColumnFamilyHandle* handle(ColumnFamilyIndex column_family_index) { return _handles[column_family_index]; }
 
+    // Becayse `DeleteRange` provided by rocksdb will generate too many tomestones and it will slow down rocksdb.
+    // So we provide an opt version `DeleteRange` named `OptDeleteRange` here, it will :
+    // 1. scan and get keys to be deleted first.
+    // 2. and then generate write batch with batch delete.
+    Status OptDeleteRange(ColumnFamilyIndex column_family_index, const std::string& begin_key,
+                          const std::string& end_key, WriteBatch* batch);
+
+private:
+    static int64_t calc_rocksdb_write_buffer_size(MemTracker* mem_tracker);
+
+    Status iterate(ColumnFamilyIndex column_family_index, const std::string& prefix, const std::string& start_key,
+                   std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                   int64_t timeout_sec = -1);
+
 private:
     std::string _root_path;
-    rocksdb::DB* _db;
+    rocksdb::DB* _db{nullptr};
     std::vector<rocksdb::ColumnFamilyHandle*> _handles;
 };
 

@@ -34,8 +34,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TupleId;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
@@ -54,5 +53,6 @@ public class IntersectNode extends SetOperationNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         toThrift(msg, TPlanNodeType.INTERSECT_NODE);
+        msg.intersect_node.setHas_outer_join_child(hasNullableGenerateChild);
     }
 }

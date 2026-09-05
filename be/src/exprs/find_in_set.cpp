@@ -14,13 +14,13 @@
 
 #include <algorithm>
 
+#include "base/string/memcmp.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/binary_function.h"
 #include "exprs/string_functions.h"
-#include "util/memcmp.h"
 
 namespace starrocks {
 

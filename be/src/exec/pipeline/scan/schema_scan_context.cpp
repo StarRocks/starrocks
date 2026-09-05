@@ -16,20 +16,24 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "exec/exec_env.h"
 #include "exec/schema_scanner.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
 Status SchemaScanContext::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _tnode.conjuncts, &_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(_prepare_params(state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_obj_pool, _tnode.conjuncts, &_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(_prepare_params(state, _conjunct_ctxs));
     return Status::OK();
 }
 
-Status SchemaScanContext::_prepare_params(RuntimeState* state) {
+Status SchemaScanContext::_prepare_params(RuntimeState* state, const std::vector<ExprContext*>& conjunct_ctxs) {
     _param = std::make_shared<SchemaScannerParam>();
     if (_tnode.schema_scan_node.__isset.catalog_name) {
         _param->catalog = _obj_pool.add(new std::string(_tnode.schema_scan_node.catalog_name));
@@ -118,8 +122,15 @@ Status SchemaScanContext::_prepare_params(RuntimeState* state) {
     if (_tnode.schema_scan_node.__isset.frontends) {
         _param->frontends = _tnode.schema_scan_node.frontends;
     }
+    // expr_contexts
+    _param->expr_contexts = &conjunct_ctxs;
 
+    // tuple_id
+    size_t tuple_id = _tnode.schema_scan_node.tuple_id;
+    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(tuple_id);
+    for (auto* slot : tuple_desc->slots()) {
+        _param->slot_id_mapping.emplace(slot->id(), slot);
+    }
     return Status::OK();
 }
-
 } // namespace starrocks::pipeline

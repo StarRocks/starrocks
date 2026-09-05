@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "统计 Bitmap 中不重复值的个数。"
 ---
 
 # bitmap_count
 
-## 功能
+
 
 统计 bitmap 中不重复值的个数。
 

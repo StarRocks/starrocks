@@ -21,11 +21,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class SafeModeCheckerTest {
 
@@ -34,9 +34,9 @@ public class SafeModeCheckerTest {
 
     Backend be = new Backend(-1000L, "", 0);
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        globalStateMgr.getClusterInfo().addBackend(be);
+        globalStateMgr.getNodeMgr().getClusterInfo().addBackend(be);
         ImmutableMap<String, DiskInfo> disksRef;
         DiskInfo diskInfo = new DiskInfo("");
         diskInfo.setTotalCapacityB(100);
@@ -50,16 +50,16 @@ public class SafeModeCheckerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getCurrentSystemInfo().getBackends();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
                 minTimes = 0;
                 result = be;
             }
         };
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws DdlException {
-        GlobalStateMgr.getCurrentState().getClusterInfo().dropBackend(be);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(be);
         GlobalStateMgr.getCurrentState().setSafeMode(false);
     }
 

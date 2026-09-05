@@ -1,0 +1,72 @@
+-- name: test_primary_key @sequential
+create table t(k int, v int) primary key(k)  properties('base_compaction_forbidden_time_ranges'='* * * * *');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Property base_compaction_forbidden_time_ranges not support primary keys table or cloud native table.')
+-- !result
+create table t(k int, v int) primary key(k);
+-- result:
+-- !result
+alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Property base_compaction_forbidden_time_ranges not support primary keys table or cloud native table.')
+-- !result
+-- name: test_create_alter_compaction_control @sequential @native
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* 8-18 * * *');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"base_compaction_forbidden_time_ranges" = "* 8-18 * * *",
+"bucket_size" = "1073741824",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"base_compaction_forbidden_time_ranges" = "* 7-20 * * *",
+"bucket_size" = "1073741824",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t set ('base_compaction_forbidden_time_ranges'='');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "1073741824",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result

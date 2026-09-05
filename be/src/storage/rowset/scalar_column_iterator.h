@@ -34,14 +34,16 @@
 
 #pragma once
 
+#include "cache/mem_cache/page_handle.h"
 #include "column/fixed_length_column.h"
-#include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/ordinal_page_index.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/parsed_page.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
+
+class Datum;
 
 // TODO: rename to ScalarColumnIterator
 class ScalarColumnIterator final : public ColumnIterator {
@@ -49,44 +51,61 @@ public:
     explicit ScalarColumnIterator(ColumnReader* reader);
     ~ScalarColumnIterator() override;
 
-    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
+    Status init(const ColumnIteratorOptions& opts) override;
 
-    [[nodiscard]] Status seek_to_first() override;
+    Status seek_to_first() override;
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+    Status seek_to_ordinal(ordinal_t ord) override;
 
-    [[nodiscard]] Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
+    Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
+                                  size_t* processed_rows) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* range) override;
+    ordinal_t num_rows() const override { return _reader->num_rows(); }
 
-    [[nodiscard]] Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                        SparseRange<>* range) override;
+    bool has_zone_map() const override { return _reader->has_zone_map(); }
+
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* range,
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
+
+    bool has_original_bloom_filter_index() const override;
+    bool has_ngram_bloom_filter_index() const override;
+    Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          SparseRange<>* range) override;
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
-    [[nodiscard]] Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
 
     int dict_lookup(const Slice& word) override;
 
-    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override;
+    void dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) override;
 
-    [[nodiscard]] Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+    Status next_dict_codes(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
 
-    [[nodiscard]] Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
     ParsedPage* get_current_page() { return _page.get(); }
+
+    ColumnReader* get_column_reader() override { return _reader; }
+
+    Status null_count(size_t* count) override;
 
     bool is_nullable();
 
@@ -94,7 +113,22 @@ public:
 
     // only work when all_page_dict_encoded was true.
     // used to acquire load local dict
-    int dict_size();
+    int dict_size() override;
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
+    std::string name() const override { return "ScalarColumnIterator"; }
+
+    void reserve_col(size_t n, Column* column) override {
+        if (_page != nullptr) {
+            _page->reserve_col(n, column);
+        } else {
+            column->reserve(n);
+        }
+    }
+
+    bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) override;
 
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
@@ -103,6 +137,9 @@ private:
 
     template <LogicalType Type>
     int _do_dict_lookup(const Slice& word);
+
+    template <LogicalType Type>
+    void _do_dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes);
 
     template <LogicalType Type>
     Status _do_next_dict_codes(size_t* n, Column* dst);
@@ -119,14 +156,17 @@ private:
     template <LogicalType Type>
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
-    template <typename ParseFunc>
-    Status _fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values, ParseFunc&& page_parse);
+    template <typename RowidReaderFunc, typename RangeReaderFunc>
+    Status _fetch_by_rowid_helper(const rowid_t* rowids, size_t size, Column* values, RowidReaderFunc&& rowid_reader,
+                                  RangeReaderFunc&& range_reader);
 
+    template <LogicalType Type>
     Status _load_dict_page();
 
     bool _contains_deleted_row(uint32_t page_index) const;
 
-    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
+    template <typename ReadFunc>
+    Status _next_batch_template(const SparseRange<>& range, Column* dst, ReadFunc&& read_func);
 
     ColumnReader* _reader;
 
@@ -139,9 +179,6 @@ private:
     // keep dict page decoder
     std::unique_ptr<PageDecoder> _dict_decoder;
 
-    // keep dict page handle to avoid released
-    PageHandle _dict_page_handle;
-
     // page iterator used to get next page when current page is finished.
     // This value will be reset when a new seek is issued
     OrdinalPageIndexIterator _page_iter;
@@ -150,7 +187,7 @@ private:
     ordinal_t _current_ordinal = 0;
 
     // page indexes those are DEL_PARTIAL_SATISFIED
-    std::unordered_set<uint32_t> _delete_partial_satisfied_pages;
+    std::optional<std::unordered_set<uint32_t>> _delete_partial_satisfied_pages;
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
     Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, Column* dst) = nullptr;
@@ -168,6 +205,16 @@ private:
     int64_t _element_ordinal = 0;
 
     UInt32Column _array_size;
+
+    // Cached IDG probe result from init(). `_reader` alone only sees the
+    // segment-footer-embedded bloom filter, so for fast-path-built bloom
+    // filters (sidecar .idx file, no footer payload) we need supplemental
+    // bits to surface via has_{original,ngram}_bloom_filter_index() to
+    // BloomFilterSupportChecker and to the short-circuit in
+    // get_row_ranges_by_bloom_filter. At most one flavor can be present per
+    // column at a time, matching the footer constraint.
+    bool _has_idg_ngram_bf = false;
+    bool _has_idg_original_bf = false;
 };
 
 } // namespace starrocks

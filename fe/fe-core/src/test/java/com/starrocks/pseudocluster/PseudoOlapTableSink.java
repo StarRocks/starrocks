@@ -208,7 +208,7 @@ public class PseudoOlapTableSink {
         partitions = tOlapTableSink.partition.partitions.stream().map(p -> {
             Partition partition = new Partition();
             partition.id = p.id;
-            partition.indexToTabletIds = p.indexes.stream().collect(Collectors.toMap(e -> e.index_id, e -> e.tablets));
+            partition.indexToTabletIds = p.indexes.stream().collect(Collectors.toMap(e -> e.index_id, e -> e.tablet_ids));
             return partition;
         }).collect(Collectors.toList());
         tabletIdToNodeIds = tOlapTableSink.location.tablets.stream().collect(Collectors.toMap(e -> e.tablet_id, e -> e.node_ids));

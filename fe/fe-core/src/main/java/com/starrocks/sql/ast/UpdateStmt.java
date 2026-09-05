@@ -15,16 +15,16 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Set;
 
 public class UpdateStmt extends DmlStmt {
-    private final TableName tableName;
+    private TableRef tableRef;
     private final List<ColumnAssignment> assignments;
     private final List<Relation> fromRelations;
     private final Expr wherePredicate;
@@ -36,20 +36,20 @@ public class UpdateStmt extends DmlStmt {
 
     private boolean usePartialUpdate;
 
-    public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
+    public UpdateStmt(TableRef tableRef, List<ColumnAssignment> assignments, List<Relation> fromRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions) {
-        this(tableName, assignments, fromRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);
+        this(tableRef, assignments, fromRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);
     }
 
-    public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
+    public UpdateStmt(TableRef tableRef, List<ColumnAssignment> assignments, List<Relation> fromRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions, NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.assignments = assignments;
         this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
-        this.assignmentColumns = Sets.newHashSet();
+        this.assignmentColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnAssignment each : assignments) {
             this.assignmentColumns.add(each.getColumn());
         }
@@ -61,12 +61,25 @@ public class UpdateStmt extends DmlStmt {
     }
 
     @Override
-    public TableName getTableName() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public List<ColumnAssignment> getAssignments() {
         return assignments;
+    }
+
+    public boolean assignmentsContainsParameter() {
+        for (ColumnAssignment assignment : assignments) {
+            if (assignment.getExpr().contains(Parameter.class)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Relation> getFromRelations() {
@@ -106,6 +119,6 @@ public class UpdateStmt extends DmlStmt {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUpdateStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitUpdateStatement(this, context);
     }
 }

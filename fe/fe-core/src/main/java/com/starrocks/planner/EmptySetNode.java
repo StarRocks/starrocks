@@ -35,8 +35,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -56,13 +54,9 @@ public class EmptySetNode extends PlanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
+    public void computeStats() {
         avgRowSize = 0;
         cardinality = 0;
-    }
-
-    @Override
-    public void init(Analyzer analyzer) {
     }
 
     @Override
@@ -78,5 +72,12 @@ public class EmptySetNode extends PlanNode {
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         planNode.setNode_type(TPlanNodeType.EXCHANGE_NODE);
+    }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into an empty-set source operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
     }
 }

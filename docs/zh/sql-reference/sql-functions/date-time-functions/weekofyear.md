@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算指定时间为一年中的第几周。"
 ---
 
 # weekofyear
 
-## 功能
+
 
 计算指定时间为一年中的第几周。
 

@@ -1,0 +1,18 @@
+-- name: test_jodatime_format_m_overflow @sequential
+-- Regression: the Joda minute specifier 'm' in to_joda_format_string guarded the
+-- output with write_size + 2 (constant) but append_with_prefix writes actual_size
+-- bytes, where actual_size grows with the run length of 'm' in the format. A long
+-- run such as repeat('m',200) overflowed the caller's 128-byte stack buffer and
+-- crashed the BE (SIGSEGV in DateTimeValue::to_joda_format_string). The fix guards
+-- with actual_size like the sibling numeric specifiers, so an over-long format
+-- returns NULL instead. The format is read from a column so the FE cannot fold it.
+CREATE TABLE t_joda_m (k INT, dt DATETIME, fmt VARCHAR(500))
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+INSERT INTO t_joda_m VALUES (1, "2023-05-15 10:20:30", repeat("m", 200));
+-- normal format still works
+SELECT jodatime_format(dt, "yyyy-MM-dd HH:mm:ss") FROM t_joda_m;
+-- over-long run must not crash the BE; with the fix it returns NULL
+[UC] SELECT jodatime_format(dt, fmt) FROM t_joda_m;
+-- BE must still be serving queries after the over-long format
+SELECT count(*) FROM t_joda_m;

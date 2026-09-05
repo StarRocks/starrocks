@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "common/sort_desc.h"
+
 namespace starrocks {
 
 #ifdef BE_TEST
@@ -28,8 +30,13 @@ Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS, {}) {
 #endif
 
 Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
+        : Schema(std::move(fields), keys_type, std::move(sort_key_idxes), nullptr) {}
+
+Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes,
+               std::shared_ptr<SortDescs> sort_descs)
         : _fields(std::move(fields)),
           _sort_key_idxes(std::move(sort_key_idxes)),
+          _sort_descs(std::move(sort_descs)),
           _name_to_index_append_buffer(nullptr),
 
           _keys_type(static_cast<uint8_t>(keys_type)) {
@@ -42,9 +49,27 @@ Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key
 Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
         : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     _fields.resize(cids.size());
+    auto ori_sort_idxes = schema->sort_key_idxes();
+    std::map<ColumnId, int32_t> cids_to_field_id;
     for (int i = 0; i < cids.size(); i++) {
-        DCHECK_LT(cids[i], schema->_fields.size());
+        if (cids[i] >= schema->_fields.size()) {
+            _fields.resize(_fields.size() - 1);
+            continue;
+        }
         _fields[i] = schema->_fields[cids[i]];
+        cids_to_field_id[cids[i]] = i;
+    }
+    if (schema->sort_descs()) {
+        _sort_descs = std::make_shared<SortDescs>();
+    }
+    for (size_t pos = 0; pos < ori_sort_idxes.size(); ++pos) {
+        auto idx = ori_sort_idxes[pos];
+        if (cids_to_field_id.count(idx) > 0) {
+            _sort_key_idxes.emplace_back(cids_to_field_id[idx]);
+            if (_sort_descs && pos < schema->sort_descs()->descs.size()) {
+                _sort_descs->descs.emplace_back(schema->sort_descs()->descs[pos]);
+            }
+        }
     }
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
@@ -77,6 +102,7 @@ Schema::Schema(Schema* schema)
         _fields[i] = schema->_fields[i];
     }
     _sort_key_idxes = schema->sort_key_idxes();
+    _sort_descs = schema->sort_descs();
     if (schema->_name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema, later append fields will be added to _name_to_index_append_buffer
         schema->_share_name_to_index = true;
@@ -98,6 +124,7 @@ Schema::Schema(const Schema& schema)
         _fields[i] = schema._fields[i];
     }
     _sort_key_idxes = schema.sort_key_idxes();
+    _sort_descs = schema.sort_descs();
     if (schema._name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
         schema._share_name_to_index = true;
@@ -121,6 +148,7 @@ Schema& Schema::operator=(const Schema& other) {
         this->_fields[i] = other._fields[i];
     }
     this->_sort_key_idxes = other.sort_key_idxes();
+    this->_sort_descs = other.sort_descs();
     if (other._name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
         other._share_name_to_index = true;
@@ -138,12 +166,12 @@ void Schema::append(const FieldPtr& field) {
     _num_keys += field->is_key();
     if (!_share_name_to_index) {
         if (_name_to_index == nullptr) {
-            _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
+            _name_to_index = std::make_shared<std::unordered_map<std::string_view, size_t>>();
         }
         _name_to_index->emplace(field->name(), _fields.size() - 1);
     } else {
         if (_name_to_index_append_buffer == nullptr) {
-            _name_to_index_append_buffer.reset(new std::unordered_map<std::string_view, size_t>());
+            _name_to_index_append_buffer = std::make_shared<std::unordered_map<std::string_view, size_t>>();
         }
         _name_to_index_append_buffer->emplace(field->name(), _fields.size() - 1);
     }
@@ -205,19 +233,58 @@ std::vector<std::string> Schema::field_names() const {
     return names;
 }
 
-FieldPtr Schema::get_field_by_name(const std::string& name) const {
+// without _row
+std::vector<std::string> Schema::value_field_names() const {
+    std::vector<std::string> names;
+    for (const auto& field : _fields) {
+        if (!field->is_key() && Schema::FULL_ROW_COLUMN != field->name()) {
+            names.emplace_back(field->name());
+        }
+    }
+    return names;
+}
+
+std::vector<ColumnId> Schema::value_field_column_ids() const {
+    std::vector<ColumnId> column_ids;
+    for (const auto& field : _fields) {
+        if (!field->is_key() && Schema::FULL_ROW_COLUMN != field->name()) {
+            column_ids.emplace_back(field->id());
+        }
+    }
+    return column_ids;
+}
+
+std::vector<ColumnId> Schema::field_column_ids(bool use_rowstore) const {
+    std::vector<ColumnId> column_ids;
+    for (const auto& field : _fields) {
+        if (use_rowstore || Schema::FULL_ROW_COLUMN != field->name()) {
+            column_ids.emplace_back(field->id());
+        }
+    }
+    return column_ids;
+}
+
+FieldPtr Schema::get_field_by_name(std::string_view name) const {
     size_t idx = get_field_index_by_name(name);
     return idx == -1 ? nullptr : _fields[idx];
 }
 
+void Schema::set_field_by_name(FieldPtr field, const std::string& name) {
+    size_t idx = get_field_index_by_name(name);
+    if (idx == -1) {
+        return;
+    }
+    _fields[idx] = std::move(field);
+}
+
 void Schema::_build_index_map(const Fields& fields) {
-    _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
+    _name_to_index = std::make_shared<std::unordered_map<std::string_view, size_t>>();
     for (size_t i = 0; i < fields.size(); i++) {
         _name_to_index->emplace(fields[i]->name(), i);
     }
 }
 
-size_t Schema::get_field_index_by_name(const std::string& name) const {
+size_t Schema::get_field_index_by_name(std::string_view name) const {
     DCHECK(_name_to_index != nullptr);
     auto p = _name_to_index->find(name);
     if (p == _name_to_index->end()) {

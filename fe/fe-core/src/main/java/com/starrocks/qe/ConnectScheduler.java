@@ -34,44 +34,68 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.LogUtil;
-import com.starrocks.http.HttpConnectContext;
-import com.starrocks.mysql.MysqlProto;
-import com.starrocks.mysql.nio.NConnectContext;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.system.Frontend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.TimerTask;
-import java.util.concurrent.ExecutorService;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class ConnectScheduler {
     private static final Logger LOG = LogManager.getLogger(ConnectScheduler.class);
+    private static final int CONNECTION_ID_SPACE = 1 << 24;
+    private static final int CONNECTION_ID_MASK = CONNECTION_ID_SPACE - 1;
     private final AtomicInteger maxConnections;
-    private final AtomicInteger numberConnection;
-    private final AtomicInteger nextConnectionId;
+    private final ConnectionIdGenerator connectionIdGenerator;
 
+    // mysql connectContext/ http connectContext/ arrowFlight connectContext all stored in connectionMap
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+    private final Map<String, ArrowFlightSqlConnectContext> arrowFlightSqlConnectContextMap = Maps.newConcurrentMap();
+
     private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
-    private final ExecutorService executor = ThreadPoolManager
-            .newDaemonCacheThreadPool(Config.max_connection_scheduler_threads_num, "connect-scheduler-pool", true);
+    private final ReentrantLock connStatsLock = new ReentrantLock();
+
+    public static final class ConnectionIdExhaustedException extends Exception {
+        public ConnectionIdExhaustedException(String message) {
+            super(message);
+        }
+    }
 
     public ConnectScheduler(int maxConnections) {
+        this(maxConnections, CONNECTION_ID_SPACE);
+    }
+
+    @VisibleForTesting
+    ConnectScheduler(int maxConnections, int connectionIdSpace) {
+        if (connectionIdSpace <= 0 || connectionIdSpace > CONNECTION_ID_SPACE) {
+            throw new IllegalArgumentException("connection ID space must be between 1 and " + CONNECTION_ID_SPACE);
+        }
         this.maxConnections = new AtomicInteger(maxConnections);
-        numberConnection = new AtomicInteger(0);
-        nextConnectionId = new AtomicInteger(0);
+        connectionIdGenerator = new ConnectionIdGenerator(connectionIdSpace);
         // Use a thread to check whether connection is timeout. Because
         // 1. If use a scheduler, the task maybe a huge number when query is messy.
         //    Let timeout is 10m, and 5000 qps, then there are up to 3000000 tasks in scheduler.
@@ -87,73 +111,177 @@ public class ConnectScheduler {
             try {
                 long now = System.currentTimeMillis();
                 synchronized (ConnectScheduler.this) {
-                    //Because unregisterConnection will be callback in NMysqlChannel's close,
-                    //unregisterConnection will remove connectionMap (in the same thread)
-                    //This will result in a concurrentModifyException.
-                    //So here we copied the connectionIds to avoid removing iterator during operate iterator
-                    ArrayList<Long> connectionIds = new ArrayList<>(connectionMap.keySet());
-                    for (Long connectId : connectionIds) {
-                        ConnectContext connectContext = connectionMap.get(connectId);
-                        connectContext.checkTimeout(now);
+                    // ConcurrentHashMap's iterator is weakly consistent, safe to iterate directly
+                    // even when modifications occur during iteration
+                    for (ConnectContext connectContext : connectionMap.values()) {
+                        if (connectContext != null) {
+                            try (var guard = connectContext.bindScope()) {
+                                connectContext.checkTimeout(now);
+                            }
+                        }
+                    }
+
+                    // remove arrow flight sql timeout connect
+                    for (ConnectContext connectContext : arrowFlightSqlConnectContextMap.values()) {
+                        if (connectContext != null) {
+                            try (var guard = connectContext.bindScope()) {
+                                connectContext.checkTimeout(now);
+                            }
+                        }
                     }
                 }
             } catch (Throwable e) {
-                //Catch Exception to avoid thread exit
-                LOG.warn("Timeout checker exception, Internal error : " + e.getMessage());
+                // Catch Exception to avoid thread exit
+                LOG.warn("Timeout checker exception, Internal error:", e);
             }
         }
     }
 
-    // submit one MysqlContext to this scheduler.
-    // return true, if this connection has been successfully submitted, otherwise return false.
-    // Caller should close ConnectContext if return false.
-    public boolean submit(ConnectContext context) {
-        if (context == null) {
-            return false;
-        }
+    /**
+     * Register one connection with its connection id.
+     *
+     * @param ctx connection context
+     * @return a pair, first is success or not, second is error message(if any)
+     */
+    public Pair<Boolean, String> registerConnection(ConnectContext ctx) {
+        try {
+            connStatsLock.lock();
+            ConnectContext existing = connectionMap.get((long) ctx.getConnectionId());
+            if (existing != null) {
+                return handleExistingConnection(ctx, existing);
+            }
 
-        context.setConnectionId(nextConnectionId.getAndAdd(1));
-        context.resetConnectionStartTime();
-        // no necessary for nio or Http.
-        if (context instanceof NConnectContext || context instanceof HttpConnectContext) {
-            return true;
+            if (connectionMap.size() >= maxConnections.get()) {
+                return new Pair<>(false, "Reach cluster-wide connection limit, qe_max_connection=" + maxConnections +
+                        ", connectionMap.size=" + connectionMap.size() +
+                        ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
+            }
+            // Check user
+            AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
+            int currentConn = currentConnAtomic == null ? 0 : currentConnAtomic.get();
+            long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
+            if (currentConn >= currentUserMaxConn) {
+                String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() + ") connection limit, " +
+                        "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
+                        ", connByUser.totConn=" + connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
+                        ", user.currConn=" + currentConn +
+                        ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode();
+                LOG.info(userErrMsg + ", details: connectionId={}, connByUser={}",
+                        ctx.getConnectionId(), connCountByUser);
+                return new Pair<>(false, userErrMsg);
+            }
+
+            existing = connectionMap.putIfAbsent((long) ctx.getConnectionId(), ctx);
+            if (existing != null) {
+                return handleExistingConnection(ctx, existing);
+            }
+            connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), ignored -> new AtomicInteger()).incrementAndGet();
+
+            if (ctx.isArrowFlightSql()) {
+                ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
+                arrowFlightSqlConnectContextMap.put(context.getArrowFlightSqlToken(), context);
+            }
+
+            return new Pair<>(true, null);
+        } finally {
+            connStatsLock.unlock();
         }
-        if (executor.submit(new LoopHandler(context)) == null) {
-            LOG.warn("Submit one thread failed.");
-            return false;
-        }
-        return true;
     }
 
-    // Register one connection with its connection id.
-    public boolean registerConnection(ConnectContext ctx) {
-        if (numberConnection.get() >= maxConnections.get()) {
-            return false;
+    private Pair<Boolean, String> handleExistingConnection(ConnectContext ctx, ConnectContext existing) {
+        if (existing == ctx) {
+            return Pair.create(true, null);
         }
-        // Check user
-        if (connCountByUser.get(ctx.getQualifiedUser()) == null) {
-            connCountByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
+        String message = "Connection ID " + ctx.getConnectionId() + " is already in use";
+        LOG.warn("{}. existingUser={}, newUser={}", message, existing.getQualifiedUser(), ctx.getQualifiedUser());
+        return Pair.create(false, message);
+    }
+
+    public Pair<Boolean, String> onUserChanged(ConnectContext ctx, String oldQualifiedUser, String newQualifiedUser) {
+        if (Objects.equals(oldQualifiedUser, newQualifiedUser)) {
+            return new Pair<>(true, null);
         }
-        int currentConns = connCountByUser.get(ctx.getQualifiedUser()).get();
-        long currentMaxConns = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
-        if (currentConns >= currentMaxConns) {
-            return false;
+
+        if (newQualifiedUser == null) {
+            return new Pair<>(false, "new qualifiedUser is null");
         }
-        numberConnection.incrementAndGet();
-        connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
-        connectionMap.put((long) ctx.getConnectionId(), ctx);
-        return true;
+
+        try {
+            connStatsLock.lock();
+            AtomicInteger newCounter = connCountByUser.computeIfAbsent(newQualifiedUser, k -> new AtomicInteger(0));
+            int currentNewCount = newCounter.get();
+            long currentUserMaxConn = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getMaxConn(newQualifiedUser);
+
+            if (currentNewCount >= currentUserMaxConn) {
+                int totalConn = connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum();
+                String userErrMsg = "Reach user-level(qualifiedUser: " + newQualifiedUser
+                        + ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, "
+                        + "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size="
+                        + connectionMap.size() + ", connByUser.totConn=" + totalConn
+                        + ", user.currConn=" + currentNewCount;
+                LOG.info("{}, details: connectionId={}, connByUser={}", userErrMsg, ctx.getConnectionId(), connCountByUser);
+                return new Pair<>(false, userErrMsg);
+            }
+
+            newCounter.incrementAndGet();
+
+            if (oldQualifiedUser != null) {
+                AtomicInteger oldCounter = connCountByUser.get(oldQualifiedUser);
+                if (oldCounter != null) {
+                    int oldCountAfterDecrement = oldCounter.decrementAndGet();
+                    if (oldCountAfterDecrement < 0) {
+                        LOG.warn("Negative connection count detected for user {} during user change of connection {}",
+                                oldQualifiedUser, ctx.getConnectionId());
+                        oldCounter.set(0);
+                        oldCountAfterDecrement = 0;
+                    }
+                    if (oldCountAfterDecrement == 0) {
+                        connCountByUser.remove(oldQualifiedUser, oldCounter);
+                    }
+                } else {
+                    LOG.warn("Missing connection counter for user {} during user change of connection {}",
+                            oldQualifiedUser, ctx.getConnectionId());
+                }
+            }
+            return new Pair<>(true, null);
+        } finally {
+            connStatsLock.unlock();
+        }
     }
 
     public void unregisterConnection(ConnectContext ctx) {
-        if (connectionMap.remove((long) ctx.getConnectionId()) != null) {
-            numberConnection.decrementAndGet();
-            AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
-            if (conns != null) {
-                conns.decrementAndGet();
+        boolean removed;
+        try {
+            connStatsLock.lock();
+            // Identity-aware remove: only drop the mapping if the entry at this
+            // connectionId is this exact context. A context can hold a stale
+            // connectionId after a failed registerConnection(), and the 24-bit
+            // counter in ConnectionIdGenerator wraps after 2^24 connections, so
+            // a blind remove(key) risks evicting a different live session that
+            // happens to own the same id.
+            removed = connectionMap.remove((long) ctx.getConnectionId(), ctx);
+            if (removed) {
+                AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
+                if (conns != null) {
+                    if (conns.decrementAndGet() <= 0) {
+                        connCountByUser.remove(ctx.getQualifiedUser());
+                    }
+                }
+                LOG.info("Connection closed. remote={}, connectionId={}, qualifiedUser={}, user.currConn={}",
+                        ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
+                        ctx.getQualifiedUser(), conns != null ? Integer.toString(conns.get()) : "nil");
             }
-            LOG.info("Connection closed. remote={}, connectionId={}",
-                    ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId());
+
+            if (ctx.isArrowFlightSql()) {
+                ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
+                arrowFlightSqlConnectContextMap.remove(context.getArrowFlightSqlToken());
+            }
+        } finally {
+            connStatsLock.unlock();
+        }
+
+        if (removed) {
+            ctx.cleanTemporaryTable();
         }
     }
 
@@ -161,84 +289,161 @@ public class ConnectScheduler {
         return connectionMap.get(connectionId);
     }
 
-    public int getConnectionNum() {
-        return numberConnection.get();
+    public ArrowFlightSqlConnectContext getArrowFlightSqlConnectContext(String token) {
+        return arrowFlightSqlConnectContextMap.get(token);
     }
 
-    private List<ConnectContext.ThreadInfo> getAllConnThreadInfoByUser(ConnectContext connectContext, String user) {
-        List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
-        ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
+    public ConnectContext findContextByQueryId(String queryId) {
+        return connectionMap.values().stream().filter(
+                        (Predicate<ConnectContext>) c ->
+                                c.getQueryId() != null
+                                        && queryId.equals(c.getQueryId().toString())
+                )
+                .findFirst().orElse(null);
+    }
 
-        for (ConnectContext ctx : connectionMap.values()) {
-            if (!ctx.getQualifiedUser().equals(user)) {
+    public ConnectContext findContextByCustomQueryId(String customQueryId) {
+        return connectionMap.values().stream().filter(
+                (Predicate<ConnectContext>) c -> customQueryId.equals(c.getCustomQueryId())).findFirst().orElse(null);
+    }
+
+    public int getConnectionNum() {
+        return connectionMap.size();
+    }
+
+    public Map<String, AtomicInteger> getUserConnectionMap() {
+        return connCountByUser;
+    }
+
+    public Map<Long, ConnectContext> getCurrentConnectionMap() {
+        return connectionMap;
+    }
+
+    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext currentContext, String forUser) {
+        List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
+        for (ConnectContext contextToShow : connectionMap.values()) {
+            // Check authorization first.
+            if (!contextToShow.getQualifiedUser().equals(currentContext.getCurrentUserIdentity().getUser())) {
                 try {
-                    Authorizer.checkSystemAction(currContext.getCurrentUserIdentity(),
-                            currContext.getCurrentRoleIds(), PrivilegeType.OPERATE);
+                    Authorizer.checkSystemAction(currentContext, PrivilegeType.OPERATE);
                 } catch (AccessDeniedException e) {
                     continue;
                 }
             }
 
-            infos.add(ctx.toThreadInfo());
+            // Check whether it's the connection for the specified user.
+            if ((forUser != null && !contextToShow.getQualifiedUser().equals(forUser)) ||
+                    (Config.authorization_enable_admin_user_protection &&
+                            contextToShow.getQualifiedUser().equals(AuthenticationMgr.ROOT_USER))) {
+                continue;
+            }
+
+            infos.add(contextToShow.toThreadInfo());
         }
         return infos;
     }
 
-    public List<ConnectContext.ThreadInfo> listConnection(String user) {
-        return getAllConnThreadInfoByUser(null, user);
+    public Set<UUID> listAllSessionsId() {
+        Set<UUID> sessionIds = new HashSet<>();
+        try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
+            connectionMap.values().forEach(ctx -> {
+                sessionIds.add(ctx.getSessionId());
+            });
+        }
+        return sessionIds;
     }
 
-    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String user) {
-        return getAllConnThreadInfoByUser(context, user);
+    public int getTotalConnCount() {
+        return connectionMap.size();
     }
 
-    private class LoopHandler implements Runnable {
-        ConnectContext context;
+    public void closeAllIdleConnection() {
+        try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
+            connectionMap.values().forEach(context -> {
+                if (context.isIdleLastFor(1000)) {
+                    context.cleanup();
+                }
+            });
+        }
+    }
 
-        LoopHandler(ConnectContext context) {
-            this.context = context;
+    public void printAllRunningQuery() {
+        connectionMap.values().stream().forEach(ctx -> {
+            if (ctx.getCommand() == MysqlCommand.COM_QUERY || ctx.getCommand() == MysqlCommand.COM_STMT_EXECUTE ||
+                    ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE) {
+                if (ctx.getExecutor() != null && ctx.getExecutor().getParsedStmt() != null &&
+                        ctx.getExecutor().getParsedStmt().getOrigStmt() != null) {
+                    long threadId = ctx.getCurrentThreadId();
+                    long theadAllocatedBytes = 0;
+                    if (threadId != 0) {
+                        theadAllocatedBytes = ConnectProcessor.getThreadAllocatedBytes(threadId) -
+                                ctx.getCurrentThreadAllocatedMemory();
+                    }
+                    LOG.warn("FE ShutDown! Running Query:{},  QueryFEAllocatedMemory: {}",
+                            ctx.getExecutor().getParsedStmt().getOrigStmt().getOrigStmt(), theadAllocatedBytes);
+                }
+            }
+        });
+    }
+
+    /**
+     * Generates a unique connection ID by combining the frontend node's GID and an atomic counter.
+     * <p>
+     * The connection ID structure:
+     * - The higher 8 bits (bits 24-31) represent the frontend node's GID (masked to 8 bits).
+     * - The lower 24 bits (bits 0-23) represent an incrementing counter that resets at 2^24.
+     *
+     * @return a unique connection ID
+     */
+    public int getNextConnectionId() throws ConnectionIdExhaustedException {
+        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+        int fePrefix = (frontend.getFid() & 0xFF) << 24;
+        for (int attempt = 0; attempt < connectionIdGenerator.getThreshold(); attempt++) {
+            int candidate = fePrefix | (connectionIdGenerator.incrementAndGet() & CONNECTION_ID_MASK);
+            if (!connectionMap.containsKey((long) candidate)) {
+                return candidate;
+            }
+        }
+        throw new ConnectionIdExhaustedException(
+                "No available connection ID on frontend " + frontend.getNodeName());
+    }
+
+    @VisibleForTesting
+    public void setNextConnectionId(int connectionId) {
+        connectionIdGenerator.counter.set(connectionId);
+    }
+
+    public static class ConnectionIdGenerator {
+        // Atomic counter to ensure thread-safe increments
+        private final AtomicInteger counter;
+        // Threshold value at which the counter resets
+        private final int threshold;
+
+        /**
+         * Default constructor, setting the threshold to 2^24 (16,777,216).
+         * This ensures that the counter cycles within 24-bit range.
+         */
+        public ConnectionIdGenerator() {
+            this(CONNECTION_ID_SPACE);
         }
 
-        @Override
-        public void run() {
-            try {
-                // Set thread local info
-                context.setThreadLocalInfo();
-                context.setConnectScheduler(ConnectScheduler.this);
-                // authenticate check failed.
-                MysqlProto.NegotiateResult result = null;
-                try {
-                    result = MysqlProto.negotiate(context);
-                    if (!result.isSuccess()) {
-                        return;
-                    }
+        public ConnectionIdGenerator(int threshold) {
+            this.counter = new AtomicInteger(0);
+            this.threshold = threshold;
+        }
 
-                    if (registerConnection(context)) {
-                        MysqlProto.sendResponsePacket(context);
-                    } else {
-                        context.getState().setError("Reach limit of connections");
-                        MysqlProto.sendResponsePacket(context);
-                        return;
-                    }
-                } finally {
-                    LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
-                            result == null ? null : result.getAuthPacket());
-                }
+        public int getThreshold() {
+            return threshold;
+        }
 
-                context.setStartTime();
-                ConnectProcessor processor = new ConnectProcessor(context);
-                processor.loop();
-            } catch (Exception e) {
-                // for unauthorized access such lvs probe request, may cause exception, just log it in debug level
-                if (context.getCurrentUserIdentity() != null) {
-                    LOG.warn("connect processor exception because ", e);
-                } else {
-                    LOG.debug("connect processor exception because ", e);
-                }
-            } finally {
-                unregisterConnection(context);
-                context.cleanup();
-            }
+        /**
+         * Atomically increments the counter and resets it when the threshold is reached.
+         * Ensures the counter remains within the valid 24-bit range.
+         *
+         * @return the updated counter value after incrementing
+         */
+        public int incrementAndGet() {
+            return counter.updateAndGet(currentValue -> (currentValue + 1 >= threshold) ? 0 : currentValue + 1);
         }
     }
 }

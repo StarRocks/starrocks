@@ -14,310 +14,337 @@
 
 #include "storage/chunk_helper.h"
 
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "base/testutil/assert.h"
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
-#include "column/field.h"
+#include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/schema.h"
-#include "common/object_pool.h"
+#include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
-#include "runtime/descriptor_helper.h"
-#include "runtime/descriptors.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
-#include "types/logical_type.h"
-#include "util/logging.h"
+#include "storage_primitive/schema_helper.h"
 
 namespace starrocks {
 
-class ChunkHelperTest : public testing::Test {
-public:
-    void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
-                           int32_t length, bool is_nullable);
-    SchemaPtr gen_v_schema(bool is_nullable);
-    void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
-    void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
-    void check_column(Column* column, LogicalType type, size_t row_size);
+namespace {
 
-private:
-    LogicalType _type[9] = {TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,     TYPE_BIGINT, TYPE_LARGEINT,
-                            TYPE_FLOAT,   TYPE_DOUBLE,   TYPE_VARCHAR, TYPE_CHAR};
+TabletSchemaCSPtr create_char_tablet_schema(size_t length) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(1024);
+    schema_pb.set_next_column_unique_id(1);
 
-    LogicalType _primitive_type[9] = {LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT, LogicalType::TYPE_INT,
-                                      LogicalType::TYPE_BIGINT,  LogicalType::TYPE_LARGEINT, LogicalType::TYPE_FLOAT,
-                                      LogicalType::TYPE_DOUBLE,  LogicalType::TYPE_VARCHAR,  LogicalType::TYPE_CHAR};
+    ColumnPB* column = schema_pb.add_column();
+    column->set_unique_id(0);
+    column->set_name("c0");
+    column->set_type("CHAR");
+    column->set_is_key(true);
+    column->set_is_nullable(true);
+    column->set_length(length);
+    column->set_index_length(length);
 
-    TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos);
-    TupleDescriptor* _create_tuple_desc();
+    return TabletSchema::create(schema_pb);
+}
 
-    // A tuple with one column
-    TupleDescriptor* _create_simple_desc() {
-        TDescriptorTableBuilder table_builder;
-        TTupleDescriptorBuilder tuple_builder;
+NullableColumn::MutablePtr make_nullable_binary_column(const std::vector<std::string_view>& values,
+                                                       const std::vector<uint8_t>& nulls) {
+    CHECK_EQ(values.size(), nulls.size());
 
-        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_INT, "c0", 0));
-        tuple_builder.build(&table_builder);
-
-        std::vector<TTupleId> row_tuples{0};
-        std::vector<bool> nullable_tuples{true};
-        DescriptorTbl* tbl = nullptr;
-        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                      .ok());
-
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
-
-        return tuple_desc;
+    auto data_column = BinaryColumn::create();
+    for (std::string_view value : values) {
+        data_column->append(Slice(value));
     }
 
-    RuntimeState _runtime_state;
-    ObjectPool _pool;
+    auto null_column = NullColumn::create();
+    null_column->get_data().insert(null_column->get_data().end(), nulls.begin(), nulls.end());
+    auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    nullable_column->update_has_null();
+    return nullable_column;
+}
+
+std::string padded_char(std::string_view value, size_t length) {
+    std::string result(value.substr(0, length));
+    result.resize(length, char(0));
+    return result;
+}
+
+void expect_padded_char_column(const BinaryColumn& column, const std::vector<std::string>& expected) {
+    const auto& offsets = column.get_offset();
+    ASSERT_EQ(expected.size() + 1, offsets.size());
+    for (size_t i = 0; i < offsets.size(); ++i) {
+        EXPECT_EQ(i * 4, offsets[i]);
+    }
+
+    for (size_t i = 0; i < expected.size(); ++i) {
+        Slice value = column.get_slice(i);
+        EXPECT_EQ(expected[i], std::string(value.data, value.size));
+    }
+}
+
+} // namespace
+
+class ChunkHelperTest : public ::testing::Test {};
+
+TEST_F(ChunkHelperTest, PaddingNullableCharColumnSkipsNullRowsWhenNullsAreDense) {
+    auto tablet_schema = create_char_tablet_schema(4);
+    Field field = StorageSchemaHelper::convert_field(0, tablet_schema->column(0));
+    auto column = make_nullable_binary_column({"ab", "null", "wxyzq", "skip", "defg", "hi", "null", ""},
+                                              {0, 1, 0, 1, 0, 0, 1, 0});
+
+    ChunkHelper::padding_char_column(tablet_schema, field, column.get());
+
+    auto* result = down_cast<NullableColumn*>(column.get());
+    ASSERT_TRUE(result->has_null());
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_TRUE(result->is_null(3));
+    EXPECT_FALSE(result->is_null(4));
+    EXPECT_FALSE(result->is_null(5));
+    EXPECT_TRUE(result->is_null(6));
+    EXPECT_FALSE(result->is_null(7));
+
+    auto* data_column = down_cast<BinaryColumn*>(result->data_column_raw_ptr());
+    expect_padded_char_column(*data_column,
+                              {padded_char("ab", 4), padded_char("", 4), padded_char("wxyzq", 4), padded_char("", 4),
+                               padded_char("defg", 4), padded_char("hi", 4), padded_char("", 4), padded_char("", 4)});
+}
+
+TEST_F(ChunkHelperTest, PaddingNullableCharColumnCopiesAllRowsWhenNullsAreSparse) {
+    auto tablet_schema = create_char_tablet_schema(4);
+    Field field = StorageSchemaHelper::convert_field(0, tablet_schema->column(0));
+    auto column = make_nullable_binary_column({"a", "bc", "def", "nullv", "wxyzq", "m", "no", "pqrs"},
+                                              {0, 0, 0, 1, 0, 0, 0, 0});
+
+    ChunkHelper::padding_char_column(tablet_schema, field, column.get());
+
+    auto* result = down_cast<NullableColumn*>(column.get());
+    ASSERT_TRUE(result->has_null());
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_FALSE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_TRUE(result->is_null(3));
+    EXPECT_FALSE(result->is_null(4));
+    EXPECT_FALSE(result->is_null(5));
+    EXPECT_FALSE(result->is_null(6));
+    EXPECT_FALSE(result->is_null(7));
+
+    auto* data_column = down_cast<BinaryColumn*>(result->data_column_raw_ptr());
+    expect_padded_char_column(
+            *data_column, {padded_char("a", 4), padded_char("bc", 4), padded_char("def", 4), padded_char("nullv", 4),
+                           padded_char("wxyzq", 4), padded_char("m", 4), padded_char("no", 4), padded_char("pqrs", 4)});
+}
+
+static ChunkPtr make_string_chunk(const std::vector<std::string>& values) {
+    // One row per value, and one array element per row, so that every invariant Chunk and its
+    // columns assert on lines up: each column's size equals the chunk's row count, the array's last
+    // offset equals its element count, and each null column matches the column it annotates.
+    const size_t rows = values.size();
+    auto binary = BinaryColumn::create();
+    auto elements = BinaryColumn::create();
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    for (size_t i = 0; i < rows; i++) {
+        binary->append(Slice(values[i]));
+        elements->append(Slice(values[i]));
+        offsets->append(static_cast<uint32_t>(i + 1));
+    }
+    // ArrayColumn requires its elements to be nullable.
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(elements), NullColumn::create(rows, 0)),
+                                     std::move(offsets));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(std::move(binary), 0);
+    chunk->append_column(NullableColumn::create(std::move(array), NullColumn::create(rows, 0)), 1);
+    return chunk;
+}
+
+TEST_F(ChunkHelperTest, reject_if_over_capacity_accepts_an_ordinary_chunk) {
+    auto chunk = make_string_chunk({"alpha", "beta", "gamma"});
+    // Covers the nested case too: the array column has to be walked down to the binary column
+    // holding its elements. On this branch those offsets are AdaptiveOffsets and the byte limb
+    // is MAX_LARGE_CAPACITY_LIMIT, so this check only fires on a genuinely unaddressable chunk;
+    // it is here to keep the path in step with branch-3.5-cc, where the same offsets are uint32.
+    ASSERT_OK(ChunkHelper::reject_if_over_capacity(*chunk, "source chunk", 10001, 4242));
+
+    Chunk empty;
+    ASSERT_OK(ChunkHelper::reject_if_over_capacity(empty, "source chunk", 10001, 4242));
+}
+
+class ChunkPipelineAccumulatorTest : public ::testing::Test {
+protected:
+    ChunkPtr _generate_chunk(size_t rows, size_t cols, size_t reserve_size = 0);
 };
 
-TSlotDescriptor ChunkHelperTest::_create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
-    TSlotDescriptorBuilder builder;
-
-    if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_CHAR) {
-        return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
-    } else {
-        return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
+ChunkPtr ChunkPipelineAccumulatorTest::_generate_chunk(size_t rows, size_t cols, size_t reserve_size) {
+    auto chunk = std::make_shared<Chunk>();
+    for (size_t i = 0; i < cols; i++) {
+        auto col = Int8Column::create(rows, reserve_size);
+        chunk->append_column(std::move(col), i);
     }
+    return chunk;
 }
 
-TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
-    TDescriptorTableBuilder table_builder;
-    TTupleDescriptorBuilder tuple_builder;
+TEST_F(ChunkPipelineAccumulatorTest, test_push) {
+    ChunkPipelineAccumulator accumulator;
 
-    for (size_t i = 0; i < 9; i++) {
-        tuple_builder.add_slot(_create_slot_desc(_primitive_type[i], "c" + std::to_string(i), 0));
-    }
-
-    tuple_builder.build(&table_builder);
-
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                  .ok());
-
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
-    auto* tuple_desc = row_desc->tuple_descriptors()[0];
-
-    return tuple_desc;
-}
-
-void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key,
-                                        const std::string& type, int32_t length, bool is_nullable) {
-    ColumnPB* column = tablet_schema_pb.add_column();
-    column->set_unique_id(id);
-    column->set_name("c" + std::to_string(id));
-    column->set_type(type);
-    column->set_is_key(is_key);
-    column->set_length(length);
-    column->set_is_nullable(is_nullable);
-    column->set_aggregation("NONE");
-}
-
-SchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
-    Fields fields;
-    fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(TYPE_TINYINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(TYPE_SMALLINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(2, "c2", get_type_info(TYPE_INT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(3, "c3", get_type_info(TYPE_BIGINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(4, "c4", get_type_info(TYPE_LARGEINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(5, "c5", get_type_info(TYPE_FLOAT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(TYPE_DOUBLE), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(TYPE_VARCHAR), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(TYPE_CHAR), is_nullable));
-    return std::make_shared<Schema>(fields);
-}
-
-void ChunkHelperTest::check_chunk(Chunk* chunk, size_t column_size, size_t row_size) {
-    CHECK_EQ(chunk->columns().size(), column_size);
-    for (size_t i = 0; i < column_size; i++) {
-        check_column(chunk->get_column_by_index(i).get(), _type[i], row_size);
-    }
-}
-
-void ChunkHelperTest::check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size) {
-    CHECK_EQ(chunk->columns().size(), column_size);
-    for (size_t i = 0; i < column_size; i++) {
-        Column* d_column =
-                (reinterpret_cast<NullableColumn*>(chunk->get_column_by_index(i).get()))->data_column().get();
-        check_column(d_column, _type[i], row_size);
-    }
-}
-
-void ChunkHelperTest::check_column(Column* column, LogicalType type, size_t row_size) {
-    ASSERT_EQ(column->size(), row_size);
-
-    switch (type) {
-    case TYPE_TINYINT: {
-        const auto* data = reinterpret_cast<const int8_t*>(static_cast<Int8Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int8_t>(i * 2));
-        }
-        break;
-    }
-    case TYPE_SMALLINT: {
-        const auto* data = reinterpret_cast<const int16_t*>(static_cast<Int16Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int16_t>(i * 2 * 10));
-        }
-        break;
-    }
-    case TYPE_INT: {
-        const auto* data = reinterpret_cast<const int32_t*>(static_cast<Int32Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int32_t>(i * 2 * 100));
-        }
-        break;
-    }
-    case TYPE_BIGINT: {
-        const auto* data = reinterpret_cast<const int64_t*>(static_cast<Int64Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int64_t>(i * 2 * 1000));
-        }
-        break;
-    }
-    case TYPE_LARGEINT: {
-        const auto* data = reinterpret_cast<const int128_t*>(static_cast<Int128Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int128_t>(i * 2 * 10000));
-        }
-        break;
-    }
-    case TYPE_FLOAT: {
-        const auto* data = reinterpret_cast<const float*>(static_cast<FloatColumn*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<float>(i * 2 * 100000));
-        }
-        break;
-    }
-    case TYPE_DOUBLE: {
-        const auto* data = reinterpret_cast<const double*>(static_cast<DoubleColumn*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<double>(i * 2 * 1000000));
-        }
-        break;
-    }
-    case TYPE_VARCHAR: {
-        const auto* data = reinterpret_cast<const BinaryColumn*>(column);
-        for (int i = 0; i < row_size; i++) {
-            Slice l = data->get_slice(i);
-            Slice r(std::to_string(i * 2 * 10000000));
-            ASSERT_EQ(l, r);
-        }
-        break;
-    }
-    case TYPE_CHAR: {
-        const auto* data = reinterpret_cast<const BinaryColumn*>(column);
-        for (int i = 0; i < row_size; i++) {
-            Slice l = data->get_slice(i);
-            Slice r(std::to_string(i * 2 * 100000000));
-            ASSERT_EQ(l, r);
-        }
-        break;
-    }
-    default:
-        break;
-    }
-}
-
-TEST_F(ChunkHelperTest, NewChunkWithTuple) {
-    auto* tuple_desc = _create_tuple_desc();
-
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1024);
-
-    // check
-    ASSERT_EQ(chunk->num_columns(), 9);
-    ASSERT_EQ(chunk->get_column_by_slot_id(0)->get_name(), "integral-1");
-    ASSERT_EQ(chunk->get_column_by_slot_id(1)->get_name(), "integral-2");
-    ASSERT_EQ(chunk->get_column_by_slot_id(2)->get_name(), "integral-4");
-    ASSERT_EQ(chunk->get_column_by_slot_id(3)->get_name(), "integral-8");
-    ASSERT_EQ(chunk->get_column_by_slot_id(4)->get_name(), "int128");
-    ASSERT_EQ(chunk->get_column_by_slot_id(5)->get_name(), "float-4");
-    ASSERT_EQ(chunk->get_column_by_slot_id(6)->get_name(), "float-8");
-    ASSERT_EQ(chunk->get_column_by_slot_id(7)->get_name(), "binary");
-    ASSERT_EQ(chunk->get_column_by_slot_id(8)->get_name(), "binary");
-}
-
-TEST_F(ChunkHelperTest, ReorderChunk) {
-    auto* tuple_desc = _create_tuple_desc();
-
-    auto reversed_slots = tuple_desc->slots();
-    std::reverse(reversed_slots.begin(), reversed_slots.end());
-    auto chunk = ChunkHelper::new_chunk(reversed_slots, 1024);
-
-    // check
-    ASSERT_EQ(chunk->num_columns(), 9);
-    ASSERT_EQ(chunk->columns()[8]->get_name(), "integral-1");
-    ASSERT_EQ(chunk->columns()[7]->get_name(), "integral-2");
-    ASSERT_EQ(chunk->columns()[6]->get_name(), "integral-4");
-    ASSERT_EQ(chunk->columns()[5]->get_name(), "integral-8");
-    ASSERT_EQ(chunk->columns()[4]->get_name(), "int128");
-    ASSERT_EQ(chunk->columns()[3]->get_name(), "float-4");
-    ASSERT_EQ(chunk->columns()[2]->get_name(), "float-8");
-    ASSERT_EQ(chunk->columns()[1]->get_name(), "binary");
-    ASSERT_EQ(chunk->columns()[0]->get_name(), "binary");
-
-    ChunkHelper::reorder_chunk(*tuple_desc, chunk.get());
-    // check
-    ASSERT_EQ(chunk->num_columns(), 9);
-    ASSERT_EQ(chunk->columns()[0]->get_name(), "integral-1");
-    ASSERT_EQ(chunk->columns()[1]->get_name(), "integral-2");
-    ASSERT_EQ(chunk->columns()[2]->get_name(), "integral-4");
-    ASSERT_EQ(chunk->columns()[3]->get_name(), "integral-8");
-    ASSERT_EQ(chunk->columns()[4]->get_name(), "int128");
-    ASSERT_EQ(chunk->columns()[5]->get_name(), "float-4");
-    ASSERT_EQ(chunk->columns()[6]->get_name(), "float-8");
-    ASSERT_EQ(chunk->columns()[7]->get_name(), "binary");
-    ASSERT_EQ(chunk->columns()[8]->get_name(), "binary");
-}
-
-TEST_F(ChunkHelperTest, Accumulator) {
-    constexpr size_t kDesiredSize = 4096;
-    auto* tuple_desc = _create_simple_desc();
-    ChunkAccumulator accumulator(kDesiredSize);
-    size_t input_rows = 0;
-    size_t output_rows = 0;
-    // push small chunks
-    for (int i = 0; i < 10; i++) {
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1025);
-        chunk->get_column_by_index(0)->append_default(1025);
-        input_rows += 1025;
-
-        static_cast<void>(accumulator.push(std::move(chunk)));
-        if (ChunkPtr output = accumulator.pull()) {
-            output_rows += output->num_rows();
-            EXPECT_EQ(kDesiredSize, output->num_rows());
-        }
-    }
-    // push large chunks
-    for (int i = 0; i < 10; i++) {
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 8888);
-        chunk->get_column_by_index(0)->append_default(8888);
-        input_rows += 8888;
-        static_cast<void>(accumulator.push(std::move(chunk)));
-    }
-
+    // rows reach limit
+    accumulator.push(_generate_chunk(4093, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    auto result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 4093);
     accumulator.finalize();
-    while (ChunkPtr output = accumulator.pull()) {
-        EXPECT_LE(output->num_rows(), kDesiredSize);
-        output_rows += output->num_rows();
-    }
-    EXPECT_EQ(input_rows, output_rows);
+    ASSERT_FALSE(accumulator.has_output());
 
-    // push empty chunks
-    for (int i = 0; i < ChunkAccumulator::kAccumulateLimit; i++) {
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-        static_cast<void>(accumulator.push(std::move(chunk)));
+    // mem reach limit
+    accumulator.reset_state();
+    accumulator.push(_generate_chunk(2048, 64));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 2048);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and reach rows limit
+    accumulator.reset_state();
+    for (size_t i = 0; i < 3; i++) {
+        accumulator.push(_generate_chunk(1000, 1));
+        ASSERT_FALSE(accumulator.has_output());
     }
-    EXPECT_TRUE(accumulator.reach_limit());
-    auto output = accumulator.pull();
-    EXPECT_EQ(nullptr, output);
-    EXPECT_TRUE(accumulator.reach_limit());
+    accumulator.push(_generate_chunk(1000, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 4000);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and read mem limit
+    accumulator.reset_state();
+    for (size_t i = 0; i < 2; i++) {
+        accumulator.push(_generate_chunk(1000, 30));
+        ASSERT_FALSE(accumulator.has_output());
+    }
+    accumulator.push(_generate_chunk(1000, 30));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and rows overflow
+    accumulator.reset_state();
+    accumulator.push(_generate_chunk(3000, 1));
+    ASSERT_FALSE(accumulator.has_output());
+    accumulator.push(_generate_chunk(3000, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    accumulator.finalize();
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    ASSERT_FALSE(accumulator.has_output());
+
+    // reserve large and use less
+    accumulator.reset_state();
+    accumulator.push(_generate_chunk(1000, 25, 4000));
+    ASSERT_FALSE(accumulator.has_output());
+    accumulator.push(_generate_chunk(1000, 25, 4000));
+    ASSERT_FALSE(accumulator.has_output());
+    accumulator.push(_generate_chunk(1000, 25, 4000));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    ASSERT_FALSE(accumulator.has_output());
+}
+
+TEST_F(ChunkPipelineAccumulatorTest, test_owner_info) {
+    constexpr size_t kDesiredSize = 4096;
+
+    {
+        ChunkPipelineAccumulator accumulator;
+        accumulator.set_max_size(kDesiredSize);
+        DCHECK(accumulator.need_input());
+        // same owner info
+        {
+            auto chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(1, false);
+            accumulator.push(std::move(chunk));
+        }
+        DCHECK(accumulator.need_input());
+        {
+            // new empty chunk
+            auto chunk = std::make_unique<Chunk>();
+            chunk->owner_info().set_owner_id(1, true);
+            accumulator.push(std::move(chunk));
+        }
+
+        DCHECK(!accumulator.need_input());
+        DCHECK(accumulator.has_output());
+        auto chunk = std::move(accumulator.pull());
+        DCHECK(!chunk->owner_info().is_last_chunk());
+        accumulator.finalize();
+        DCHECK(accumulator.has_output());
+        chunk = std::move(accumulator.pull());
+        DCHECK(chunk->owner_info().is_last_chunk());
+    }
+
+    {
+        ChunkPipelineAccumulator accumulator;
+        accumulator.set_max_size(kDesiredSize);
+        DCHECK(accumulator.need_input());
+        // same owner info
+        {
+            auto chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(2, false);
+            accumulator.push(std::move(chunk));
+            chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(2, true);
+            accumulator.push(std::move(chunk));
+        }
+        DCHECK(accumulator.has_output());
+        auto chunk = std::move(accumulator.pull());
+        DCHECK(!chunk->owner_info().is_last_chunk());
+    }
+
+    {
+        ChunkPipelineAccumulator accumulator;
+        accumulator.set_max_size(kDesiredSize);
+        DCHECK(accumulator.need_input());
+        // not the same owner info
+        {
+            auto chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(3, false);
+            accumulator.push(std::move(chunk));
+            chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(4, false);
+            accumulator.push(std::move(chunk));
+        }
+        auto chunk = std::move(accumulator.pull());
+        DCHECK_EQ(chunk->owner_info().owner_id(), 3);
+    }
+
+    {
+        ChunkPipelineAccumulator accumulator;
+        accumulator.set_max_size(kDesiredSize);
+        DCHECK(accumulator.need_input());
+        // not the same owner info
+        {
+            auto chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(1, true);
+            accumulator.push(std::move(chunk));
+            DCHECK(!accumulator.need_input());
+        }
+        auto chunk = std::move(accumulator.pull());
+        DCHECK(chunk->owner_info().is_last_chunk());
+    }
 }
 
 } // namespace starrocks

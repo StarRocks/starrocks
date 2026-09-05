@@ -12,53 +12,68 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
-import com.google.gson.annotations.Expose;
+import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserRef;
 
-import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
-public class UserAuthenticationInfo implements Writable {
+public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
     protected static final String ANY_HOST = "%";
     protected static final String ANY_USER = "%";
 
     @SerializedName(value = "p")
-    private byte[] password = MysqlPassword.EMPTY_PASSWORD;
+    private byte[] password;
     @SerializedName(value = "a")
     private String authPlugin = null;
     @SerializedName(value = "t")
-    private String textForAuthPlugin = null;
+    private String authString = null;
     @SerializedName(value = "h")
     private String origHost;
     @SerializedName(value = "u")
     private String origUser;
 
-    @Expose(serialize = false)
     private boolean isAnyUser;
-    @Expose(serialize = false)
     private boolean isAnyHost;
-    @Expose(serialize = false)
     protected PatternMatcher userPattern;
-    @Expose(serialize = false)
     protected PatternMatcher hostPattern;
 
-    /**
-     * extra user authentication info when authenticating, it may have different usage for different
-     * auth plugin, since the authenticate info for different auth mechanism can vary a log, here we
-     * use a general Object map to represent this requirement.
-     */
-    public Map<String, Object> extraInfo = new HashMap<>();
+    public UserAuthenticationInfo(UserRef user, UserAuthOption userAuthOption) {
+        String authPluginUsing;
+        if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
+            authPluginUsing = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString();
+        } else {
+            authPluginUsing = userAuthOption.getAuthPlugin();
+        }
+
+        this.authPlugin = authPluginUsing;
+        
+        if (authPluginUsing.equalsIgnoreCase(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString())) {
+            byte[] passwordScrambled = MysqlPassword.EMPTY_PASSWORD;
+            if (userAuthOption != null) {
+                passwordScrambled = scramblePassword(userAuthOption.getAuthString(), userAuthOption.isPasswordPlain());
+            }
+            this.password = passwordScrambled;
+            this.authString = null;
+        } else {
+            this.password = MysqlPassword.EMPTY_PASSWORD;
+            this.authString = userAuthOption == null ? null : userAuthOption.getAuthString();
+        }
+
+        this.origUser = user.getUser();
+        this.origHost = user.getHost();
+
+        loadMysqlPattern();
+    }
 
     public boolean matchUser(String remoteUser) {
         return isAnyUser || userPattern.match(remoteUser);
@@ -68,16 +83,11 @@ public class UserAuthenticationInfo implements Writable {
         return isAnyHost || hostPattern.match(remoteHost);
     }
 
-    public void analyze() throws AuthenticationException {
+    private void loadMysqlPattern() {
         isAnyUser = origUser.equals(ANY_USER);
         isAnyHost = origHost.equals(ANY_HOST);
         userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
         hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public byte[] getPassword() {
@@ -92,25 +102,30 @@ public class UserAuthenticationInfo implements Writable {
         return origHost;
     }
 
-    public String getTextForAuthPlugin() {
-        return textForAuthPlugin;
+    public String getAuthString() {
+        return authString;
     }
 
-    public void setPassword(byte[] password) {
-        this.password = password;
+    public static UserAuthenticationInfo build(UserRef user, UserAuthOption userAuthOption) {
+        return new UserAuthenticationInfo(user, userAuthOption);
     }
 
-    public void setAuthPlugin(String authPlugin) {
-        this.authPlugin = authPlugin;
+    /**
+     * Get scrambled password from plain password
+     */
+    private static byte[] scramblePassword(String originalPassword, boolean isPasswordPlain) {
+        if (Strings.isNullOrEmpty(originalPassword)) {
+            return MysqlPassword.EMPTY_PASSWORD;
+        }
+        if (isPasswordPlain) {
+            return MysqlPassword.makeScrambledPassword(originalPassword);
+        } else {
+            return MysqlPassword.checkPassword(originalPassword);
+        }
     }
 
-    public void setTextForAuthPlugin(String textForAuthPlugin) {
-        this.textForAuthPlugin = textForAuthPlugin;
-    }
-
-    public void setOrigUserHost(String origUser, String origHost) throws AuthenticationException {
-        this.origUser = origUser;
-        this.origHost = origHost;
-        analyze();
+    @Override
+    public void gsonPostProcess() throws IOException {
+        loadMysqlPattern();
     }
 }

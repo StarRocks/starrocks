@@ -16,7 +16,9 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
+#include "column/vectorized_fwd.h"
+#include "gutil/casts.h"
 
 namespace starrocks {
 class FunctionContext;
@@ -25,26 +27,35 @@ namespace starrocks {
 
 class FunctionHelper {
 public:
+    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
+
     /**
      * if ptr is NullableColumn, return data column
      * else return ptr
      * @param ptr 
      */
-    static inline const ColumnPtr& get_data_column_of_nullable(const ColumnPtr& ptr) {
+    static inline ColumnPtr get_data_column_of_nullable(const ColumnPtr& ptr) {
         if (ptr->is_nullable()) {
-            return down_cast<NullableColumn*>(ptr.get())->data_column();
+            return down_cast<const NullableColumn*>(ptr.get())->data_column();
         }
         return ptr;
     }
+
+    /**
+     * get data of column.
+     * @param col, row_num, data 
+     */
+    template <typename ToColumnType, typename CppType>
+    static inline void get_data_of_column(const Column* col, size_t row_num, CppType& data);
 
     /**
      * if ptr is ConstColumn, return data column
      * else return ptr
      * @param ptr 
      */
-    static inline const ColumnPtr& get_data_column_of_const(const ColumnPtr& ptr) {
+    static inline ColumnPtr get_data_column_of_const(const ColumnPtr& ptr) {
         if (ptr->is_constant()) {
-            return down_cast<ConstColumn*>(ptr.get())->data_column();
+            return down_cast<const ConstColumn*>(ptr.get())->data_column();
         }
         return ptr;
     }
@@ -53,23 +64,45 @@ public:
      * if v1 is NullableColumn and v2 is NullableColumn, union
      * if v1 is NullableColumn and v2 is not NullableColumn, return v1.nullColumn
      * if v1 is not NullableColumn and v2 is NullableColumn, return v2.nullColumn
-     * if v1 is not NullableColumn and v2 is not NullableColumn, impossible
+     * if v1 is not NullableColumn and v2 is not NullableColumn, return nullptr
      * 
      * @param v1 
      * @param v2 
      */
-    static NullColumnPtr union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2);
+    static NullColumn::MutablePtr union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2);
 
     static void union_produce_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2,
-                                              NullColumnPtr* produce_null_column);
+                                              NullColumn::MutablePtr* produce_null_column);
 
-    static void union_produce_nullable_column(const ColumnPtr& v1, NullColumnPtr* produce_null_column);
+    static void union_produce_nullable_column(const ColumnPtr& v1, NullColumn::MutablePtr* produce_null_column);
 
-    static NullColumnPtr union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2);
+    static NullColumn::MutablePtr union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2);
 
     // merge a column and null_column and generate a column with null values.
     static ColumnPtr merge_column_and_null_column(ColumnPtr&& column, NullColumnPtr&& null_column);
 };
+
+template <typename ToColumnType, typename CppType>
+inline void FunctionHelper::get_data_of_column(const Column* col, size_t row_num, CppType& data) {
+    if (col->is_constant()) {
+        auto const_col = down_cast<const ConstColumn*>(col);
+        col = const_col->data_column().get();
+        row_num = 0;
+    }
+    const auto* column = down_cast<const ToColumnType*>(col);
+    data = column->immutable_data()[row_num];
+}
+
+template <>
+inline void FunctionHelper::get_data_of_column<BinaryColumn, Slice>(const Column* col, size_t row_num, Slice& data) {
+    if (col->is_constant()) {
+        auto const_col = down_cast<const ConstColumn*>(col);
+        col = const_col->data_column().get();
+        row_num = 0;
+    }
+    const auto* column = down_cast<const BinaryColumn*>(col);
+    data = column->get_slice(row_num);
+}
 
 #define DEFINE_VECTORIZED_FN(NAME) static StatusOr<ColumnPtr> NAME(FunctionContext* context, const Columns& columns)
 

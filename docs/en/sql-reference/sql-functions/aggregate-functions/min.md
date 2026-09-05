@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the minimum value of the expr expression."
 ---
 
-# MIN
+# min
 
-## Description
+
 
 Returns the minimum value of the expr expression.
 

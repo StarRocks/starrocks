@@ -1,41 +1,3 @@
-[sql]
-select
-    s_name,
-    s_address
-from
-    supplier,
-    nation
-where
-        s_suppkey in (
-        select
-            ps_suppkey
-        from
-            partsupp
-        where
-                ps_partkey in (
-                select
-                    p_partkey
-                from
-                    part
-                where
-                        p_name like 'sienna%'
-            )
-          and ps_availqty > (
-            select
-                    0.5 * sum(l_quantity)
-            from
-                lineitem
-            where
-                    l_partkey = ps_partkey
-              and l_suppkey = ps_suppkey
-              and l_shipdate >= date '1993-01-01'
-              and l_shipdate < date '1994-01-01'
-        )
-    )
-  and s_nationkey = n_nationkey
-  and n_name = 'ARGENTINA'
-order by
-    s_name ;
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:2: S_NAME | 3: S_ADDRESS
@@ -193,7 +155,7 @@ OutPut Exchange Id: 14
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (14: PS_PARTKEY), remote = true
 |  - filter_id = 2, build_expr = (15: PS_SUPPKEY), remote = false
-|  output columns: 15, 16, 48
+|  output columns: 15
 |  cardinality: 39029703
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -290,7 +252,7 @@ OutPut Exchange Id: 08
 6:OlapScanNode
 table: part, rollup: part
 preAggregation: on
-Predicates: 21: P_NAME LIKE 'sienna%'
+Predicates: [21: P_NAME, VARCHAR, false] LIKE 'sienna%'
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=63.0
 cardinality: 5000000
@@ -344,11 +306,11 @@ column statistics:
 {
   "statement": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like \u0027sienna%\u0027 ) and ps_availqty \u003e ( select 0.5 * sum(l_quantity) from lineitem where l_partkey \u003d ps_partkey and l_suppkey \u003d ps_suppkey and l_shipdate \u003e\u003d date \u00271993-01-01\u0027 and l_shipdate \u003c date \u00271994-01-01\u0027 ) ) and s_nationkey \u003d n_nationkey and n_name \u003d \u0027ARGENTINA\u0027 order by s_name ; ",
   "table_meta": {
-    "test.supplier": "CREATE TABLE `supplier` (\n  `S_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `S_NAME` char(25) NOT NULL COMMENT \"\",\n  `S_ADDRESS` varchar(40) NOT NULL COMMENT \"\",\n  `S_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n  `S_PHONE` char(15) NOT NULL COMMENT \"\",\n  `S_ACCTBAL` double NOT NULL COMMENT \"\",\n  `S_COMMENT` varchar(101) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`S_SUPPKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`S_SUPPKEY`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);",
-    "test.nation": "CREATE TABLE `nation` (\n  `N_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n  `N_NAME` char(25) NOT NULL COMMENT \"\",\n  `N_REGIONKEY` int(11) NOT NULL COMMENT \"\",\n  `N_COMMENT` varchar(152) NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`N_NATIONKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);",
-    "test.partsupp": "CREATE TABLE `partsupp` (\n  `PS_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `PS_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `PS_AVAILQTY` int(11) NOT NULL COMMENT \"\",\n  `PS_SUPPLYCOST` double NOT NULL COMMENT \"\",\n  `PS_COMMENT` varchar(199) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`PS_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`PS_PARTKEY`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);",
-    "test.part": "CREATE TABLE `part` (\n  `P_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `P_NAME` varchar(55) NOT NULL COMMENT \"\",\n  `P_MFGR` char(25) NOT NULL COMMENT \"\",\n  `P_BRAND` char(10) NOT NULL COMMENT \"\",\n  `P_TYPE` varchar(25) NOT NULL COMMENT \"\",\n  `P_SIZE` int(11) NOT NULL COMMENT \"\",\n  `P_CONTAINER` char(10) NOT NULL COMMENT \"\",\n  `P_RETAILPRICE` double NOT NULL COMMENT \"\",\n  `P_COMMENT` varchar(23) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`P_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`P_PARTKEY`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);",
-    "test.lineitem": "CREATE TABLE `lineitem` (\n  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n  `L_QUANTITY` double NOT NULL COMMENT \"\",\n  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n  `L_TAX` double NOT NULL COMMENT \"\",\n  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`L_ORDERKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 20 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);"
+    "test.supplier": "CREATE TABLE `supplier` (\n  `S_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `S_NAME` char(25) NOT NULL COMMENT \"\",\n  `S_ADDRESS` varchar(40) NOT NULL COMMENT \"\",\n  `S_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n  `S_PHONE` char(15) NOT NULL COMMENT \"\",\n  `S_ACCTBAL` double NOT NULL COMMENT \"\",\n  `S_COMMENT` varchar(101) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`S_SUPPKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`S_SUPPKEY`) BUCKETS 1 \nPROPERTIES (\n\"compression\" \u003d \"LZ4\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"replicated_storage\" \u003d \"true\",\n\"replication_num\" \u003d \"1\"\n);",
+    "test.nation": "CREATE TABLE `nation` (\n  `N_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n  `N_NAME` char(25) NOT NULL COMMENT \"\",\n  `N_REGIONKEY` int(11) NOT NULL COMMENT \"\",\n  `N_COMMENT` varchar(152) NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`N_NATIONKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1 \nPROPERTIES (\n\"compression\" \u003d \"LZ4\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"replicated_storage\" \u003d \"true\",\n\"replication_num\" \u003d \"1\"\n);",
+    "test.partsupp": "CREATE TABLE `partsupp` (\n  `PS_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `PS_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `PS_AVAILQTY` int(11) NOT NULL COMMENT \"\",\n  `PS_SUPPLYCOST` double NOT NULL COMMENT \"\",\n  `PS_COMMENT` varchar(199) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`PS_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`PS_PARTKEY`) BUCKETS 10 \nPROPERTIES (\n\"compression\" \u003d \"LZ4\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"replicated_storage\" \u003d \"true\",\n\"replication_num\" \u003d \"1\"\n);",
+    "test.part": "CREATE TABLE `part` (\n  `P_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `P_NAME` varchar(55) NOT NULL COMMENT \"\",\n  `P_MFGR` char(25) NOT NULL COMMENT \"\",\n  `P_BRAND` char(10) NOT NULL COMMENT \"\",\n  `P_TYPE` varchar(25) NOT NULL COMMENT \"\",\n  `P_SIZE` int(11) NOT NULL COMMENT \"\",\n  `P_CONTAINER` char(10) NOT NULL COMMENT \"\",\n  `P_RETAILPRICE` double NOT NULL COMMENT \"\",\n  `P_COMMENT` varchar(23) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`P_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`P_PARTKEY`) BUCKETS 10 \nPROPERTIES (\n\"compression\" \u003d \"LZ4\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"replicated_storage\" \u003d \"true\",\n\"replication_num\" \u003d \"1\"\n);",
+    "test.lineitem": "CREATE TABLE `lineitem` (\n  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n  `L_QUANTITY` double NOT NULL COMMENT \"\",\n  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n  `L_TAX` double NOT NULL COMMENT \"\",\n  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`L_ORDERKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 20 \nPROPERTIES (\n\"compression\" \u003d \"LZ4\",\n\"fast_schema_evolution\" \u003d \"true\",\n\"replicated_storage\" \u003d \"true\",\n\"replication_num\" \u003d \"1\"\n);"
   },
   "table_row_count": {
     "test.nation": {
@@ -369,36 +331,177 @@ column statistics:
   },
   "column_statistics": {
     "test.nation": {
-      "N_NAME": "[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE",
-      "N_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE"
+      "N_NAME": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "25.0",
+        "distinctValuesCount": "25.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "N_NATIONKEY": {
+        "version": 1,
+        "min": "0.0",
+        "max": "24.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "25.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     },
     "test.partsupp": {
-      "PS_SUPPKEY": "[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE",
-      "PS_AVAILQTY": "[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE",
-      "PS_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE"
+      "PS_SUPPKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1000000.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "1000000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "PS_AVAILQTY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "9999.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "9999.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "PS_PARTKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "2.0E7",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "2.0E7",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     },
     "test.lineitem": {
-      "L_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE",
-      "L_SHIPDATE": "[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE",
-      "L_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE",
-      "L_QUANTITY": "[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE"
+      "L_PARTKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "2.0E7",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "2.0E7",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_SHIPDATE": {
+        "version": 1,
+        "min": "6.942816E8",
+        "max": "9.124416E8",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "2526.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_SUPPKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1000000.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "1000000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_QUANTITY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "50.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "50.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     },
     "test.supplier": {
-      "S_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE",
-      "S_NAME": "[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE",
-      "S_ADDRESS": "[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE",
-      "S_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE"
+      "S_NATIONKEY": {
+        "version": 1,
+        "min": "0.0",
+        "max": "24.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "25.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "S_NAME": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "25.0",
+        "distinctValuesCount": "1000000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "S_ADDRESS": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "40.0",
+        "distinctValuesCount": "10000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "S_SUPPKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1000000.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "1000000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     },
     "test.part": {
-      "P_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE",
-      "P_NAME": "[-Infinity, Infinity, 0.0, 55.0, 1.99997E7] ESTIMATE"
+      "P_PARTKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "2.0E7",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "2.0E7",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "P_NAME": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "55.0",
+        "distinctValuesCount": "1.99997E7",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     }
   },
   "be_number": 3,
   "be_core_stat": {
-    "numOfHardwareCoresPerBe": "{}",
-    "cachedAvgNumOfHardwareCores": -1
+    "cachedAvgNumOfHardwareCores": -1,
+    "numOfHardwareCoresPerBe": "{}"
+  },
+  "be_core_stat_v2": {
+    "cachedAvgNumOfHardwareCores": -1,
+    "warehouses": [],
+    "currentWarehouseId": 0
   },
   "exception": []
 }
 [end]
+

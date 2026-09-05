@@ -37,14 +37,13 @@ package com.starrocks.clone;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.clone.BalanceStatus.ErrCode;
+import com.starrocks.clone.BackendsFitStatus.ErrCode;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -58,11 +57,13 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
 
 public class BackendLoadStatistic {
     private static final Logger LOG = LogManager.getLogger(BackendLoadStatistic.class);
@@ -212,8 +213,15 @@ public class BackendLoadStatistic {
     }
 
     // Get max|min path used percent.
-    // Return Pair<max, min>, return null if be has no medium path.
+    // Return Pair<maxUsedPercent, minUsedPercent>, return null if be has no medium path.
     public Pair<Double, Double> getMaxMinPathUsedPercent(TStorageMedium medium) {
+        Pair<Pair<Double, String>, Pair<Double, String>> maxMin = getMaxMinPathUsedPercentWithPath(medium);
+        return maxMin == null ? null : Pair.create(maxMin.first.first, maxMin.second.first);
+    }
+
+    // Get max|min path used percent with path.
+    // Return Pair<Pair<maxUsedPercent, maxPath>, Pair<minUsedPercent, minPath>>, return null if be has no medium path.
+    public Pair<Pair<Double, String>, Pair<Double, String>> getMaxMinPathUsedPercentWithPath(TStorageMedium medium) {
         List<RootPathLoadStatistic> pathStats = getPathStatistics(medium);
         if (pathStats.isEmpty()) {
             return null;
@@ -221,20 +229,24 @@ public class BackendLoadStatistic {
 
         double maxUsedPercent = Double.MIN_VALUE;
         double minUsedPercent = Double.MAX_VALUE;
+        String maxPath = "";
+        String minPath = "";
         for (RootPathLoadStatistic pathStat : pathStats) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE) {
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
                 continue;
             }
 
             double usedPercent = pathStat.getUsedPercent();
             if (usedPercent > maxUsedPercent) {
                 maxUsedPercent = usedPercent;
+                maxPath = pathStat.getPath();
             }
             if (usedPercent < minUsedPercent) {
                 minUsedPercent = usedPercent;
+                minPath = pathStat.getPath();
             }
         }
-        return Pair.create(maxUsedPercent, minUsedPercent);
+        return Pair.create(Pair.create(maxUsedPercent, maxPath), Pair.create(minUsedPercent, minPath));
     }
 
     public long getReplicaNum(TStorageMedium medium) {
@@ -280,8 +292,20 @@ public class BackendLoadStatistic {
         memUsed = be.getMemUsedBytes();
 
         ImmutableMap<String, DiskInfo> disks = be.getDisks();
+        Set<TStorageMedium> mediaOnBackend = EnumSet.noneOf(TStorageMedium.class);
+        boolean anyMediumUnknown = false;
         for (DiskInfo diskInfo : disks.values()) {
             TStorageMedium medium = diskInfo.getStorageMedium();
+            if (medium == null) {
+                // A disk's medium is not persisted in the image, it is only filled in by the BE's
+                // disk report, so it stays null from a leader restart until that BE's first report
+                // (forever for a BE that never comes back). Such a disk must be kept out of the
+                // EnumSet, which rejects null; leaving its medium unknown is also what the
+                // hasMedium() checks below have always done with it.
+                anyMediumUnknown = true;
+            } else {
+                mediaOnBackend.add(medium);
+            }
             if (diskInfo.getState() == DiskState.ONLINE) {
                 // we only collect online disk's capacity
                 totalCapacityMap
@@ -296,15 +320,49 @@ public class BackendLoadStatistic {
             pathStatistics.add(pathStatistic);
         }
 
-        totalReplicaNumMap = invertedIndex.getReplicaNumByBeIdAndStorageMedium(beId);
-        // This is very tricky. because the number of replica on specified medium we get
-        // from getReplicaNumByBeIdAndStorageMedium() is defined by table properties,
-        // but in fact there may not has SSD disk on this backend. So if we found that no SSD disk on this
-        // backend, set the replica number to 0, otherwise, the average replica number on specified medium
-        // will be incorrect.
-        for (TStorageMedium medium : TStorageMedium.values()) {
-            if (!hasMedium(medium)) {
+        totalReplicaNumMap = Maps.newHashMap();
+        if (mediaOnBackend.isEmpty()) {
+            // No disk with a known medium (BE newly added / dead / pre-report). Skip the
+            // per-tablet scan -- with no pathStatistics carrying a medium, the hasMedium()
+            // post-pass would zero every count anyway. Match that outcome directly.
+            for (TStorageMedium medium : TStorageMedium.values()) {
                 totalReplicaNumMap.put(medium, 0L);
+            }
+        } else if (mediaOnBackend.size() == 1 && !anyMediumUnknown) {
+            // Homogeneous-disk BE: every replica on the BE physically resides on its only
+            // medium, so we can read the count directly from the backend->tablet index in O(1)
+            // instead of scanning every TabletMeta. This avoids holding the inverted-index walk
+            // each ClusterLoadStatistic refresh (~20s) on busy clusters with ~350k replicas/BE.
+            //
+            // Storage-cooldown consideration: when a partition's DataProperty flips from SSD to
+            // HDD, ReportHandler propagates the new intended medium into TabletMeta even on
+            // single-medium BEs that cannot migrate (ReportHandler skips the migrate task when
+            // backendStorageTypeCnt <= 1). The per-tablet scan would then attribute those
+            // replicas to the medium the BE physically lacks, and the post-pass below would
+            // zero them out -- making the replicas vanish from the load-balance averages.
+            // Counting by physical placement here is both cheaper and more accurate.
+            //
+            // A disk whose medium is still unknown disqualifies the shortcut: it may hold replicas
+            // of the other medium, so "one known medium" is not "one medium on the BE". Such a
+            // backend falls through to the per-tablet scan, the way it was counted before this
+            // shortcut existed.
+            TStorageMedium onlyMedium = mediaOnBackend.iterator().next();
+            long totalOnBe = invertedIndex.getTabletNumByBackendId(beId);
+            for (TStorageMedium medium : TStorageMedium.values()) {
+                totalReplicaNumMap.put(medium, medium == onlyMedium ? totalOnBe : 0L);
+            }
+        } else {
+            // Either a mixed-medium BE (both HDD and SSD disks) or one that is not fully
+            // classified yet: per-tablet scan so the count reflects each replica's
+            // TabletMeta.storageMedium, which is what drives migration scheduling on BEs that
+            // actually have both media available.
+            totalReplicaNumMap = invertedIndex.getReplicaNumByBeIdAndStorageMedium(beId);
+            // Post-pass: zero a medium the BE has no disk of. A no-op when both media are present,
+            // load-bearing when we got here with a single known medium plus an unclassified disk.
+            for (TStorageMedium medium : TStorageMedium.values()) {
+                if (!hasMedium(medium)) {
+                    totalReplicaNumMap.put(medium, 0L);
+                }
             }
         }
 
@@ -320,6 +378,10 @@ public class BackendLoadStatistic {
         long totalCapacity = 0;
         long totalUsedCapacity = 0;
         for (RootPathLoadStatistic pathStat : pathStatistics) {
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
+                continue;
+            }
+
             if (pathStat.getStorageMedium() == medium) {
                 totalCapacity += pathStat.getCapacityB();
                 totalUsedCapacity += pathStat.getUsedCapacityB();
@@ -332,6 +394,11 @@ public class BackendLoadStatistic {
         int highCounter = 0;
         for (RootPathLoadStatistic pathStat : pathStatistics) {
             if (pathStat.getStorageMedium() != medium) {
+                continue;
+            }
+
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
+                pathStat.setClazz(Classification.MID);
                 continue;
             }
 
@@ -396,9 +463,9 @@ public class BackendLoadStatistic {
         return loadScore;
     }
 
-    public BalanceStatus isFit(long tabletSize, TStorageMedium medium,
-                               List<RootPathLoadStatistic> result, boolean isSupplement) {
-        BalanceStatus status = new BalanceStatus(ErrCode.COMMON_ERROR);
+    public BackendsFitStatus isFit(long tabletSize, TStorageMedium medium,
+                                   List<RootPathLoadStatistic> result, boolean isSupplement) {
+        BackendsFitStatus status = new BackendsFitStatus(ErrCode.COMMON_ERROR);
         // try choosing path from first to end (low usage to high usage)
         List<RootPathLoadStatistic> mediumNotMatchedPath = Lists.newArrayList();
         for (RootPathLoadStatistic pathStatistic : pathStatistics) {
@@ -407,80 +474,30 @@ public class BackendLoadStatistic {
                 continue;
             }
 
-            BalanceStatus bStatus = pathStatistic.isFit(tabletSize);
+            BackendsFitStatus bStatus = pathStatistic.isFit(tabletSize);
             if (!bStatus.ok()) {
                 status.addErrMsgs(bStatus.getErrMsgs());
                 continue;
             }
 
             result.add(pathStatistic);
-            return BalanceStatus.OK;
+            return BackendsFitStatus.OK;
         }
 
         // if this is a supplement task, ignore the storage medium
         if (isSupplement || !Config.enable_strict_storage_medium_check) {
             for (RootPathLoadStatistic filteredPathStatistic : mediumNotMatchedPath) {
-                BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize);
+                BackendsFitStatus bStatus = filteredPathStatistic.isFit(tabletSize);
                 if (!bStatus.ok()) {
                     status.addErrMsgs(bStatus.getErrMsgs());
                     continue;
                 }
 
                 result.add(filteredPathStatistic);
-                return BalanceStatus.OK;
+                return BackendsFitStatus.OK;
             }
         }
         return status;
-    }
-
-    public boolean hasAvailDisk() {
-        for (RootPathLoadStatistic rootPathLoadStatistic : pathStatistics) {
-            if (rootPathLoadStatistic.getDiskState() == DiskState.ONLINE) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Classify the paths into 'low', 'mid' and 'high',
-     * and skip offline path, and path with different storage medium
-     */
-    public void getPathStatisticByClass(
-            Set<Long> low, Set<Long> mid, Set<Long> high, TStorageMedium storageMedium) {
-
-        for (RootPathLoadStatistic pathStat : pathStatistics) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE
-                    || (storageMedium != null && pathStat.getStorageMedium() != storageMedium)) {
-                continue;
-            }
-
-            if (pathStat.getClazz() == Classification.LOW) {
-                low.add(pathStat.getPathHash());
-            } else if (pathStat.getClazz() == Classification.HIGH) {
-                high.add(pathStat.getPathHash());
-            } else {
-                mid.add(pathStat.getPathHash());
-            }
-        }
-
-        LOG.debug("after adjust, backend {}, medium: {}, path classification low/mid/high: {}/{}/{}",
-                beId, storageMedium, low.size(), mid.size(), high.size());
-    }
-
-    public Set<Long> getPathStatisticForMIDAndClazz(Classification clazz, TStorageMedium storageMedium) {
-        Set<Long> paths = Sets.newHashSet();
-        for (RootPathLoadStatistic pathStat : pathStatistics) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE
-                    || (storageMedium != null && pathStat.getStorageMedium() != storageMedium)) {
-                continue;
-            }
-
-            if (pathStat.getClazz() == clazz || pathStat.getClazz() == Classification.MID) {
-                paths.add(pathStat.getPathHash());
-            }
-        }
-        return paths;
     }
 
     public List<RootPathLoadStatistic> getPathStatistics() {
@@ -495,11 +512,6 @@ public class BackendLoadStatistic {
         Optional<RootPathLoadStatistic> pathStat = pathStatistics.stream().filter(
                 p -> p.getPathHash() == pathHash).findFirst();
         return pathStat.isPresent() ? pathStat.get() : null;
-    }
-
-    public long getAvailPathNum(TStorageMedium medium) {
-        return pathStatistics.stream().filter(
-                p -> p.getDiskState() == DiskState.ONLINE && p.getStorageMedium() == medium).count();
     }
 
     public boolean hasMedium(TStorageMedium medium) {
@@ -539,7 +551,7 @@ public class BackendLoadStatistic {
         return json.toString();
     }
 
-    public List<String> getInfo(TStorageMedium medium) {
+    public List<String> getInfo(TStorageMedium medium, @NotNull BalanceStat balanceStat) {
         List<String> info = Lists.newArrayList();
         info.add(String.valueOf(beId));
         info.add(clusterName);
@@ -556,6 +568,7 @@ public class BackendLoadStatistic {
         info.add(String.valueOf(loadScore.replicaNumCoefficient));
         info.add(String.valueOf(loadScore.score));
         info.add(clazzMap.getOrDefault(medium, Classification.INIT).name());
+        info.add(balanceStat.toString());
         return info;
     }
 }

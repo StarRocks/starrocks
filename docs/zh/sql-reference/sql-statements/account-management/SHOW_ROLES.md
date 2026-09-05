@@ -1,8 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "SHOW ROLES displays all roles in the system."
 ---
 
 # SHOW ROLES
+
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
 
 ## 功能
 
@@ -10,7 +13,7 @@ displayed_sidebar: "Chinese"
 
 该命令从 3.0 版本开始支持。
 
-> 说明：只有 `user_admin` 角色有权限执行该语句。
+<UserManagementPriv />
 
 ## 语法
 

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将分组中的多个非NULL值连接成一个字符串，使用指定的分隔符或默认逗号。"
 ---
 
 # group_concat
 
-## 功能
+
 
 将分组中的多个非 NULL 值连接成一个字符串，参数 `sep` 为字符串之间的连接符，该参数可选，默认为 `,`。该函数在连接时会忽略 NULL 值。
 
@@ -33,7 +34,7 @@ VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
 
 返回值的数据类型为 VARCHAR。如果没有非 NULL 值，则返回 NULL。
 
-您可以使用系统变量 [group_concat_max_len](../../../reference/System_variable.md#group_concat_max_len) 来控制可以返回的最大字符长度。默认值：1024。最小值：4。单位：字符。
+您可以使用系统变量 [group_concat_max_len](../../System_variable.md#group_concat_max_len) 来控制可以返回的最大字符长度。默认值：1024。最小值：4。单位：字符。
 
 变量的设置方法：
 

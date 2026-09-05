@@ -15,12 +15,12 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.Config;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class DecimalTypeTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE tab0 (" +
@@ -60,6 +60,7 @@ public class DecimalTypeTest extends PlanTestBase {
                 "AGGREGATE KEY (c_2_0) " +
                 "DISTRIBUTED BY HASH (c_2_0) " +
                 "properties(\"replication_num\"=\"1\") ;");
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -94,13 +95,13 @@ public class DecimalTypeTest extends PlanTestBase {
     public void testDecimalCast() throws Exception {
         String sql = "select * from baseall where cast(k5 as decimal32(4,3)) = 1.234";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PREDICATES: CAST(5: k5 AS DECIMAL32(4,3)) = 1.234"));
+        Assertions.assertTrue(plan.contains("PREDICATES: CAST(5: k5 AS DECIMAL32(4,3)) = 1.234"));
 
         sql = "SELECT k5 FROM baseall WHERE (CAST(k5 AS DECIMAL32 ) ) IN (0.006) " +
                 "GROUP BY k5 HAVING (k5) IN (0.005, 0.006)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan,
-                plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"));
+        Assertions.assertTrue(plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"),
+                plan);
     }
 
     @Test
@@ -117,30 +118,30 @@ public class DecimalTypeTest extends PlanTestBase {
     public void testCountDecimalV3Literal() throws Exception {
         String sql = "select count( - - cast(89 AS DECIMAL )) from t0";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("output: count(89)"));
+        Assertions.assertTrue(plan.contains("output: count(89)"));
 
         sql = "select max( - - cast(89 AS DECIMAL )) from t0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("output: max(89)"));
+        Assertions.assertTrue(plan.contains("output: max(89)"));
 
         sql = "select min( - - cast(89 AS DECIMAL )) from t0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("output: min(89)"));
+        Assertions.assertTrue(plan.contains("output: min(89)"));
 
         sql = "select sum( - - cast(89 AS DECIMAL )) from t0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("output: sum(89)"));
+        Assertions.assertTrue(plan.contains("output: sum(89)"));
 
         sql = "select avg( - - cast(89 AS DECIMAL )) from t0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("output: avg(89)"));
+        Assertions.assertTrue(plan.contains("output: avg(89)"));
     }
 
     @Test
     public void testDecimalV3Distinct() throws Exception {
         String sql = "select avg(t1c), count(distinct id_decimal) from test_all_type;";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("multi_distinct_count[([10: id_decimal, DECIMAL64(10,2), true]); " +
+        Assertions.assertTrue(plan.contains("multi_distinct_count[([10: id_decimal, DECIMAL64(10,2), true]); " +
                 "args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]"));
     }
 
@@ -149,7 +150,7 @@ public class DecimalTypeTest extends PlanTestBase {
         String sql = "select t1a, sum(id_decimal * t1f), sum(id_decimal * t1f)" +
                 "from test_all_type group by t1a";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: t1a | 12: sum | 12: sum"));
+        Assertions.assertTrue(plan.contains("OUTPUT EXPRS:1: t1a | 12: sum | 12: sum"));
     }
 
     @Test
@@ -157,7 +158,7 @@ public class DecimalTypeTest extends PlanTestBase {
         String sql = "select id_datetime " +
                 "from test_all_type WHERE CAST(IF(true, 0.38542880072101215, '-Inf')  AS BOOLEAN )";
         String thrift = getThriftPlan(sql);
-        Assert.assertTrue(thrift.contains("string_literal:TStringLiteral(value:0.38542880072101215)"));
+        Assertions.assertTrue(thrift.contains("string_literal:TStringLiteral(value:0.38542880072101215)"));
     }
 
     @Test
@@ -165,7 +166,7 @@ public class DecimalTypeTest extends PlanTestBase {
         String sql =
                 "select t3.v10 from t3 inner join test_all_type on t3.v11 = test_all_type.id_decimal and t3.v11 > true";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n"
+        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n"
                 + "     TABLE: t3\n"
                 + "     PREAGGREGATION: ON\n"
                 + "     PREDICATES: 2: v11 > 1"));
@@ -192,10 +193,10 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(c_0_0) from tab0";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg[([16: array_agg, struct<col1 array<decimal128(26, 2)>>, true]); " +
+            assertContains(plan, "array_agg[([16: array_agg, struct<`col1` array<DECIMAL128(26,2)>>, true]); " +
                     "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
             assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
-                    "args: DECIMAL128; result: struct<col1 array<decimal128(26, 2)>>;");
+                    "args: DECIMAL128; result: struct<`col1` array<DECIMAL128(26,2)>>;");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
@@ -220,9 +221,34 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(distinct c_1_6) from tab1 group by c_1_0,c_1_1;";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg_distinct");
+            assertNotContains(plan, "array_agg_distinct");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+        }
+    }
+
+    @Test
+    public void testCountOverArrayOfDecimal() throws Exception {
+        // count() is routed through the decimalv3 rewriting because the ARRAY's item type is decimal,
+        // but there is nothing to widen, and the rewriting used to leave the return type INVALID.
+        // That surfaced as "slot type shouldn't be invalid" while building the fragment.
+        starRocksAssert.withTable("CREATE TABLE arr_dec (" +
+                "k INT NULL," +
+                "a32 ARRAY<DECIMAL32(4, 2)> NULL," +
+                "a64 ARRAY<DECIMAL64(10, 2)> NULL," +
+                "a128 ARRAY<DECIMAL128(30, 2)> NULL) " +
+                "DUPLICATE KEY (k) " +
+                "DISTRIBUTED BY HASH (k) " +
+                "properties(\"replication_num\"=\"1\") ;");
+        try {
+            for (String col : new String[] {"a32", "a64", "a128"}) {
+                assertContains(getVerboseExplain("select count(" + col + ") from arr_dec"),
+                        "aggregate: count", "result: BIGINT;");
+                assertContains(getVerboseExplain("select k, count(" + col + ") from arr_dec group by k"),
+                        "aggregate: count", "result: BIGINT;");
+            }
+        } finally {
+            starRocksAssert.dropTable("arr_dec");
         }
     }
 
@@ -266,5 +292,24 @@ public class DecimalTypeTest extends PlanTestBase {
         sql = "select cast(cast('12.56' as decimalv2(9,1)) as varchar);";
         plan = getFragmentPlan(sql);
         assertContains(plan, "'12.56'");
+    }
+
+    @Test
+    public void testDateToDecimal() throws Exception {
+        String sql = "select '1969-12-10 23:46:53' > c_0_0 from tab0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 16> : CAST(1: c_0_0 AS DOUBLE) < CAST('1969-12-10 23:46:53' AS DOUBLE)");
+    }
+
+    @Test
+    public void testSameValueDiffTypeDecimal() throws Exception {
+        String sql = "SELECT t1a,\n" +
+                "    sum(t1f * 1.00000000000) / NULLIF(sum(t1c), 0) AS aaaa,\n" +
+                "    sum(t1f * 1.000) / NULLIF(sum(t1d * 1.000), 0) * 1000 AS bbbb\n" +
+                " FROM test_all_type \n" +
+                " GROUP BY t1a;\n ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 11> : 6: t1f * 1.0\n");
     }
 }

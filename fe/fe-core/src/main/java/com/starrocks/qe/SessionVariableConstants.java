@@ -14,6 +14,8 @@
 
 package com.starrocks.qe;
 
+import org.apache.commons.lang3.EnumUtils;
+
 public class SessionVariableConstants {
 
     private SessionVariableConstants() {}
@@ -34,11 +36,122 @@ public class SessionVariableConstants {
 
     public static final String VARCHAR = "varchar";
 
+    public static final String ALWAYS = "always";
+
+    public static final String NEVER = "never";
+    public static final String ELASTIC = "elastic";
+    public static final String BALANCE = "balance";
+
+    public static final String ETL = "etl";
+    public static final String DEFAULT = "default";
+
+    public enum ExecMode {
+        DEFAULT,
+        ETL;
+
+        public static ExecMode getDefault() {
+            return DEFAULT;
+        }
+
+        public boolean isETL() {
+            return this == ETL;
+        }
+
+        public static ExecMode parse(String str) {
+            try {
+                return EnumUtils.getEnumIgnoreCase(ExecMode.class, str);
+            } catch (Exception e) {
+                return getDefault();
+            }
+        }
+    }
+
+    public enum ChooseInstancesMode {
+
+        // the number of chosen instances is the same as the max number of instances from its children fragments
+        LOCALITY,
+
+        // auto increase or decrease the instances based on the processed data size
+        AUTO,
+
+        // choose more instances than the max number of instances from its children fragments
+        // if the remote fragment needs process too much data
+        ADAPTIVE_INCREASE,
+
+        // choose fewer instances than the max number of instances from its children fragments
+        // if the remote fragment doesn't need process too much data
+        ADAPTIVE_DECREASE;
+
+        public boolean enableIncreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_INCREASE;
+        }
+
+        public boolean enableDecreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_DECREASE;
+        }
+    }
+
+    public enum ComputationFragmentSchedulingPolicy {
+
+        // only select compute node in scheduler policy (default)
+        COMPUTE_NODES_ONLY,
+
+        // both select compute node and backend in scheduler policy
+        ALL_NODES
+    }
+
+    /**
+     * How to pick a backup compute node in shared-data mode when the scan's primary worker is unavailable
+     * (for example because it is blocklisted).
+     */
+    public enum BlacklistBackupRoutingPolicy {
+        /**
+         * Walk the sorted warehouse node id ring starting from the primary worker and return the first eligible
+         * buddy (default, deterministic behavior).
+         */
+        CIRCULAR,
+        /**
+         * Choose uniformly at random from eligible nodes.
+         */
+        RANDOM;
+
+        public static BlacklistBackupRoutingPolicy getDefault() {
+            return CIRCULAR;
+        }
+    }
+
     public enum AggregationStage {
         AUTO,
         ONE_STAGE,
         TWO_STAGE,
         THREE_STAGE,
         FOUR_STAGE
+    }
+
+    // default, ndv, rewrite_by_hll_bitmap
+    public enum CountDistinctImplMode {
+        DEFAULT,                // default, keeps the original count distinct implementation
+        NDV,                    // ndv, uses HyperLogLog to estimate the count distinct
+        MULTI_COUNT_DISTINCT;
+        public static String MODE_DEFAULT = DEFAULT.toString();
+        public static CountDistinctImplMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(CountDistinctImplMode.class, str);
+        }
+    }
+
+    /**
+     * The default SQL SECURITY characteristic applied when CREATE VIEW omits the SECURITY clause.
+     */
+    public enum DefaultViewSqlSecurity {
+        // Querying the view only checks that the invoker has privileges on the view itself; the tables the view
+        // references are not checked against the invoker (maps to SECURITY NONE).
+        NONE,
+        // Additionally checks that the invoker has privileges on the tables the view references
+        // (maps to SECURITY INVOKER).
+        INVOKER;
+
+        public static DefaultViewSqlSecurity getDefault() {
+            return NONE;
+        }
     }
 }

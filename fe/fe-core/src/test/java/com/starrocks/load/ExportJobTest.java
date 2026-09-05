@@ -15,12 +15,48 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.task.ExportExportingTask;
+import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocation;
+import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
+import mockit.Verifications;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.TimeZone;
 
 public class ExportJobTest {
 
@@ -34,7 +70,295 @@ public class ExportJobTest {
                 Pair.create(new ExportJob.NetworkAddress("host1", 1000), "path1")
         );
 
-        Assert.assertEquals(sList, updateInfo.serialize(tList));
-        Assert.assertEquals(tList, updateInfo.deserialize(sList));
+        Assertions.assertEquals(sList, updateInfo.serialize(tList));
+        Assertions.assertEquals(tList, updateInfo.deserialize(sList));
+    }
+
+    @Test
+    public void testLakeGenTaskFragments(@Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked TabletInvertedIndex invertedIndex,
+                                         @Mocked Table table,
+                                         @Mocked Partition partition,
+                                         @Mocked MaterializedIndex index,
+                                         @Mocked Tablet tablet,
+                                         @Mocked OlapScanNode scanNode,
+                                         @Mocked PlanFragment fragment,
+                                         @Mocked BrokerPropertiesPersistInfo brokerDescPersistInfo) {
+        // tabletId  backendId  dataSize
+        //     1        0           1
+        //     2        0           2
+        //     3        0           3
+        //     4        0           4
+        //     5        0           5
+        TabletMeta tabletMeta = new TabletMeta(0L, 1L, 2L, 3L, TStorageMedium.HDD, true);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                result = invertedIndex;
+                invertedIndex.getTabletMeta(anyLong);
+                result = tabletMeta;
+                tablet.getDataSize(true);
+                returns(1L, 2L, 3L, 4L, 5L);
+                brokerDescPersistInfo.hasBroker();
+                result = true;
+            }
+        };
+
+        List<TScanRangeLocations> locationsList = Lists.newArrayList();
+        for (int i = 1; i < 6; ++i) {
+            TInternalScanRange internalScanRange = new TInternalScanRange();
+            internalScanRange.setTablet_id(i);
+            TScanRange scanRange = new TScanRange();
+            scanRange.setInternal_scan_range(internalScanRange);
+
+            TScanRangeLocation scanRangeLocation = new TScanRangeLocation();
+            scanRangeLocation.setBackend_id(0);
+
+            TScanRangeLocations locations = new TScanRangeLocations();
+            locations.setScan_range(scanRange);
+            locations.setLocations(Lists.newArrayList(scanRangeLocation));
+            locationsList.add(locations);
+        }
+
+
+        ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
+        Deencapsulation.setField(job, "tabletLocations", locationsList);
+        Deencapsulation.setField(job, "exportTable", table);
+        Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
+        Deencapsulation.setField(job, "brokerPersistInfo", brokerDescPersistInfo);
+
+        // 1 task: (1,2,3,4,5)
+        List<PlanFragment> fragments = Lists.newArrayList();
+        List<ScanNode> scanNodes = Lists.newArrayList();
+        Config.export_max_bytes_per_be_per_task = 100L;
+        Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
+        Assertions.assertEquals(1, fragments.size());
+        Assertions.assertEquals(1, scanNodes.size());
+
+        // 2 tasks: (1,2,3), (4,5)
+        fragments.clear();
+        scanNodes.clear();
+        Config.export_max_bytes_per_be_per_task = 5L;
+        Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
+
+        // 5 tasks: (1), (2), (3), (4), (5)
+        fragments.clear();
+        scanNodes.clear();
+        Config.export_max_bytes_per_be_per_task = 1L;
+        Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
+    }
+
+    @Test
+    public void testOlapGenTaskFragments(@Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked TabletInvertedIndex invertedIndex,
+                                         @Mocked Table table,
+                                         @Mocked Partition partition,
+                                         @Mocked MaterializedIndex index,
+                                         @Mocked Tablet tablet,
+                                         @Mocked OlapScanNode scanNode,
+                                         @Mocked PlanFragment fragment,
+                                         @Mocked BrokerPropertiesPersistInfo brokerDesc) {
+        // tabletId  backendId  dataSize
+        //     1        0           1
+        //     2        0           2
+        //     3        0           3
+        //     4        0           4
+        //     5        0           5
+        TabletMeta tabletMeta = new TabletMeta(0L, 1L, 2L, 3L, TStorageMedium.HDD, false);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                result = invertedIndex;
+                invertedIndex.getTabletMeta(anyLong);
+                result = tabletMeta;
+                invertedIndex.getReplica(anyLong, anyLong);
+                returns(
+                        new Replica(1L, 0L, 1L, 0, 1L, 1L, ReplicaState.NORMAL, -1L, -1L),
+                        new Replica(2L, 0L, 1L, 0, 2L, 2L, ReplicaState.NORMAL, -1L, -1L),
+                        new Replica(3L, 0L, 1L, 0, 3L, 3L, ReplicaState.NORMAL, -1L, -1L),
+                        new Replica(4L, 0L, 1L, 0, 4L, 4L, ReplicaState.NORMAL, -1L, -1L),
+                        new Replica(5L, 0L, 1L, 0, 5L, 5L, ReplicaState.NORMAL, -1L, -1L));
+                brokerDesc.hasBroker();
+                result = true;
+            }
+        };
+
+        List<TScanRangeLocations> locationsList = Lists.newArrayList();
+        for (int i = 1; i < 6; ++i) {
+            TInternalScanRange internalScanRange = new TInternalScanRange();
+            internalScanRange.setTablet_id(i);
+            TScanRange scanRange = new TScanRange();
+            scanRange.setInternal_scan_range(internalScanRange);
+
+            TScanRangeLocation scanRangeLocation = new TScanRangeLocation();
+            scanRangeLocation.setBackend_id(0);
+
+            TScanRangeLocations locations = new TScanRangeLocations();
+            locations.setScan_range(scanRange);
+            locations.setLocations(Lists.newArrayList(scanRangeLocation));
+            locationsList.add(locations);
+        }
+
+
+
+        ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
+        Deencapsulation.setField(job, "tabletLocations", locationsList);
+        Deencapsulation.setField(job, "exportTable", table);
+        Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
+        Deencapsulation.setField(job, "brokerPersistInfo", brokerDesc);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, job.getComputeResource());
+
+        // 1 task: (1,2,3,4,5)
+        List<PlanFragment> fragments = Lists.newArrayList();
+        List<ScanNode> scanNodes = Lists.newArrayList();
+        Config.export_max_bytes_per_be_per_task = 100L;
+        Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
+        Assertions.assertEquals(1, fragments.size());
+        Assertions.assertEquals(1, scanNodes.size());
+
+        // 2 tasks: (1,2,3), (4,5)
+        fragments.clear();
+        scanNodes.clear();
+        Config.export_max_bytes_per_be_per_task = 5L;
+        Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
+
+        // 5 tasks: (1), (2), (3), (4), (5)
+        fragments.clear();
+        scanNodes.clear();
+        Config.export_max_bytes_per_be_per_task = 1L;
+        Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
+    }
+
+    @Test
+    public void testGenScanNodeRecordsPartitionAccess(@Mocked GlobalStateMgr globalStateMgr,
+                                                       @Mocked Table table,
+                                                       @Mocked OlapScanNode scanNode) {
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            long dbId = 777L;
+            long tableId = 555L;
+            PartitionAccessTimeMgr accessTimeMgr = new PartitionAccessTimeMgr();
+            new Expectations() {
+                {
+                    table.getType();
+                    result = Table.TableType.OLAP;
+                    table.getId();
+                    result = tableId;
+                    GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr();
+                    result = accessTimeMgr;
+                    // computePartitionInfo() has resolved these data-bearing logical partition ids.
+                    scanNode.getSelectedPartitionIds();
+                    result = Lists.newArrayList(100L, 200L);
+                }
+            };
+
+            ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
+            Deencapsulation.setField(job, "exportTable", table);
+            Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
+            Deencapsulation.setField(job, "dbId", dbId);
+
+            long before = System.currentTimeMillis();
+            Deencapsulation.invoke(job, "genScanNode");
+
+            // genScanNode records the export scan as a user access for exactly the selected partitions.
+            Assertions.assertTrue(accessTimeMgr.getLastAccessTime(dbId, tableId, 100L) >= before);
+            Assertions.assertTrue(accessTimeMgr.getLastAccessTime(dbId, tableId, 200L) >= before);
+            Assertions.assertEquals(0L, accessTimeMgr.getLastAccessTime(dbId, tableId, 300L));
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
+    @Test
+    public void testGenScanNodeSkipsAccessRecordingWhenDisabled(@Mocked GlobalStateMgr globalStateMgr,
+                                                                @Mocked Table table,
+                                                                @Mocked OlapScanNode scanNode) {
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = false;
+        try {
+            new Expectations() {
+                {
+                    table.getType();
+                    result = Table.TableType.OLAP;
+                }
+            };
+
+            ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
+            Deencapsulation.setField(job, "exportTable", table);
+            Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
+            Deencapsulation.setField(job, "dbId", 777L);
+
+            Deencapsulation.invoke(job, "genScanNode");
+
+            // With the feature disabled, genScanNode must not reach the access-time collection at all
+            // (the whole block, starting at GlobalStateMgr.getCurrentState(), is skipped).
+            new Verifications() {
+                {
+                    GlobalStateMgr.getCurrentState();
+                    times = 0;
+                }
+            };
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
+    @Test
+    public void initProfile_createsProfileWithCorrectSummaryInfo(@Mocked GlobalStateMgr state,
+                                                                 @Mocked ExportJob job) {
+        new Expectations() {
+            {
+                job.getId();
+                result = 12345L;
+
+                job.getStartTimeMs();
+                result = 1633024800000L;
+
+                job.getState();
+                result = ExportJob.JobState.EXPORTING;
+
+                job.getDbId();
+                result = 1001L;
+
+                job.getSql();
+                result = "SELECT * FROM table";
+
+                job.getComputeResource();
+                result = WarehouseManager.DEFAULT_RESOURCE;
+
+                GlobalStateMgr.getCurrentState();
+                result = state;
+
+                state.getWarehouseMgr().getWarehouseComputeResourceName((ComputeResource) any);
+                result = "default_warehouse";
+            }
+        };
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public static TimeZone getTimeZone() {
+                return TimeZone.getTimeZone("UTC");
+            }
+        };
+        ExportExportingTask task = new ExportExportingTask(job);
+        Deencapsulation.invoke(task, "initProfile");
+
+        RuntimeProfile profile = Deencapsulation.getField(task, "profile");
+        Assertions.assertNotNull(profile);
+        RuntimeProfile summaryProfile = profile.getChild("Summary");
+        Assertions.assertNotNull(summaryProfile);
+        Assertions.assertEquals("12345", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
+        Assertions.assertEquals("Query", summaryProfile.getInfoString(ProfileManager.QUERY_TYPE));
+        Assertions.assertEquals("EXPORTING", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
+        Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
     }
 }

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算以10为底的数值对数。"
 ---
 
 # log10, dlog10
 
-## 功能
+
 
 返回以 10 为底数的 `x` 的对数。
 

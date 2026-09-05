@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -29,10 +28,19 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
@@ -42,6 +50,7 @@ import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.RoundingMode;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -92,18 +101,39 @@ public class ScalarOperatorToIcebergExpr {
     private static final Logger LOG = LogManager.getLogger(ScalarOperatorToIcebergExpr.class);
 
     public Expression convert(List<ScalarOperator> operators, IcebergContext context) {
+        return convert(operators, context, false);
+    }
+
+    public Expression convertStrict(List<ScalarOperator> operators, IcebergContext context) {
+        return convert(operators, context, true);
+    }
+
+    public Expression convert(List<ScalarOperator> operators, IcebergContext context, boolean strict) {
         IcebergExprVisitor visitor = new IcebergExprVisitor();
+        IcebergContext effectiveContext = strict && !context.isStrict()
+                ? new IcebergContext(context.getSchema(), context.isInsideNot(), true)
+                : context;
         List<Expression> expressions = Lists.newArrayList();
         for (ScalarOperator operator : operators) {
-            Expression filterExpr = operator.accept(visitor, context);
-            if (filterExpr != null) {
-                try {
-                    Binder.bind(context.getSchema(), filterExpr, false);
-                    expressions.add(filterExpr);
-                } catch (ValidationException e) {
-                    LOG.error("binding to the table schema failed, cannot be pushed down scanOperator: {}",
-                            operator.debugString());
+            Expression filterExpr = operator.accept(visitor, effectiveContext);
+            if (filterExpr == null) {
+                if (strict) {
+                    LOG.debug("Strict mode: cannot convert operator {}", operator.debugString());
+                    return null;
                 }
+                continue;
+            }
+
+            try {
+                Binder.bind(context.getSchema(), filterExpr, false);
+                expressions.add(filterExpr);
+            } catch (ValidationException e) {
+                if (strict) {
+                    LOG.debug("Strict mode: bind failed, {}", operator.debugString());
+                    return null;
+                }
+                LOG.error("binding to the table schema failed, cannot be pushed down scanOperator: {}",
+                        operator.debugString());
             }
         }
 
@@ -114,13 +144,33 @@ public class ScalarOperatorToIcebergExpr {
 
     public static class IcebergContext {
         private final Types.StructType schema;
+        private final boolean insideNot;
+        private final boolean strict;
 
         public IcebergContext(Types.StructType schema) {
+            this(schema, false, false);
+        }
+
+        public IcebergContext(Types.StructType schema, boolean insideNot, boolean strict) {
             this.schema = schema;
+            this.insideNot = insideNot;
+            this.strict = strict;
         }
 
         public Types.StructType getSchema() {
             return schema;
+        }
+
+        public boolean isInsideNot() {
+            return insideNot;
+        }
+
+        public boolean isStrict() {
+            return strict;
+        }
+
+        public IcebergContext withInsideNot() {
+            return new IcebergContext(schema, true, strict);
         }
     }
 
@@ -132,10 +182,21 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         private static Type getColumnType(String qualifiedName, IcebergContext context) {
-            String[] paths = qualifiedName.split("\\.");
-            Type type = context.getSchema();
-            for (String path : paths) {
-                type = type.asStructType().fieldType(path);
+            Types.StructType structType = context.getSchema().asStructType();
+            Type type = structType.fieldType(qualifiedName);
+            if (null != type) {
+                return type;
+            }
+            if (qualifiedName.contains(".")) {
+                type = context.getSchema();
+                String[] paths = qualifiedName.split("\\.");
+                for (String path : paths) {
+                    type = type.asStructType().fieldType(path);
+                }
+            }
+            if (qualifiedName.equals(IcebergTable.ROW_ID)
+                    || qualifiedName.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER)) {
+                type = new Types.LongType();
             }
             return type;
         }
@@ -147,7 +208,7 @@ public class ScalarOperatorToIcebergExpr {
                 if (operator.getChild(0) instanceof LikePredicateOperator) {
                     return null;
                 }
-                Expression expression = operator.getChild(0).accept(this, context);
+                Expression expression = operator.getChild(0).accept(this, context.withInsideNot());
 
                 if (expression != null) {
                     return not(expression);
@@ -157,6 +218,21 @@ public class ScalarOperatorToIcebergExpr {
                 Expression right = operator.getChild(1).accept(this, context);
                 if (left != null && right != null) {
                     return (op == CompoundPredicateOperator.CompoundType.OR) ? or(left, right) : and(left, right);
+                }
+                // For AND predicates outside of NOT, allow partial pushdown.
+                // If only one side converts successfully, push down that side alone.
+                // This is safe because AND(a, b) is more restrictive than just a (or just b),
+                // so pushing down one side still correctly filters data.
+                // This must NOT be done inside NOT, because NOT(AND(a, b)) = OR(NOT(a), NOT(b)),
+                // and pushing down NOT(a) alone would over-filter.
+                if (!context.isStrict() && !context.isInsideNot()
+                        && op == CompoundPredicateOperator.CompoundType.AND) {
+                    if (left != null) {
+                        return left;
+                    }
+                    if (right != null) {
+                        return right;
+                    }
                 }
             }
             return null;
@@ -208,6 +284,11 @@ public class ScalarOperatorToIcebergExpr {
                 default:
                     return null;
             }
+        }
+
+        @Override
+        public Expression visitLargeInPredicate(LargeInPredicateOperator operator, IcebergContext context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ScalarOperatorToIcebergExpr");
         }
 
         @Override
@@ -313,6 +394,9 @@ public class ScalarOperatorToIcebergExpr {
                     return dstTypeID != Type.TypeID.DATE;
                 case DATETIME:
                     return dstTypeID != Type.TypeID.TIMESTAMP;
+                case VARBINARY:
+                case BINARY:
+                    return dstTypeID != Type.TypeID.BINARY;
                 default:
                     return true;
             }
@@ -323,13 +407,13 @@ public class ScalarOperatorToIcebergExpr {
             Optional<ConstantOperator> res = Optional.empty();
             switch (resultTypeID) {
                 case BOOLEAN:
-                    res = operator.castTo(com.starrocks.catalog.Type.BOOLEAN);
+                    res = operator.castTo(BooleanType.BOOLEAN);
                     break;
                 case DATE:
-                    res = operator.castTo(com.starrocks.catalog.Type.DATE);
+                    res = operator.castTo(DateType.DATE);
                     break;
                 case TIMESTAMP:
-                    res = operator.castTo(com.starrocks.catalog.Type.DATETIME);
+                    res = operator.castTo(DateType.DATETIME);
                     break;
                 case STRING:
                 case UUID:
@@ -337,18 +421,19 @@ public class ScalarOperatorToIcebergExpr {
                     if (operator.getType().isNumericType()) {
                         return null;
                     } else {
-                        res = operator.castTo(com.starrocks.catalog.Type.VARCHAR);
+                        res = operator.castTo(VarcharType.VARCHAR);
                     }
                     break;
                 case BINARY:
-                    res = operator.castTo(com.starrocks.catalog.Type.VARBINARY);
+                    res = operator.castTo(VarbinaryType.VARBINARY);
                     break;
-                    // num usually don't need cast, and num and string has different comparator
-                    // cast is dangerous.
+                // num usually don't need cast, and num and string has different comparator
+                // cast is dangerous.
+                case DECIMAL:
+                    res = operator.castTo(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 0));
+                    break;
                 case INTEGER:
                 case LONG:
-                    // usually not used as partition column, don't do much work
-                case DECIMAL:
                 case FLOAT:
                 case DOUBLE:
                 case STRUCT:
@@ -360,7 +445,7 @@ public class ScalarOperatorToIcebergExpr {
                     return null;
             }
 
-            return res.isPresent() ? res.get() : null;
+            return res.orElse(null);
         }
 
         @Override
@@ -395,7 +480,16 @@ public class ScalarOperatorToIcebergExpr {
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
-                    return operator.getDecimal();
+                    if (context != null) {
+                        //In iceberg transform expr, the decimal's scale will influence the result, like truncate and bucket...
+                        //For column value 123.40 and const value 123.4, column = value should be true
+                        //But in iceberg transform, 123.40 and 123.4 are not the same, and the partition may be pruned incorretly.
+                        return operator.getDecimal().setScale(((Types.DecimalType) context).scale(),
+                                RoundingMode.HALF_UP);
+                    } else {
+                        return operator.getDecimal().setScale(((ScalarType) operator.getType()).getScalarScale(),
+                                RoundingMode.HALF_UP);
+                    }
                 case HLL:
                 case VARCHAR:
                 case CHAR:
@@ -413,6 +507,9 @@ public class ScalarOperatorToIcebergExpr {
                     long value = operator.getDatetime().atZone(zoneId).toEpochSecond() * 1000
                             * 1000 * 1000 + operator.getDatetime().getNano();
                     return TimeUnit.MICROSECONDS.convert(value, TimeUnit.NANOSECONDS);
+                case VARBINARY:
+                case BINARY:
+                    return operator.getBinary();
                 default:
                     return null;
             }
@@ -438,20 +535,34 @@ public class ScalarOperatorToIcebergExpr {
             return null;
         }
 
+        @Override
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
+            if (operator.getHints().contains(VariantPathRewriteRule.COLUMN_REF_HINT)) {
+                return null;
+            }
             return operator.getName();
         }
 
+        @Override
         public String visitCastOperator(CastOperator operator, Void context) {
+            // Stripping a non-identity cast can change predicate semantics and incorrectly prune files.
+            // Any non-identity cast that still reaches this converter must remain a residual predicate.
+            if (!operator.getType().equals(operator.getChild(0).getType())) {
+                return null;
+            }
             return operator.getChild(0).accept(this, context);
         }
 
+        @Override
         public String visitSubfield(SubfieldOperator operator, Void context) {
             ScalarOperator child = operator.getChild(0);
             if (!(child instanceof ColumnRefOperator)) {
                 return null;
             }
             ColumnRefOperator columnRefChild = ((ColumnRefOperator) child);
+            if (columnRefChild.getHints().contains(VariantPathRewriteRule.COLUMN_REF_HINT)) {
+                return null;
+            }
             List<String> paths = new ImmutableList.Builder<String>()
                     .add(columnRefChild.getName()).addAll(operator.getFieldNames())
                     .build();

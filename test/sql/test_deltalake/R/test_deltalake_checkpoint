@@ -1,0 +1,17 @@
+-- name: test_delta_lake_checkpoint
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+select resourceType, id,  active, gender from delta_test_${uuid0}.delta_oss_db.delta_legacy_checkpoint where id = '5dcd87d8-7006-55e0-4c58-0078d613922d';
+-- result:
+Patient	5dcd87d8-7006-55e0-4c58-0078d613922d	None	male
+-- !result
+drop catalog delta_test_${uuid0}
+-- result:
+-- !result

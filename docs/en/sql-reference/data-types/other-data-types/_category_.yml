@@ -1,0 +1,7 @@
+position: 50 # float position is supported
+label: 'Other'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: other-data-types

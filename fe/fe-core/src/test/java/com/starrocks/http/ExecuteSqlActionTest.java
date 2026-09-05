@@ -13,38 +13,53 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.awaitility.Awaitility;
 import org.json.JSONObject;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+@TestMethodOrder(MethodName.class)
 public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
     private static final String QUERY_EXECUTE_API = "/api/v1/catalogs/default_catalog/sql";
 
+    @BeforeEach
     @Override
-    @Before
-    public void setUp() {
-        super.setUp();
+    public void setUp() throws Exception {
+        setUpWithCatalog();
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getDb(new ConnectContext(), "default_catalog", DB_NAME) != null);
+    }
+
+    @Override
+    protected void doSetUp() throws Exception {
         MetricRepo.init();
         ExecuteEnv.setup();
     }
 
     @Test
-    public void test1ExecuteSqlSuccess() throws IOException {
-        super.setUpWithCatalog();
+    public void test1ExecuteSqlSuccess() throws Exception {
         RequestBody body =
-                RequestBody.create(JSON, "{ \"query\" :  \"kill 0\" }");
+                RequestBody.create(JSON, "{ \"query\" :  \"kill 1\" }");
 
         Request request = new Request.Builder()
                 .get()
@@ -56,7 +71,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
 
         String respStr = Objects.requireNonNull(response.body()).string();
         String expected = "";
-        Assert.assertEquals(respStr, expected);
+        Assertions.assertEquals(respStr, expected);
 
         body = RequestBody.create(JSON, "{ \"query\" :  \"show catalogs\" }");
         request = new Request.Builder()
@@ -75,7 +90,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
                         "\"data\":[{\"Catalog\":\"default_catalog\",\"Type\":\"Internal\"," +
                         "\"Comment\":\"An internal catalog contains this cluster's self-managed tables.\"}]," +
                         "\"statistics\":{\"scanRows\":0,\"scanBytes\":0,\"returnRows\":1}}";
-        Assert.assertEquals(respStr, expected);
+        Assertions.assertEquals(respStr, expected);
 
         body = RequestBody.create(JSON,
                 "{ \"query\" :  \" explain select * from " + DB_NAME + "." + TABLE_NAME + ";\" }");
@@ -92,7 +107,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
                 "   TABLE: testTbl\\n     PREAGGREGATION: OFF. Reason: None aggregate function\\n   " +
                 "  partitions=1/1\\n     rollup: testIndex\\n     tabletRatio=1/1\\n     " +
                 "tabletList=400\\n     cardinality=1\\n     avgRowSize=2.0\\n\"}";
-        Assert.assertEquals(respStr, expected);
+        Assertions.assertEquals(respStr, expected);
     }
 
     @Test
@@ -109,9 +124,10 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         Response response = networkClient.newCall(request).execute();
 
         String respStr = Objects.requireNonNull(response.body()).string();
+        Assertions.assertEquals(500, response.code());
         JSONObject jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("\"query can not be empty\"", jsonObject.get("msg").toString());
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("\"query can not be empty\"", jsonObject.get("msg").toString());
 
         body = RequestBody.create(JSON, "{ \"query\" :  \" desc " + DB_NAME + "." + TABLE_NAME + ";" +
                 "select 1" + "  \" }");
@@ -124,8 +140,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("http query does not support execute multiple query", jsonObject.get("msg").toString());
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("http query does not support execute multiple query", jsonObject.get("msg").toString());
 
         body = RequestBody.create(JSON, "{ \"sql\" :  \" desc " + DB_NAME + "." + TABLE_NAME + " \"");
         request = new Request.Builder()
@@ -137,8 +153,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("malformed json [ { \"sql\" :  \" desc testDb.testTbl \" ]",
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("malformed json [ { \"sql\" :  \" desc testDb.testTbl \" ]",
                 jsonObject.get("message").toString());
 
         body = RequestBody.create(JSON, "{ \"query\" :  \" drop table " + DB_NAME + "." + TABLE_NAME + " \" }");
@@ -151,8 +167,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("http query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement",
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("http query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement",
                 jsonObject.get("msg").toString());
 
         body = RequestBody.create(JSON, "{ \"query\" :  \" select;\" }");
@@ -165,8 +181,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals(
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals(
                 "Getting syntax error at line 1, column 7. Detail message: Unexpected input ';'," +
                         " the most similar input is {a legal identifier}.",
                 jsonObject.get("msg").toString());
@@ -180,8 +196,47 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("Need auth information.",
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("Need auth information.",
                 jsonObject.get("msg").toString());
+
+        body = RequestBody.create(JSON, "{ \"query\" :  \" select 1;\", \"sessionVariables\":{\"timeout\":\"10\"}}");
+        request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + QUERY_EXECUTE_API)
+                .post(body)
+                .build();
+        response = networkClient.newCall(request).execute();
+        respStr = Objects.requireNonNull(response.body()).string();
+        jsonObject = new JSONObject(respStr);
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertTrue(jsonObject.get("msg").toString().contains("Unknown system variable"));
+    }
+
+    @Test
+    public void testConnectionIdExhaustionReturnsServiceUnavailable() throws Exception {
+        ExecuteEnv executeEnv = ExecuteEnv.getInstance();
+        ConnectScheduler originalScheduler = executeEnv.getScheduler();
+        ConnectScheduler exhaustedScheduler = mock(ConnectScheduler.class);
+        when(exhaustedScheduler.getNextConnectionId()).thenThrow(
+                new ConnectScheduler.ConnectionIdExhaustedException("No available connection ID"));
+        Deencapsulation.setField(executeEnv, "scheduler", exhaustedScheduler);
+        try {
+            RequestBody body = RequestBody.create(JSON, "{ \"query\" : \"select 1\" }");
+            Request request = new Request.Builder()
+                    .get()
+                    .addHeader("Authorization", rootAuth)
+                    .url(BASE_URL + QUERY_EXECUTE_API)
+                    .post(body)
+                    .build();
+
+            Response response = networkClient.newCall(request).execute();
+            String responseBody = Objects.requireNonNull(response.body()).string();
+            Assertions.assertEquals(503, response.code());
+            Assertions.assertTrue(responseBody.contains("No available connection ID"));
+        } finally {
+            Deencapsulation.setField(executeEnv, "scheduler", originalScheduler);
+        }
     }
 }

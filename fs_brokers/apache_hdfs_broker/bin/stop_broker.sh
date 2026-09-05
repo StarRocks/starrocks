@@ -23,7 +23,7 @@ export BROKER_HOME=`cd "$curdir/.."; pwd`
 export PID_DIR=`cd "$curdir"; pwd`
 
 while read line; do
-    envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
+    envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | grep -E "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
     envline=`eval "echo $envline"`
     if [[ $envline == *"="* ]]; then
         eval 'export "$envline"'

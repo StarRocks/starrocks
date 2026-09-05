@@ -1,0 +1,71 @@
+-- name: test_short_circuit
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 4 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  6553500));
+-- result:
+-- !result
+create table t1 like t0;
+-- result:
+-- !result
+insert into t1 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(4096,  8192));
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+6553500
+-- !result
+select count(*) from t1;
+-- result:
+4097
+-- !result
+create table empty_t like t0;
+-- result:
+-- !result
+insert into empty_t values (-1,-1);
+-- result:
+-- !result
+select count(*) from ( select l.c0,r.c1 from (select c0, c1, row_number() over (partition by c1) as rn from t0) l join empty_t r on l.c0=r.c0 and l.c1=r.c1 where r.c1 > 0) tb;
+-- result:
+0
+-- !result
+select count(*) from ( select l.c0,r.c1 from (select c0, c1, row_number() over (partition by c1) as rn from t0) l join [shuffle] empty_t r on l.c0=r.c0 and l.c1=r.c1 where r.c1 > 0) tb;
+-- result:
+0
+-- !result
+select count(*) from ( select * from (select c0,c1,max(c0),max(c1) from t0 group by c0,c1) l join empty_t r on l.c0=r.c0 and l.c1=r.c1 where r.c1 > 0) tb;
+-- result:
+0
+-- !result
+select count(*) from ( select * from (select c0,c1,max(c0),max(c1) from t0 group by c0,c1) l join [shuffle] empty_t r on l.c0=r.c0 and l.c1=r.c1 where r.c1 > 0) tb;
+-- result:
+0
+-- !result
+select count(*) from ( select * from (select t0.c0 as c0, t1.c1 as c1 from t0 join t1 on t0.c0=t1.c0) l join [shuffle] empty_t r on l.c0=r.c0 and l.c1=r.c1 where r.c1 > 0) tb;
+-- result:
+0
+-- !result
+set query_timeout=5;
+-- result:
+-- !result
+[UC] select count(*), count(rn) from (select c0, c0, row_number() over (partition by c0) as rn from TABLE(generate_series(1, 1000000000)) t(c0)) tb;
+-- result:
+-- !result
+[UC] select count(*), count(c0), count(mc0) from (select max(c0) mc0, c0 from TABLE(generate_series(1, 1000000000)) t(c0) group by c0) tb;
+-- result:
+-- !result
+[UC] select count(*) from ( select * from (select c0 from TABLE(generate_series(1, 1000000000)) t(c0)) l join [broadcast] (select c1 from TABLE(generate_series(1, 1000000000)) t(c1)) r on l.c0 = r.c1 )tb;
+-- result:
+-- !result

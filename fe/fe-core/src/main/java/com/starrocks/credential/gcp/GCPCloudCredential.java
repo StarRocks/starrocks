@@ -16,49 +16,90 @@ package com.starrocks.credential.gcp;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.GSFileStoreInfo;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL;
+
 public class GCPCloudCredential implements CloudCredential {
 
+    private final String endpoint;
     private final boolean useComputeEngineServiceAccount;
     private final String serviceAccountEmail;
     private final String serviceAccountPrivateKeyId;
     private final String serviceAccountPrivateKey;
     private final String impersonationServiceAccount;
+    private final String accessToken;
+    private final String accessTokenExpiresAt;
 
     private final Map<String, String> hadoopConfiguration;
 
-    public GCPCloudCredential(boolean useComputeEngineServiceAccount, String serviceAccountEmail,
+    public GCPCloudCredential(String endpoint, boolean useComputeEngineServiceAccount, String serviceAccountEmail,
                               String serviceAccountPrivateKeyId, String serviceAccountPrivateKey,
-                              String impersonationServiceAccount) {
+                              String impersonationServiceAccount, String accessToken, String accessTokenExpiresAt) {
+        Preconditions.checkNotNull(endpoint);
         Preconditions.checkNotNull(serviceAccountEmail);
         Preconditions.checkNotNull(serviceAccountPrivateKeyId);
         Preconditions.checkNotNull(serviceAccountPrivateKey);
         Preconditions.checkNotNull(impersonationServiceAccount);
+        this.endpoint = endpoint;
         this.useComputeEngineServiceAccount = useComputeEngineServiceAccount;
         this.serviceAccountEmail = serviceAccountEmail;
         this.serviceAccountPrivateKeyId = serviceAccountPrivateKeyId;
         this.serviceAccountPrivateKey = serviceAccountPrivateKey;
         this.impersonationServiceAccount = impersonationServiceAccount;
+        this.accessToken = accessToken;
+        this.accessTokenExpiresAt = accessTokenExpiresAt;
         hadoopConfiguration = new HashMap<>();
         tryGenerateHadoopConfiguration(hadoopConfiguration);
     }
 
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    private boolean hasServiceAccountCredentials() {
+        return !serviceAccountEmail.isEmpty() && !serviceAccountPrivateKeyId.isEmpty()
+                && !serviceAccountPrivateKey.isEmpty();
+    }
+
+    private boolean hasAccessToken() {
+        return accessToken != null && !accessToken.isEmpty();
+    }
+
     private void tryGenerateHadoopConfiguration(Map<String, String> hadoopConfiguration) {
+        if (!endpoint.isEmpty()) {
+            hadoopConfiguration.put("fs.gs.endpoint", endpoint);
+        }
         if (useComputeEngineServiceAccount) {
             hadoopConfiguration.put("fs.gs.auth.type", "COMPUTE_ENGINE");
-        } else if (!serviceAccountEmail.isEmpty() && !serviceAccountPrivateKeyId.isEmpty() &&
-                !serviceAccountPrivateKey.isEmpty()) {
+        } else if (hasServiceAccountCredentials()) {
+            hadoopConfiguration.put("fs.gs.auth.type", "SERVICE_ACCOUNT_JSON_KEYFILE");
             hadoopConfiguration.put("fs.gs.auth.service.account.email", serviceAccountEmail);
             hadoopConfiguration.put("fs.gs.auth.service.account.private.key.id", serviceAccountPrivateKeyId);
             hadoopConfiguration.put("fs.gs.auth.service.account.private.key", serviceAccountPrivateKey);
         }
-        if (!impersonationServiceAccount.isEmpty()) {
-            hadoopConfiguration.put("fs.gs.auth.impersonation.service.account", impersonationServiceAccount);
+        // Skip impersonation when a vended access token is present: gcs-connector would apply
+        // impersonation on top of the token, and vended tokens lack IAM impersonation permission.
+        if (!impersonationServiceAccount.isEmpty() && !hasAccessToken()) {
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY,
+                    impersonationServiceAccount);
+        }
+        if (hasAccessToken()) {
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
+                    GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY,
+                    ACCESS_TOKEN_PROVIDER_IMPL);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY,
+                    ACCESS_TOKEN_PROVIDER_IMPL);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY, "true");
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, accessToken);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY, accessTokenExpiresAt);
         }
     }
 
@@ -74,8 +115,10 @@ public class GCPCloudCredential implements CloudCredential {
         if (useComputeEngineServiceAccount) {
             return true;
         }
-        if (!serviceAccountEmail.isEmpty() && !serviceAccountPrivateKeyId.isEmpty()
-                && !serviceAccountPrivateKey.isEmpty()) {
+        if (hasServiceAccountCredentials()) {
+            return true;
+        }
+        if (hasAccessToken()) {
             return true;
         }
         return false;
@@ -89,17 +132,32 @@ public class GCPCloudCredential implements CloudCredential {
     @Override
     public String toCredString() {
         return "GCPCloudCredential{" +
-                "useComputeEngineServiceAccount=" + useComputeEngineServiceAccount +
+                "endpoint='" + endpoint + '\'' +
+                ", useComputeEngineServiceAccount=" + useComputeEngineServiceAccount +
                 ", serviceAccountEmail='" + serviceAccountEmail + '\'' +
                 ", serviceAccountPrivateKeyId='" + serviceAccountPrivateKeyId + '\'' +
                 ", serviceAccountPrivateKey='" + serviceAccountPrivateKey + '\'' +
                 ", impersonationServiceAccount='" + impersonationServiceAccount + '\'' +
+                ", accessToken='" + accessToken + '\'' +
+                ", accessTokenExpiresAt='" + accessTokenExpiresAt + '\'' +
                 '}';
     }
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support gcp credential
-        return null;
+        FileStoreInfo.Builder fsb = FileStoreInfo.newBuilder();
+        fsb.setFsType(FileStoreType.GS);
+        GSFileStoreInfo.Builder gsFileStoreInfo = GSFileStoreInfo.newBuilder();
+        gsFileStoreInfo.setEndpoint(endpoint);
+
+        gsFileStoreInfo.setUseComputeEngineServiceAccount(useComputeEngineServiceAccount);
+        if (hasServiceAccountCredentials()) {
+            gsFileStoreInfo.setServiceAccountEmail(serviceAccountEmail);
+            gsFileStoreInfo.setServiceAccountPrivateKeyId(serviceAccountPrivateKeyId);
+            gsFileStoreInfo.setServiceAccountPrivateKey(serviceAccountPrivateKey);
+        }
+        gsFileStoreInfo.setImpersonation(impersonationServiceAccount);
+        fsb.setGsFsInfo(gsFileStoreInfo);
+        return fsb.build();
     }
 }

@@ -17,21 +17,25 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/string/slice.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "testutil/column_test_helper.h"
+#include "types/datum.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 namespace {
 
-ColumnPtr const_int_column(int32_t value, size_t size = 1) {
+MutableColumnPtr const_int_column(int32_t value, size_t size = 1) {
     auto data = Int32Column::create();
     data->append(value);
     return ConstColumn::create(std::move(data), size);
 }
 
-ColumnPtr const_varchar_column(const std::string& value, size_t size = 1) {
+MutableColumnPtr const_varchar_column(const std::string& value, size_t size = 1) {
     auto data = BinaryColumn::create();
     data->append_string(value);
     return ConstColumn::create(std::move(data), size);
@@ -69,7 +73,7 @@ protected:
         return e;
     }
 
-    MockColumnExpr* new_fake_col_expr(ColumnPtr value, const TypeDescriptor& type) {
+    MockColumnExpr* new_fake_col_expr(const ColumnPtr& value, const TypeDescriptor& type) {
         TExprNode node;
         node.__set_node_type(TExprNodeType::INT_LITERAL);
         node.__set_num_children(0);
@@ -86,8 +90,8 @@ private:
 TEST_F(MapElementExprTest, test_map_int_int) {
     TypeDescriptor type_map_int_int;
     type_map_int_int.type = LogicalType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 
@@ -363,8 +367,8 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
 TEST_F(MapElementExprTest, test_map_const) {
     TypeDescriptor type_map_int_int;
     type_map_int_int.type = LogicalType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 
@@ -449,7 +453,7 @@ TEST_F(MapElementExprTest, test_map_const) {
     //   33
 
     {
-        auto const_map = ConstColumn::create(column->clone(), column->size());
+        ColumnPtr const_map = ConstColumn::create(column->clone(), column->size());
         std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
 
         expr->add_child(new_fake_col_expr(const_map, type_map_int_int));
@@ -457,10 +461,128 @@ TEST_F(MapElementExprTest, test_map_const) {
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         // corner test
-        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_constant());
         EXPECT_EQ(33, result->get(0).get_int32());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(MapElementExprTest, test_const_map_int_variable_int) {
+    TypeDescriptor type_map_int_int;
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
+
+    auto column = ColumnHelper::create_column(type_map_int_int, false);
+
+    DatumMap map;
+    map[(int32_t)1] = (int32_t)11;
+    map[(int32_t)2] = (int32_t)22;
+    map[(int32_t)3] = (int32_t)33;
+    column->append_datum(map);
+    ColumnPtr const_column = ConstColumn::create(column->clone(), 1);
+
+    // Inputs:
+    //   c0
+    // --------
+    //   [1->11, 2->22, 3->33]
+    //
+    //   c1
+    // ----------
+    // 1, 2, 3
+    //
+    // Query:
+    //   select c0[idx]
+    //
+    // Outputs:
+    //   11
+    //   22
+    //   33
+    auto key = RunTimeColumnType<TYPE_INT>::create();
+    key->append(1);
+    key->append(2);
+    key->append(3);
+
+    {
+        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+
+        expr->add_child(new_fake_col_expr(const_column, type_map_int_int));
+        expr->add_child(new_fake_col_expr(key, type_int));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_EQ(3, result->size());
+        EXPECT_FALSE(result->is_null(0));
+        EXPECT_FALSE(result->is_null(1));
+        EXPECT_FALSE(result->is_null(2));
+
+        EXPECT_EQ(11, result->get(0).get_int32());
+        EXPECT_EQ(22, result->get(1).get_int32());
+        EXPECT_EQ(33, result->get(2).get_int32());
+    }
+}
+// NOLINTNEXTLINE
+TEST_F(MapElementExprTest, test_map_null_key) {
+    TypeDescriptor type_map_varchar_int;
+    type_map_varchar_int.type = LogicalType::TYPE_MAP;
+    type_map_varchar_int.children.resize(2);
+    type_map_varchar_int.children[0].type = LogicalType::TYPE_VARCHAR;
+    type_map_varchar_int.children[0].len = 10;
+    type_map_varchar_int.children[1].type = LogicalType::TYPE_INT;
+
+    TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
+    type_varchar.len = 10;
+
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
+
+    auto column = ColumnHelper::create_column(type_map_varchar_int, false);
+
+    DatumMap map;
+    map[(Slice) "a"] = (int32_t)11;
+    map[(Slice) "b"] = (int32_t)22;
+    map[(Slice) "c"] = (int32_t)33;
+    column->append_datum(map);
+
+    MapColumn* map_column = down_cast<MapColumn*>(column.get());
+    map_column->offsets_column_raw_ptr()->append(6);
+    map_column->keys_column_raw_ptr()->append_datum(Datum(Slice("a")));
+    map_column->keys_column_raw_ptr()->append_datum(Datum(Slice("b")));
+    map_column->keys_column_raw_ptr()->append_nulls(1);
+    map_column->values_column_raw_ptr()->append_datum(Datum(44));
+    map_column->values_column_raw_ptr()->append_datum(Datum(55));
+    map_column->values_column_raw_ptr()->append_datum(Datum(66));
+
+    // Inputs:
+    //   c0
+    // --------
+    //   [a->11, b->22, c->33]
+    //   [a->44, b->55, null->66]
+    //
+    // Query:
+    //   select c0[null]
+    //
+    // Outputs:
+    //   Null
+    //   66
+    {
+        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+
+        expr->add_child(new_fake_col_expr(column, type_map_varchar_int));
+        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(1), type_varchar));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_EQ(2, result->size());
+        EXPECT_TRUE(result->is_null(0));
+        EXPECT_FALSE(result->is_null(1));
+
+        EXPECT_EQ(66, result->get(1).get_int32());
     }
 }
 

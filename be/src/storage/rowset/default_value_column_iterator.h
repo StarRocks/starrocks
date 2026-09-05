@@ -37,9 +37,12 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/types.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
+class ColumnAccessPath;
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 
@@ -47,51 +50,73 @@ using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 class DefaultValueColumnIterator final : public ColumnIterator {
 public:
     DefaultValueColumnIterator(bool has_default_value, std::string default_value, bool is_nullable,
-                               TypeInfoPtr type_info, size_t schema_length, ordinal_t num_rows)
+                               TypeInfoPtr type_info, size_t schema_length, ordinal_t num_rows,
+                               const ColumnAccessPath* path = nullptr)
             : _has_default_value(has_default_value),
               _default_value(std::move(default_value)),
               _is_nullable(is_nullable),
               _type_info(std::move(type_info)),
               _schema_length(schema_length),
-
               _pool(),
-              _num_rows(num_rows) {}
+              _num_rows(num_rows),
+              _path(path) {}
 
-    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
+    ~DefaultValueColumnIterator() override {
+        // For complex types (ARRAY/MAP/STRUCT), a Datum is placement-new'd into _mem_value.
+        // MemPool only frees raw memory without calling destructors, so we must explicitly
+        // destroy the Datum to avoid leaking its internal heap-allocated containers.
+        if (_mem_value != nullptr && _type_info != nullptr && !_is_default_value_null) {
+            auto type = _type_info->type();
+            if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+                reinterpret_cast<Datum*>(_mem_value)->~Datum();
+            }
+        }
+    }
 
-    [[nodiscard]] Status seek_to_first() override {
+    bool only_nulls() const override { return _is_default_value_null; }
+
+    Status init(const ColumnIteratorOptions& opts) override;
+
+    Status seek_to_first() override {
         _current_rowid = 0;
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord_idx) override {
+    Status seek_to_ordinal(ordinal_t ord_idx) override {
         _current_rowid = ord_idx;
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override;
+    ordinal_t num_rows() const override { return _num_rows; }
+
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
 
     bool all_page_dict_encoded() const override { return false; }
 
     int dict_lookup(const Slice& word) override { return -1; }
 
-    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override {
+    Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("DefaultValueColumnIterator does not support");
     }
 
-    [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
         return Status::NotSupported("DefaultValueColumnIterator does not support");
     }
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override {
+        return std::vector<std::pair<int64_t, int64_t>>();
+    }
 
 private:
     bool _has_default_value;
@@ -108,6 +133,11 @@ private:
     ordinal_t _current_rowid = 0;
     ordinal_t _num_rows = 0;
     bool _may_contain_deleted_row = false;
+
+    // Optional: used when scan prunes subfields (e.g. only read /struct_col/subfield).
+    // For missing columns filled by default value, we need this to project STRUCT default datums
+    // to match the pruned column shape.
+    const ColumnAccessPath* _path = nullptr;
 };
 
 } // namespace starrocks

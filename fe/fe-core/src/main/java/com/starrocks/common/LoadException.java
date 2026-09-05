@@ -20,7 +20,7 @@ package com.starrocks.common;
 /**
  * Exception for load
  */
-public class LoadException extends UserException {
+public class LoadException extends StarRocksException {
 
     private static final long serialVersionUID = 1L;
 
@@ -30,5 +30,9 @@ public class LoadException extends UserException {
 
     public LoadException(String msg, Throwable e) {
         super(msg, e);
+    }
+
+    public LoadException(ErrorCode errorCode, Object... objs) {
+        super(errorCode, objs);
     }
 }

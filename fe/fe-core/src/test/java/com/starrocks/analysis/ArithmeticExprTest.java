@@ -1,14 +1,21 @@
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -18,17 +25,20 @@ public class ArithmeticExprTest {
         UtFrameUtils.createDefaultCtx();
         Expr lhsExpr = new SlotRef(new TableName("foo_db", "bar_table"), "c0");
         Expr rhsExpr = new SlotRef(new TableName("foo_db", "bar_table"), "c1");
-        ScalarType decimal32p9s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2);
+        ScalarType decimal32p9s2 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2);
         lhsExpr.setType(decimal32p9s2);
         rhsExpr.setType(decimal32p9s2);
         ArithmeticExpr addExpr = new ArithmeticExpr(
                 ArithmeticExpr.Operator.ADD, lhsExpr, rhsExpr);
-        ScalarType decimal64p10s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
+        ScalarType decimal64p10s2 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(addExpr, ConnectContext.get());
-        Assert.assertEquals(addExpr.type, decimal64p10s2);
-        Assert.assertNotNull(addExpr.getFn());
-        Assert.assertEquals(addExpr.getFn().getArgs()[0], decimal64p10s2);
-        Assert.assertEquals(addExpr.getFn().getArgs()[1], decimal64p10s2);
+        Assertions.assertEquals(addExpr.getType(), decimal64p10s2);
+
+        Function fn = ExpressionAnalyzer.getArithmeticFunction(addExpr);
+
+        Assertions.assertNotNull(fn);
+        Assertions.assertEquals(fn.getArgs()[0], decimal64p10s2);
+        Assertions.assertEquals(fn.getArgs()[1], decimal64p10s2);
     }
 
     private ScalarType dec(int bits, int precision, int scale) {
@@ -45,7 +55,7 @@ public class ArithmeticExprTest {
                 pType = PrimitiveType.DECIMAL128;
                 break;
         }
-        return ScalarType.createDecimalV3Type(pType, precision, scale);
+        return TypeFactory.createDecimalV3Type(pType, precision, scale);
     }
 
     @Test
@@ -115,10 +125,10 @@ public class ArithmeticExprTest {
             ScalarType expectLhsType = (ScalarType) c[3];
             ScalarType expectRhsType = (ScalarType) c[4];
             ArithmeticExpr.TypeTriple tr =
-                    ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
-            Assert.assertEquals(tr.returnType, expectReturnType);
-            Assert.assertEquals(tr.lhsTargetType, expectLhsType);
-            Assert.assertEquals(tr.rhsTargetType, expectRhsType);
+                    DecimalV3FunctionAnalyzer.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
+            Assertions.assertEquals(tr.returnType, expectReturnType);
+            Assertions.assertEquals(tr.lhsTargetType, expectLhsType);
+            Assertions.assertEquals(tr.rhsTargetType, expectRhsType);
         }
     }
 
@@ -142,8 +152,8 @@ public class ArithmeticExprTest {
             ScalarType lhsType = (ScalarType) c[0];
             ScalarType rhsType = (ScalarType) c[1];
             try {
-                ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
-                Assert.fail("should throw exception");
+                DecimalV3FunctionAnalyzer.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
+                Assertions.fail("should throw exception");
             } catch (SemanticException ignored) {
             }
         }

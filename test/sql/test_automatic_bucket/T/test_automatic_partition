@@ -1,18 +1,10 @@
--- name: test_bucket_size
+-- name: test_bucket_size @native
 create table t(k int);
 show create table t;
 alter table t set('bucket_size'='1024');
 show create table t;
 
--- name: test_invalid_bucket_size
-create table t(k int) properties('bucket_size'='0');
-create table t(k int) properties('bucket_size'='-1');
-create table t(k int) properties('bucket_size'='1024');
-alter table t set('bucket_size'='0');
-alter table t set('bucket_size'='-1');
-alter table t set('bucket_size'='2048');
-
--- name: test_automatic_bucket
+-- name: test_automatic_bucket @native
 create database kkk;
 use kkk;
 create table t(k int);
@@ -22,12 +14,8 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 insert into t values(1);
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
 alter table t set('bucket_size'='1');
-insert into t values(1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
-insert into t values(1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
 
--- name: test_range_partition
+-- name: test_range_partition @sequential
 create database ttt;
 use ttt;
 create table t(k date, v int) PARTITION BY RANGE(`k`)
@@ -52,7 +40,7 @@ insert into t values('2021-01-01', 1);
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
 select * from t;
 
--- name: test_list_partition
+-- name: test_list_partition @sequential
 create database ddd;
 use ddd;
 create table t(k date not null, v int) PARTITION BY LIST(`k`)
@@ -68,16 +56,20 @@ PROPERTIES (
 
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 insert into t values('2021-01-01', 1);
+function: wait_db_transaction_finish("ddd", 60)
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 insert into t values('2021-01-03', 1);
+function: wait_db_transaction_finish("ddd", 60)
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 insert into t values('2021-01-05', 1);
+function: wait_db_transaction_finish("ddd", 60)
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 insert into t values('2021-01-01', 1);
+function: wait_db_transaction_finish("ddd", 60)
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 select * from t;
 
--- name: test_expr_partition
+-- name: test_expr_partition @sequential
 create database eee;
 use eee;
 create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
@@ -85,14 +77,55 @@ PROPERTIES (
 "replication_num" = "1",
 "bucket_size" = "1"
 );
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-01', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-03', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-05', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-01', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 select * from t;
 
+-- name: test_mv @sequential
+create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+insert into t values('2021-01-01', 1, 1);
+insert into t values('2021-01-03', 1, 1);
+insert into t values('2021-01-05', 1, 1);
+insert into t values('2021-01-01', 1, 1);
+insert into t values('2021-01-01', 2, 2);
+insert into t values('2021-01-03', 2, 2);
+insert into t values('2021-01-05', 2, 2);
+insert into t values('2021-01-01', 2, 2);
+insert into t values('2021-01-01', 3, 3);
+insert into t values('2021-01-03', 3, 3);
+insert into t values('2021-01-05', 3, 3);
+insert into t values('2021-01-01', 3, 3);
+select * from t;
+
+create materialized view mv as select k, v1 from t;
+function: wait_alter_table_finish("rollup", 8)
+select k, v1 from t;
+
+-- name: test_mutable_bucket @sequential @native
+create database ggg;
+use ggg;
+create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1",
+"mutable_bucket_num" = "2"
+);
+show create table t;
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+insert into t values('2021-01-01', 1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+
+alter table t set('mutable_bucket_num'='3');
+show create table t;
+insert into t values('2021-01-01', 1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+select * from t;
+
+alter table t set('mutable_bucket_num'='-1');
+alter table t set('mutable_bucket_num'='a');

@@ -1,32 +1,3 @@
-[sql]
-select
-    l_shipmode,
-    sum(case
-            when o_orderpriority = '1-URGENT'
-                or o_orderpriority = '2-HIGH'
-                then cast (1 as bigint)
-            else cast(0 as bigint)
-        end) as high_line_count,
-    sum(case
-            when o_orderpriority <> '1-URGENT'
-                and o_orderpriority <> '2-HIGH'
-                then cast (1 as bigint)
-            else cast(0 as bigint)
-        end) as low_line_count
-from
-    orders,
-    lineitem
-where
-        o_orderkey = l_orderkey
-  and l_shipmode in ('REG AIR', 'MAIL')
-  and l_commitdate < l_receiptdate
-  and l_shipdate < l_commitdate
-  and l_receiptdate >= date '1997-01-01'
-  and l_receiptdate < date '1998-01-01'
-group by
-    l_shipmode
-order by
-    l_shipmode ;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:25: L_SHIPMODE | 30: sum | 31: sum
@@ -85,7 +56,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: orders
 tabletRatio=10/10
-tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=150000000
 avgRowSize=23.0
 
@@ -104,12 +74,11 @@ BUCKET_SHUFFLE_HASH_PARTITIONED: 11: L_ORDERKEY
 1:OlapScanNode
 TABLE: lineitem
 PREAGGREGATION: ON
-PREDICATES: 25: L_SHIPMODE IN ('REG AIR', 'MAIL'), 22: L_COMMITDATE < 23: L_RECEIPTDATE, 21: L_SHIPDATE < 22: L_COMMITDATE, 23: L_RECEIPTDATE >= '1997-01-01', 23: L_RECEIPTDATE < '1998-01-01'
+PREDICATES: 25: L_SHIPMODE IN ('REG AIR', 'MAIL'), 22: L_COMMITDATE < 23: L_RECEIPTDATE, 21: L_SHIPDATE < 22: L_COMMITDATE, 23: L_RECEIPTDATE >= '1997-01-01', 23: L_RECEIPTDATE < '1998-01-01', 22: L_COMMITDATE < '1998-01-01', 21: L_SHIPDATE < '1998-01-01'
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=6124846
+cardinality=4661385
 avgRowSize=30.0
 [end]
 

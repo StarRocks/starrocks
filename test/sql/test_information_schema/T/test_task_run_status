@@ -1,0 +1,66 @@
+-- name: test_task_run_status
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+insert into ss values('2020-01-14', 1), ('2020-01-14', 3), ('2020-01-15', 2);
+
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) 
+REFRESH DEFERRED MANUAL
+AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
+SELECT * FROM mv1 ORDER BY event_day;
+
+SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_NAME = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
+SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
+
+[UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='mv1';
+SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
+SELECT count(1) FROM information_schema.task_runs WHERE task_name = '${task_name}';
+SELECT TASK_SOURCE FROM information_schema.task_runs WHERE task_name = '${task_name}';
+
+submit task task_src_insert_${uuid0} as insert into ss select * from ss;
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for INSERT task run to appear"}
+  result=select count(*) from information_schema.task_runs where task_name='task_src_insert_${uuid0}';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+select distinct TASK_SOURCE from information_schema.task_runs where task_name='task_src_insert_${uuid0}';
+submit task task_src_ctas_${uuid0} as create table ss_ctas as select event_day, pv from ss;
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for CTAS task run to appear"}
+  result=select count(*) from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+select distinct TASK_SOURCE from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
+
+admin set frontend config('enable_task_run_fe_evaluation'='false');
+[UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
+SELECT count(1) FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
+SELECT count(1) FROM information_schema.task_runs WHERE query_id= '${query_id}';
+
+[UC]state=SELECT `STATE` FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
+SELECT count(1) FROM information_schema.task_runs WHERE `STATE` = '${state}' and task_name = '${task_name}' and QUERY_ID = '${query_id}';
+
+set enable_evaluate_schema_scan_rule=true;
+[UC] select count(*) from information_schema.task_runs;
+select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
+set enable_evaluate_schema_scan_rule=false;
+[UC] select count(*) from information_schema.task_runs;
+select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
+
+create database if not exists test_information_schema_task_runs;
+use test_information_schema_task_runs;
+
+set enable_evaluate_schema_scan_rule=true;
+[UC] select count(*) from information_schema.task_runs;
+select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
+set enable_evaluate_schema_scan_rule=false;
+[UC] select count(*) from information_schema.task_runs;
+select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
+
+drop database if exists test_information_schema_task_runs;
+drop database db_${uuid0};

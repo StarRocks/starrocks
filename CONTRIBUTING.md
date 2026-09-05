@@ -2,7 +2,7 @@
 
 StarRocks is built by an open and friendly community. We are dedicated to building a collaborative, inspiring, and exuberant open-source community for our members. Everyone is more than welcome to join our community to get help and to contribute to StarRocks.
 
-## Table of content
+## Table of contents
 
 - [How to contribute](#How-to-contribute)
 - [Contributing guideline](#Contributing-guideline)
@@ -83,6 +83,8 @@ TBC
 
 1. For FE development environment, see [The development configuration setup for StarRocks on IDEA](https://github.com/StarRocks/community/blob/main/Contributors/guide/IDEA.md).
 2. For BE development environment, see [The development configuration setup for StarRocks on Clion](https://github.com/StarRocks/community/blob/main/Contributors/guide/Clion.md).
+3. To compile StarRocks with Docker, see [Compile StarRocks with Docker](https://docs.starrocks.io/docs/developers/build-starrocks/Build_in_docker/).
+4. To deploy StarRocks manually, see [Deploy StarRocks manually](https://docs.starrocks.io/docs/deployment/deploy_manually/).
 
 #### Coding style
 
@@ -128,7 +130,7 @@ TBC
 
 ### Contributing documentation
 
-To contribute to StarRocks documentation, please refer to [Document Contribution Guideline](https://github.com/StarRocks/docs/blob/main/README.md).
+To contribute to StarRocks documentation, please refer to [Document Contribution Guideline](https://github.com/StarRocks/starrocks/blob/main/docs/README.md).
 
 ### Help community members
 

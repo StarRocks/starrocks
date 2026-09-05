@@ -18,12 +18,12 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
@@ -39,11 +39,11 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
         Response response = networkClient.newCall(request).execute();
         assertTrue(response.isSuccessful());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
+        Assertions.assertNotNull(respStr);
         JSONObject object = new JSONObject(respStr);
-        Assert.assertEquals(200, object.getInt("status"));
+        Assertions.assertEquals(200, object.getInt("status"));
         JSONArray propArray = object.getJSONArray("properties");
         // k1, k2
-        Assert.assertEquals(2, propArray.length());
+        Assertions.assertEquals(2, propArray.length());
     }
 }

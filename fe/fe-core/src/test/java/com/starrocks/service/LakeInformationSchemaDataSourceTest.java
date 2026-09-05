@@ -1,0 +1,545 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.service;
+
+import com.google.common.collect.Lists;
+import com.google.gson.Gson;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangeDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.PatternMatcher;
+import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetPartitionsMetaRequest;
+import com.starrocks.thrift.TGetPartitionsMetaResponse;
+import com.starrocks.thrift.TGetTablesConfigRequest;
+import com.starrocks.thrift.TGetTablesConfigResponse;
+import com.starrocks.thrift.TPartitionMetaInfo;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTableConfigInfo;
+import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
+import org.apache.thrift.TException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+public class LakeInformationSchemaDataSourceTest {
+
+    @Mocked
+    ExecuteEnv exeEnv;
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+    }
+
+    @Test
+    public void testGetLakeTablesConfig() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db1").useDatabase("db1");
+
+        String createTblStmtStr = "CREATE TABLE db1.tbl1 (`k1` int,`k2` int,`k3` int,`v1` int,`v2` int,`v3` int) " +
+                "ENGINE=OLAP " + "PRIMARY KEY(`k1`, `k2`, `k3`) " +
+                "COMMENT \"OLAP\" " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 " +
+                "ORDER BY(`v2`, `v3`) " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        String createMvStmtStr = "CREATE MATERIALIZED VIEW db1.mv1 " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10 " +
+                "REFRESH ASYNC " +
+                "AS SELECT k1, k2 " +
+                "FROM db1.tbl1 ";
+
+        starRocksAssert.withMaterializedView(createMvStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db1");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("tbl1")).findFirst()
+                .orElseGet(null);
+        Assertions.assertEquals("db1", tableConfig.getTable_schema());
+        Assertions.assertEquals("tbl1", tableConfig.getTable_name());
+        Assertions.assertEquals("CLOUD_NATIVE", tableConfig.getTable_engine());
+        Assertions.assertEquals("PRIMARY_KEYS", tableConfig.getTable_model());
+        Assertions.assertEquals("`k1`, `k2`, `k3`", tableConfig.getPrimary_key());
+        Assertions.assertEquals("", tableConfig.getPartition_key());
+        Assertions.assertEquals("`k1`, `k2`, `k3`", tableConfig.getDistribute_key());
+        Assertions.assertEquals("HASH", tableConfig.getDistribute_type());
+        Assertions.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assertions.assertEquals("`v2`, `v3`", tableConfig.getSort_key());
+        Map<String, String> propsMap = new HashMap<>();
+        propsMap = new Gson().fromJson(tableConfig.getProperties(), propsMap.getClass());
+        Assertions.assertEquals("builtin_storage_volume", propsMap.get("storage_volume"));
+
+
+        TTableConfigInfo mvConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_engine().equals("CLOUD_NATIVE_MATERIALIZED_VIEW")).findFirst()
+                .orElseGet(null);
+        Assertions.assertEquals("CLOUD_NATIVE_MATERIALIZED_VIEW", mvConfig.getTable_engine());
+        propsMap = new HashMap<>();
+        propsMap = new Gson().fromJson(mvConfig.getProperties(), propsMap.getClass());
+        Assertions.assertEquals("1", propsMap.get("replication_num"));
+        Assertions.assertEquals("HDD", propsMap.get("storage_medium"));
+        Assertions.assertEquals("builtin_storage_volume", propsMap.get("storage_volume"));
+    }
+
+    /**
+     * Test getPartitionsMeta for cloud native tables.
+     * This covers InformationSchemaDataSource.java lines 480-484:
+     * - setCompact_version
+     * - setEnable_datacache
+     */
+    @Test
+    public void testGetLakePartitionsMeta() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_partition_meta").useDatabase("db_partition_meta");
+
+        String createTblStmtStr = "CREATE TABLE db_partition_meta.lake_table " +
+                "(`k1` int,`k2` int,`v1` int) " +
+                "PRIMARY KEY(`k1`, `k2`) " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 2 " +
+                "PROPERTIES ('replication_num' = '1', 'datacache.enable' = 'true');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_partition_meta");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("lake_table")).findFirst().orElse(null);
+        Assertions.assertNotNull(partitionMeta);
+        Assertions.assertEquals("db_partition_meta", partitionMeta.getDb_name());
+        Assertions.assertEquals("lake_table", partitionMeta.getTable_name());
+        // Verify cloud-native specific fields are set (lines 480-484)
+        // compact_version is set (defaults to 0 if no compaction statistics)
+        Assertions.assertTrue(partitionMeta.getCompact_version() >= 0);
+        // enable_datacache should be true since we set 'datacache.enable' = 'true'
+        Assertions.assertTrue(partitionMeta.isEnable_datacache());
+        // No async vector index on this table → VI built-version columns stay unset.
+        Assertions.assertFalse(partitionMeta.isSetMin_vi_built_version());
+        Assertions.assertFalse(partitionMeta.isSetMax_vi_built_version());
+    }
+
+    @Test
+    public void testGetLakePartitionsMetaWithoutDatacache() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_partition_meta2").useDatabase("db_partition_meta2");
+
+        String createTblStmtStr = "CREATE TABLE db_partition_meta2.lake_table_no_cache " +
+                "(`k1` int,`k2` int,`v1` int) " +
+                "PRIMARY KEY(`k1`, `k2`) " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 2 " +
+                "PROPERTIES ('replication_num' = '1', 'datacache.enable' = 'false');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_partition_meta2");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("lake_table_no_cache")).findFirst().orElse(null);
+        Assertions.assertNotNull(partitionMeta);
+        Assertions.assertEquals("db_partition_meta2", partitionMeta.getDb_name());
+        // compact_version is set (defaults to 0 if no compaction statistics)
+        Assertions.assertTrue(partitionMeta.getCompact_version() >= 0);
+        // enable_datacache should be false
+        Assertions.assertFalse(partitionMeta.isEnable_datacache());
+    }
+
+    /**
+     * MIN_VI_BUILT_VERSION / MAX_VI_BUILT_VERSION are populated for tables with an async vector
+     * index, aggregating the per-tablet built version across the partition's base index. Stamp
+     * distinct built versions on the base-index tablets and assert the [min, max] span is surfaced.
+     */
+    @Test
+    public void testGetLakePartitionsMetaAsyncVectorIndexBuiltVersion() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_vi_meta").useDatabase("db_vi_meta");
+
+        String createTblStmtStr = "CREATE TABLE db_vi_meta.vi_table (" +
+                " c0 INT," +
+                " c1 array<float> NOT NULL," +
+                " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
+                "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
+                "'index_build_mode' = 'async')) " +
+                "DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("db_vi_meta", "vi_table");
+        Assertions.assertTrue(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
+
+        // Stamp distinct built versions on the base-index tablets so the span becomes [3, 7].
+        long[] versions = {3L, 5L, 7L};
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
+            int i = 0;
+            for (Tablet tablet : baseIndex.getTablets()) {
+                ((LakeTablet) tablet).setVectorIndexBuiltVersion(versions[i % versions.length]);
+                i++;
+            }
+        }
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_vi_meta");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("vi_table")).findFirst().orElse(null);
+        Assertions.assertNotNull(partitionMeta);
+        Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
+        Assertions.assertEquals(3L, partitionMeta.getMin_vi_built_version());
+        Assertions.assertEquals(7L, partitionMeta.getMax_vi_built_version());
+    }
+
+    /**
+     * A sync-mode vector index is built inline, so the built-version columns report the partition's
+     * visible version (always current) rather than 0.
+     */
+    @Test
+    public void testGetLakePartitionsMetaSyncVectorIndexBuiltVersion() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_vi_sync").useDatabase("db_vi_sync");
+
+        String createTblStmtStr = "CREATE TABLE db_vi_sync.vi_sync_table (" +
+                " c0 INT," +
+                " c1 array<float> NOT NULL," +
+                " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
+                "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
+                "'index_build_mode' = 'sync')) " +
+                "DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("db_vi_sync", "vi_sync_table");
+        Assertions.assertFalse(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
+        Assertions.assertTrue(VectorIndexBuildScheduler.hasVectorIndex(table));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_vi_sync");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("vi_sync_table")).findFirst().orElse(null);
+        Assertions.assertNotNull(partitionMeta);
+        Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
+        // Sync index is always current as of the visible version.
+        Assertions.assertEquals(partitionMeta.getVisible_version(), partitionMeta.getMin_vi_built_version());
+        Assertions.assertEquals(partitionMeta.getVisible_version(), partitionMeta.getMax_vi_built_version());
+    }
+
+    /**
+     * partitions_meta must report each physical partition's own bucket count, not the table-level
+     * default. Add a physical partition whose bucket count differs from the table default and assert
+     * BUCKETS is per-physical (the default physical keeps the table default; the added one reports its own).
+     */
+    @Test
+    public void testGetLakePartitionsMetaReportsPerPhysicalBucketNum() throws Exception {
+        starRocksAssert.withDatabase("db_pp_buckets").useDatabase("db_pp_buckets");
+        starRocksAssert.withTable("CREATE TABLE db_pp_buckets.t (k1 INT, v1 BIGINT) " +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        // Add a physical partition whose bucket count (5) differs from the table default (3).
+        metastore.addPhysicalPartition("db_pp_buckets", "t", null, 5);
+
+        OlapTable table = (OlapTable) metastore.getTable("db_pp_buckets", "t");
+        Partition partition = table.getPartitions().iterator().next();
+        long defaultPhysicalId = partition.getDefaultPhysicalPartition().getId();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_pp_buckets");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        Map<Long, Integer> bucketsByPartitionId = new HashMap<>();
+        for (TPartitionMetaInfo meta : response.getPartitions_meta_infos()) {
+            if (meta.getTable_name().equals("t")) {
+                bucketsByPartitionId.put(meta.getPartition_id(), meta.getBuckets());
+            }
+        }
+        Assertions.assertEquals(2, bucketsByPartitionId.size());
+        Assertions.assertEquals(Integer.valueOf(3), bucketsByPartitionId.get(defaultPhysicalId));
+        Assertions.assertTrue(bucketsByPartitionId.containsValue(5),
+                "expected an added physical partition reporting 5 buckets, got: " + bucketsByPartitionId);
+    }
+
+    /**
+     * partitions_meta must report a range-distribution partition's real tablet count. Base holds 3
+     * tablets while the rollups hold 2 and 4, so "base" (3) is distinguishable from the old fixed 1,
+     * from the minimum (2) and from the maximum (4).
+     */
+    @Test
+    public void testGetLakePartitionsMetaReportsRangeBaseIndexTabletNum() throws Exception {
+        starRocksAssert.withDatabase("db_range_buckets").useDatabase("db_range_buckets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_range_buckets");
+
+        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT, true));
+        long partitionId = 90025L;
+        long physicalPartitionId = 90035L;
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
+
+        LakeTable table = new LakeTable(90024L, "range_buckets_t", columns, KeysType.DUP_KEYS,
+                partitionInfo, new RangeDistributionInfo());
+        MaterializedIndex baseIndex = newRangeIndex(30000L, 3000L, 3);
+        table.setBaseIndexMetaId(baseIndex.getMetaId());
+        table.setIndexMeta(baseIndex.getMetaId(), "range_buckets_t", columns, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        // STORAGE_PATH is filled unconditionally for a cloud-native table:
+        // InformationSchemaDataSource.genPartitionMetaInfo does
+        // table.getPartitionFilePathInfo(id).getFullPath(), and OlapTable.getPartitionFilePathInfo is
+        // @Nullable, returning null when the table has no StorageInfo. Without this the request throws
+        // an NPE long before the bucket assertion.
+        S3FileStoreInfo.Builder s3FsBuilder = S3FileStoreInfo.newBuilder()
+                .setBucket("test-bucket")
+                .setRegion("test-region");
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsType(FileStoreType.S3)
+                .setFsKey("test-bucket")
+                .setS3FsInfo(s3FsBuilder.build())
+                .build();
+        FilePathInfo pathInfo = FilePathInfo.newBuilder()
+                .setFsInfo(fsInfo)
+                .setFullPath("s3://test-bucket/range_buckets_t")
+                .build();
+        table.setStorageInfo(pathInfo, new DataCacheInfo(true, false));
+
+        Partition partition = new Partition(partitionId, physicalPartitionId, "range_buckets_t",
+                baseIndex, new RangeDistributionInfo());
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        physicalPartition.createRollupIndex(newRangeIndex(10000L, 1000L, 2));
+        physicalPartition.createRollupIndex(newRangeIndex(20000L, 2000L, 4));
+        table.addPartition(partition);
+
+        db.registerTableUnlocked(table);
+        try {
+            Assertions.assertNotEquals(baseIndex.getId(),
+                    physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).get(0).getId(),
+                    "fixture no longer discriminates: adjust the meta ids so a rollup enumerates first");
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+            TAuthInfo authInfo = new TAuthInfo();
+            authInfo.setPattern("db_range_buckets");
+            authInfo.setUser("root");
+            authInfo.setUser_ip("%");
+            req.setAuth_info(authInfo);
+            TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+            Integer buckets = null;
+            for (TPartitionMetaInfo meta : response.getPartitions_meta_infos()) {
+                if (meta.getTable_name().equals("range_buckets_t")) {
+                    buckets = meta.getBuckets();
+                }
+            }
+            Assertions.assertEquals(Integer.valueOf(3), buckets);
+        } finally {
+            db.dropTable(90024L);
+        }
+    }
+
+    private static MaterializedIndex newRangeIndex(long indexId, long metaId, int tabletNum) {
+        MaterializedIndex index = new MaterializedIndex(indexId, metaId, IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        for (int i = 0; i < tabletNum; i++) {
+            index.addTablet(new LakeTablet(indexId + i), null, false);
+        }
+        return index;
+    }
+
+    @Test
+    public void testGetTablesConfigWithExactTableNameFilter() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_exact_filter").useDatabase("db_exact_filter");
+        starRocksAssert.withTable("CREATE TABLE db_exact_filter.target_table " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE db_exact_filter.other_table " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_exact_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name("target_table");
+
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+
+        Assertions.assertEquals(1, response.getTables_config_infos().size());
+        Assertions.assertEquals("target_table", response.getTables_config_infos().get(0).getTable_name());
+    }
+
+    @Test
+    public void testGetTablesConfigWithLikePatternFilter() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_like_filter").useDatabase("db_like_filter");
+        starRocksAssert.withTable("CREATE TABLE db_like_filter.order_table_a " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE db_like_filter.order_table_b " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE db_like_filter.user_table " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_like_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name("order%");
+
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+
+        List<String> names = response.getTables_config_infos().stream()
+                .map(TTableConfigInfo::getTable_name)
+                .collect(Collectors.toList());
+        Assertions.assertEquals(2, names.size());
+        Assertions.assertTrue(names.contains("order_table_a"));
+        Assertions.assertTrue(names.contains("order_table_b"));
+        Assertions.assertFalse(names.contains("user_table"));
+    }
+
+    @Test
+    public void testGetTablesConfigWithNonExistentTableNameReturnsEmpty() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_empty_filter").useDatabase("db_empty_filter");
+        starRocksAssert.withTable("CREATE TABLE db_empty_filter.some_table " +
+                "(`k1` int, `v1` int) PRIMARY KEY(`k1`) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_empty_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name("does_not_exist");
+
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+
+        Assertions.assertTrue(response.getTables_config_infos().isEmpty());
+    }
+
+    @Test
+    public void testGetTablesConfigWithInvalidTableNamePattern() {
+        String invalidPattern = "invalid_table_pattern";
+        new MockUp<PatternMatcher>() {
+            @Mock
+            public PatternMatcher createMysqlPattern(Invocation invocation, String mysqlPattern, boolean caseSensitive) {
+                if (invalidPattern.equals(mysqlPattern)) {
+                    throw new SemanticException("bad table name pattern");
+                }
+                return invocation.proceed(mysqlPattern, caseSensitive);
+            }
+        };
+
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_empty_filter");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        req.setTable_name(invalidPattern);
+
+        TException exception = Assertions.assertThrows(TException.class,
+                () -> InformationSchemaDataSource.generateTablesConfigResponse(req));
+        Assertions.assertEquals("Pattern is in bad format: " + invalidPattern, exception.getMessage());
+    }
+}

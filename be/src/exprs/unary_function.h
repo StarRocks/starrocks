@@ -19,14 +19,14 @@
 
 #include <cstdint>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/logging.h"
 #include "function_helper.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -70,7 +70,102 @@ public:
         }
 
         if (SIMD::count_nonzero(nulls->get_data())) {
-            return NullableColumn::create(result, nulls);
+            return NullableColumn::create(std::move(result), std::move(nulls));
+        }
+        return result;
+    }
+};
+
+/**
+ * Like ProduceNullUnaryFunction driven by an input check, but the throwing CHECK_OP is never run on
+ * a null row of a nullable input. This matters when CHECK_OP may throw (e.g. the overflow check used
+ * by strict-mode cast): the data stored at a null row is undefined, so feeding it to CHECK_OP could
+ * raise a spurious exception.
+ *
+ * For a nullable input the hot loop stays branchless to match the throughput of the old
+ * ProduceNullUnaryFunction path (a per-row `if (null) continue` would introduce a data-dependent
+ * branch that mispredicts badly at mixed null ratios):
+ *   - OP runs on every row (the result of a null row is masked out by the null column anyway);
+ *   - the NON-throwing NULL_SAFE_CHECK runs on every row, but its result is AND-ed with the
+ *     not-null mask and OR-accumulated, so a null row's garbage can never set the accumulator;
+ *   - only if a genuine non-null row overflowed do we enter a cold path that re-runs the throwing
+ *     CHECK_OP on the non-null rows to raise the exception (with its detailed message). This path
+ *     terminates the query anyway, so its cost is irrelevant.
+ *
+ * Unlike ProduceNullUnaryFunction it handles const/nullable unwrapping itself, because the null
+ * column must stay available at the point where the check runs (an outer
+ * DealNullableColumnUnaryFunction would strip it before the check).
+ *
+ * @param OP             the value conversion.
+ * @param CHECK_OP       the throwing overflow check; used only on non-null rows / on the cold path.
+ * @param NULL_SAFE_CHECK the non-throwing overflow predicate (returns bool); safe to run on a null
+ *                       row's undefined data, used for branchless detection in the hot loop.
+ */
+template <typename OP, typename CHECK_OP, typename NULL_SAFE_CHECK = CHECK_OP>
+class NullAwareInputCheckUnaryFunction {
+public:
+    template <LogicalType Type, LogicalType ResultType>
+    static ColumnPtr evaluate(const ColumnPtr& v1) {
+        if (v1->only_null()) {
+            return v1;
+        }
+        if (v1->is_constant()) {
+            auto data = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
+            ColumnPtr result = evaluate<Type, ResultType>(data);
+            return ConstColumn::create(std::move(result), v1->size());
+        }
+
+        const int size = v1->size();
+        auto result = RunTimeColumnType<ResultType>::create();
+        result->resize(size);
+        auto* r3 = result->get_data().data();
+
+        // The throwing check plus the conversion for a single value. Used on paths where every row
+        // holds valid data (no nulls), so the throw is a predictable, never-taken branch.
+        auto apply_checked = [&](RunTimeCppType<Type> v, int i) {
+            (void)CHECK_OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(v);
+            r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(v);
+        };
+
+        if (v1->is_nullable()) {
+            auto* col = ColumnHelper::as_raw_column<NullableColumn>(v1);
+            const auto* r1 = ColumnHelper::cast_to_raw<Type>(col->data_column())->get_data().data();
+            if (col->has_null()) {
+                const auto& null_data = col->null_column()->get_data();
+                // Branchless hot loop: convert every row, and detect overflow on non-null rows only
+                // by masking the non-throwing check with the not-null flag and OR-accumulating it.
+                uint8_t overflow = 0;
+                for (int i = 0; i < size; ++i) {
+                    r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
+                    overflow |=
+                            static_cast<uint8_t>(
+                                    NULL_SAFE_CHECK::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(
+                                            r1[i])) &
+                            static_cast<uint8_t>(null_data[i] == 0);
+                }
+                // Cold path: a non-null row overflowed. Re-run the throwing check on non-null rows to
+                // raise the exception with its detailed message. This terminates the query.
+                if (overflow) {
+                    for (int i = 0; i < size; ++i) {
+                        if (null_data[i] == 0) {
+                            (void)CHECK_OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
+                        }
+                    }
+                }
+            } else {
+                // no nulls present: every row holds valid data, run the checked conversion directly
+                for (int i = 0; i < size; ++i) {
+                    apply_checked(r1[i], i);
+                }
+            }
+            auto nul = NullColumn::create();
+            nul->append(*col->null_column(), 0, col->null_column()->size());
+            return NullableColumn::create(std::move(result), std::move(nul));
+        }
+
+        const auto* r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data().data();
+        for (int i = 0; i < size; ++i) {
+            apply_checked(r1[i], i);
         }
         return result;
     }
@@ -101,9 +196,9 @@ public:
         result->resize(size);
         auto* r3 = result->get_data().data();
 
-        const auto& data_array = GetContainer<Type>().get_data(v1);
+        const auto& data_array = GetContainer<Type>::get_data(v1);
 
-        if constexpr (lt_is_string<Type> || lt_is_binary<Type>) {
+        if constexpr (lt_is_string<Type> || lt_is_binary<Type> || lt_is_object_family<Type>) {
             for (int i = 0; i < size; ++i) {
                 r3[i] = OP::template apply<CppType, ResultCppType>(data_array[i]);
             }
@@ -124,10 +219,9 @@ public:
  */
 template <typename OP>
 struct StringUnaryFunction {
-public:
     template <LogicalType Type, LogicalType ResultType, typename... Args>
     static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
-        auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data();
+        const auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->immutable_data();
 
         auto result = RunTimeColumnType<TYPE_VARCHAR>::create(std::forward<Args>(args)...);
 
@@ -136,7 +230,6 @@ public:
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
             std::string ret = OP::template apply<RunTimeCppType<Type>, std::string>(r1[i], std::forward<Args>(args)...);
-            bytes.reserve(ret.size());
             bytes.insert(bytes.end(), (uint8_t*)ret.data(), (uint8_t*)ret.data() + ret.size());
             offset.emplace_back(bytes.size());
         }
@@ -159,7 +252,7 @@ public:
             auto eva1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
             ColumnPtr data_column = FN::template evaluate<Type, ResultType, Args...>(eva1, std::forward<Args>(args)...);
 
-            return ConstColumn::create(data_column, v1->size());
+            return ConstColumn::create(std::move(data_column), v1->size());
         } else {
             return FN::template evaluate<Type, ResultType, Args...>(v1, std::forward<Args>(args)...);
         }
@@ -184,11 +277,16 @@ public:
             auto col = ColumnHelper::as_raw_column<NullableColumn>(v1);
 
             if (v1->size() == ColumnHelper::count_nulls(v1)) {
-                auto data = RunTimeColumnType<ResultType>::create();
+                typename RunTimeColumnType<ResultType>::MutablePtr data;
+                if constexpr (lt_is_decimal<ResultType>) {
+                    data = RunTimeColumnType<ResultType>::create(std::forward<Args>(args)...);
+                } else {
+                    data = RunTimeColumnType<ResultType>::create();
+                }
                 data->resize(v1->size());
                 auto nul = NullColumn::create();
                 nul->append(*col->null_column(), 0, col->null_column()->size());
-                return NullableColumn::create(data, std::move(nul));
+                return NullableColumn::create(std::move(data), std::move(nul));
             }
 
             ColumnPtr result =
@@ -202,13 +300,13 @@ public:
                     return result;
                 }
 
-                auto nullable_data = down_cast<NullableColumn*>(result.get());
+                auto nullable_data = down_cast<const NullableColumn*>(result.get());
                 if (result->has_null()) {
                     // case 2: the result rows are partially nulls, must merge null columns
                     // both inside the input column and inside the results.
                     auto finally_null_column =
                             FunctionHelper::union_null_column(col->null_column(), nullable_data->null_column());
-                    return NullableColumn::create(nullable_data->data_column(), finally_null_column);
+                    return NullableColumn::create(nullable_data->data_column(), std::move(finally_null_column));
 
                 } else {
                     // case 3: the result rows are all non-nulls, the data of null column should

@@ -13,22 +13,24 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class SessionVariablesSystemTable {
+    private static final String NAME = "session_variables";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.SESSION_VARIABLES_ID,
-                "session_variables",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("VARIABLE_NAME", ScalarType.createVarchar(64))
-                        .column("VARIABLE_VALUE", ScalarType.createVarchar(1024))
+                        .column("VARIABLE_NAME", TypeFactory.createVarcharType(64))
+                        .column("VARIABLE_VALUE", TypeFactory.createVarcharType(1024))
                         .build(), TSchemaTableType.SCH_SESSION_VARIABLES);
     }
 }

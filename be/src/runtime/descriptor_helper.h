@@ -21,7 +21,7 @@
 
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -51,6 +51,7 @@ public:
         _slot_desc.isMaterialized = true;
         _slot_desc.isOutputColumn = true;
         _slot_desc.__isset.isOutputColumn = true;
+        _slot_desc.id = -1;
     }
     TSlotDescriptorBuilder& type(LogicalType type) { return this->type(TypeDescriptor(type)); }
     TSlotDescriptorBuilder& type(const TypeDescriptor& type) {
@@ -78,7 +79,7 @@ public:
         return this->type(TYPE_DECIMALV2).precision(precision).scale(scale);
     }
     TSlotDescriptorBuilder& nullable(bool nullable) {
-        _slot_desc.nullIndicatorByte = (nullable) ? 0 : -1;
+        _slot_desc.__set_isNullable(nullable);
         return *this;
     }
     TSlotDescriptorBuilder& is_materialized(bool is_materialized) {
@@ -120,31 +121,23 @@ public:
         _tuple_id = tb->next_tuple_id();
         int num_nullables = 0;
         for (auto& slot_desc : _slot_descs) {
-            if (slot_desc.nullIndicatorByte >= 0) {
+            bool is_nullable = slot_desc.__isset.isNullable ? slot_desc.isNullable : true;
+            if (is_nullable) {
                 num_nullables++;
             }
         }
         int null_byetes = (num_nullables + 7) / 8;
         int offset = null_byetes;
-        int null_offset = 0;
         for (int i = 0; i < _slot_descs.size(); ++i) {
             auto& slot_desc = _slot_descs[i];
             TypeDescriptor td = TypeDescriptor::from_thrift(slot_desc.slotType);
             int size = td.get_slot_size();
             int align = (size > 16) ? 16 : size;
             offset = ((offset + align - 1) / align) * align;
-            slot_desc.id = tb->next_slot_id();
+            slot_desc.id = slot_desc.id == -1 ? tb->next_slot_id() : slot_desc.id;
             slot_desc.parent = _tuple_id;
             slot_desc.byteOffset = offset;
             offset += size;
-            if (slot_desc.nullIndicatorByte >= 0) {
-                slot_desc.nullIndicatorBit = null_offset % 8;
-                slot_desc.nullIndicatorByte = null_offset / 8;
-                null_offset++;
-            } else {
-                slot_desc.nullIndicatorByte = 0;
-                slot_desc.nullIndicatorBit = -1;
-            }
             slot_desc.slotIdx = i;
         }
 

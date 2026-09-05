@@ -16,7 +16,7 @@
 
 #include <cmath>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
@@ -67,7 +67,7 @@ public:
         int64_t temp = 1 + this->data(state).count;
 
         TResult delta;
-        delta = column->get_data()[row_num] - this->data(state).mean;
+        delta = column->immutable_data()[row_num] - this->data(state).mean;
 
         TResult r;
         if constexpr (lt_is_decimalv2<LT>) {
@@ -155,15 +155,17 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         size_t old_size = bytes.size();
 
         size_t one_element_size = sizeof(TResult) * 2 + sizeof(int64_t);
-        bytes.resize(one_element_size * chunk_size);
-        dst_column->get_offset().resize(chunk_size + 1);
+        const size_t final_size = old_size + one_element_size * chunk_size;
+        bytes.resize(final_size);
+        auto& offsets = dst_column->get_offset();
+        offsets.resize(chunk_size + 1);
 
         const auto* src_column = down_cast<const InputColumnType*>(src[0].get());
 
@@ -177,12 +179,12 @@ public:
 
         int64_t count = 1;
         for (size_t i = 0; i < chunk_size; ++i) {
-            mean = src_column->get_data()[i];
+            mean = src_column->immutable_data()[i];
             memcpy(bytes.data() + old_size, &mean, sizeof(TResult));
             memcpy(bytes.data() + old_size + sizeof(TResult), &m2, sizeof(TResult));
             memcpy(bytes.data() + old_size + sizeof(TResult) * 2, &count, sizeof(int64_t));
             old_size += one_element_size;
-            dst_column->get_offset()[i + 1] = old_size;
+            offsets.set(i + 1, old_size);
         }
     }
 
@@ -195,6 +197,19 @@ class VarianceAggregateFunction final : public DevFromAveAggregateFunction<LT, i
 public:
     using ResultColumnType =
             typename DevFromAveAggregateFunction<LT, is_sample, T, ResultLT, TResult>::ResultColumnType;
+
+    struct AggNullPred {
+        bool operator()(const DevFromAveAggregateState<TResult>& state) const {
+            if constexpr (is_sample) {
+                return state.count <= 1;
+            } else {
+                // The non-sample case will return null only when `state.count` is 0, where
+                // `NullableAggregateFunctionState::is_null` also true.
+                // Therefore, we don't need to check `state.count` here.
+                return false;
+            }
+        }
+    };
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
@@ -312,6 +327,19 @@ class StddevAggregateFunction final : public DevFromAveAggregateFunction<LT, is_
 public:
     using ResultColumnType =
             typename DevFromAveAggregateFunction<LT, is_sample, T, ResultLT, TResult>::ResultColumnType;
+
+    struct AggNullPred {
+        bool operator()(const DevFromAveAggregateState<TResult>& state) const {
+            if constexpr (is_sample) {
+                return state.count <= 1;
+            } else {
+                // The non-sample case will return null only when `state.count` is 0, where
+                // `NullableAggregateFunctionState::is_null` also true.
+                // Therefore, we don't need to check `state.count` here.
+                return false;
+            }
+        }
+    };
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());

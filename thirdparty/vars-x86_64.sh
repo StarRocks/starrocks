@@ -21,17 +21,11 @@
 # architecure-related.
 #####################################################
 
-# HADOOP
-HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz"
-HADOOP_NAME="hadoop-3.3.6.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.6"
-HADOOP_MD5SUM="1cbe1214299cd3bd282d33d3934b5cbd"
-
 # OPEN JDK
-JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"
-JDK_NAME="java-se-8u41-ri.tar.gz"
-JDK_SOURCE="java-se-8u41-ri"
-JDK_MD5SUM="7295b5a3fb90e7aaf80df23d5eac222d"
+JDK_DOWNLOAD="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_NAME="OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_SOURCE="jdk-17.0.13+11"
+JDK_MD5SUM="6876bb460fbcf6234778a62e1f3c4ae9"
 
 # HYPERSCAN
 HYPERSCAN_DOWNLOAD="https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz"
@@ -39,20 +33,26 @@ HYPERSCAN_NAME="hyperscan-5.4.0.tar.gz"
 HYPERSCAN_SOURCE="hyperscan-5.4.0"
 HYPERSCAN_MD5SUM="65e08385038c24470a248f6ff2fa379b"
 
-# async-profiler
-ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v2.9/async-profiler-2.9-linux-x64.tar.gz"
-ASYNC_PROFILER_NAME="async-profiler-2.9-linux-x64.tar.gz"
-ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-x64"
-ASYNC_PROFILER_MD5SUM="29127cee36b7acf069d31603b4558361"
-
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux.tar.gz"
 JINDOSDK_NAME="jindosdk-4.6.8-linux.tar.gz"
 JINDOSDK_SOURCE="jindosdk-4.6.8-linux"
 JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
 
+# tenann
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-rc2/tenann-v0.5.1-rc2-x86_64.tar.gz"
+TENANN_NAME="tenann-v0.5.1-rc2-x86_64.tar.gz"
+TENANN_SOURCE="tenann-v0.5.1-rc2"
+TENANN_MD5SUM="d3ee63132e0d3633fb417789feb9cb03"
+
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v2.0.2/starcache-centos7_amd64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc2/starcache-centos7_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="05d44dc8803fc398e6d4fa4ca95b7634"
+STARCACHE_MD5SUM="4f75bfdaf4956ea7433822bf51eb7a08"
+
+# pprof
+PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260814/pprof-linux-amd64"
+PPROF_NAME="pprof"
+PPROF_SOURCE="pprof"
+PPROF_MD5SUM="145bef6bc11b8fc8bc134e79384b78ee"

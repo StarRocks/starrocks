@@ -19,18 +19,29 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TMasterResult;
+import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTaskType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
@@ -50,7 +61,7 @@ public class LeaderImplTest {
 
     private final LeaderImpl leader = new LeaderImpl();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         dbId = 1L;
         dbName = "database0";
@@ -65,21 +76,21 @@ public class LeaderImplTest {
 
     @Test
     public void testFindRelatedReplica(@Mocked OlapTable olapTable, @Mocked LakeTable lakeTable,
-                                       @Mocked Partition partition, @Mocked MaterializedIndex index
+                                       @Mocked PhysicalPartition physicalPartition, @Mocked MaterializedIndex index
                                        ) throws Exception {
 
         // olap table
         new Expectations() {
             {
-                partition.getIndex(indexId);
+                physicalPartition.getIndex(indexId);
                 result = index;
                 index.getTablet(tabletId);
                 result = new LocalTablet(tabletId);
             }
         };
         
-        Assert.assertNull(Deencapsulation.invoke(leader, "findRelatedReplica",
-                olapTable, partition, backendId, tabletId, indexId));
+        Assertions.assertNull(Deencapsulation.invoke(leader, "findRelatedReplica",
+                olapTable, physicalPartition, backendId, tabletId, indexId));
         // lake table
         new MockUp<LakeTablet>() {
             @Mock
@@ -90,14 +101,107 @@ public class LeaderImplTest {
 
         new Expectations() {
             {
-                partition.getIndex(indexId);
+                physicalPartition.getIndex(indexId);
                 result = index;
                 index.getTablet(tabletId);
                 result = new LakeTablet(tabletId);
             }
         };
 
-        Assert.assertEquals(new Replica(tabletId, backendId, -1, NORMAL), Deencapsulation.invoke(leader, "findRelatedReplica",
-                olapTable, partition, backendId, tabletId, indexId));
+        Assertions.assertEquals(new Replica(tabletId, backendId, -1, NORMAL), Deencapsulation.invoke(leader, "findRelatedReplica",
+                olapTable, physicalPartition, backendId, tabletId, indexId));
+    }
+
+    @Test
+    public void testReportTranslatesIllegalStateExceptionToNotMaster(@Mocked GlobalStateMgr globalStateMgr,
+                                                                     @Mocked ReportHandler reportHandler) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.isLeader();
+                result = true;
+                globalStateMgr.getReportHandler();
+                result = reportHandler;
+                reportHandler.handleReport((TReportRequest) any);
+                result = new IllegalStateException("leader lease invalidated");
+            }
+        };
+
+        TMasterResult result = leader.report(new TReportRequest());
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        Assertions.assertNotNull(result.getStatus().getError_msgs());
+        Assertions.assertEquals(1, result.getStatus().getError_msgs().size());
+        String msg = result.getStatus().getError_msgs().get(0);
+        Assertions.assertTrue(msg.contains("current fe is not master"), "error msg must include non-master marker, got: " + msg);
+        Assertions.assertTrue(msg.contains("leader lease invalidated"),
+                "error msg must propagate the IllegalStateException message, got: " + msg);
+    }
+
+    @Test
+    public void testReportRejectsWhenNotLeader(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.isLeader();
+                result = false;
+            }
+        };
+
+        TMasterResult result = leader.report(new TReportRequest());
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        Assertions.assertEquals("current fe is not master", result.getStatus().getError_msgs().get(0));
+    }
+
+    @Test
+    public void testCreateFinishTaskReturnsLeaderTransferredWhenLeaderDemoting(@Mocked GlobalStateMgr globalStateMgr,
+                                                                               @Mocked NodeMgr nodeMgr,
+                                                                               @Mocked SystemInfoService clusterInfo) {
+        Backend backend = new Backend(10001L, "172.26.80.2", 9050);
+        backend.setBePort(9060);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.isLeaderDemoting();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.isLeaderWorkAdmissionOpen();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+
+                nodeMgr.getClusterInfo();
+                result = clusterInfo;
+                minTimes = 0;
+
+                clusterInfo.getBackendWithBePort("172.26.80.2", 9060);
+                result = backend;
+                minTimes = 0;
+            }
+        };
+
+        TFinishTaskRequest request = new TFinishTaskRequest(
+                new TBackend("172.26.80.2", 9060, 8040),
+                TTaskType.CREATE,
+                58052L,
+                new TStatus(TStatusCode.OK));
+
+        TMasterResult result = leader.finishTask(request);
+
+        Assertions.assertEquals(TStatusCode.LEADER_TRANSFERRED, result.getStatus().getStatus_code());
+        Assertions.assertNotNull(result.getStatus().getError_msgs());
+        Assertions.assertTrue(result.getStatus().getError_msgs().get(0).contains("leader is transferring"));
     }
 }

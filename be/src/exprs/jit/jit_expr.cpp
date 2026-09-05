@@ -1,0 +1,171 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "exprs/jit/jit_expr.h"
+
+#include <llvm/IR/IRBuilder.h>
+
+#include <chrono>
+#include <vector>
+
+#include "base/time/time.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
+#include "common/compiler_util.h"
+#include "common/runtime_profile.h"
+#include "common/status.h"
+#include "exprs/expr.h"
+#include "exprs/function_context.h"
+#include "exprs/jit/expr_jit_codegen.h"
+#include "exprs/jit/jit_engine.h"
+#include "runtime/runtime_state.h"
+
+namespace starrocks {
+
+JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
+    TExprNode node;
+    node.node_type = TExprNodeType::JIT_EXPR;
+    node.opcode = TExprOpcode::JIT;
+    node.is_nullable = expr->is_nullable();
+    node.type = expr->type().to_thrift();
+    node.is_monotonic = expr->is_monotonic();
+    return pool->add(new JITExpr(node, expr));
+}
+
+JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {}
+
+void JITExpr::set_uncompilable_children(RuntimeState* state) {
+    _children.clear();
+    ExprJITCodegen::collect_uncompilable_exprs(_expr, _children, state);
+}
+
+Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
+    RETURN_IF_ERROR(prepare_impl(state, context));
+    if (_jit_callable == nullptr) {
+        _children.clear();
+        _children.push_back(_expr);
+        // jitExpr becomes an empty node, fallback to original expr, which are prepared again in case of jit
+        // complex expressions later.
+        RETURN_IF_ERROR(Expr::prepare(state, context));
+    }
+    return Status::OK();
+}
+
+Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
+    if (!is_constant()) {
+        auto start = MonotonicNanos();
+
+        // Compile the expression into native code and retrieve the function pointer.
+        auto* jit_engine = JITEngine::get_instance();
+        if (!jit_engine->support_jit()) {
+            return Status::JitCompileError("JIT is not supported");
+        }
+        auto expr_name = ExprJITCodegen::func_name(_expr, state);
+        ASSIGN_OR_RETURN(_jit_callable, jit_engine->get_jit_callable(expr_name, context, _expr, _children));
+        auto elapsed = MonotonicNanos() - start;
+        auto* profile = state == nullptr ? nullptr : state->runtime_profile();
+        if (profile != nullptr) {
+            auto* jit_counter = ADD_COUNTER(profile, "JITCounter", TUnit::UNIT);
+            auto* jit_timer = ADD_TIMER(profile, "JITTotalCostTime");
+            COUNTER_UPDATE(jit_counter, 1);
+            COUNTER_UPDATE(jit_timer, elapsed);
+        }
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, Chunk* ptr) {
+    // If the expr fails to compile, evaluate using the original expr.
+    if (UNLIKELY(_jit_callable == nullptr)) {
+        return _expr->evaluate_checked(context, ptr);
+    }
+
+    std::vector<JITColumn> jit_columns;
+    jit_columns.reserve(_children.size() + 1);
+    Columns args;
+    args.reserve(_children.size() + 1);
+    auto unfold_ptr = [&jit_columns](const ColumnPtr& column) -> Status {
+        DCHECK(!column->is_constant());
+        auto [un_col, un_col_null] = ColumnHelper::unpack_nullable_column(column);
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(un_col->accept(&visitor));
+        auto data_col_ptr = reinterpret_cast<const int8_t*>(visitor.result());
+        const int8_t* null_flags_ptr = nullptr;
+        if (un_col_null != nullptr) {
+            null_flags_ptr = reinterpret_cast<const int8_t*>(un_col_null->immutable_data().data());
+        }
+        jit_columns.emplace_back(JITColumn{data_col_ptr, null_flags_ptr});
+        return Status::OK();
+    };
+    size_t num_rows = 0;
+    for (Expr* child : _children) {
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
+        num_rows = std::max<size_t>(num_rows, column->size());
+        args.emplace_back(column);
+    }
+    if (ptr != nullptr) {
+        num_rows = ptr->num_rows();
+    }
+    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows);
+    if (num_rows == 0) {
+        return result_column;
+    }
+    Columns backup_args;
+    backup_args.reserve(_children.size() + 1);
+    for (auto i = 0; i < _children.size(); i++) {
+        auto column = args[i];
+        auto child = _children[i];
+        if (UNLIKELY((column->is_constant() ^ child->is_constant()) ||
+                     (column->is_nullable() ^ child->is_nullable()))) {
+            VLOG_QUERY << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
+                       << " but col const = " << column->is_constant() << " null = " << column->is_nullable()
+                       << " expr= " << child->debug_string() << " col= " << column->get_name();
+        }
+
+        if (column->is_constant()) {
+            column = ColumnHelper::unfold_const_column(child->type(), num_rows, column);
+        }
+        DCHECK(num_rows == column->size())
+                << "size unequal " + std::to_string(num_rows) + " != " + std::to_string(column->size());
+
+        if (child->is_nullable() && !column->is_nullable()) {
+            column = NullableColumn::create(column, NullColumn::create(column->size(), 0));
+        } else if (!child->is_nullable() && column->is_nullable()) {
+            if (column->has_null()) {
+                return Status::RuntimeError(
+                        "[JIT] an expression comes out unexpected null values, please set jit_level = 0 to disable jit "
+                        "and retry");
+            }
+        }
+        RETURN_IF_ERROR(unfold_ptr(column));
+        backup_args.emplace_back(column);
+    }
+
+    RETURN_IF_ERROR(unfold_ptr(result_column->as_mutable_ptr()));
+    // inputs are not empty.
+    (*_jit_callable)(num_rows, jit_columns.data());
+    //TODO: _jit_function return has_null
+    if (is_nullable()) {
+        down_cast<NullableColumn*>(result_column.get())->update_has_null();
+    }
+    return result_column;
+}
+
+} // namespace starrocks

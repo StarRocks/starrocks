@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the bitwise negation of a numeric expression."
 ---
 
 # bitnot
 
-## Description
+
 
 Returns the bitwise negation of a numeric expression.
 

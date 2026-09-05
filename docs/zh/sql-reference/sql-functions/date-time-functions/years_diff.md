@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算两个日期时间表达式之间相差的年数，精确到年。"
 ---
 
 # years_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差几年 （`expr1` - `expr2`），结果精确到年。
 

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.gson.JsonObject;
@@ -52,7 +51,7 @@ public class Partition implements PartitionInfo {
         return parameters;
     }
 
-    public RemoteFileInputFormat getInputFormat() {
+    public RemoteFileInputFormat getFileFormat() {
         return inputFormat;
     }
 

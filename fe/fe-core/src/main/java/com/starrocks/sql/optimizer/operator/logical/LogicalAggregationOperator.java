@@ -28,13 +28,16 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
-import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+import com.starrocks.sql.optimizer.skew.DataSkewInfo;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,17 +62,22 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // but for single distinct function, partitionByColumns are not same with groupingKeys
     private List<ColumnRefOperator> partitionByColumns;
 
-    // When generate plan fragment, we need this info.
-    // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
-    // In the distinct local (update serialize) agg stage:
-    //|   5:AGGREGATE (update serialize)                                                      |
-    //|   |  output: count(<slot 13>), sum(<slot 16>)                                         |
-    //|   |  group by:                                                                        |
-    // count function is update function, but sum is merge function
-    // if singleDistinctFunctionPos is -1, means no single distinct function
-    private int singleDistinctFunctionPos = -1;
-
     private DataSkewInfo distinctColumnDataSkew = null;
+
+    // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
+    // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
+    private boolean topNLocalAgg = false;
+
+    // only used in streaming aggregate
+    // eg: select distinct a from table limit 100;
+    // In this query, we can push the LIMIT down to the streaming distinct operator.
+    // However, no LIMIT should be inserted between the global and local operators.
+    // may cause incorrect final results, because the LIMIT between the local-distinct and global-distinct
+    // operators can truncate overlapping data produced by the local-distinct stage.
+    private long localLimit = DEFAULT_LIMIT;
+
+    // TopN information for filtering group by data during aggregation
+    private LogicalTopNOperator.TopNSortInfo aggTopnSortInfo = null;
 
     // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
     // `this.isSplit = !type.isGlobal() || isSplit;` helps us do the work.
@@ -77,7 +85,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
     public LogicalAggregationOperator(AggType type,
                                       List<ColumnRefOperator> groupingKeys,
                                       Map<ColumnRefOperator, CallOperator> aggregations) {
-        this(type, groupingKeys, groupingKeys, aggregations, false, -1, -1, null);
+        this(type, groupingKeys, groupingKeys, aggregations, false, -1, null);
     }
 
     public LogicalAggregationOperator(
@@ -86,7 +94,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
             List<ColumnRefOperator> partitionByColumns,
             Map<ColumnRefOperator, CallOperator> aggregations,
             boolean isSplit,
-            int singleDistinctFunctionPos,
             long limit,
             ScalarOperator predicate) {
         super(OperatorType.LOGICAL_AGGR, limit, predicate, null);
@@ -95,13 +102,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.partitionByColumns = partitionByColumns;
         this.aggregations = ImmutableMap.copyOf(aggregations);
         this.isSplit = !type.isGlobal() || isSplit;
-        this.singleDistinctFunctionPos = singleDistinctFunctionPos;
     }
 
     private LogicalAggregationOperator() {
         super(OperatorType.LOGICAL_AGGR);
         this.isSplit = false;
-        this.singleDistinctFunctionPos = -1;
     }
 
     public AggType getType() {
@@ -120,12 +125,16 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return isSplit;
     }
 
+    public void setSplit(boolean split) {
+        isSplit = split;
+    }
+
     public void setOnlyLocalAggregate() {
         isSplit = false;
     }
 
-    public int getSingleDistinctFunctionPos() {
-        return singleDistinctFunctionPos;
+    public boolean isOnlyLocalAggregate() {
+        return type.isLocal() && !isSplit;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
@@ -142,6 +151,22 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public DataSkewInfo getDistinctColumnDataSkew() {
         return distinctColumnDataSkew;
+    }
+
+    public boolean isTopNLocalAgg() {
+        return topNLocalAgg;
+    }
+
+    public void setTopNLocalAgg(boolean topNLocalAgg) {
+        this.topNLocalAgg = topNLocalAgg;
+    }
+
+    public long getLocalLimit() {
+        return localLimit;
+    }
+
+    public LogicalTopNOperator.TopNSortInfo getAggTopnSortInfo() {
+        return aggTopnSortInfo;
     }
 
     public boolean checkGroupByCountDistinct() {
@@ -169,6 +194,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return checkGroupByCountDistinct() && hasSkew();
     }
 
+    public boolean hasRemoveDistinctFunc() {
+        return aggregations.values().stream().anyMatch(CallOperator::isRemovedDistinct);
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
@@ -188,6 +217,35 @@ public class LogicalAggregationOperator extends LogicalOperator {
         aggregations.entrySet().forEach(entry -> columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(),
                 entry.getValue())));
         return new RowOutputInfo(columnOutputInfoList);
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
+
+        Map<ScalarOperator, DomainProperty.DomainWrapper> newDomainMap = Maps.newHashMap();
+        for (ColumnRefOperator groupByKey : groupingKeys) {
+            if (childDomainProperty.contains(groupByKey)) {
+                newDomainMap.put(groupByKey, childDomainProperty.getValueWrapper(groupByKey));
+            }
+        }
+
+        ColumnRefSet groupByCols = new ColumnRefSet(groupingKeys);
+        for (Map.Entry<ScalarOperator, DomainProperty.DomainWrapper> entry : childDomainProperty.getDomainMap().entrySet()) {
+            if (!newDomainMap.containsKey(entry.getKey()) && groupByCols.containsAll(entry.getKey().getUsedColumns())) {
+                newDomainMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        DomainProperty domainProperty = new DomainProperty(newDomainMap);
+        if (predicate != null) {
+            DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+            DomainProperty property = deriver.derive(predicate);
+            domainProperty = domainProperty.filterDomainProperty(property);
+        }
+        return domainProperty;
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
@@ -235,16 +293,18 @@ public class LogicalAggregationOperator extends LogicalOperator {
             return false;
         }
         LogicalAggregationOperator that = (LogicalAggregationOperator) o;
-        return isSplit == that.isSplit && singleDistinctFunctionPos == that.singleDistinctFunctionPos &&
+        return isSplit == that.isSplit &&
                 type == that.type && Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupingKeys, that.groupingKeys) &&
-                Objects.equals(partitionByColumns, that.partitionByColumns);
+                Objects.equals(partitionByColumns, that.partitionByColumns) &&
+                topNLocalAgg == that.topNLocalAgg &&
+                Objects.equals(aggTopnSortInfo, that.aggTopnSortInfo);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns,
-                singleDistinctFunctionPos);
+        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns, topNLocalAgg,
+                aggTopnSortInfo);
     }
 
     public static Builder builder() {
@@ -276,8 +336,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
             builder.partitionByColumns = aggregationOperator.partitionByColumns;
             builder.aggregations = aggregationOperator.aggregations;
             builder.isSplit = aggregationOperator.isSplit;
-            builder.singleDistinctFunctionPos = aggregationOperator.singleDistinctFunctionPos;
             builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
+            builder.topNLocalAgg = aggregationOperator.topNLocalAgg;
+            builder.localLimit = aggregationOperator.localLimit;
+            builder.aggTopnSortInfo = aggregationOperator.aggTopnSortInfo;
             return this;
         }
 
@@ -292,6 +354,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
             return this;
         }
 
+        public Builder setLocalLimit(long localLimit) {
+            builder.localLimit = localLimit;
+            return this;
+        }
+
         public Builder setAggregations(Map<ColumnRefOperator, CallOperator> aggregations) {
             builder.aggregations = ImmutableMap.copyOf(aggregations);
             return this;
@@ -302,14 +369,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
             return this;
         }
 
-        public Builder setPartitionByColumns(
-                List<ColumnRefOperator> partitionByColumns) {
-            builder.partitionByColumns = partitionByColumns;
+        public Builder setSplit(boolean split) {
+            builder.isSplit = split;
             return this;
         }
 
-        public Builder setSingleDistinctFunctionPos(int singleDistinctFunctionPos) {
-            builder.singleDistinctFunctionPos = singleDistinctFunctionPos;
+        public Builder setPartitionByColumns(
+                List<ColumnRefOperator> partitionByColumns) {
+            builder.partitionByColumns = partitionByColumns;
             return this;
         }
 
@@ -319,6 +386,16 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
         public DataSkewInfo getDistinctColumnDataSkew() {
             return builder.distinctColumnDataSkew;
+        }
+
+        public Builder setTopNLocalAgg(boolean topNLocalAgg) {
+            builder.topNLocalAgg = topNLocalAgg;
+            return this;
+        }
+
+        public Builder setAggTopnSortInfo(LogicalTopNOperator.TopNSortInfo aggTopnSortInfo) {
+            builder.aggTopnSortInfo = aggTopnSortInfo;
+            return this;
         }
     }
 }

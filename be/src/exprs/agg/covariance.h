@@ -15,9 +15,12 @@
 
 #include <cmath>
 
-#include "column/type_traits.h"
+#include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
 #include "types/logical_type.h"
+
 namespace starrocks {
 
 // aditional state for Corelation
@@ -67,16 +70,18 @@ public:
                 size_t row_num) const override {
         DCHECK(ctx->get_num_args() == 2);
 
-        const auto* column0 = down_cast<const InputColumnType*>(columns[0]);
-        const auto* column1 = down_cast<const InputColumnType*>(columns[1]);
-
+        // An argument may still be a constant column here: the analyzer only rejects arguments
+        // that are already constant in the AST, but the optimizer can fold one into a literal
+        // afterwards (e.g. `covar_samp(a, b)` over an inlined one-row subquery), and the
+        // aggregator keeps constant arguments other than the first one packed as ConstColumn.
+        // GetContainer unwraps const/nullable wrappers and picks the right row index.
         this->data(state).count += 1;
 
         double oldMeanX = this->data(state).meanX;
-        InputCppType rowX = column0->get_data()[row_num];
+        InputCppType rowX = GetContainer<LT>::get_data(columns[0], row_num);
 
         double oldMeanY = this->data(state).meanY;
-        InputCppType rowY = column1->get_data()[row_num];
+        InputCppType rowY = GetContainer<LT>::get_data(columns[1], row_num);
 
         double newMeanX = (oldMeanX + (rowX - oldMeanX) / this->data(state).count);
         double newMeanY = (oldMeanY + (rowY - oldMeanY) / this->data(state).count);
@@ -113,11 +118,12 @@ public:
         double deltaY = this->data(state).meanY - meanY;
 
         double sum_count = this->data(state).count + count;
-        double factor = (this->data(state).count / sum_count);
 
-        this->data(state).meanX = meanX + deltaX * factor;
-        this->data(state).meanY = meanY + deltaY * factor;
+        double factor_for_mean = (this->data(state).count / sum_count);
+        this->data(state).meanX = meanX + deltaX * factor_for_mean;
+        this->data(state).meanY = meanY + deltaY * factor_for_mean;
 
+        double factor = (this->data(state).count * count / sum_count);
         this->data(state).c2 = c2 + this->data(state).c2 + (deltaX * deltaY) * factor;
         this->data(state).count = sum_count;
 
@@ -156,9 +162,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         size_t old_size = bytes.size();
 
@@ -166,20 +172,25 @@ public:
         if constexpr (isCorelation) {
             one_element_size += (sizeof(double) * 2);
         }
-        bytes.resize(one_element_size * chunk_size);
-        dst_column->get_offset().resize(chunk_size + 1);
+        const size_t final_size = old_size + one_element_size * chunk_size;
+        bytes.resize(final_size);
+        auto& offsets = dst_column->get_offset();
+        offsets.resize(chunk_size + 1);
 
-        const auto* src_column0 = down_cast<const InputColumnType*>(src[0].get());
-        const auto* src_column1 = down_cast<const InputColumnType*>(src[1].get());
+        // `src` may hold constant columns, see the comment in `update`.
+        const bool src0_is_const = src[0]->is_constant();
+        const bool src1_is_const = src[1]->is_constant();
 
         double meanX = {};
         double meanY = {};
         double c2 = 0;
 
         int64_t count = 1;
+        const auto src0_data = GetContainer<LT>::get_data(src[0]);
+        const auto src1_data = GetContainer<LT>::get_data(src[1]);
         for (size_t i = 0; i < chunk_size; ++i) {
-            meanX = src_column0->get_data()[i];
-            meanY = src_column1->get_data()[i];
+            meanX = static_cast<double>(src0_data[src0_is_const ? 0 : i]);
+            meanY = static_cast<double>(src1_data[src1_is_const ? 0 : i]);
             memcpy(bytes.data() + old_size, &meanX, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double), &meanY, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double) * 2, &c2, sizeof(double));
@@ -192,17 +203,31 @@ public:
                        sizeof(double));
             }
             old_size += one_element_size;
-
-            dst_column->get_offset()[i + 1] = old_size;
+            offsets.set(i + 1, old_size);
         }
     }
 };
 
 template <LogicalType LT, bool isSample, typename T = RunTimeCppType<LT>>
 class CorVarianceAggregateFunction final : public CorVarianceBaseAggregateFunction<LT, false> {
+public:
     using InputColumnType = RunTimeColumnType<LT>;
     using InputCppType = T;
     using ResultColumnType = RunTimeColumnType<TYPE_DOUBLE>;
+
+    struct AggNullPred {
+        bool operator()(const CovarianceCorelationAggregateState<false>& state) const {
+            if constexpr (isSample) {
+                return state.count <= 1;
+            } else {
+                // The non-sample case will return null only when `state.count` is 0, where
+                // `NullableAggregateFunctionState::is_null` also true.
+                // Therefore, we don't need to check `state.count` here.
+                return false;
+            }
+        }
+    };
+
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
 
@@ -257,6 +282,10 @@ public:
     using InputColumnType = RunTimeColumnType<LT>;
     using InputCppType = T;
     using ResultColumnType = RunTimeColumnType<TYPE_DOUBLE>;
+
+    struct AggNullPred {
+        bool operator()(const CovarianceCorelationAggregateState<true>& state) const { return state.count <= 1; }
+    };
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());

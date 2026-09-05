@@ -46,7 +46,7 @@
 #include "Adaptor.hh"
 #include "LzoDecompressor.hh"
 #include "Utils.hh"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "lz4.h"
 #include "orc/Exceptions.hh"
 #include "wrap/snappy-wrapper.h"
@@ -753,7 +753,7 @@ protected:
         size_t actual = 0;
         auto res = libdeflate_deflate_decompress(decompressor, inputPtr, length, output, maxOutputLength, &actual);
         if (res != LIBDEFLATE_SUCCESS) {
-            throw ParseError("LibDefalte decompress failed");
+            throw ParseError("LibDeflate decompress failed");
         }
         return actual;
     }
@@ -1086,7 +1086,12 @@ private:
 
 uint64_t ZSTDDecompressionStream::decompress(const char* inputPtr, uint64_t length, char* output,
                                              size_t maxOutputLength) {
-    return static_cast<uint64_t>(ZSTD_decompressDCtx(dctx, output, maxOutputLength, inputPtr, length));
+    auto ret = ZSTD_decompressDCtx(dctx, output, maxOutputLength, inputPtr, length);
+    if (ZSTD_isError(ret)) {
+        throw std::runtime_error(std::string("Error while calling ZSTD_decompressDCtx for zstd. error: ") +
+                                 ZSTD_getErrorName(ret));
+    }
+    return static_cast<uint64_t>(ret);
 }
 
 DIAGNOSTIC_PUSH

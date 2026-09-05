@@ -14,11 +14,19 @@
 
 #pragma once
 
+#include <optional>
+#include <set>
+#include <vector>
+
+#include "common/column_id.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "runtime/mem_pool.h"
-#include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
-#include "storage/lake/tablet.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/range.h"
+#include "types_fwd.h"
 
 namespace starrocks {
 class OlapTuple;
@@ -30,10 +38,27 @@ struct RowSourceMask;
 class RowSourceMaskBuffer;
 class SeekRange;
 class SeekTuple;
+class Segment;
+class TabletSchema;
+class TabletMetadataPB;
+class RowsetReadOptions;
 
 namespace lake {
 
+struct PreparedTabletReadState;
 class Rowset;
+class TabletManager;
+
+// Set difference lhs - rhs over two sorted, internally non-overlapping sparse ranges. Used by the
+// prepared-split refine path to compute the REFINED coverage (pruned - already-allocated-coarse).
+// Declared here so it can be unit-tested directly (the definition lives in tablet_reader.cpp).
+SparseRange<> subtract_sparse_ranges(const SparseRange<>& lhs, const SparseRange<>& rhs);
+
+// Column ids the tablet's delete predicates evaluate; mirrors TabletReader::init_delete_predicates, which
+// filters neither by version nor by key column, so a caller keeping them out of the unused-output set cannot
+// disagree with what the reader reads.
+Status delete_predicate_column_ids(const TabletMetadataPB& metadata, const TabletSchema& schema,
+                                   std::set<ColumnId>* column_ids);
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
@@ -49,13 +74,21 @@ class TabletReader final : public ChunkIterator {
     using TabletReaderParams = starrocks::TabletReaderParams;
 
 public:
-    TabletReader(Tablet tablet, int64_t version, Schema schema);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
-                 RowSourceMaskBuffer* mask_buffer);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 bool need_split, bool could_split_physically);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
+                 std::shared_ptr<const TabletSchema> tablet_schema, RowSourceMaskBuffer* selection_buffer = nullptr);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
+
+    void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
 
     Status prepare();
 
@@ -69,23 +102,13 @@ public:
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
-protected:
-    Status do_get_next(Chunk* chunk) override;
-    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
+    void set_tablet(std::shared_ptr<VersionedTablet> tablet) { _tablet = std::move(tablet); }
 
-private:
-    using PredicateList = std::vector<const ColumnPredicate*>;
-    using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
+    void set_tablet_schema(std::shared_ptr<const TabletSchema> tablet_schema) {
+        _tablet_schema = std::move(tablet_schema);
+    }
 
-    Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
-
-    Status init_predicates(const TabletReaderParams& read_params);
-    Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
-
-    Status init_collector(const TabletReaderParams& read_params);
-
-    static Status to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
-                                MemPool* mempool);
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
 
     static Status parse_seek_range(const TabletSchema& tablet_schema,
                                    TabletReaderParams::RangeStartOperation range_start_op,
@@ -94,17 +117,47 @@ private:
                                    const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
                                    MemPool* mempool);
 
-    Tablet _tablet;
-    int64_t _version;
+protected:
+    Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override;
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                       std::vector<uint64_t>* rssid_rowids) override;
+
+private:
+    using PredicateList = std::vector<const ColumnPredicate*>;
+    using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
+
+    Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state);
+    Status build_initial_coarse_split_tasks(const TabletReaderParams& params,
+                                            const PreparedTabletReadStatePtr& prepared_tablet_read_state);
+    Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
+                                                                RowidRangeOptionPtr* local_rowid_range);
+    Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+    Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
+    Status init_rowset_read_options_for_split(const TabletReaderParams& params, RowsetReadOptions* options,
+                                              LakeIOOptions* lake_io_opts);
+
+    Status init_predicates(const TabletReaderParams& read_params);
+    Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
+
+    Status init_collector(const TabletReaderParams& read_params);
+    Status init_compaction_column_paths(const TabletReaderParams& read_params);
+
+    static Status to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
+                                MemPool* mempool);
+
+    TabletManager* _tablet_mgr;
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
     std::shared_ptr<const TabletSchema> _tablet_schema;
 
     // _rowsets is specified in the constructor when compaction
     bool _rowsets_inited = false;
     std::vector<RowsetPtr> _rowsets;
+    std::vector<SegmentSharedPtr> _segments;
+    std::vector<std::vector<ChunkIteratorPtr>> _reusable_rowset_iterators;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
-    PredicateMap _pushdown_predicates;
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
@@ -113,10 +166,25 @@ private:
     MemPool _mempool;
     ObjectPool _obj_pool;
 
+    // Cached parse_seek_range() result, reused across this reader's per-split reopens: the seek range
+    // derives only from the tablet schema and scan-constant key ranges, so it is invariant across reopens
+    // (runtime filters narrow rows separately). Its datums live in _mempool, so declare it after _mempool.
+    std::optional<std::vector<SeekRange>> _cached_seek_ranges;
+
+    bool _is_asc_hint = true;
+
     // used for vertical compaction
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+    RowSourceMaskBuffer* _selection_buffer = nullptr;
+
+    std::shared_ptr<VersionedTablet> _tablet;
+
+    // used for table internal parallel
+    bool _need_split = false;
+    bool _could_split_physically = false;
+    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
 };
 
 } // namespace lake

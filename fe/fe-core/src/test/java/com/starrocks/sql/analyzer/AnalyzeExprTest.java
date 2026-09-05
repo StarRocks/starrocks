@@ -15,12 +15,12 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.Expr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -28,9 +28,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
@@ -39,7 +39,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeExprTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -79,28 +79,28 @@ public class AnalyzeExprTest {
         ScalarOperator so =
                 SqlToScalarOperatorTranslator.translate(arrow, new ExpressionMapping(null, Collections.emptyList()),
                         new ColumnRefFactory());
-        Assert.assertEquals(OperatorType.CALL, so.getOpType());
+        Assertions.assertEquals(OperatorType.CALL, so.getOpType());
         CallOperator callOperator = (CallOperator) so;
-        Assert.assertEquals(expected, callOperator.toString());
+        Assertions.assertEquals(expected, callOperator.toString());
     }
 
     @Test
     public void testQuotedToString() {
         QueryRelation query = ((QueryStatement) analyzeSuccess(
                 " select (select 1 as v),v1 from t0")).getQueryRelation();
-        Assert.assertEquals("(SELECT 1 AS v),v1", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("(SELECT 1 AS v),v1", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
     public void testExpressionPreceding() {
         String sql = "select v2&~v1|v3^1 from t0";
         StatementBase statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+        Assertions.assertTrue(AstToStringBuilder.toString(statementBase)
                 .contains("(test.t0.v2 & (~test.t0.v1)) | (test.t0.v3 ^ 1)"));
 
         sql = "select v1 * v1 / v1 % v1 + v1 - v1 DIV v1 from t0";
         statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+        Assertions.assertTrue(AstToStringBuilder.toString(statementBase)
                 .contains("((((test.t0.v1 * test.t0.v1) / test.t0.v1) % test.t0.v1) + test.t0.v1) " +
                         "- (test.t0.v1 DIV test.t0.v1)"));
     }
@@ -356,6 +356,8 @@ public class AnalyzeExprTest {
                 " (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeFail("select array_agg(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
                 " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+
+        analyzeSuccess("select array_agg_distinct(v1), array_agg(distinct v1),array_agg(v1) from t0;");
     }
 
     @Test
@@ -405,9 +407,9 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map{NULL:NULL}");
         analyzeSuccess("select map<int,map<varchar,int>>{2:map{3:3}}");
         analyzeSuccess("select map<int,map<int,int>>{2:map{'3':3}}");
-        analyzeSuccess("select map<int,map<int,int>>{map{3:3}:2}"); // runtime error will report when cast
-        analyzeSuccess("select map<int,map<int,int>>{'2s':map{3:3}}");
 
+        analyzeFail("select map<int,map<int,int>>{map{3:3}:2}");
+        analyzeFail("select map<int,map<int,int>>{'2s':map{3:3}}");
         analyzeFail("select map(null)");
         analyzeFail("select map(1:4)");
         analyzeFail("select map(1,3,4)");
@@ -431,6 +433,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map_concat(NULL)");
         analyzeSuccess("select map_concat(NULL,NULL)");
         analyzeSuccess("select map_concat(NULL,map{})");
+        analyzeSuccess("select map_concat(NULL,map{to_date(\"2020-02-02 00:00:00\"):2})");
 
         analyzeFail("select cardinality();");
         analyzeFail("select cardinality(map{},map{})");
@@ -497,6 +500,161 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby('[a,b]','[1,2]')");
         analyzeFail("select array_sum('[1,2]')");
         analyzeFail("select array_to_bitmap('[1,2]')");
+        analyzeFail("select array_sortby([1, 2, 3])");
+        analyzeFail("select array_sortby([1, 2, 3], [1, 2, 3], 'a')");
+        analyzeFail("select array_sortby([map{'a':1, 'b':2, 'c':3}], " +
+                "[map{'a':1, 'b':2, 'c':3}], [map{'c':4, 'd':5, 'e':6}])");
+    }
+    @Test
+    public void testArraySort() {
+        // Basic array_sort with lambda comparator
+        analyzeSuccess("select array_sort([1, 2, 3], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+        analyzeSuccess("select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+        analyzeSuccess("select array_sort(['bc', 'ab', 'dc'], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+
+        // Empty arrays
+        analyzeSuccess("select array_sort([], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+        analyzeSuccess("select array_sort([], (x, y) -> 0)");
+
+        // Null arrays
+        analyzeSuccess("select array_sort(null, (x, y) -> 0)");
+        analyzeSuccess("select array_sort(null, (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+
+        // Null handling in comparator
+        analyzeSuccess("select array_sort([3, 2, null, 5, null, 1, 2]," +
+                "  (x, y) -> CASE WHEN x IS NULL THEN -1" +
+                "               WHEN y IS NULL THEN 1" +
+                "               WHEN x < y THEN 1" +
+                "               WHEN x = y THEN 0" +
+                "               ELSE -1 END)");
+
+        // Sort with complex expressions
+        analyzeSuccess("select array_sort(['a', 'abcd', 'abc']," +
+                "  (x, y) -> IF(length(x) < length(y), -1," +
+                "               IF(length(x) = length(y), 0, 1)))");
+
+        // Sort nested arrays by cardinality
+        analyzeSuccess("select array_sort([[2, 3, 1], [4, 2, 1, 4], [1, 2]]," +
+                "  (x, y) -> IF(cardinality(x) < cardinality(y), -1," +
+                "               IF(cardinality(x) = cardinality(y), 0, 1)))");
+
+        // Ascending order
+        analyzeSuccess("select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+
+        // Multiple parameter combinations
+        analyzeSuccess("select array_sort([1], (x, y) -> x - y)");
+        analyzeSuccess("select array_sort([null], (x, y) -> IF(x IS NULL, 0, 1))");
+
+        // With column reference
+        analyzeSuccess("select array_sort(v3, (x, y) -> IF(x < y, -1, IF(x = y, 0, 1))) from tarray");
+
+        // With array_agg
+        analyzeSuccess("select array_sort(array_agg(v1), (x, y) -> IF(x < y, -1, IF(x = y, 0, 1))) from tarray");
+
+        // Nested in other functions
+        analyzeSuccess("select array_length(array_sort([1, 2, 3], (x, y) -> 0))");
+        analyzeSuccess("select array_concat(array_sort([1, 2], (x, y) -> 0), [3, 4])");
+
+        // Multiple comparisons with captured variables
+        analyzeSuccess("select array_sort([1, 2, 3], (x, y) -> IF(x + v1 < y + v1, -1, 0)) from t0");
+
+        // Invalid comparator - not a lambda
+        analyzeFail("select array_sort([1, 2, 3], 1)");
+
+        // Wrong number of lambda parameters
+        analyzeFail("select array_sort([1, 2, 3], (x) -> x)");
+        analyzeFail("select array_sort([1, 2, 3], (x, y, z) -> x)");
+
+        // Undefined variable in comparator
+        analyzeFail("select array_sort([1, 2, 3], (x, y) -> z)");
+
+        // Wrong array type
+        analyzeFail("select array_sort('not_an_array', (x, y) -> 0)");
+        analyzeFail("select array_sort(123, (x, y) -> 0)");
+
+        // Duplicate parameter names
+        analyzeFail("select array_sort([1, 2, 3], (x, x) -> 0)");
+
+        // No parameters in lambda
+        analyzeFail("select array_sort([1, 2, 3], () -> 0)");
+    }
+
+    @Test
+    public void testArraySortLambdaDispatch() {
+        // Verify that array_sort with lambda is correctly dispatched to array_sort_lambda function
+        analyzeSuccess(
+                "select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+
+    }
+
+    @Test
+    public void testAnalyseNullToBoolean() {
+        analyzeSuccess("select coalesce(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select coalesce([to_date(\"2020-02-02 00:00:00\")], [])");
+        analyzeSuccess("select coalesce(struct(to_date(\"2020-02-02 00:00:00\")), NULL)");
+        analyzeSuccess("select ifnull(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select map_from_arrays([1, 2], NULL)");
+    }
+
+    @Test
+    public void testMapInvalidKeyType() {
+        analyzeSuccess("select map(1, 2)");
+        analyzeSuccess("select map(1, [])");
+        analyzeSuccess("select map('a', row(1, 2))");
+        analyzeSuccess("select map('abc', row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as date), row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as datetime), row(1, 2))");
+
+        analyzeFail("select map([], 123)");
+        analyzeFail("select map(row(1,2,3), 123)");
+        analyzeFail("select map(map(1,2), 123)");
+        analyzeFail("select map(parse_json('{\"a\": 1}'), map(1,2))");
+    }
+
+    @Test
+    public void testNgramSearch() {
+        // missing gram_num argument
+        analyzeFail("select ngram_search('abc', 'a')");
+        // non-string first parameter
+        analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
+        // non-string haystack column (th is datetime in tall)
+        analyzeFail("select ngram_search(th, th, 4) from tall;");
+        // non-string non-constant needle must also be rejected (type check, not constant check)
+        analyzeFail("select ngram_search(ta, th, 4) from tall;");
+        // non-constant needle is now allowed
+        analyzeSuccess("select ngram_search(ta, ta, 4) from tall;");
+        // non-constant gram_num is still rejected
+        analyzeFail("select ngram_search(ta, ta, tc) from tall;");
+        // gram_num must be a positive integer constant: a constant expression of some other type is
+        // not enough. The BE reads it as a raw INT const column (including from the ngram bloom
+        // filter path in the storage layer), so a JSON/NULL constant used to crash the BE.
+        analyzeFail("select ngram_search(ta, 'aabaa', json_query(cast(4 as json), '$.a')) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', null) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', cast(null as int)) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', 0) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', -1) from tall;");
+        analyzeSuccess("select ngram_search(ta, 'aabaa', cast(4 as int)) from tall;");
+    }
+
+    @Test
+    public void testTokenize() {
+        analyzeSuccess("select tokenize('english', 'Today is saturday')");
+        analyzeSuccess("select tokenize('standard', 'Today is saturday')");
+        analyzeSuccess("select tokenize('chinese', '中华人民共和国')");
+        // The tokenizer name is read by the BE as a raw VARCHAR const column at prepare time, so a
+        // constant of any other type (or NULL) used to crash the BE.
+        analyzeFail("select tokenize(cast('english' as time), 'Today is saturday')");
+        analyzeFail("select tokenize(cast('english' as int), 'Today is saturday')");
+        analyzeFail("select tokenize(json_query(cast(4 as json), '$.a'), 'Today is saturday')");
+        // a NULL tokenizer is still accepted: the whole call folds to NULL and never reaches the BE
+        analyzeSuccess("select tokenize(null, 'Today is saturday')");
+        analyzeSuccess("select tokenize(cast(null as varchar), 'Today is saturday')");
+        // a cast to a string type over a string literal is still a constant string
+        analyzeSuccess("select tokenize(cast('english' as varchar), 'Today is saturday')");
+        // unknown tokenizer
+        analyzeFail("select tokenize('nosuchtokenizer', 'Today is saturday')");
+        // non-constant tokenizer name
+        analyzeFail("select tokenize(ta, ta) from tall");
     }
 
 }

@@ -1,0 +1,381 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package com.starrocks.scheduler.mv;
+
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.logging.log4j.Logger;
+
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+/**
+ * MVVersionManager is used to update materialized view version info when base table partition changes after mv refresh finished.
+ */
+public class MVVersionManager {
+    private final Logger logger;
+    private final MaterializedView mv;
+    private final MvTaskRunContext mvTaskRunContext;
+
+    public MVVersionManager(MaterializedView mv,
+                            MvTaskRunContext mvTaskRunContext) {
+        this.mv = mv;
+        this.mvTaskRunContext = mvTaskRunContext;
+        this.logger = MVTraceUtils.getLogger(mv, MVVersionManager.class);
+    }
+
+    /**
+     * Update materialized view version info when base table partition changes after mv refresh finished.
+     * @param snapshotBaseTables base tables snapshot info that has been refreshed
+     * @param mvRefreshedPartitions mv refreshed partitions
+     * @param refBaseTableIds  mv's ref base table ids
+     * @param refTableAndPartitionNames mv's ref base table and partition names
+     * @param tvrDeltaToPromote TVR version ranges to promote into the persistent baseTableInfoTvrVersionRangeMap
+     * @param isFinalBatchRun whether this run is the batch's final task run (only then is freshness confirmed)
+     */
+    public void updateMVVersionInfo(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
+                                    PCellSortedSet mvRefreshedPartitions,
+                                    Set<Long> refBaseTableIds,
+                                    Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
+                                    Map<BaseTableInfo, TvrVersionRange> tvrDeltaToPromote,
+                                    boolean isFinalBatchRun) {
+        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
+        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
+        // update materialized view partition to ref base table partition names meta
+        updateAssociatedPartitionMeta(refreshContext, mvRefreshedPartitions, refTableAndPartitionNames);
+        // Update meta information for OLAP tables and external tables
+        Map<Boolean, List<BaseTableSnapshotInfo>> snapshotInfoSplits = snapshotBaseTables.values()
+                .stream()
+                .collect(Collectors.partitioningBy(s -> s.getBaseTable().isNativeTableOrMaterializedView()));
+        List<BaseTableSnapshotInfo> olapTables = snapshotInfoSplits.getOrDefault(true, List.of());
+        List<BaseTableSnapshotInfo> externalTables = snapshotInfoSplits.getOrDefault(false, List.of());
+        boolean isOlapTableRefreshed = updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds);
+        boolean isExternalTableRefreshed = updateMetaForExternalTable(refreshContext, externalTables, refBaseTableIds);
+
+        if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
+            return;
+        }
+        if (tvrDeltaToPromote != null) {
+            // update the tvr version range map in mv context
+            final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
+                    refreshContext.getBaseTableInfoTvrVersionRangeMap();
+            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tvrDeltaToPromote.entrySet()) {
+                TvrVersionRange versionRange = entry.getValue();
+                if (versionRange == null || versionRange.isEmpty()) {
+                    continue;
+                }
+                mvTvrVersionRangeMap.put(entry.getKey(), TvrTableSnapshot.of(versionRange.to()));
+            }
+        }
+
+        long maxChangedTableRefreshTime = 0L;
+        for (BaseTableSnapshotInfo snapshot : snapshotBaseTables.values()) {
+            if (snapshot instanceof PCTTableSnapshotInfo) {
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
+                        ((PCTTableSnapshotInfo) snapshot).getRefreshedPartitionInfos();
+                long refreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(partitionInfos);
+                if (refreshTime > maxChangedTableRefreshTime) {
+                    maxChangedTableRefreshTime = refreshTime;
+                }
+            }
+        }
+        copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        // Freshness is confirmed as of the batch's first-run start (the pinned-snapshot moment), and only once
+        // the batch's final run completes. Monotonic (>) so it can never move backwards.
+        long freshnessBaseline = freshnessBaselineTime();
+        if (isFinalBatchRun && freshnessBaseline > copiedScheme.getLastFreshnessConfirmedAt()) {
+            copiedScheme.setLastFreshnessConfirmedAt(freshnessBaseline);
+        }
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
+        logger.info("Update materialized view {} refresh scheme, " +
+                        "last refresh time: {}, version meta changed",
+                mv.getName(), maxChangedTableRefreshTime);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                wal -> mv.setRefreshScheme(copiedScheme));
+
+        // trigger timeless info event since mv version changed
+        GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
+                MVTimelinessMgr.MVChangeEvent.MV_REFRESHED);
+    }
+
+    // Persist freshness for a successful refresh that changed no version. Idempotent: a no-op when the version-change
+    // log already recorded this run's freshness, so the main path writes no extra edit-log entry.
+    public void confirmFreshness() {
+        long confirmTime = freshnessBaselineTime();
+        if (confirmTime <= 0
+                || mv.getRefreshScheme().getLastFreshnessConfirmedAt() >= confirmTime) {
+            return;
+        }
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            logger.warn("skip freshness confirm, failed to lock mv: {}", mv.getName());
+            return;
+        }
+        try {
+            MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
+            if (copiedScheme.getLastFreshnessConfirmedAt() >= confirmTime) {
+                return;
+            }
+            copiedScheme.setLastFreshnessConfirmedAt(confirmTime);
+            ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                    new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                    wal -> mv.setRefreshScheme(copiedScheme));
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
+        }
+    }
+
+    // The batch's first-run start time, propagated across batch runs via MV_FRESHNESS_BASELINE_TIME. A single-run
+    // refresh has no such property and falls back to this run's own start, which is also the batch start.
+    private long freshnessBaselineTime() {
+        // A complete refresh that excluded older partitions via auto_refresh_partitions_limit does not
+        // cover the whole MV, so it must not confirm whole-MV freshness (handles a single-run batch that
+        // is both complete and final).
+        if (mvTaskRunContext.isPartitionLimitExcludedPartitions()) {
+            return 0;
+        }
+        Map<String, String> properties = mvTaskRunContext.getProperties();
+        if (properties != null) {
+            String baseline = properties.get(TaskRun.MV_FRESHNESS_BASELINE_TIME);
+            if (baseline != null) {
+                try {
+                    return Long.parseLong(baseline);
+                } catch (NumberFormatException e) {
+                    // fall through to this run's own start time
+                }
+            }
+        }
+        TaskRunStatus status = mvTaskRunContext.getStatus();
+        if (status == null) {
+            return 0;
+        }
+        // A user-scoped partial refresh only covers the requested range, so it cannot confirm whole-MV freshness.
+        if (properties != null && !new MVRefreshParams(mv, properties).isCompleteRefresh()) {
+            return 0;
+        }
+        return status.getProcessStartTime();
+    }
+
+    private boolean updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
+                                           List<BaseTableSnapshotInfo> changedTablePartitionInfos,
+                                           Set<Long> refBaseTableIds) {
+        if (changedTablePartitionInfos.isEmpty()) {
+            return false;
+        }
+        logger.info("Update meta for mv {} with olap tables:{}, refBaseTableIds:{}", mv.getName(),
+                changedTablePartitionInfos, refBaseTableIds);
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
+                refreshContext.getBaseTableVisibleVersionMap();
+        boolean hasNextPartitionToRefresh = mvTaskRunContext.hasNextBatchPartition();
+        // update version map of materialized view
+        boolean isOlapTableRefreshed = false;
+        for (BaseTableSnapshotInfo snapshotInfo : changedTablePartitionInfos) {
+            if (!(snapshotInfo instanceof PCTTableSnapshotInfo)) {
+                logger.warn("Skip update meta for base table {}, because it is not a PCTTableSnapshotInfo",
+                        snapshotInfo.getBaseTable().getName());
+                continue;
+            }
+            PCTTableSnapshotInfo pctTableSnapshotInfo = (PCTTableSnapshotInfo) snapshotInfo;
+            Table snapshotTable = snapshotInfo.getBaseTable();
+            // Non-ref-base-tables should be update meta at the last refresh, otherwise it may
+            // cause wrong results for rewrite or refresh.
+            // eg:
+            // tblA : partition table, has partitions: p0, p1, p2
+            // tblB : non-partition table
+            // MV: tblA a join tblB b on a.dt=b.dt
+            // case: tblB has been updated,
+            // run1: tblA(p0) + tblB, (X)
+            // run2: tblA(p1) + tblB, (X)
+            // run3: tblA(p2) + tblB, (Y)
+            // In the run1/run2 should only update the tblA's partition info, but tblB's partition
+            // info meta should be updated at the last refresh.
+            if (hasNextPartitionToRefresh && !refBaseTableIds.contains(snapshotTable.getId())) {
+                logger.info("Skip update meta for olap base table {} with partitions info: {}, " +
+                                "because it is not a ref base table of materialized view {}",
+                        snapshotTable.getName(), pctTableSnapshotInfo.getRefreshedPartitionInfos(), mv.getName());
+                continue;
+            }
+            Long tableId = snapshotTable.getId();
+            Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
+                    currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = pctTableSnapshotInfo.getRefreshedPartitionInfos();
+            logger.debug("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
+                    mv.getName(), snapshotTable.getName(), partitionInfoMap, currentTablePartitionInfo);
+            currentTablePartitionInfo.putAll(partitionInfoMap);
+
+            // FIXME: If base table's partition has been dropped, should drop the according version partition too?
+            // remove partition info of not-exist partition for snapshot table from version map
+            if (snapshotTable.isOlapOrCloudNativeTable()) {
+                OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
+                Set<String> visiblePartitionNames = snapshotOlapTable.getVisiblePartitionNames();
+                // Use iterator to avoid creating intermediate collections and for better performance
+                Iterator<String> keyIter = currentTablePartitionInfo.keySet().iterator();
+                while (keyIter.hasNext()) {
+                    String partitionName = keyIter.next();
+                    if (!visiblePartitionNames.contains(partitionName)) {
+                        keyIter.remove();
+                    }
+                }
+            }
+            isOlapTableRefreshed = true;
+        }
+        return isOlapTableRefreshed;
+    }
+
+    private boolean updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
+                                               List<BaseTableSnapshotInfo> changedTablePartitionInfos,
+                                               Set<Long> refBaseTableIds) {
+        if (changedTablePartitionInfos.isEmpty()) {
+            return false;
+        }
+        logger.info("Update meta for mv {} with external tables:{}, refBaseTableIds:{}", mv.getName(),
+                changedTablePartitionInfos, refBaseTableIds);
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
+                refreshContext.getBaseTableInfoVisibleVersionMap();
+        boolean hasNextBatchPartition = mvTaskRunContext.hasNextBatchPartition();
+        // update version map of materialized view
+        for (BaseTableSnapshotInfo snapshotInfo : changedTablePartitionInfos) {
+            if (!(snapshotInfo instanceof PCTTableSnapshotInfo)) {
+                logger.warn("Skip update meta for base table {}, because it is not a PCTTableSnapshotInfo",
+                        snapshotInfo.getBaseTable().getName());
+                continue;
+            }
+            PCTTableSnapshotInfo pctTableSnapshotInfo = (PCTTableSnapshotInfo) snapshotInfo;
+            BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
+            Table snapshotTable = snapshotInfo.getBaseTable();
+            // Non-ref-base-tables should be update meta at the last refresh, otherwise it may
+            // cause wrong results for rewrite or refresh.
+            // eg:
+            // tblA : partition table, has partitions: p0, p1, p2
+            // tblB : non-partition table
+            // MV: tblA a join tblB b on a.dt=b.dt
+            // case: tblB has been updated,
+            // run1: tblA(p0) + tblB, (X)
+            // run2: tblA(p1) + tblB, (X)
+            // run3: tblA(p2) + tblB, (Y)
+            // In the run1/run2 should only update the tblA's partition info, but tblB's partition
+            // info meta should be updated at the last refresh.
+            if (hasNextBatchPartition && !refBaseTableIds.contains(snapshotTable.getId())) {
+                logger.info("Skip update meta for external base table {} with partitions info: {}, " +
+                                "because it is not a ref base table of materialized view {}",
+                        snapshotTable.getName(), pctTableSnapshotInfo.getRefreshedPartitionInfos(), mv.getName());
+                continue;
+            }
+
+            // Use computeIfAbsent to avoid unnecessary map creation
+            Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
+                    currentVersionMap.computeIfAbsent(baseTableInfo, v -> Maps.newConcurrentMap());
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = pctTableSnapshotInfo.getRefreshedPartitionInfos();
+            logger.debug("Update materialized view {} meta for external base table {} with partitions info: {}, " +
+                            "old partition infos:{}", mv.getName(), snapshotTable.getName(),
+                    partitionInfoMap, currentTablePartitionInfo);
+            // overwrite old partition names
+            currentTablePartitionInfo.putAll(partitionInfoMap);
+
+            // Remove partition info for partitions that no longer exist in the snapshot table
+            List<String> partitionNamesList = PartitionUtil.getPartitionNames(snapshotTable);
+            if (!partitionNamesList.isEmpty()) {
+                Set<String> partitionNames = Sets.newHashSetWithExpectedSize(partitionNamesList.size());
+                partitionNames.addAll(partitionNamesList);
+                // Remove using iterator for better performance on concurrent maps
+                Iterator<String> iter = currentTablePartitionInfo.keySet().iterator();
+                while (iter.hasNext()) {
+                    String partitionName = iter.next();
+                    if (!partitionNames.contains(partitionName)) {
+                        iter.remove();
+                    }
+                }
+            } else {
+                // If no partitions exist, clear all
+                currentTablePartitionInfo.clear();
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Update materialized view partition to ref base table partition names meta, this is used in base table's partition
+     * changes.
+     * eg:
+     * base table has dropped one partitioned, we can only drop the vesion map of associated materialized view's
+     * partitions rather than the whole table.
+     */
+    private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
+                                               PCellSortedSet mvRefreshedPartitions,
+                                               Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
+        PCTPartitionTopology partitionTopology = mvTaskRunContext.getPartitionTopology();
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs =
+                partitionTopology == null ? null : partitionTopology.getMvRefBaseTableIntersectedPartitions();
+        if (Objects.isNull(mvToBaseNameRefs) || Objects.isNull(refTableAndPartitionNames) ||
+                refTableAndPartitionNames.isEmpty()) {
+            return;
+        }
+
+        try {
+            Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                    refreshContext.getMvPartitionNameRefBaseTablePartitionMap();
+            for (PCellWithName mvPCellWithName : mvRefreshedPartitions.getPartitions()) {
+                String mvRefreshedPartition = mvPCellWithName.name();
+                Map<Table, PCellSortedSet> mvToBaseNameRef = mvToBaseNameRefs.get(mvRefreshedPartition);
+                for (BaseTableSnapshotInfo snapshotInfo : refTableAndPartitionNames.keySet()) {
+                    Table refBaseTable = snapshotInfo.getBaseTable();
+                    if (!mvToBaseNameRef.containsKey(refBaseTable)) {
+                        continue;
+                    }
+                    Set<String> realBaseTableAssociatedPartitions = Sets.newHashSet();
+                    for (PCellWithName basePCellWithName : mvToBaseNameRef.get(refBaseTable).getPartitions()) {
+                        String refBaseTableAssociatedPartition = basePCellWithName.name();
+                        realBaseTableAssociatedPartitions.addAll(
+                                mvTaskRunContext.getExternalTableRealPartitionName(refBaseTable,
+                                        refBaseTableAssociatedPartition));
+                    }
+                    mvPartitionNameRefBaseTablePartitionMap
+                            .put(mvRefreshedPartition, realBaseTableAssociatedPartitions);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Update materialized view {} with the associated ref base table partitions failed: ",
+                    mv.getName(), e);
+        }
+    }
+
+}

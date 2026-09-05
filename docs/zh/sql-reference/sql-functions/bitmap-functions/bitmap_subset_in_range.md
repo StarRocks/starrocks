@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "从 Bitmap 中返回取值在指定范围内的元素子集。"
 ---
 
 # bitmap_subset_in_range
 
-## 功能
+
 
 从 Bitmap 中返回取值在指定范围内的元素。返回的元素是 Bitmap 的子集。
 

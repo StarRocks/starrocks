@@ -36,15 +36,14 @@
 
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
+#include <google/protobuf/service.h>
 
+#include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "gen_cpp/MVMaintenance_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/countdown_latch.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace brpc {
 class Controller;
@@ -53,13 +52,18 @@ class Controller;
 namespace starrocks {
 
 class TExecPlanFragmentParams;
-class TMVCommitEpochTask;
+class BatchWriteMgr;
 class ExecEnv;
+
+namespace orchestration {
+class OrchestrationEnv;
+}
 
 template <typename T>
 class PInternalServiceImplBase : public T {
 public:
-    PInternalServiceImplBase(ExecEnv* exec_env);
+    PInternalServiceImplBase(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env,
+                             BatchWriteMgr* batch_write_mgr);
     ~PInternalServiceImplBase() override;
 
     void transmit_data(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitDataParams* request,
@@ -90,6 +94,9 @@ public:
     void fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                     PFetchDataResult* result, google::protobuf::Closure* done) override;
 
+    void fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
+                         PFetchDataCacheResponse* response, google::protobuf::Closure* done) override;
+
     void tablet_writer_open(google::protobuf::RpcController* controller, const PTabletWriterOpenRequest* request,
                             PTabletWriterOpenResult* response, google::protobuf::Closure* done) override;
 
@@ -105,12 +112,28 @@ public:
                                   const PTabletWriterAddChunksRequest* request, PTabletWriterAddBatchResult* response,
                                   google::protobuf::Closure* done) override;
 
+    void tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller,
+                                          const ::starrocks::PHttpRequest* request,
+                                          PTabletWriterAddBatchResult* response,
+                                          google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller,
+                                           const ::starrocks::PHttpRequest* request,
+                                           PTabletWriterAddBatchResult* response,
+                                           google::protobuf::Closure* done) override;
+
     void tablet_writer_add_segment(google::protobuf::RpcController* controller,
                                    const PTabletWriterAddSegmentRequest* request,
                                    PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
 
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
+
+    void get_load_replica_status(google::protobuf::RpcController* controller, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response, google::protobuf::Closure* done) override;
+
+    void load_diagnose(google::protobuf::RpcController* controller, const PLoadDiagnoseRequest* request,
+                       PLoadDiagnoseResult* response, google::protobuf::Closure* done) override;
 
     void trigger_profile_report(google::protobuf::RpcController* controller,
                                 const PTriggerProfileReportRequest* request, PTriggerProfileReportResult* result,
@@ -163,6 +186,28 @@ public:
     void list_fail_point(google::protobuf::RpcController* controller, const PListFailPointRequest* request,
                          PListFailPointResponse* response, google::protobuf::Closure* done) override;
 
+    void exec_short_circuit(google::protobuf::RpcController* controller, const PExecShortCircuitRequest* request,
+                            PExecShortCircuitResult* response, google::protobuf::Closure* done) override;
+
+    void process_dictionary_cache(google::protobuf::RpcController* controller,
+                                  const PProcessDictionaryCacheRequest* request,
+                                  PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
+
+    void fetch_arrow_schema(google::protobuf::RpcController* controller, const PFetchArrowSchemaRequest* request,
+                            PFetchArrowSchemaResult* result, google::protobuf::Closure* done) override;
+
+    void stream_load(google::protobuf::RpcController* controller, const PStreamLoadRequest* request,
+                     PStreamLoadResponse* response, google::protobuf::Closure* done) override;
+
+    void update_transaction_state(google::protobuf::RpcController* controller,
+                                  const PUpdateTransactionStateRequest* request,
+                                  PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
+    void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
+                google::protobuf::Closure* done) override;
+
+    void lookup_close(google::protobuf::RpcController* controller, const PLookUpCloseRequest* request,
+                      PLookUpCloseResponse* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
@@ -186,6 +231,9 @@ private:
     void _fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                      PFetchDataResult* result, google::protobuf::Closure* done);
 
+    void _fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
+                          PFetchDataCacheResponse* response, google::protobuf::Closure* done);
+
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response, google::protobuf::Closure* done,
                         int timeout_ms);
 
@@ -195,20 +243,23 @@ private:
     void _get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
                           PGetFileSchemaResult* response, google::protobuf::Closure* done);
 
-    Status _exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request);
+    Status _exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request,
+                               PExecPlanFragmentResult* response);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 
-    // MV Maintenance task
-    Status _submit_mv_maintenance_task(brpc::Controller* cntl);
-    Status _mv_start_maintenance(const TMVMaintenanceTasks& task);
-    Status _mv_start_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
-    Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
-    Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
+    // short circuit
+    Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
+                               PExecShortCircuitResult* response);
+
+    Status _prepare_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
+                                              const TExecPlanFragmentParams& t_unique_request);
 
 protected:
     ExecEnv* _exec_env;
+    orchestration::OrchestrationEnv* _orchestration_env;
+    BatchWriteMgr* _batch_write_mgr;
 };
 
 } // namespace starrocks

@@ -18,10 +18,7 @@ package com.starrocks.sql.optimizer.task;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-
-import java.util.Collections;
-import java.util.List;
+import com.starrocks.sql.optimizer.validate.PlanValidator;
 
 // The context for optimizer task
 public class TaskContext {
@@ -29,7 +26,7 @@ public class TaskContext {
     private final PhysicalPropertySet requiredProperty;
     private ColumnRefSet requiredColumns;
     private double upperBoundCost;
-    private List<LogicalOlapScanOperator> allScanOperators;
+    private final PlanValidator planValidator;
 
     public TaskContext(OptimizerContext context,
                        PhysicalPropertySet physicalPropertySet,
@@ -39,7 +36,11 @@ public class TaskContext {
         this.requiredProperty = physicalPropertySet;
         this.requiredColumns = requiredColumns;
         this.upperBoundCost = cost;
-        this.allScanOperators = Collections.emptyList();
+        this.planValidator = new PlanValidator();
+    }
+
+    public PlanValidator getPlanValidator() {
+        return planValidator;
     }
 
     public OptimizerContext getOptimizerContext() {
@@ -64,13 +65,5 @@ public class TaskContext {
 
     public void setUpperBoundCost(double upperBoundCost) {
         this.upperBoundCost = upperBoundCost;
-    }
-
-    public void setAllScanOperators(List<LogicalOlapScanOperator> allScanOperators) {
-        this.allScanOperators = allScanOperators;
-    }
-
-    public List<LogicalOlapScanOperator> getAllScanOperators() {
-        return allScanOperators;
     }
 }

@@ -19,28 +19,31 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnionFind;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.planner.expression.ExprToNormalFormVisitor;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TExpr;
@@ -49,9 +52,9 @@ import com.starrocks.thrift.TNormalPlanNode;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.protocol.TSimpleJSONProtocol;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -61,10 +64,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static com.starrocks.rpc.ConfigurableSerDesFactory.Protocol.SIMPLE_JSON;
 
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
 // is normalized, FragmentNormalizer draws out required information as follows from the fragment.
@@ -203,7 +209,7 @@ public class FragmentNormalizer {
     }
 
     public Integer remapSlotId(Integer slotId) {
-        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getMaxId()).asInt();
+        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getNextId()).asInt();
     }
 
     public List<Integer> remapSlotIds(List<SlotId> slotIds) {
@@ -230,18 +236,17 @@ public class FragmentNormalizer {
 
     public ByteBuffer normalizeExpr(Expr expr) {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
-        TExpr texpr = expr.normalize(this);
-        //TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
-        TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
+        TExpr tExpr = ExprToNormalFormVisitor.treeToNormalForm(expr, this);
         try {
-            return ByteBuffer.wrap(ser.serialize(texpr));
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
+            return ByteBuffer.wrap(ser.serialize(tExpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
         }
         return null;
     }
 
-    public static class SimpleRangePredicateVisitor extends AstVisitor<String, Void> {
+    public static class SimpleRangePredicateVisitor implements AstVisitorExtendInterface<String, Void> {
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
             String lhs = visit(node.getChild(0), context);
@@ -287,6 +292,17 @@ public class FragmentNormalizer {
         return new Pair<>(remapSlotIds(slotIds), exprs);
     }
 
+    // Serialize a thrift struct into the digest the same way expressions are handled, so a
+    // sub-structure that has no expression form can still take part in the cache key.
+    public ByteBuffer normalizeThrift(org.apache.thrift.TBase<?, ?> value) {
+        try {
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
+            return ByteBuffer.wrap(ser.serialize(value));
+        } catch (Exception e) {
+            throw new RuntimeException("Fatal error happens when normalize thrift struct", e);
+        }
+    }
+
     public List<ByteBuffer> normalizeExprs(List<Expr> exprList) {
         if (exprList == null || exprList.isEmpty()) {
             return Collections.emptyList();
@@ -299,6 +315,13 @@ public class FragmentNormalizer {
             return Collections.emptyList();
         }
         return exprList.stream().map(this::normalizeExpr).collect(Collectors.toList());
+    }
+
+    // The time zone the BE will evaluate this plan with, normalized the same way
+    // CoordinatorPreprocessor.genQueryGlobals() normalizes it before putting it into TQueryGlobals.
+    private String getNormalizedTimeZone() {
+        String timezone = execPlan.getConnectContext().getSessionVariable().getTimeZone();
+        return "CST".equals(timezone) ? TimeUtils.DEFAULT_TIME_ZONE : timezone;
     }
 
     public boolean computeDigest(PlanNode cachePointNode) {
@@ -316,6 +339,12 @@ public class FragmentNormalizer {
             for (TGlobalDict dict : dicts) {
                 digest.update(serializer.serialize(dict));
             }
+            // Session variables that change how expressions are evaluated on the BE are not part of the
+            // plan, so semantically-equivalent plans evaluated under different variables would otherwise
+            // share cache entries. time_zone is such a variable: from_unixtime/unix_timestamp/convert_tz
+            // are evaluated against RuntimeState::timezone, so two sessions that only differ in time_zone
+            // must not reuse each other's per-tablet results.
+            digest.update(getNormalizedTimeZone().getBytes(StandardCharsets.UTF_8));
 
             List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
@@ -329,8 +358,12 @@ public class FragmentNormalizer {
             cacheParam.setSlot_remapping(outputSlotIdRemapping);
             cacheParam.setRegion_map(selectedRangeMap);
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
-            cacheParam.setKeys_type(keysType.toThrift());
+            cacheParam.setKeys_type(ExprToThrift.keysTypeToThrift(keysType));
             cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
+            if (RunMode.isSharedDataMode()) {
+                cacheParam.setIs_lake(true);
+            }
+
             fragment.setCacheParam(cacheParam);
             return true;
         } catch (TException | NoSuchAlgorithmException e) {
@@ -421,11 +454,18 @@ public class FragmentNormalizer {
     boolean hasNonDeterministicFunctions(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr callExpr = (FunctionCallExpr) expr;
-            if (FunctionSet.nonDeterministicFunctions.contains(callExpr.getFn().functionName())) {
+            String funcName = callExpr.getFn().functionName();
+            if (FunctionSet.nonDeterministicFunctions.contains(funcName)) {
+                return true;
+            }
+            if (FunctionSet.NOW.equals(funcName)) {
+                return true;
+            }
+            if (FunctionSet.nonDeterministicTimeFunctions.contains(funcName) && callExpr.getChildren().isEmpty()) {
                 return true;
             }
         }
-        return expr.getChildren().stream().anyMatch(e -> hasNonDeterministicFunctions(e));
+        return expr.getChildren().stream().anyMatch(this::hasNonDeterministicFunctions);
     }
 
     List<Range<PartitionKey>> convertPredicateToRange(Column partitionColumn, Expr expr) {
@@ -505,8 +545,8 @@ public class FragmentNormalizer {
     }
 
     List<Expr> getPartitionRangePredicates(List<Expr> conjuncts,
-                                           List<Map.Entry<Long, Range<PartitionKey>>> rangeMap,
-                                           RangePartitionInfo partitionInfo,
+                                           List<Pair<Long, Range<PartitionKey>>> rangeMap,
+                                           List<Column> partitionColumns,
                                            SlotId partitionSlotId) {
 
         List<Expr> exprs = conjuncts.stream().flatMap(e -> flatAndPredicate(e).stream()).collect(Collectors.toList());
@@ -514,7 +554,7 @@ public class FragmentNormalizer {
         List<Expr> boundSimpleRegionExprs = Lists.newArrayList();
         List<Expr> boundOtherExprs = Lists.newArrayList();
         for (Expr e : exprs) {
-            if (!e.isBound(partitionSlotId)) {
+            if (!ExprUtils.isBound(e, partitionSlotId)) {
                 unboundExprs.add(e);
                 continue;
             }
@@ -534,20 +574,20 @@ public class FragmentNormalizer {
         //  create a simpleRangeMap without predicates' decomposition to turn on the cache. date_trunc function
         //  is frequently-used, we should decompose predicates contains date_trunc in the future.
         if (!boundOtherExprs.isEmpty() && boundSimpleRegionExprs.isEmpty()) {
-            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
             return conjuncts;
         }
 
         if (boundSimpleRegionExprs.isEmpty()) {
-            for (Map.Entry<Long, Range<PartitionKey>> range : rangeMap) {
-                selectedRangeMap.put(range.getKey(), range.getValue().toString());
+            for (Pair<Long, Range<PartitionKey>> range : rangeMap) {
+                selectedRangeMap.put(range.first, range.second.toString());
             }
             return conjuncts;
         }
 
-        Column partitionColumn = partitionInfo.getPartitionColumns().get(0);
+        Column partitionColumn = partitionColumns.get(0);
         List<Range<PartitionKey>> partitionRanges = rangeMap.stream()
-                .map(Map.Entry::getValue).collect(Collectors.toList());
+                .map(r -> r.second).collect(Collectors.toList());
 
         // compute the intersection region of partition range and region predicates
         for (Expr expr : boundSimpleRegionExprs) {
@@ -566,17 +606,22 @@ public class FragmentNormalizer {
             if (range.isEmpty()) {
                 continue;
             }
-            range = toClosedOpenRange(range);
-            Map.Entry<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
+            Optional<Range> optRange = Optional.empty();
+            try {
+                optRange = Optional.ofNullable(toClosedOpenRange(range));
+            } catch (Throwable ignored) {
+            }
+
+            Pair<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
             // when the range is to total cover this partition, we also cache it
-            if (!range.isEmpty()) {
-                selectedRangeMap.put(partitionKeyRange.getKey(), range.toString());
+            if (optRange.isPresent() && !optRange.get().isEmpty()) {
+                selectedRangeMap.put(partitionKeyRange.first, optRange.get().toString());
             }
         }
         // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
         // we get a empty selectedRangeMap. it is defensive-style programming.
         if (selectedRangeMap.isEmpty()) {
-            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
             return conjuncts;
         } else {
             List<Expr> remainConjuncts = Lists.newArrayList();
@@ -590,7 +635,7 @@ public class FragmentNormalizer {
     // just create a simple selectedRangeMap which is used to construct cache key in BE.
     public void createSimpleRangeMap(Collection<Long> selectedPartitionIds) {
         selectedRangeMap = Maps.newHashMap();
-        selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
+        selectedPartitionIds.forEach(id -> selectedRangeMap.put(id, "[]"));
     }
 
     public Set<SlotId> getSlotsUseAggColumns() {
@@ -654,6 +699,19 @@ public class FragmentNormalizer {
         }
     }
 
+    // Whether any PlanNode of the subtree rooted at `node` still retains one of the given runtime
+    // filters as a probe. The recursion stops at an ExchangeNode's children, which live in another
+    // fragment, and a local runtime filter cannot reach them anyway.
+    private boolean probesAnyFilterOfSameFragment(PlanNode node, Set<Integer> filterIds) {
+        if (node.getFragment() != fragment) {
+            return false;
+        }
+        if (node.getProbeRuntimeFilters().stream().anyMatch(rf -> filterIds.contains(rf.getFilterId()))) {
+            return true;
+        }
+        return node.getChildren().stream().anyMatch(child -> probesAnyFilterOfSameFragment(child, filterIds));
+    }
+
     public static void collectRightSiblingFragments(PlanNode root, List<PlanFragment> siblings,
                                                     Set<PlanFragmentId> visitedMultiCastFragments) {
         if (root.getChildren().isEmpty()) {
@@ -709,11 +767,15 @@ public class FragmentNormalizer {
 
     public boolean normalize() {
         PlanNode root = fragment.getPlanRoot();
+        if (fragment.collectNodes().stream().anyMatch(AIProjectNode.class::isInstance)) {
+            setUncacheable(true);
+            return false;
+        }
 
         // Get leftmost path
         List<PlanNode> leftNodesTopDown = Lists.newArrayList();
         for (PlanNode currNode = root; currNode != null && currNode.getFragment() == fragment;
-             currNode = currNode.getChild(0)) {
+                currNode = currNode.getChild(0)) {
             leftNodesTopDown.add(currNode);
         }
 
@@ -758,6 +820,43 @@ public class FragmentNormalizer {
             return false;
         }
 
+        // Not cacheable if a node of the leftmost path builds a runtime filter of its own. Such a filter
+        // probes the OlapScanNode that feeds the cache interpolation point, so the per-tablet results
+        // that get populated only contain the rows that survived it. Its content is decided at run time
+        // -- it depends on which tablets this instance happened to scan, in which order, and which of
+        // them were served from the cache -- so unlike a JoinNode's runtime filter, whose build side is
+        // packed into the digest together with the data versions of its OlapScanNodes, there is nothing
+        // here that could be packed into the cache key. A populated entry would therefore not be a
+        // function of the cache key, and would produce wrong results as soon as it is read back by a
+        // query that needs the rows the filter dropped.
+        // Both of the nodes that can build such a filter have to be checked, because the two are
+        // mutually exclusive and depend on whether PushDownTopNToPreAggRule fired:
+        //   - AggregationNode builds an AGG_IN_FILTER when it carries a LIMIT of its own, and a
+        //     TOPN_FILTER when the rule attached the TopN to it (SortNode.perPipeline is then true and
+        //     the SortNode builds nothing);
+        //   - SortNode builds the TOPN_FILTER in every other shape, e.g. `group by k order by k limit n`
+        //     over a table distributed by k, which is planned as a one-phase aggregation that the rule's
+        //     TopN->Agg(GLOBAL)->Agg(LOCAL) pattern cannot match.
+        // Neither is visible to the alien-GRF check below: both are onlyLocal/non-remote filters.
+        // Only a filter that actually probes inside the cached subtree matters, though. When a JoinNode
+        // sits between the builder and the cache point, the filter may land entirely on the other input
+        // -- `... join r on l.k = r.k order by r.v limit n` builds a TOPN_FILTER on r.v that only r's
+        // scan can probe. That one cannot change a single row the cache point produces, so rejecting it
+        // would give up the cache for nothing.
+        // The targets are read off the probe nodes rather than off RuntimeFilterDescription's
+        // nodeIdToProbeExpr, because that map is only ever added to: a probe dropped afterwards -- by
+        // removeDictMappingProbeRuntimeFilters for a DictMappingExpr probe, or by computeLocalRfWaitingSet
+        // when global runtime filters are off -- leaves its node id behind and would read as an active
+        // probe here. A PlanNode's retained probe list is what the BE actually applies.
+        Set<Integer> localFilterIds = leftNodesTopDown.stream()
+                .filter(node -> node instanceof RuntimeFilterBuildNode && !(node instanceof JoinNode))
+                .flatMap(node -> ((RuntimeFilterBuildNode) node).getBuildRuntimeFilters().stream())
+                .map(RuntimeFilterDescription::getFilterId)
+                .collect(Collectors.toSet());
+        if (!localFilterIds.isEmpty() && probesAnyFilterOfSameFragment(firstAggNode, localFilterIds)) {
+            return false;
+        }
+
         // If there exists no JoinNode has runtime filters above cache point(i.e.firstAggNode),
         // then we just compute digest from the subtree rooted at firstAggNode.
         if (topMostDigestNode == null) {
@@ -767,15 +866,17 @@ public class FragmentNormalizer {
         // Not cacheable unless alien GRF(s) take effects on this PlanFragment.
         // The alien GRF(s) mean the GRF(S) that not created by PlanNodes of the subtree rooted at
         // the PlanFragment.planRoot.
+
         Set<Integer> grfBuilders =
                 fragment.getProbeRuntimeFilters().values().stream().filter(RuntimeFilterDescription::isHasRemoteTargets)
                         .map(RuntimeFilterDescription::getBuildPlanNodeId).collect(Collectors.toSet());
         if (!grfBuilders.isEmpty()) {
             List<PlanFragment> rightSiblings = Lists.newArrayList();
             collectRightSiblingFragments(root, rightSiblings, Sets.newHashSet());
-            Set<Integer> acceptableGrfBuilders = rightSiblings.stream().flatMap(
-                    frag -> frag.getBuildRuntimeFilters().values().stream().map(
-                            RuntimeFilterDescription::getBuildPlanNodeId)).collect(Collectors.toSet());
+            Set<Integer> acceptableGrfBuilders = rightSiblings.stream()
+                    .flatMap(frag -> frag.getBuildRuntimeFilters().values().stream())
+                    .map(RuntimeFilterDescription::getBuildPlanNodeId)
+                    .collect(Collectors.toSet());
             boolean hasAlienGrf = !Sets.difference(grfBuilders, acceptableGrfBuilders).isEmpty();
             if (hasAlienGrf) {
                 return false;

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -42,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -86,7 +88,18 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         List<OptExpression> children = new ArrayList<>();
         List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
         LogicalRepeatOperator repeatOperator = (LogicalRepeatOperator) repeatOpt.getOp();
-        for (int i = 0; i < repeatOperator.getRepeatColumnRef().size(); i++) {
+        // outputGrouping:  GROUPING_ID / GROUPING
+        // repeatColumnRef:  [[], [a]]
+        // groupingIds/groupingList: [[1, 0], [1, 0]]
+        // groupingIds' order is same as outputGrouping's order
+        List<ColumnRefOperator> outputGrouping = repeatOperator.getOutputGrouping();
+        List<List<Long>> groupingIds = repeatOperator.getGroupingIds();
+        List<List<ColumnRefOperator>> repeatColumnRefs = repeatOperator.getRepeatColumnRef();
+        Preconditions.checkState(outputGrouping.size() == groupingIds.size());
+        for (int i = 0; i < groupingIds.size(); i++) {
+            Preconditions.checkState(groupingIds.get(i).size() == repeatColumnRefs.size());
+        }
+        for (int i = 0; i < repeatColumnRefs.size(); i++) {
             // create cte consume, cte output columns
             // output column -> old input column.
             List<ColumnRefOperator> groupingSetKeys = repeatOperator.getRepeatColumnRef().get(i);
@@ -102,17 +115,33 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
             cteConsume.getCteOutputColumnRefMap().forEach((k, v) -> rewriteMap.put(v, k));
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
 
-            // rewrite agg functions by cte consume output
-            Map<ColumnRefOperator, CallOperator> newAggregations = new HashMap<>();
+            // rewrite agg functions by cte consume output.
+            // must keep the origin aggregations' order: the union node built below aligns each
+            // child's output columns with its own output columns by position, and its output
+            // columns follow the origin aggregations' order.
+            Map<ColumnRefOperator, CallOperator> newAggregations = new LinkedHashMap<>();
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregate.getAggregations().entrySet()) {
+                ColumnRefOperator originAggColRef = kv.getKey();
                 ColumnRefOperator aggColumnRef =
-                        columnRefFactory.create(kv.getKey(), kv.getKey().getType(), kv.getKey().isNullable());
+                        columnRefFactory.create(originAggColRef, originAggColRef.getType(), originAggColRef.isNullable());
                 newAggregations.put(aggColumnRef, (CallOperator) rewriter.rewrite(kv.getValue()));
             }
 
+            // new group by keys. A grouping set must never yield a duplicated group-by key: the aggregation
+            // tuple holds one slot per distinct key, while the BE builds its output from one column per
+            // group-by expression.
             List<ColumnRefOperator> rewriteGroupingKeys = groupingSetKeys.stream().
-                    map(column -> (ColumnRefOperator) rewriter.rewrite(column)).collect(
+                    map(column -> (ColumnRefOperator) rewriter.rewrite(column)).distinct().collect(
                             Collectors.toList());
+            // add grouping id and grouping
+            Map<ColumnRefOperator, ConstantOperator> groupingIdMap = new HashMap<>();
+            for (int idx = 0; idx < outputGrouping.size(); idx++) {
+                List<Long> curGroupingIds = groupingIds.get(idx);
+                ColumnRefOperator groupingIdColumn = outputGrouping.get(idx);
+                long groupingId = curGroupingIds.get(i);
+                groupingIdMap.put(groupingIdColumn, ConstantOperator.createBigint(groupingId));
+            }
+
             LogicalAggregationOperator newChildAgg = new LogicalAggregationOperator(AggType.GLOBAL, rewriteGroupingKeys,
                     newAggregations);
 
@@ -125,6 +154,12 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
                     ScalarOperator rewriteGroupKey = rewriter.rewrite(groupKey);
                     newProjectMap.put((ColumnRefOperator) rewriteGroupKey, rewriteGroupKey);
                     projectionOutputColumns.add((ColumnRefOperator) rewriteGroupKey);
+                } else if (groupingIdMap.containsKey(groupKey)) {
+                    // output null if not in the grouping keys.
+                    ColumnRefOperator projectOutputColumn =
+                            columnRefFactory.create(groupKey, groupKey.getType(), groupKey.isNullable());
+                    newProjectMap.put(projectOutputColumn, groupingIdMap.get(groupKey));
+                    projectionOutputColumns.add(projectOutputColumn);
                 } else {
                     // output null if not in the grouping keys.
                     ColumnRefOperator projectOutputColumn =
@@ -160,7 +195,9 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         context.getCteContext().addForceCTE(cteId);
 
         LogicalCTEAnchorOperator cteAnchor = new LogicalCTEAnchorOperator(cteId);
-        return Lists.newArrayList(OptExpression.create(cteAnchor, cteProduce, rightTree));
+        OptExpression result = OptExpression.create(cteAnchor, cteProduce, rightTree);
+
+        return Lists.newArrayList(result);
     }
 
     private LogicalCTEConsumeOperator buildCteConsume(OptExpression cteProduce, ColumnRefSet requiredColumns,

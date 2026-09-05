@@ -23,12 +23,47 @@ sql_annotation
 """
 from functools import wraps
 
+from nose.plugins.multiprocess import TimedOutException
 from cup import log
-from nose import tools
+import signal
 
 
-def init(record_mode=False):
-    """init"""
+def timeout(seconds):
+
+    def receive(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+
+            def _handler(signum, frame):
+                raise TimeoutError(f"Timed out after {seconds}s")
+
+            old_handler = signal.getsignal(signal.SIGALRM)
+            try:
+                signal.signal(signal.SIGALRM, _handler)
+                signal.alarm(seconds)
+                res = func(*args, **kwargs)
+                return res
+            except TimeoutError as e:
+                log.error(e)
+                raise e
+            except TimedOutException as e:
+                log.error(f"TimedOutException: exceed the process-timeout limit! {e}")
+                raise AssertionError("TimedOutException: exceed the process-timeout limit!")
+            except Exception as e:
+                raise e
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+
+        return wrapper
+
+    return receive
+
+
+def ignore_timeout():
+    """
+    ignore timeout exception
+    """
 
     def receive(func):
         """init decorator"""
@@ -36,35 +71,14 @@ def init(record_mode=False):
         @wraps(func)
         def wrapper(*args, **kwargs):
             """wrapper"""
-            name = args[1].name
-            args[0].db = args[1].db
-            args[0].case_info = args[1]
-            args[0].resource = args[1].resource
 
-            log.info(
-                """
-*********************************************
-Start to run: %s
-*********************************************"""
-                % name
-            )
-            # record mode, init info
-            if record_mode:
-                args[0].res_log.append(args[1].info)
-
-            # drop database
-            for each_db in args[0].db:
-                # drop database in init
-                log.info("init drop db: %s" % each_db)
-                args[0].drop_database(each_db)
-
-            # drop resource
-            for each_resource in args[0].resource:
-                # drop resource in init
-                log.info("init drop resource: %s" % each_resource)
-                args[0].drop_resource(each_resource)
-
-            return func(*args, **kwargs)
+            try:
+                res = func(*args, **kwargs)
+                return res
+            except TimedOutException as e:
+                log.warning("[Ignore] TimedOutException: exceed the process-timeout limit!")
+            except Exception as e:
+                raise e
 
         return wrapper
 

@@ -18,33 +18,43 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class StatisticsExecutorTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -64,32 +74,34 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats");
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
-        partition.updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
-                .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
+        partition.getDefaultPhysicalPartition()
+                .updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
+                        .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
         setTableStatistics(t0, 20000000);
     }
 
     @Test
     public void testCollectStatisticSync(@Mocked StmtExecutor executor) throws Exception {
+        Config.internal_log_json_format = true;
         // mock
-        MockUp<StmtExecutor> mock = new MockUp<StmtExecutor>() {
+        new MockUp<StmtExecutor>() {
             @Mock
             public void execute() {
             }
         };
 
-        Database database = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) database.getTable("t0_stats");
-        List<Long> partitionIdList =
-                table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+        Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0_stats");
 
         SampleStatisticsCollectJob collectJob = new SampleStatisticsCollectJob(database, table,
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
                 StatsConstants.AnalyzeType.SAMPLE,
                 StatsConstants.ScheduleType.SCHEDULE,
-                Maps.newHashMap());
+                Maps.newHashMap()
+        );
 
         String sql = "insert into test.t0 values(1,2,3)";
         ConnectContext context = StatisticUtils.buildConnectContext();
@@ -111,7 +123,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        Assert.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context, analyzeStatus));
 
         new Expectations(context) {
             {
@@ -120,39 +133,174 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        collectJob.collectStatisticSync(sql, context);
+        collectJob.collectStatisticSync(sql, context, analyzeStatus);
     }
 
     @Test
-    public void testQueryStatisticSync() {
-        String res;
+    public void testQueryStatisticSync() throws AnalysisException {
+        String tableUUID = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1").getUUID();
+        // table_uuid is stored hashed (StatisticUtils.hashTableUuidForPkStorage) to stay within
+        // BE's primary_key_limit_size; queries match both the hashed and raw value so historical
+        // rows written before hashing was introduced remain visible.
+        String hashedTableUUID = StatisticUtils.hashTableUuidForPkStorage(tableUUID);
+        String tableUUIDPredicate = "table_uuid in (\"" + hashedTableUUID + "\", \"" + tableUUID + "\")";
         new MockUp<StatisticExecutor>() {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
-                Assert.assertEquals("SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
-                            "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as int(11))) as string), " +
-                            "cast(min(cast(min as int(11))) as string) " +
-                            "FROM external_column_statistics " +
-                            "WHERE table_uuid = \"hive0.partitioned_db.t1.0\" " +
-                            "and column_name = \"c1\" " +
-                            "GROUP BY table_uuid, column_name UNION ALL " +
-                            "SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
-                            "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as varchar(1073741824))) as string), " +
-                            "cast(min(cast(min as varchar(1073741824))) as string) " +
-                            "FROM external_column_statistics " +
-                            "WHERE table_uuid = \"hive0.partitioned_db.t1.0\"" +
-                            " and column_name = \"c2\" " +
-                            "GROUP BY table_uuid, column_name", sql);
+                Assertions.assertEquals(
+                        "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "hll_union_agg(ndv), sum(null_count),  " +
+                                "cast(max(cast(nullif(max, '') as string)) as string), " +
+                                "cast(min(cast(nullif(min, '') as string)) as string), " +
+                                "max(update_time) FROM (SELECT *, row_number() " +
+                                "over ( partition by partition_name, column_name order by update_time desc) as rn " +
+                                "FROM external_column_statistics WHERE " + tableUUIDPredicate +
+                                " and column_name in (\"c2\")) dedup_t WHERE rn = 1 GROUP BY column_name UNION ALL " +
+                                "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "hll_union_agg(ndv), sum(null_count),  " +
+                                "cast(max(cast(nullif(max, '') as bigint)) as string), " +
+                                "cast(min(cast(nullif(min, '') as bigint)) as string), " +
+                                "max(update_time) FROM (SELECT *, row_number() " +
+                                "over ( partition by partition_name, column_name order by update_time desc) as rn " +
+                                "FROM external_column_statistics WHERE " + tableUUIDPredicate +
+                                " and column_name in (\"c1\")) dedup_t WHERE rn = 1 GROUP BY column_name", sql);
                 return Lists.newArrayList();
             }
         };
 
         ConnectContext context = StatisticUtils.buildConnectContext();
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db",
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db",
                 "t1");
-        String tableUUID = table.getUUID();
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1", "c2"));
+    }
+
+    public static StatementBase parseSql(String originStmt) {
+        return SqlParser.parse(originStmt, connectContext.getSessionVariable()).get(0);
+    }
+
+    public static StatementBase analyzeSuccess(String originStmt) {
+        try {
+            StatementBase statementBase = parseSql(originStmt);
+            Analyzer.analyze(statementBase, connectContext);
+
+            return statementBase;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            Assertions.fail();
+            throw ex;
+        }
+    }
+
+    @Test
+    public void testExecuteAnalyze(@Mocked StatisticExecutor statisticExecutor) {
+        ExternalAnalyzeStatus status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
+        new Expectations() {
+            {
+                statisticExecutor.collectStatistics((ConnectContext) any, (StatisticsCollectJob) any,
+                        (AnalyzeStatus) any,
+                        anyBoolean,
+                        anyBoolean);
+                minTimes = 0;
+                result = status;
+            }
+        };
+        String sql = "analyze table hive0.partitioned_db.t1 update histogram on c1";
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
+        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
+        AnalyzeStatus pendingStatus = new ExternalAnalyzeStatus(1, "", "", "",
+                "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
+
+        Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "partitioned_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
+
+        Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, pendingStatus, db, table);
+        Assertions.assertTrue(stmt.isExternal());
+        Assertions.assertTrue(stmt.getAnalyzeTypeDesc().isHistogram());
+
+        sql = "analyze table hive0.partitioned_db.t1";
+        stmt = (AnalyzeStmt) analyzeSuccess(sql);
+        executor = new StmtExecutor(connectContext, stmt);
+        pendingStatus = new ExternalAnalyzeStatus(1, "", "", "",
+                "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
+        Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, pendingStatus, db, table);
+        Assertions.assertTrue(stmt.isExternal());
+        Assertions.assertFalse(stmt.getAnalyzeTypeDesc().isHistogram());
+    }
+
+    @Test
+    public void testCollectStatistics() {
+        ExternalAnalyzeStatus status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList("col1", "col2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+
+        Database database = new Database(1, "test_db");
+        Table table = HiveTable.builder().setTableName("test_table").build();
+        StatisticsCollectJob statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.INT),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false,
+                true /* resetWarehouse */);
+
+        ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assertions.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 2);
+        Assertions.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col1"));
+        Assertions.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col2"));
+
+        status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList("col1", "col3"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+        statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("col1", "col3"),
+                Lists.newArrayList(IntegerType.INT, StringType.STRING),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false,
+                true /* resetWarehouse */);
+        externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assertions.assertEquals(externalBasicStatsMeta.getColumns(), Lists.newArrayList("col1", "col3"));
+        Assertions.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 3);
+    }
+
+    @Test
+    public void testDropHistogramStmt() {
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID,
+                                              List<String> columnNames) {
+                return;
+            }
+        };
+        String sql = "analyze table hive0.partitioned_db.t1 drop histogram on c1";
+        DropHistogramStmt stmt = (DropHistogramStmt) analyzeSuccess(sql);
+        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
+        Deencapsulation.invoke(executor, "handleDropHistogramStmt");
+        Assertions.assertTrue(stmt.isExternal());
+
+        sql = "analyze table test.t0_stats drop histogram on v1, v2";
+        stmt = (DropHistogramStmt) analyzeSuccess(sql);
+        executor = new StmtExecutor(connectContext, stmt);
+        Deencapsulation.invoke(executor, "handleDropHistogramStmt");
+        Assertions.assertFalse(stmt.isExternal());
     }
 
     @Test
@@ -162,6 +310,26 @@ public class StatisticsExecutorTest extends PlanTestBase {
         context.setThreadLocalInfo();
 
         ConnectContext statsContext = StatisticUtils.buildConnectContext();
-        Assert.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
+        Assertions.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
+    }
+
+    @Test
+    public void testDropHistogramWithEmptyColumnNames() {
+        // Test that dropHistogram and dropExternalHistogram methods handle empty column lists
+        // without throwing exceptions (which would happen if SQL with "in ()" was generated)
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        ConnectContext context = StatisticUtils.buildConnectContext();
+
+        // Should not throw any exception when columnNames is empty
+        statisticExecutor.dropHistogram(context, 1L, Lists.newArrayList());
+        statisticExecutor.dropHistogram(context, 1L, null);
+
+        // Should not throw any exception when columnNames is empty for external histogram
+        statisticExecutor.dropExternalHistogram(context, "test-uuid", Lists.newArrayList());
+        statisticExecutor.dropExternalHistogram(context, "test-uuid", null);
+
+        // Should not throw any exception for the overloaded version with catalog/db/table names
+        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", Lists.newArrayList());
+        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", null);
     }
 }

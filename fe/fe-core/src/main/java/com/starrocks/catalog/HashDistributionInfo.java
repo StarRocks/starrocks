@@ -38,24 +38,34 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Hash Distribution Info.
  */
-public class HashDistributionInfo extends DistributionInfo {
+public class HashDistributionInfo extends DistributionInfo implements GsonPostProcessable {
+
+    @SerializedName("colIds")
+    private List<ColumnId> distributionColumnIds;
+
     @SerializedName(value = "distributionColumns")
-    private List<Column> distributionColumns;
+    @Deprecated // Use distributionColumnIds to get columns, this is reserved for rollback compatibility only.
+    private List<Column> deprecatedColumns;
+
     @SerializedName(value = "bucketNum")
     private int bucketNum;
 
@@ -63,12 +73,16 @@ public class HashDistributionInfo extends DistributionInfo {
 
     public HashDistributionInfo() {
         super();
-        this.distributionColumns = new ArrayList<Column>();
+        this.deprecatedColumns = new ArrayList<>();
+        this.distributionColumnIds = new ArrayList<>();
     }
 
     public HashDistributionInfo(int bucketNum, List<Column> distributionColumns) {
         super(DistributionInfoType.HASH);
-        this.distributionColumns = distributionColumns;
+        this.deprecatedColumns = requireNonNull(distributionColumns, "distributionColumns is null");
+        this.distributionColumnIds = distributionColumns.stream()
+                .map(Column::getColumnId)
+                .collect(Collectors.toList());
         this.bucketNum = bucketNum;
     }
 
@@ -77,8 +91,9 @@ public class HashDistributionInfo extends DistributionInfo {
         return true;
     }
 
-    public List<Column> getDistributionColumns() {
-        return distributionColumns;
+    @Override
+    public List<ColumnId> getDistributionColumns() {
+        return distributionColumnIds;
     }
 
     @Override
@@ -87,9 +102,9 @@ public class HashDistributionInfo extends DistributionInfo {
     }
 
     @Override
-    public String getDistributionKey() {
+    public String getDistributionKey(Map<ColumnId, Column> schema) {
         List<String> colNames = Lists.newArrayList();
-        for (Column column : distributionColumns) {
+        for (Column column : MetaUtils.getColumnsByColumnIds(schema, distributionColumnIds)) {
             colNames.add("`" + column.getName() + "`");
         }
         String colList = Joiner.on(", ").join(colNames);
@@ -97,7 +112,10 @@ public class HashDistributionInfo extends DistributionInfo {
     }
 
     public void setDistributionColumns(List<Column> columns) {
-        this.distributionColumns = columns;
+        this.deprecatedColumns = columns;
+        this.distributionColumnIds = columns.stream()
+                .map(column -> ColumnId.create(column.getName()))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -105,35 +123,9 @@ public class HashDistributionInfo extends DistributionInfo {
         this.bucketNum = bucketNum;
     }
 
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        int columnCount = distributionColumns.size();
-        out.writeInt(columnCount);
-        for (Column column : distributionColumns) {
-            column.write(out);
-        }
-        out.writeInt(bucketNum);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int columnCount = in.readInt();
-        for (int i = 0; i < columnCount; i++) {
-            Column column = Column.read(in);
-            distributionColumns.add(column);
-        }
-        bucketNum = in.readInt();
-    }
-
-    public static DistributionInfo read(DataInput in) throws IOException {
-        DistributionInfo distributionInfo = new HashDistributionInfo();
-        distributionInfo.readFields(in);
-        return distributionInfo;
-    }
-
     @Override
     public int hashCode() {
-        return Objects.hashCode(type, bucketNum, distributionColumns);
+        return Objects.hashCode(type, bucketNum, distributionColumnIds);
     }
 
     @Override
@@ -150,13 +142,13 @@ public class HashDistributionInfo extends DistributionInfo {
 
         return type == hashDistributionInfo.type
                 && bucketNum == hashDistributionInfo.bucketNum
-                && distributionColumns.equals(hashDistributionInfo.distributionColumns);
+                && distributionColumnIds.equals(hashDistributionInfo.distributionColumnIds);
     }
 
     @Override
-    public DistributionDesc toDistributionDesc() {
+    public DistributionDesc toDistributionDesc(Map<ColumnId, Column> schema) {
         List<String> distriColNames = Lists.newArrayList();
-        for (Column col : distributionColumns) {
+        for (Column col : MetaUtils.getColumnsByColumnIds(schema, distributionColumnIds)) {
             distriColNames.add(col.getName());
         }
         DistributionDesc distributionDesc = new HashDistributionDesc(bucketNum, distriColNames);
@@ -164,17 +156,24 @@ public class HashDistributionInfo extends DistributionInfo {
     }
 
     @Override
-    public HashDistributionInfo copy() {
-        return new HashDistributionInfo(bucketNum, distributionColumns);
+    public void gsonPostProcess() throws IOException {
+        if (distributionColumnIds == null || distributionColumnIds.size() <= 0) {
+            distributionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
+        }
     }
 
     @Override
-    public String toSql() {
+    public HashDistributionInfo copy() {
+        return new HashDistributionInfo(bucketNum, deprecatedColumns);
+    }
+
+    @Override
+    public String toSql(Map<ColumnId, Column> schema) {
         StringBuilder builder = new StringBuilder();
         builder.append("DISTRIBUTED BY HASH(");
 
         List<String> colNames = Lists.newArrayList();
-        for (Column column : distributionColumns) {
+        for (Column column : MetaUtils.getColumnsByColumnIds(schema, distributionColumnIds)) {
             colNames.add("`" + column.getName() + "`");
         }
         String colList = Joiner.on(", ").join(colNames);
@@ -192,8 +191,8 @@ public class HashDistributionInfo extends DistributionInfo {
         builder.append("type: ").append(type).append("; ");
 
         builder.append("distribution columns: [");
-        for (Column column : distributionColumns) {
-            builder.append(column.getName()).append(",");
+        for (ColumnId name : distributionColumnIds) {
+            builder.append(name.getId()).append(",");
         }
         builder.append("]; ");
 

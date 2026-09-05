@@ -18,11 +18,17 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.hive.TextFileFormatDesc;
+import com.starrocks.connector.hudi.HudiConnector;
+import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
+import com.starrocks.thrift.TTextFileDesc;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
@@ -30,11 +36,12 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,12 +51,13 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_INPUT_FOAMT;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 import static org.apache.hudi.common.model.HoodieTableType.COPY_ON_WRITE;
 
 public class HiveMetastoreApiConverterTest {
     Schema hudiSchema;
 
-    @Before
+    @BeforeEach
     public void setup() {
         List<Schema.Field> hudiFields = new ArrayList<>();
         hudiFields.add(new Schema.Field("_hoodie_commit_time",
@@ -66,24 +74,124 @@ public class HiveMetastoreApiConverterTest {
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG)), "", null));
         hudiFields.add(new Schema.Field("col2",
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
+        hudiFields.add(new Schema.Field("col3",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
         hudiSchema = Schema.createRecord(hudiFields);
     }
 
     @Test
-    public void testToFullSchemasForHudiTable() {
-        List<Column> columns = HiveMetastoreApiConverter.toFullSchemasForHudiTable(hudiSchema);
-        Assert.assertEquals(7, columns.size());
+    void testToTextFileFormatDescForOpenCSVSerde() {
+        String openCSVSerde = "org.apache.hadoop.hive.serde2.OpenCSVSerde";
+
+        // OpenCSVSerde applies separator/quote/escape defaults even when unset.
+        TextFileFormatDesc def = HiveMetastoreApiConverter.toTextFileFormatDesc(new HashMap<>(), openCSVSerde);
+        Assertions.assertEquals(",", def.getFieldDelim());
+        Assertions.assertEquals('"', def.getEnclose());
+        Assertions.assertEquals('\\', def.getEscape());
+
+        // Explicit separator/quote/escape are honored.
+        Map<String, String> params = new HashMap<>();
+        params.put("separatorChar", "|");
+        params.put("quoteChar", "'");
+        params.put("escapeChar", "/");
+        TextFileFormatDesc explicit = HiveMetastoreApiConverter.toTextFileFormatDesc(params, openCSVSerde);
+        Assertions.assertEquals("|", explicit.getFieldDelim());
+        Assertions.assertEquals('\'', explicit.getEnclose());
+        Assertions.assertEquals('/', explicit.getEscape());
+
+        // enclose/escape are carried over thrift.
+        TTextFileDesc thrift = def.toThrift();
+        Assertions.assertEquals('"', thrift.getEnclose());
+        Assertions.assertEquals('\\', thrift.getEscape());
+
+        // Non-OpenCSVSerde (LazySimpleSerDe): no enclose/escape, naive path stays.
+        TextFileFormatDesc lazy = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                new HashMap<>(), "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, lazy.getEnclose());
+        Assertions.assertEquals(0, lazy.getEscape());
+
+        // Backward-compatible single-arg overload behaves like the non-OpenCSVSerde case.
+        TextFileFormatDesc legacy = HiveMetastoreApiConverter.toTextFileFormatDesc(new HashMap<>());
+        Assertions.assertEquals(0, legacy.getEnclose());
+        Assertions.assertEquals(0, legacy.getEscape());
+
+        // Explicitly empty quote/escape disables that char (the !isEmpty guard): a
+        // degenerate OpenCSVSerde config then falls back to the naive (v1) path.
+        Map<String, String> emptyParams = new HashMap<>();
+        emptyParams.put("quoteChar", "");
+        emptyParams.put("escapeChar", "");
+        TextFileFormatDesc empty = HiveMetastoreApiConverter.toTextFileFormatDesc(emptyParams, openCSVSerde);
+        Assertions.assertEquals(0, empty.getEnclose());
+        Assertions.assertEquals(0, empty.getEscape());
+    }
+
+    @Test
+    void testToTextFileFormatDescForLazySimpleEscape() {
+        // LazySimpleSerDe with ESCAPED BY (serde property 'escape.delim'): the escape
+        // char must reach the BE so "a\,b" is one field, while enclose stays unset.
+        Map<String, String> params = new HashMap<>();
+        params.put("field.delim", ",");
+        params.put("escape.delim", "\\");
+        TextFileFormatDesc lazy = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                params, "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, lazy.getEnclose());
+        Assertions.assertEquals('\\', lazy.getEscape());
+
+        // Like the delimiters, only the first character is used.
+        Map<String, String> multiChar = new HashMap<>();
+        multiChar.put("escape.delim", "#!");
+        TextFileFormatDesc first = HiveMetastoreApiConverter.toTextFileFormatDesc(multiChar, null);
+        Assertions.assertEquals('#', first.getEscape());
+
+        // Without the property, escaping stays off.
+        TextFileFormatDesc off = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                new HashMap<>(), "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, off.getEscape());
+
+        // OpenCSVSerde ignores LazySimpleSerDe's escape.delim: its own escapeChar
+        // (here explicitly disabled) wins.
+        Map<String, String> mixed = new HashMap<>();
+        mixed.put("escape.delim", "#");
+        mixed.put("escapeChar", "");
+        TextFileFormatDesc opencsv = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                mixed, "org.apache.hadoop.hive.serde2.OpenCSVSerde");
+        Assertions.assertEquals(0, opencsv.getEscape());
+    }
+
+    @Test
+    public void testToFullSchemasForHudiTable(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient) {
+        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "bigint", ""));
+        List<FieldSchema> unPartKeys = Lists.newArrayList();
+        unPartKeys.add(new FieldSchema("_hoodie_commit_time", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_commit_seqno", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_record_key", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_partition_path", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_file_name", "string", ""));
+        unPartKeys.add(new FieldSchema("col2", "int", ""));
+        new Expectations() {
+            {
+                table.getSd().getCols();
+                result = unPartKeys;
+
+                table.getPartitionKeys();
+                result = partKeys;
+            }
+        };
+
+        List<Column> columns = HiveMetastoreApiConverter.toFullSchemasForHudiTable(table, hudiSchema);
+        Assertions.assertEquals(8, columns.size());
     }
 
     @Test
     public void testToDataColumnNamesForHudiTable() {
         List<String> partColumns = Lists.newArrayList("col1");
         List<String> dataColumns = HiveMetastoreApiConverter.toDataColumnNamesForHudiTable(hudiSchema, partColumns);
-        Assert.assertEquals(6, dataColumns.size());
+        Assertions.assertEquals(7, dataColumns.size());
     }
 
     @Test
-    public void testToHudiProperties(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient) {
+    public void testToHudiProperties(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient,
+                                     @Mocked ConnectorMgr connectorMgr) {
         StorageDescriptor sd = new StorageDescriptor();
         String tableLocation = "hdfs://127.0.0.1/db/table/hudi_table";
         String serLib = "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe";
@@ -122,35 +230,49 @@ public class HiveMetastoreApiConverterTest {
         };
 
         Map<String, String> params = HiveMetastoreApiConverter.toHudiProperties(table, metaClient, hudiSchema);
-        Assert.assertEquals(tableLocation, params.get(HUDI_BASE_PATH));
-        Assert.assertEquals(serLib, params.get(HUDI_TABLE_SERDE_LIB));
-        Assert.assertEquals(inputFormat, params.get(HUDI_TABLE_INPUT_FOAMT));
-        Assert.assertEquals("COPY_ON_WRITE", params.get(HUDI_TABLE_TYPE));
-        Assert.assertEquals("_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key," +
-                "_hoodie_partition_path,_hoodie_file_name,col1,col2", params.get(HUDI_TABLE_COLUMN_NAMES));
-        Assert.assertEquals("string#string#string#string#string#bigint#int", params.get(HUDI_TABLE_COLUMN_TYPES));
+        Assertions.assertEquals(tableLocation, params.get(HUDI_BASE_PATH));
+        Assertions.assertEquals(serLib, params.get(HUDI_TABLE_SERDE_LIB));
+        Assertions.assertEquals(inputFormat, params.get(HUDI_TABLE_INPUT_FOAMT));
+        Assertions.assertEquals("COPY_ON_WRITE", params.get(HUDI_TABLE_TYPE));
+        Assertions.assertEquals("_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key," +
+                "_hoodie_partition_path,_hoodie_file_name,col1,col2,col3", params.get(HUDI_TABLE_COLUMN_NAMES));
+        Assertions.assertEquals("string#string#string#string#string#bigint#int#int", params.get(HUDI_TABLE_COLUMN_TYPES));
+
+        final String catalogName = "hudi_catalog";
+        new Expectations() {
+            {
+                connectorMgr.getConnector(catalogName);
+                Map<String, String> properties = new HashMap<>();
+                properties.put(HIVE_METASTORE_URIS, "thrift://127.0.0.1:9083");
+                Connector connector = new HudiConnector(new ConnectorContext(catalogName, "hive", properties));
+                result = new CatalogConnector(connector, new InformationSchemaConnector(catalogName),
+                        new TableMetaConnector(catalogName, "hive"));
+            }
+        };
+        HudiTable hudiTable = HiveMetastoreApiConverter.toHudiTable(table, "hudi_catalog");
+        Assertions.assertEquals(catalogName, hudiTable.getCatalogName());
     }
 
     @Test
     public void testValidateTableType() {
         try {
             HiveMetastoreApiConverter.validateHiveTableType(null);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof  StarRocksConnectorException);
+            Assertions.assertTrue(e instanceof  StarRocksConnectorException);
         }
 
         try {
             HiveMetastoreApiConverter.validateHiveTableType("xxxx");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof  StarRocksConnectorException);
+            Assertions.assertTrue(e instanceof  StarRocksConnectorException);
         }
 
         try {
             HiveMetastoreApiConverter.validateHiveTableType("VIRTUAL_VIEW");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -161,25 +283,106 @@ public class HiveMetastoreApiConverterTest {
                 .setHiveDbName("hive_db")
                 .setHiveTableName("hive_table")
                 .setPartitionColumnNames(Lists.newArrayList("p1"))
-                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
                 .setDataColumnNames(Lists.newArrayList("c1"))
                 .setTableLocation("table_location")
                 .setStorageFormat(HiveStorageFormat.PARQUET)
                 .build();
         hiveTable.setComment("my_comment");
         Table table = HiveMetastoreApiConverter.toMetastoreApiTable(hiveTable);
-        Assert.assertEquals("hive_table", table.getTableName());
-        Assert.assertEquals("hive_db", table.getDbName());
-        Assert.assertEquals("p1", table.getPartitionKeys().get(0).getName());
-        Assert.assertEquals("table_location", table.getSd().getLocation());
-        Assert.assertEquals("c1", table.getSd().getCols().get(0).getName());
-        Assert.assertEquals("int", table.getSd().getCols().get(0).getType());
+        Assertions.assertEquals("hive_table", table.getTableName());
+        Assertions.assertEquals("hive_db", table.getDbName());
+        Assertions.assertEquals("p1", table.getPartitionKeys().get(0).getName());
+        Assertions.assertEquals("table_location", table.getSd().getLocation());
+        Assertions.assertEquals("c1", table.getSd().getCols().get(0).getName());
+        Assertions.assertEquals("int", table.getSd().getCols().get(0).getType());
 
-        Assert.assertEquals(HiveClassNames.PARQUET_HIVE_SERDE_CLASS, table.getSd().getSerdeInfo().getSerializationLib());
-        Assert.assertEquals(HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS, table.getSd().getInputFormat());
-        Assert.assertEquals(HiveClassNames.MAPRED_PARQUET_OUTPUT_FORMAT_CLASS, table.getSd().getOutputFormat());
+        Assertions.assertEquals(HiveClassNames.PARQUET_HIVE_SERDE_CLASS, table.getSd().getSerdeInfo().getSerializationLib());
+        Assertions.assertEquals(HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS, table.getSd().getInputFormat());
+        Assertions.assertEquals(HiveClassNames.MAPRED_PARQUET_OUTPUT_FORMAT_CLASS, table.getSd().getOutputFormat());
 
-        Assert.assertEquals("my_comment", table.getParameters().get("comment"));
-        Assert.assertEquals("0", table.getParameters().get("numRows"));
+        Assertions.assertEquals("my_comment", table.getParameters().get("comment"));
+        Assertions.assertEquals("0", table.getParameters().get("numRows"));
+    }
+
+    @Test
+    public void testToMetastoreApiTableWithSerdeProperties() {
+        Map<String, String> serdeProperties = new HashMap<>();
+        serdeProperties.put("field.delim", ",");
+        serdeProperties.put("collection.delim", "|");
+        serdeProperties.put("mapkey.delim", ":");
+        serdeProperties.put("line.delim", "\n");
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("text_table")
+                .setPartitionColumnNames(Lists.newArrayList("p1"))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
+                .setDataColumnNames(Lists.newArrayList("c1"))
+                .setTableLocation("table_location")
+                .setStorageFormat(HiveStorageFormat.TEXTFILE)
+                .setSerdeProperties(serdeProperties)
+                .build();
+
+        Table table = HiveMetastoreApiConverter.toMetastoreApiTable(hiveTable);
+        Map<String, String> serdeParams = table.getSd().getSerdeInfo().getParameters();
+        Assertions.assertNotNull(serdeParams);
+        Assertions.assertEquals(",", serdeParams.get("field.delim"));
+        Assertions.assertEquals("|", serdeParams.get("collection.delim"));
+        Assertions.assertEquals(":", serdeParams.get("mapkey.delim"));
+        Assertions.assertEquals("\n", serdeParams.get("line.delim"));
+    }
+
+    @Test
+    public void testExtractSerdeProperties() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("file_format", "textfile");
+        properties.put("field.delim", ",");
+        properties.put("collection.delim", "|");
+        properties.put("mapkey.delim", ":");
+        properties.put("line.delim", "\n");
+        // escape.delim (ESCAPED BY) must survive CREATE TABLE and reach HMS SerDeInfo,
+        // or a table created through StarRocks silently loses its escape setting and
+        // later scans (by StarRocks or by Hive itself) fall back to unescaped splitting.
+        properties.put("escape.delim", "\\");
+        properties.put("some_other_prop", "value");
+
+        Map<String, String> serdeProps = HiveMetastoreApiConverter.extractSerdeProperties(properties);
+        Assertions.assertEquals(5, serdeProps.size());
+        Assertions.assertEquals(",", serdeProps.get("field.delim"));
+        Assertions.assertEquals("|", serdeProps.get("collection.delim"));
+        Assertions.assertEquals(":", serdeProps.get("mapkey.delim"));
+        Assertions.assertEquals("\n", serdeProps.get("line.delim"));
+        Assertions.assertEquals("\\", serdeProps.get("escape.delim"));
+        Assertions.assertFalse(serdeProps.containsKey("file_format"));
+        Assertions.assertFalse(serdeProps.containsKey("some_other_prop"));
+    }
+
+    @Test
+    public void testExtractSerdePropertiesEmpty() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("file_format", "parquet");
+
+        Map<String, String> serdeProps = HiveMetastoreApiConverter.extractSerdeProperties(properties);
+        Assertions.assertTrue(serdeProps.isEmpty());
+    }
+
+    @Test
+    public void testToApiTableProperties() {
+        HiveTable hiveTable = HiveTable.builder()
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("hive_table")
+                .setPartitionColumnNames(Lists.newArrayList("p1"))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
+                .setDataColumnNames(Lists.newArrayList("c1"))
+                .setTableLocation("table_location")
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE)
+                .build();
+        Map<String, String> properties = HiveMetastoreApiConverter.toApiTableProperties(hiveTable);
+        Assertions.assertTrue(properties.containsKey("EXTERNAL"));
+        Assertions.assertEquals("TRUE", properties.get("EXTERNAL"));
     }
 }

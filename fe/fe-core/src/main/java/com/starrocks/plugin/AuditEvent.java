@@ -35,9 +35,15 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Joiner;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /*
@@ -55,7 +61,7 @@ public class AuditEvent {
         CONNECTION,
         DISCONNECTION,
         BEFORE_QUERY,
-        AFTER_QUERY
+        AFTER_QUERY,
     }
 
     @Retention(RetentionPolicy.RUNTIME)
@@ -63,6 +69,7 @@ public class AuditEvent {
         String value() default "";
 
         boolean ignore_zero() default false;
+        boolean ignore_empty() default false;
     }
 
     public EventType type;
@@ -120,6 +127,8 @@ public class AuditEvent {
     public double planMemCosts = -1;
     @AuditField(value = "PendingTimeMs")
     public long pendingTimeMs = -1;
+    @AuditField(value = "Slots")
+    public int numSlots = -1;
     @AuditField(value = "BigQueryLogCPUSecondThreshold")
     public long bigQueryLogCPUSecondThreshold = -1;
     @AuditField(value = "BigQueryLogScanBytesThreshold")
@@ -128,6 +137,12 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+    @AuditField(value = "writeClientTimeMs", ignore_zero = true)
+    public long writeClientTimeMs = -1;
+    @AuditField(value = "Warehouse")
+    public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    @AuditField(value = "CNGroup")
+    public String cnGroup = "";
 
     // Materialized View usage info
     @AuditField(value = "CandidateMVs", ignore_zero = true)
@@ -135,8 +150,82 @@ public class AuditEvent {
     @AuditField(value = "HitMvs", ignore_zero = true)
     public String hitMVs;
 
+    @AuditField(value = "Features", ignore_zero = true)
+    public String features;
+    @AuditField(value = "PredictMemBytes", ignore_zero = true)
+    public long predictMemBytes = 0;
+
     @AuditField(value = "IsForwardToLeader")
     public boolean isForwardToLeader = false;
+
+    @AuditField(value = "QueryFEAllocatedMemory")
+    public long queryFeMemory = 0;
+
+    @AuditField(value = "SessionId")
+    public String sessionId = "";
+    
+    @AuditField(value = "CustomQueryId")
+    public String customQueryId = "";
+
+    @AuditField(value = "CustomSessionName")
+    public String customSessionName = "";
+
+    @AuditField(value = "TransmittedBytes")
+    public long transmittedBytes = -1;
+
+    @AuditField(value = "QuerySource")
+    public String querySource = "";
+
+    @AuditField(value = "Command")
+    public String command = "";
+
+    @AuditField(value = "PreparedStmtId", ignore_zero = true)
+    public String preparedStmtId = null;
+
+    @AuditField(value = "QueriedRelations", ignore_empty = true)
+    public List<String> queriedRelations = Collections.emptyList();
+
+    public long readLocalCnt = 0;
+    public long readRemoteCnt = 0;
+    @AuditField(value = "CacheHitRatio", ignore_empty = true)
+    public String cacheHitRatio = "";
+
+    public void calculateCacheHitRatio() {
+        if (!isQuery || RunMode.isSharedNothingMode()) {
+            return;
+        }
+        long readTotalCnt = readLocalCnt + readRemoteCnt;
+        if (readTotalCnt > 0) {
+            float percent = ((float) readLocalCnt * 100) / readTotalCnt;
+            cacheHitRatio = String.format("%.1f", percent) + "%";
+        } else {
+            cacheHitRatio = "100%";
+        }
+    }
+
+    public float getCacheMissRatio() {
+        long readTotalCnt = readLocalCnt + readRemoteCnt;
+        if (readTotalCnt > 0) {
+            return ((float) readRemoteCnt * 100) / readTotalCnt;
+        } else {
+            return 0;
+        }
+    }
+
+    public AuditEvent copy() {
+        AuditEvent copied = new AuditEvent();
+        try {
+            for (Field field : AuditEvent.class.getFields()) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                field.set(copied, field.get(this));
+            }
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Failed to copy audit event", e);
+        }
+        return copied;
+    }
 
     public static class AuditEventBuilder {
 
@@ -219,6 +308,24 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder addScanBytes(long scanBytes) {
+            if (auditEvent.scanBytes == -1) {
+                auditEvent.scanBytes = scanBytes;
+            } else {
+                auditEvent.scanBytes += scanBytes;
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addScanRows(long scanRows) {
+            if (auditEvent.scanRows == -1) {
+                auditEvent.scanRows = scanRows;
+            } else {
+                auditEvent.scanRows += scanRows;
+            }
+            return this;
+        }
+
         /**
          * Cpu cost in nanoseconds
          */
@@ -227,13 +334,55 @@ public class AuditEvent {
             return this;
         }
 
-        public AuditEventBuilder setMemCostBytes(long memCostBytes) {
-            auditEvent.memCostBytes = memCostBytes;
+        public AuditEventBuilder addCpuCostNs(long cpuNs) {
+            if (auditEvent.cpuCostNs == -1) {
+                auditEvent.cpuCostNs = cpuNs;
+            } else {
+                auditEvent.cpuCostNs += cpuNs;
+            }
             return this;
         }
 
-        public AuditEventBuilder setSpilledBytes(long spilledBytes) {
-            auditEvent.spilledBytes = spilledBytes;
+        public AuditEventBuilder addMemCostBytes(long memCostBytes) {
+            if (auditEvent.memCostBytes == -1) {
+                auditEvent.memCostBytes = memCostBytes;
+            } else {
+                auditEvent.memCostBytes = Math.max(auditEvent.memCostBytes, memCostBytes);
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addSpilledBytes(long spilledBytes) {
+            if (auditEvent.spilledBytes == -1) {
+                auditEvent.spilledBytes = spilledBytes;
+            } else {
+                auditEvent.spilledBytes += spilledBytes;
+            }
+            return this;
+        }
+
+        public AuditEventBuilder setWriteClientTimeMs(long writeClientTimeMs) {
+            auditEvent.writeClientTimeMs = writeClientTimeMs;
+            return this;
+        }
+
+        public AuditEventBuilder addReadLocalCnt(long readLocalCnt) {
+            auditEvent.readLocalCnt += readLocalCnt;
+            return this;
+        }
+
+        public AuditEventBuilder addReadRemoteCnt(long readRemoteCnt) {
+            auditEvent.readRemoteCnt += readRemoteCnt;
+            return this;
+        }
+
+        public AuditEventBuilder setWarehouse(String warehouse) {
+            auditEvent.warehouse = warehouse;
+            return this;
+        }
+
+        public AuditEventBuilder setCNGroup(String cnGroup) {
+            auditEvent.cnGroup = cnGroup;
             return this;
         }
 
@@ -277,8 +426,23 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setPlanFeatures(String features) {
+            auditEvent.features = features;
+            return this;
+        }
+
         public AuditEventBuilder setPendingTimeMs(long pendingTimeMs) {
             auditEvent.pendingTimeMs = pendingTimeMs;
+            return this;
+        }
+
+        public AuditEventBuilder setNumSlots(int numSlots) {
+            auditEvent.numSlots = numSlots;
+            return this;
+        }
+
+        public AuditEventBuilder setPredictMemBytes(long memBytes) {
+            auditEvent.predictMemBytes = memBytes;
             return this;
         }
 
@@ -316,8 +480,79 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setQueryFeMemory(long queryFeMemory) {
+            auditEvent.queryFeMemory = queryFeMemory;
+            return this;
+        }
+
+        public AuditEventBuilder setSessionId(String sessionId) {
+            auditEvent.sessionId = sessionId;
+            return this;
+        }
+
+        public AuditEventBuilder setCustomQueryId(String customQueryId) {
+            auditEvent.customQueryId = customQueryId;
+            return this;
+        }
+
+        public AuditEventBuilder setCustomSessionName(String customSessionName) {
+            auditEvent.customSessionName = customSessionName;
+            return this;
+        }
+
+        public AuditEventBuilder addTransmittedBytes(long transmittedBytes) {
+            if (auditEvent.transmittedBytes == -1) {
+                auditEvent.transmittedBytes = transmittedBytes;
+            } else {
+                auditEvent.transmittedBytes += transmittedBytes;
+            }
+            return this;
+        }
+
+        public AuditEventBuilder setQuerySource(String querySource) {
+            auditEvent.querySource = querySource;
+            return this;
+        }
+
+        public AuditEventBuilder setCommand(String command) {
+            auditEvent.command = command;
+            return this;
+        }
+
+        public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
+            auditEvent.preparedStmtId = preparedStmtId;
+            return this;
+        }
+
+        public AuditEventBuilder setQueriedRelations(List<String> queriedRelations) {
+            if (queriedRelations == null || queriedRelations.isEmpty()) {
+                auditEvent.queriedRelations = Collections.emptyList();
+            } else {
+                auditEvent.queriedRelations = Collections.unmodifiableList(new ArrayList<>(queriedRelations));
+            }
+            return this;
+        }
+
         public AuditEvent build() {
+            this.auditEvent.calculateCacheHitRatio();
             return this.auditEvent;
+        }
+
+        public AuditEvent buildSnapshot() {
+            return build().copy();
+        }
+
+        // Copy execution statistics from another audit event
+        public void copyExecStatsFrom(AuditEvent event) {
+            this.auditEvent.cpuCostNs = event.cpuCostNs;
+            this.auditEvent.memCostBytes = event.memCostBytes;
+            this.auditEvent.scanBytes = event.scanBytes;
+            this.auditEvent.scanRows = event.scanRows;
+            this.auditEvent.spilledBytes = event.spilledBytes;
+            this.auditEvent.readLocalCnt = event.readLocalCnt;
+            this.auditEvent.readRemoteCnt = event.readRemoteCnt;
+            this.auditEvent.returnRows = event.returnRows;
+            this.auditEvent.transmittedBytes = event.transmittedBytes;
         }
     }
 }

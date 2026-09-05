@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
@@ -44,43 +45,67 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
+import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.ArrayBlockingQueue;
 
 public class LoadJobTest {
 
-    @BeforeClass
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+
+    @Mocked
+    private WarehouseManager warehouseManager;
+
+    @Mocked
+    private Warehouse warehouse;
+
+    @BeforeAll
     public static void start() {
         MetricRepo.init();
     }
 
     @Test
-    public void testGetDbNotExists(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testGetDbNotExists() {
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "dbId", 1L);
         new Expectations() {
             {
-                globalStateMgr.getDb(1L);
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getLocalMetastore().getDb(1L);
                 minTimes = 0;
                 result = null;
             }
@@ -88,7 +113,7 @@ public class LoadJobTest {
 
         try {
             loadJob.getDb();
-            Assert.fail();
+            Assertions.fail();
         } catch (MetaNotFoundException e) {
         }
     }
@@ -100,13 +125,33 @@ public class LoadJobTest {
         LoadJob loadJob = new BrokerLoadJob();
         try {
             loadJob.setJobProperties(jobProperties);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
         }
     }
 
     @Test
     public void testSetJobProperties() {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getId();
+                minTimes = 0;
+                result = 1001L;
+            }
+        };
+
         Map<String, String> jobProperties = Maps.newHashMap();
         jobProperties.put(LoadStmt.TIMEOUT_PROPERTY, "1000");
         jobProperties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY, "0.1");
@@ -116,25 +161,93 @@ public class LoadJobTest {
         LoadJob loadJob = new BrokerLoadJob();
         try {
             loadJob.setJobProperties(jobProperties);
-            Assert.assertEquals(1000, (long) Deencapsulation.getField(loadJob, "timeoutSecond"));
-            Assert.assertEquals(0.1, Deencapsulation.getField(loadJob, "maxFilterRatio"), 0);
-            Assert.assertEquals(1024, (long) Deencapsulation.getField(loadJob, "loadMemLimit"));
-            Assert.assertTrue(Deencapsulation.getField(loadJob, "strictMode"));
+            Assertions.assertEquals(1000, (long) Deencapsulation.getField(loadJob, "timeoutSecond"));
+            Assertions.assertEquals(0.1, Deencapsulation.getField(loadJob, "maxFilterRatio"), 0);
+            Assertions.assertEquals(1024, (long) Deencapsulation.getField(loadJob, "loadMemLimit"));
+            Assertions.assertTrue((Boolean) Deencapsulation.getField(loadJob, "strictMode"));
         } catch (DdlException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSetJobPropertiesForWarehouse() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getId();
+                minTimes = 0;
+                result = 1001L;
+            }
+        };
+
+        ConnectContext context = new ConnectContext(null);
+        new Expectations(context) {
+            {
+                ConnectContext.get();
+                result = context;
+
+                context.getCurrentWarehouseId();
+                result = 1000L;
+            }
+        };
+
+        try {
+            // normal, jobProperties set
+            LoadJob loadJob1 = new BrokerLoadJob();
+            Map<String, String> jobProperties1 = Maps.newHashMap();
+            jobProperties1.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, "test_warehouse");
+            loadJob1.setJobProperties(jobProperties1);
+            Assertions.assertEquals(1001L, (long) Deencapsulation.getField(loadJob1, "warehouseId"));
+
+            // with jobProperties set, but no warehouse property,
+            LoadJob loadJob2 = new BrokerLoadJob();
+            Map<String, String> jobProperties2 = Maps.newHashMap();
+            loadJob2.setJobProperties(jobProperties2);
+            Assertions.assertEquals(1000L, (long) Deencapsulation.getField(loadJob2, "warehouseId"));
+
+            // no jobProperties provided
+            LoadJob loadJob3 = new BrokerLoadJob();
+            loadJob3.setJobProperties(null);
+            Assertions.assertEquals(1000L, (long) Deencapsulation.getField(loadJob3, "warehouseId"));
+        } catch (DdlException e) {
+            Assertions.fail(e.getMessage());
         }
     }
 
     @Test
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
                             @Mocked LeaderTaskExecutor leaderTaskExecutor)
-            throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
+        // BrokerLoadJob now defers beginTxn + the PENDING -> LOADING transition
+        // out of unprotectedExecute and into createLoadingTask (after the
+        // pre-split hook returns). execute() only submits the BrokerLoadPendingTask;
+        // state stays PENDING and transactionId stays 0 until the pending task
+        // finishes and createLoadingTask opens the load txn under the write lock.
         LoadJob loadJob = new BrokerLoadJob();
         new Expectations() {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
                         (TransactionState.TxnCoordinator) any,
-                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong);
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, (ComputeResource) any);
                 minTimes = 0;
                 result = 1;
                 leaderTaskExecutor.submit((LeaderTask) any);
@@ -154,11 +267,13 @@ public class LoadJobTest {
         try {
             loadJob.execute();
         } catch (LoadException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
-        Assert.assertEquals(JobState.LOADING, loadJob.getState());
-        Assert.assertEquals(1, loadJob.getTransactionId());
-
+        Assertions.assertEquals(JobState.PENDING, loadJob.getState());
+        Assertions.assertEquals(0L, loadJob.getTransactionId());
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(loadJob, "idToTasks");
+        Assertions.assertEquals(1, idToTasks.size(),
+                "execute() submits a BrokerLoadPendingTask before deferring beginTxn");
     }
 
     @Test
@@ -167,7 +282,7 @@ public class LoadJobTest {
         Deencapsulation.setField(loadJob, "state", JobState.FINISHED);
 
         loadJob.processTimeout();
-        Assert.assertEquals(JobState.FINISHED, loadJob.getState());
+        Assertions.assertEquals(JobState.FINISHED, loadJob.getState());
     }
 
     @Test
@@ -177,7 +292,7 @@ public class LoadJobTest {
         Deencapsulation.setField(loadJob, "state", JobState.LOADING);
 
         loadJob.processTimeout();
-        Assert.assertEquals(JobState.LOADING, loadJob.getState());
+        Assertions.assertEquals(JobState.LOADING, loadJob.getState());
     }
 
     @Test
@@ -187,15 +302,20 @@ public class LoadJobTest {
         Deencapsulation.setField(loadJob, "timeoutSecond", 1000L);
 
         loadJob.processTimeout();
-        Assert.assertEquals(JobState.PENDING, loadJob.getState());
+        Assertions.assertEquals(JobState.PENDING, loadJob.getState());
     }
 
     @Test
-    public void testProcessTimeout(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+    public void testProcessTimeout(@Mocked EditLog editLog) {
+        new FakeEditLog();
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "timeoutSecond", 0);
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -203,14 +323,14 @@ public class LoadJobTest {
         };
 
         loadJob.processTimeout();
-        Assert.assertEquals(JobState.CANCELLED, loadJob.getState());
+        Assertions.assertEquals(JobState.CANCELLED, loadJob.getState());
     }
 
     @Test
     public void testUpdateStateToLoading() {
         LoadJob loadJob = new BrokerLoadJob();
         loadJob.updateState(JobState.LOADING);
-        Assert.assertEquals(JobState.LOADING, loadJob.getState());
+        Assertions.assertEquals(JobState.LOADING, loadJob.getState());
     }
 
     @Test
@@ -226,11 +346,229 @@ public class LoadJobTest {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         GlobalTransactionMgr mgr = new GlobalTransactionMgr(globalStateMgr);
         Deencapsulation.setField(globalStateMgr, "globalTransactionMgr", mgr);
-        Assert.assertEquals(1, loadJob.idToTasks.size());
+        Assertions.assertEquals(1, loadJob.idToTasks.size());
         loadJob.updateState(JobState.FINISHED);
-        Assert.assertEquals(JobState.FINISHED, loadJob.getState());
-        Assert.assertNotEquals(-1, (long) Deencapsulation.getField(loadJob, "finishTimestamp"));
-        Assert.assertEquals(100, (int) Deencapsulation.getField(loadJob, "progress"));
-        Assert.assertEquals(0, loadJob.idToTasks.size());
+        Assertions.assertEquals(JobState.FINISHED, loadJob.getState());
+        Assertions.assertNotEquals(-1, (long) Deencapsulation.getField(loadJob, "finishTimestamp"));
+        Assertions.assertEquals(100, (int) Deencapsulation.getField(loadJob, "progress"));
+        Assertions.assertEquals(0, loadJob.idToTasks.size());
+    }
+
+    @Test
+    public void testGetShowInfo() throws DdlException {
+        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return tz;
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getName();
+                minTimes = 0;
+                result = "test_wh";
+            }
+        };
+
+        LoadJob loadJob = new BrokerLoadJob();
+        List<Comparable> showInfo = loadJob.getShowInfo();
+        Assertions.assertNotNull(showInfo);
+        Comparable result = showInfo.get(showInfo.size() - 1);
+        Assertions.assertEquals("test_wh", result);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        showInfo = loadJob.getShowInfo();
+        Assertions.assertNotNull(showInfo);
+        result = showInfo.get(showInfo.size() - 1);
+        Assertions.assertEquals("", result);
+    }
+
+    @Test
+    public void testGetShowInfoMissingWarehouse() throws DdlException {
+        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return tz;
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        LoadJob loadJob = new BrokerLoadJob();
+        loadJob.setWarehouseId(1L);
+
+        List<Comparable> showInfo = loadJob.getShowInfo();
+        Assertions.assertEquals("Warehouse id: 1 not exist.", showInfo.get(showInfo.size() - 1));
+
+        TLoadInfo loadInfo = loadJob.toThrift();
+        Assertions.assertEquals("Warehouse id: 1 not exist.", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testToThrift() {
+        LoadJob loadJob = new BrokerLoadJob();
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getName();
+                minTimes = 0;
+                result = "test_wh";
+            }
+        };
+
+        TLoadInfo loadInfo = loadJob.toThrift();
+        Assertions.assertEquals("test_wh", loadInfo.getWarehouse());
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        loadInfo = loadJob.toThrift();
+        Assertions.assertEquals("", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testToThrift_timestampMsFields() {
+        // Regression coverage: BE materializes information_schema.loads DATETIME
+        // columns from the *_ms fields. If a future change ever drops a setter,
+        // the column silently falls back to the legacy UTC+8 string and loads in
+        // non-Asia/Shanghai sessions go missing again.
+        long createMs = 1_700_000_000_000L;
+        long startMs = createMs + 1_000;
+        long commitMs = createMs + 2_000;
+        long finishMs = createMs + 3_000;
+
+        LoadJob loadJob = new BrokerLoadJob();
+        Deencapsulation.setField(loadJob, "createTimestamp", createMs);
+        Deencapsulation.setField(loadJob, "loadStartTimestamp", startMs);
+        Deencapsulation.setField(loadJob, "loadCommittedTimestamp", commitMs);
+        Deencapsulation.setField(loadJob, "finishTimestamp", finishMs);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        TLoadInfo info = loadJob.toThrift();
+        Assertions.assertEquals(createMs, info.getCreate_time_ms());
+        Assertions.assertEquals(startMs, info.getLoad_start_time_ms());
+        Assertions.assertEquals(commitMs, info.getLoad_commit_time_ms());
+        Assertions.assertEquals(finishMs, info.getLoad_finish_time_ms());
+        // Legacy strings must still be set so old BEs in a rolling upgrade keep working.
+        Assertions.assertEquals(TimeUtils.longToTimeString(createMs), info.getCreate_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(startMs), info.getLoad_start_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(commitMs), info.getLoad_commit_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(finishMs), info.getLoad_finish_time());
+
+        // Sentinel path: unset timestamps must leave both the string and the ms
+        // field unset so BE can fall back to NULL via its !__isset branch
+        // instead of materializing the epoch.
+        LoadJob unset = new BrokerLoadJob();
+        TLoadInfo unsetInfo = unset.toThrift();
+        Assertions.assertFalse(unsetInfo.isSetCreate_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_start_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_commit_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_finish_time_ms());
+    }
+
+    @Test
+    public void testJsonOptionsEnvelope() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.ENVELOPE, LoadStmt.ENVELOPE_DEBEZIUM);
+
+        LoadJob loadJob = new BrokerLoadJob();
+        loadJob.setJobProperties(properties);
+        Assertions.assertEquals(LoadStmt.ENVELOPE_DEBEZIUM, loadJob.jsonOptions.envelope);
+
+        // Mutually exclusive: json_root and envelope
+        properties.put(LoadStmt.JSONROOT, "$.root");
+        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
+
+        // Mutually exclusive: strip_outer_array and envelope
+        properties.remove(LoadStmt.JSONROOT);
+        properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
+        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
     }
 }

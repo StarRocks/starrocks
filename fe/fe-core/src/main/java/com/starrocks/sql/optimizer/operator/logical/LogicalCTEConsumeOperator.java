@@ -25,6 +25,8 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,6 +74,14 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
             entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
         }
         return new RowOutputInfo(entryList);
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
     }
 
     public int getCteId() {
@@ -124,6 +134,11 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
             super.withOperator(operator);
             builder.cteId = operator.cteId;
             builder.cteOutputColumnRefMap = operator.cteOutputColumnRefMap;
+            return this;
+        }
+
+        public LogicalCTEConsumeOperator.Builder setCteId(int cteId) {
+            builder.cteId = cteId;
             return this;
         }
 

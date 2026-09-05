@@ -14,9 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -28,17 +25,24 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -49,7 +53,7 @@ public class CTASAnalyzerTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -65,7 +69,7 @@ public class CTASAnalyzerTest {
         // create statistic
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -215,7 +219,7 @@ public class CTASAnalyzerTest {
         String sql = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
 
         StatisticStorage storage = new CachedStatisticStorage();
-        Table table = ctx.getGlobalStateMgr().getDb("ctas")
+        Table table = ctx.getGlobalStateMgr().getLocalMetastore().getDb("ctas")
                 .getTable("duplicate_table_with_null");
         ColumnStatistic k1cs = new ColumnStatistic(1.5928416E9, 1.5982848E9,
                 1.5256461111280627E-4, 4.0, 64.0);
@@ -330,15 +334,14 @@ public class CTASAnalyzerTest {
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
         createTableStmt.getCreateTableStmt().getProperties().put("replication_num", "1");
-        createTableStmt.createTable(ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt.getCreateTableStmt(), ctx);
+
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
-        CreateTableAsSelectStmt createTableStmt2 =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
 
         String ctasSql3 = "CREATE TABLE json_kv as select * from test, lateral json_each(parse_json(c1));";
-        CreateTableAsSelectStmt createTableStmt3 =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
     }
 
     @Test
@@ -351,7 +354,7 @@ public class CTASAnalyzerTest {
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         KeysDesc keysDesc
                 = createTableStmt.getCreateTableStmt().getKeysDesc();
-        Assert.assertEquals(KeysType.PRIMARY_KEYS, keysDesc.getKeysType());
+        Assertions.assertEquals(KeysType.PRIMARY_KEYS, keysDesc.getKeysType());
     }
 
     @Test
@@ -360,13 +363,13 @@ public class CTASAnalyzerTest {
         String sql = "CREATE TABLE tbl as select vc1,vc2 from v1";
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertTrue(createTableStmt.getCreateTableStmt().getDistributionDesc() instanceof RandomDistributionDesc);
+        Assertions.assertTrue(createTableStmt.getCreateTableStmt().getDistributionDesc() instanceof RandomDistributionDesc);
     }
 
     @Test
     public void testCTASReplicaNum() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        Table table = ctx.getGlobalStateMgr().getDb("ctas")
+        Table table = ctx.getGlobalStateMgr().getLocalMetastore().getDb("ctas")
                 .getTable("duplicate_table_with_null");
         OlapTable olapTable = (OlapTable) table;
         olapTable.setReplicationNum((short) 3);
@@ -375,16 +378,16 @@ public class CTASAnalyzerTest {
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
         Map<String, String> properties = createTableStmt.getCreateTableStmt().getProperties();
-        Assert.assertTrue(properties.containsKey("replication_num"));
-        Assert.assertEquals(properties.get("replication_num"), "3");
+        Assertions.assertTrue(properties.containsKey("replication_num"));
+        Assertions.assertEquals(properties.get("replication_num"), "3");
 
         String sql2 = "CREATE TABLE test_replica2 as select 1 as id";
         CreateTableAsSelectStmt createTableStmt2 =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
 
         Map<String, String> properties2 = createTableStmt2.getCreateTableStmt().getProperties();
-        Assert.assertTrue(properties2.containsKey("replication_num"));
-        Assert.assertEquals(properties2.get("replication_num"), "3");
+        Assertions.assertTrue(properties2.containsKey("replication_num"));
+        Assertions.assertEquals(properties2.get("replication_num"), "3");
     }
 
     @Test
@@ -392,8 +395,7 @@ public class CTASAnalyzerTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create table table_01 PARTITION BY date_trunc('day', k1) as " +
                 "select k1, k2, k3 from  duplicate_table_with_null;";
-        CreateTableAsSelectStmt createTableStmt =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
     @Test
@@ -404,31 +406,31 @@ public class CTASAnalyzerTest {
         CreateTableAsSelectStmt ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         List<ColumnDef> columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertFalse(columnDefs.get(0).isAllowNull());
-        Assert.assertFalse(columnDefs.get(1).isAllowNull());
-        Assert.assertTrue(columnDefs.get(2).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(0).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(1).isAllowNull());
+        Assertions.assertTrue(columnDefs.get(2).isAllowNull());
 
         sql = "create table ctas_pk (Cc1, Cc2, c3) primary key (cC1, `cC2`) DISTRIBUTED BY HASH (Cc1) BUCKETS 1 \n" +
                 "as select t1.c1, t1.c2, t2.c1 as c3 from test_notnull t1 left join test t2 on t1.c2 = t2.c2;";
         ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertFalse(columnDefs.get(0).isAllowNull());
-        Assert.assertFalse(columnDefs.get(1).isAllowNull());
-        Assert.assertTrue(columnDefs.get(2).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(0).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(1).isAllowNull());
+        Assertions.assertTrue(columnDefs.get(2).isAllowNull());
 
         sql = "create table ctas_pk (Cc1, Cc2, c3) DISTRIBUTED BY HASH (Cc1) BUCKETS 1 \n" +
                 "as select t1.c1, t1.c2, t2.c1 as c3 from test_notnull t1 left join test t2 on t1.c2 = t2.c2;";
         ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertFalse(columnDefs.get(0).isAllowNull());
-        Assert.assertFalse(columnDefs.get(1).isAllowNull());
-        Assert.assertTrue(columnDefs.get(2).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(0).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(1).isAllowNull());
+        Assertions.assertTrue(columnDefs.get(2).isAllowNull());
     }
 
     @Test
-    public void testCtasWithNullale() throws Exception {
+    public void testCtasWithNullable() throws Exception {
         {
             String createSql = "create table emps (\n" +
                     "    empid int null,\n" +
@@ -447,10 +449,10 @@ public class CTASAnalyzerTest {
             CreateTableAsSelectStmt ctasStmt =
                     (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
             QueryStatement queryStatement = ctasStmt.getQueryStatement();
-            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
-            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            Assertions.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assertions.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
             SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
-            Assert.assertTrue(col1.isNullable());
+            Assertions.assertTrue(col1.isNullable());
             starRocksAssert.dropTable("emps");
         }
 
@@ -472,12 +474,63 @@ public class CTASAnalyzerTest {
             CreateTableAsSelectStmt ctasStmt =
                     (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
             QueryStatement queryStatement = ctasStmt.getQueryStatement();
-            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
-            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            Assertions.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assertions.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
             SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
-            Assert.assertFalse(col1.isNullable());
+            Assertions.assertFalse(col1.isNullable());
             starRocksAssert.dropTable("emps");
         }
+    }
+
+    @Test
+    public void testCTASPreservesDeclaredVarcharLength() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        boolean savedFlag = Config.transform_type_prefer_string_for_varchar;
+        try {
+            Config.transform_type_prefer_string_for_varchar = true;
+
+            String fromColumnSql = "create table test_varchar_from_column as select c1 from test;";
+            CreateTableAsSelectStmt fromColumnStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(fromColumnSql, ctx);
+            List<ColumnDef> fromColumnDefs = fromColumnStmt.getCreateTableStmt().getColumnDefs();
+            Assertions.assertEquals(1, fromColumnDefs.size());
+            assertVarcharLength(fromColumnDefs.get(0).getTypeDef(), 10);
+
+            String castSql = "create table test_varchar_from_cast as select cast('abc' as varchar(64)) as c;";
+            CreateTableAsSelectStmt castStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(castSql, ctx);
+            List<ColumnDef> castColumnDefs = castStmt.getCreateTableStmt().getColumnDefs();
+            Assertions.assertEquals(1, castColumnDefs.size());
+            assertVarcharLength(castColumnDefs.get(0).getTypeDef(), 64);
+
+            String stringSql = "create table test_varchar_from_string as select cast(c1 as string) as c from test;";
+            CreateTableAsSelectStmt stringStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(stringSql, ctx);
+            List<ColumnDef> stringColumnDefs = stringStmt.getCreateTableStmt().getColumnDefs();
+            Assertions.assertEquals(1, stringColumnDefs.size());
+            assertVarcharLength(stringColumnDefs.get(0).getTypeDef(), StringType.DEFAULT_STRING_LENGTH);
+        } finally {
+            Config.transform_type_prefer_string_for_varchar = savedFlag;
+        }
+    }
+
+    @Test
+    public void testRepeatedAnalysisReusesInferredColumns() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table test_repeated_analysis as select cast('abc' as varchar(10)) as c;";
+        CreateTableAsSelectStmt stmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+
+        Analyzer.analyze(stmt, ctx);
+
+        Assertions.assertEquals(1, stmt.getCreateTableStmt().getColumnDefs().size());
+        assertVarcharLength(stmt.getCreateTableStmt().getColumnDefs().get(0).getTypeDef(), 10);
+    }
+
+    private static void assertVarcharLength(TypeDef typeDef, int expectedLength) {
+        ScalarType scalarType = (ScalarType) typeDef.getType();
+        Assertions.assertEquals(PrimitiveType.VARCHAR, scalarType.getPrimitiveType());
+        Assertions.assertEquals(expectedLength, scalarType.getLength());
     }
 
     @Test
@@ -489,9 +542,51 @@ public class CTASAnalyzerTest {
             CreateTableAsSelectStmt ctasStmt =
                     (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             QueryStatement query = ctasStmt.getQueryStatement();
-            Assert.assertFalse(query.getQueryRelation().hasLimit());
+            Assertions.assertFalse(query.getQueryRelation().hasLimit());
         } finally {
             ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
         }
+    }
+
+    @Test
+    public void testCTASParsesEngineClause() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_with_engine engine=olap as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt)
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, ctx);
+        Assertions.assertEquals("olap", stmt.getCreateTableStmt().getEngineName());
+    }
+
+    @Test
+    public void testCTASWithoutEngineClauseParsesEmptyEngine() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_without_engine as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt)
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, ctx);
+        Assertions.assertEquals("", stmt.getCreateTableStmt().getEngineName());
+    }
+
+    @Test
+    public void testCTASWithExplicitOlapEngineAnalyzesSuccessfully() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_explicit_olap engine=olap as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assertions.assertEquals("olap", stmt.getCreateTableStmt().getEngineName());
+    }
+
+    @Test
+    public void testCTASOlapListPartitionColumnStaysNotNull() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_olap_list_part (a, c) partition by (c) "
+                + "distributed by hash(a) buckets 1 as select 1 as a, null as c;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        List<ColumnDef> columnDefs = stmt.getCreateTableStmt().getColumnDefs();
+        // An OLAP list partition column is forced NOT NULL even when the query derives it as
+        // nullable. Only external engines keep the derived nullability.
+        Assertions.assertFalse(columnDefs.get(1).isAllowNull());
     }
 }

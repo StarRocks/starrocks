@@ -19,11 +19,14 @@
 #include <vector>
 
 #include "column/column_access_path.h"
-#include "runtime/global_dict/types.h"
+#include "column/global_dict/types.h"
+#include "compute_env/runtime_range_pruner.h"
 #include "storage/olap_common.h"
-#include "storage/olap_runtime_range_pruner.h"
+#include "storage/options.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 class Conditions;
@@ -36,8 +39,11 @@ class TabletSchema;
 
 class ColumnPredicate;
 class DeletePredicates;
+class ChunkPredicate;
 struct RowidRangeOption;
 struct ShortKeyRangesOption;
+struct VectorSearchOption;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 class RowsetReadOptions {
     using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
@@ -50,8 +56,9 @@ public:
 
     std::vector<SeekRange> ranges;
 
-    std::unordered_map<ColumnId, PredicateList> predicates;
-    std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
+    PredicateTree pred_tree;
+    PredicateTree pred_tree_for_zone_map;
+    RuntimeFilterPredicates runtime_filter_preds;
 
     // whether rowset should return rows in sorted order.
     bool sorted = true;
@@ -68,7 +75,7 @@ public:
     RuntimeState* runtime_state = nullptr;
     RuntimeProfile* profile = nullptr;
     bool use_page_cache = false;
-    bool fill_data_cache = true;
+    LakeIOOptions lake_io_opts;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
@@ -76,11 +83,26 @@ public:
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
 
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
+    uint32_t dynamic_rss_id_base = 0;
+
     bool asc_hint = true;
+
+    bool prune_column_after_index_filter = false;
+    bool enable_gin_filter = false;
+    bool has_preaggregation = true;
+
+    bool use_vector_index = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
+
+    TTableSampleOptions sample_options;
+    bool enable_join_runtime_filter_pushdown = false;
+    bool enable_predicate_col_late_materialize = false;
+    bool has_predicate_above_iterator = false;
 };
 
 } // namespace starrocks

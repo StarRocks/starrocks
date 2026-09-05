@@ -14,9 +14,10 @@
 
 #pragma once
 
-#include "column/chunk.h"
+#include <mutex>
+
 #include "column/vectorized_fwd.h"
-#include "common/tracer.h"
+#include "common/tracer_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "gutil/macros.h"
@@ -51,6 +52,7 @@ struct DeltaWriterOptions {
     int32_t schema_hash;
     int64_t txn_id;
     int64_t partition_id;
+    int64_t sink_id;
     PUniqueId load_id;
     // slots are in order of tablet's schema
     const std::vector<SlotDescriptor*>* slots;
@@ -65,8 +67,12 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
-    POlapTableSchemaParam ptable_schema_param;
+    // `ptable_schema_param` is valid during initialization.
+    // And it will be set to nullptr because we only need to access it during intialization.
+    // If you need to access it after intialization, please make sure the pointer is valid.
+    const POlapTableSchemaParam* ptable_schema_param = nullptr;
     int64_t immutable_tablet_size = 0;
+    std::map<string, string>* column_to_expr_value = nullptr;
 };
 
 enum State {
@@ -75,6 +81,56 @@ enum State {
     kClosed,
     kAborted,
     kCommitted, // committed state can transfer to kAborted state
+};
+
+// Statistics for DeltaWriter
+struct DeltaWriterStat {
+    std::atomic_int32_t task_count = 0;
+    std::atomic_int64_t pending_time_ns = 0;
+
+    // ====== statistics for write()
+
+    // The number of write()
+    std::atomic_int32_t write_count = 0;
+    // The number of rows to write
+    std::atomic_int32_t row_count = 0;
+    // Accumulated time for write()
+    std::atomic_int64_t write_time_ns = 0;
+    // The number that memtable is full
+    std::atomic_int32_t memtable_full_count = 0;
+    // The number that reach memory limit, and each will
+    // trigger memtable flush, and wait for it to finish
+    std::atomic_int32_t memory_exceed_count = 0;
+    // Accumulated time to wait for flush because of reaching memory limit
+    std::atomic_int64_t write_wait_flush_time_ns = 0;
+
+    // ====== statistics for add_segment()
+
+    // The number of add_segment()
+    std::atomic_int32_t add_segment_count = 0;
+    // Accumulated time for add_segment()
+    std::atomic_int32_t add_segment_time_ns = 0;
+    // Accumulated io time for add_segment()
+    std::atomic_int64_t add_segment_io_time_ns = 0;
+    std::atomic_int64_t add_segment_data_size = 0;
+
+    // ====== statistics for close()
+
+    // Time for close()
+    std::atomic_int64_t close_time_ns = 0;
+
+    // ====== statistics for commit()
+
+    // Time for commit()
+    std::atomic_int64_t commit_time_ns = 0;
+    // Time to wait for memtable flush in commit()
+    std::atomic_int64_t commit_wait_flush_time_ns = 0;
+    // Time to build rowset in commit()
+    std::atomic_int64_t commit_rowset_build_time_ns = 0;
+    // Time to wait for replica sync in commit()
+    std::atomic_int64_t commit_wait_replica_time_ns = 0;
+    // Time to commit txn in commit()
+    std::atomic_int64_t commit_txn_commit_time_ns = 0;
 };
 
 // Writer for a particular (load, index, tablet).
@@ -88,24 +144,27 @@ public:
     DISALLOW_COPY(DeltaWriter);
 
     // [NOT thread-safe]
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     // [thread-safe]
-    [[nodiscard]] Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
+    Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
 
     // Flush all in-memory data to disk, without waiting.
     // Subsequent `write()`s to this DeltaWriter will fail after this method returned.
     // [NOT thread-safe]
-    [[nodiscard]] Status close();
+    Status close();
 
     void cancel(const Status& st);
 
     // Wait until all data have been flushed to disk, then create a new Rowset.
     // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]
-    [[nodiscard]] Status commit();
+    Status commit();
 
-    [[nodiscard]] Status flush_memtable_async(bool eos = false);
+    // Manual flush used by stale memtable flush
+    Status manual_flush();
+
+    Status flush_memtable_async(bool eos = false);
 
     // Rollback all writes and delete the Rowset created by 'commit()', if any.
     // [thread-safe]
@@ -118,6 +177,8 @@ public:
     int64_t txn_id() const { return _opt.txn_id; }
 
     const PUniqueId& load_id() const { return _opt.load_id; }
+
+    int64_t index_id() const { return _opt.index_id; }
 
     int64_t partition_id() const;
 
@@ -136,6 +197,8 @@ public:
     const RowsetWriter* committed_rowset_writer() const { return _rowset_writer.get(); }
 
     const ReplicateToken* replicate_token() const { return _replicate_token.get(); }
+
+    SegmentFlushToken* segment_flush_token() const { return _segment_flush_token.get(); }
 
     // REQUIRE: has successfully `commit()`ed
     const DictColumnsValidMap& global_dict_columns_valid_info() const {
@@ -158,28 +221,66 @@ public:
 
     int64_t write_buffer_size() const { return _write_buffer_size; }
 
+    void update_task_stat(int32_t num_tasks, int64_t pending_time_ns) {
+        _stats.task_count.fetch_add(num_tasks, std::memory_order_relaxed);
+        _stats.pending_time_ns.fetch_add(pending_time_ns, std::memory_order_relaxed);
+    }
+    const DeltaWriterStat& get_writer_stat() const { return _stats; }
+
+    static bool is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
+                                                         const std::vector<int32_t>& referenced_column_ids,
+                                                         const std::vector<ColumnId>& sort_key_idxes,
+                                                         size_t num_key_columns);
+
+    // Maps the table's sort key columns, in their original order, onto positions in a partial update
+    // schema built from |referenced_column_ids|. Returns an empty vector if any sort key column is
+    // absent, i.e. the mapping is not total.
+    static std::vector<ColumnId> map_sort_key_to_partial_schema(const std::vector<ColumnId>& sort_key_idxes,
+                                                                const std::vector<int32_t>& referenced_column_ids);
+
+    static const char* state_name(State state);
+    static const char* replica_state_name(ReplicaState state);
+
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
     Status _flush_memtable();
-    Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& table_schema_param,
+    Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam* table_schema_param,
                                         const TabletSchemaCSPtr& ori_tablet_schema);
 
-    const char* _state_name(State state) const;
-    const char* _replica_state_name(ReplicaState state) const;
-    Status _fill_auto_increment_id(const Chunk& chunk);
+    Status _fill_auto_increment_id(Chunk& chunk);
     Status _check_partial_update_with_sort_key(const Chunk& chunk);
 
     void _garbage_collection();
 
-    void _reset_mem_table();
+    Status _reset_mem_table();
 
     void _set_state(State state, const Status& st);
 
-    State _state;
+    // Body of commit() executed exactly once across concurrent duplicate
+    // callers via std::call_once on _commit_once. The result is captured
+    // in _commit_result. Not directly callable from outside commit().
+    Status _do_commit_body();
+
+    State _state{kUninitialized};
     Status _err_status;
     mutable std::mutex _state_lock;
+    // Serialises the body of commit(). The first caller to enter
+    // std::call_once runs the body; concurrent duplicate callers (e.g.
+    // retried tablet_writer_add_segment(eos=true) arriving on the
+    // secondary replica) block inside call_once until the body finishes,
+    // and then read _commit_result. This makes duplicate RPCs observably
+    // idempotent at the API level and prevents callers such as
+    // SegmentFlushTask::run from cancelling the writer on a transient
+    // status (see the comment in LocalTabletsChannel::add_segment for
+    // the larger duplicate-RPC contract).
+    std::once_flag _commit_once;
+    // Outcome of the single commit body invocation. Written exactly once
+    // from inside the std::call_once callable; readable by all callers
+    // after the call_once returns (the standard library establishes the
+    // happens-before relationship).
+    Status _commit_result;
 
     ReplicaState _replica_state;
     DeltaWriterOptions _opt;
@@ -189,26 +290,34 @@ private:
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
-    bool _schema_initialized;
+    bool _schema_initialized{false};
     Schema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
     // tablet schema owned by delta writer, all write will use this tablet schema
     // it's build from unsafe_tablet_schema_ref（stored when create tablet） and OlapTableSchema
     // every request will have it's own tablet schema so simple schema change can work
-    TabletSchemaSPtr _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
-    bool _with_rollback_log;
+    std::unique_ptr<SegmentFlushToken> _segment_flush_token;
+    bool _with_rollback_log{true};
     // initial value is max value
-    size_t _memtable_buffer_row = -1;
-    bool _partial_schema_with_sort_key = false;
+    size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
+    bool _partial_schema_with_sort_key_conflict = false;
+    // COLUMN_UPSERT_MODE only: the table's ORIGINAL sort key columns, in their original order,
+    // mapped to positions in the partial schema. Empty when that mapping is not total, which
+    // _check_partial_update_with_sort_key proves means the chunk carries no UPSERT row.
+    std::vector<ColumnId> _original_sort_key_idxes_in_partial_schema;
     std::atomic<bool> _is_immutable = false;
 
     int64_t _last_write_ts = 0;
     // for concurrency issue, we can't get write_buffer_size from memtable directly
     int64_t _write_buffer_size = 0;
+
+    DeltaWriterStat _stats;
+    bool _is_shadow = false;
 };
 
 } // namespace starrocks

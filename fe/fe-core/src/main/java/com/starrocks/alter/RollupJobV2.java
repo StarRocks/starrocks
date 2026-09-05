@@ -34,23 +34,16 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -59,52 +52,63 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
+import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -113,6 +117,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -123,17 +128,20 @@ import java.util.stream.Collectors;
 public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(RollupJobV2.class);
 
-    // partition id -> (rollup tablet id -> base tablet id)
+    // physical partition id -> (rollup tablet id -> base tablet id)
     @SerializedName(value = "partitionIdToBaseRollupTabletIdMap")
-    private Map<Long, Map<Long, Long>> partitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+    private Map<Long, Map<Long, Long>> physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
     @SerializedName(value = "partitionIdToRollupIndex")
-    private Map<Long, MaterializedIndex> partitionIdToRollupIndex = Maps.newHashMap();
+    private Map<Long, MaterializedIndex> physicalPartitionIdToRollupIndex = Maps.newHashMap();
 
     // rollup and base schema info
+    // base index meta id, not change the SerializedName for compatibility
     @SerializedName(value = "baseIndexId")
-    private long baseIndexId;
+    private long baseIndexMetaId;
+    // initially, rollup index id and rollup index meta id are the same
+    // rollup index meta id, not change the SerializedName for compatibility
     @SerializedName(value = "rollupIndexId")
-    private long rollupIndexId;
+    private long rollupIndexMetaId;
     @SerializedName(value = "baseIndexName")
     private String baseIndexName;
     @SerializedName(value = "rollupIndexName")
@@ -141,6 +149,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     @SerializedName(value = "rollupSchema")
     private List<Column> rollupSchema = Lists.newArrayList();
+    @SerializedName(value = "rollupSchemaVersion")
+    private int rollupSchemaVersion;
     @SerializedName(value = "baseSchemaHash")
     private int baseSchemaHash;
     @SerializedName(value = "rollupSchemaHash")
@@ -151,7 +161,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @SerializedName(value = "rollupShortKeyColumnCount")
     private short rollupShortKeyColumnCount;
     @SerializedName(value = "origStmt")
-    private OriginStatement origStmt;
+    private OriginStatementInfo origStmt;
 
     // The rollup job will wait all transactions before this txn id finished, then send the rollup tasks.
     @SerializedName(value = "watershedTxnId")
@@ -164,19 +174,51 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private Expr whereClause;
 
     // save all create rollup tasks
-    private AgentBatchTask rollupBatchTask = new AgentBatchTask();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask rollupBatchTask = new AgentBatchTask();
+
+    // runtime variable for synchronization between cancel and runPendingJob
+    private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
+    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
+    private AtomicBoolean isCancelling = new AtomicBoolean(false);
+
+    // for deserialization
+    public RollupJobV2() {
+        super(JobType.ROLLUP);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-enters runWaitingTxnJob and re-sends every AlterReplicaTask.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // runWaitingTxnJob APPENDS to the batch - see SchemaChangeJobV2 for the double-add hazard.
+        rollupBatchTask = new AgentBatchTask();
+        createReplicaLatch = null;
+        waitingCreatingReplica.set(false);
+        isCancelling.set(false);
+        if (jobState == JobState.PENDING) {
+            watershedTxnId = -1;
+        }
+        // whereClause is deliberately KEPT: gsonPostProcess only restores it for PENDING jobs,
+        // so a true reload would silently lose the sync-MV filter (pre-existing reload bug);
+        // the surviving in-memory value is strictly better and every derived value is recomputed.
+    }
 
     public RollupJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                       long baseIndexId, long rollupIndexId, String baseIndexName, String rollupIndexName,
-                       List<Column> rollupSchema, Expr whereClause, int baseSchemaHash, int rollupSchemaHash,
-                       KeysType rollupKeysType, short rollupShortKeyColumnCount, OriginStatement origStmt,
-                       String viewDefineSql, boolean isColocateMVIndex) {
+                       long baseIndexMetaId, long rollupIndexMetaId, String baseIndexName, String rollupIndexName,
+                       int rollupSchemaVersion, List<Column> rollupSchema, Expr whereClause, int baseSchemaHash,
+                       int rollupSchemaHash, KeysType rollupKeysType, short rollupShortKeyColumnCount,
+                       OriginStatement origStmt, String viewDefineSql, boolean isColocateMVIndex) {
         super(jobId, JobType.ROLLUP, dbId, tableId, tableName, timeoutMs);
 
-        this.baseIndexId = baseIndexId;
-        this.rollupIndexId = rollupIndexId;
+        this.baseIndexMetaId = baseIndexMetaId;
+        this.rollupIndexMetaId = rollupIndexMetaId;
         this.baseIndexName = baseIndexName;
         this.rollupIndexName = rollupIndexName;
+        this.rollupSchemaVersion = rollupSchemaVersion;
 
         this.rollupSchema = rollupSchema;
         this.baseSchemaHash = baseSchemaHash;
@@ -184,24 +226,84 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.rollupKeysType = rollupKeysType;
         this.rollupShortKeyColumnCount = rollupShortKeyColumnCount;
 
-        this.origStmt = origStmt;
+        if (origStmt != null) {
+            this.origStmt = new OriginStatementInfo(origStmt.getOrigStmt(), origStmt.getIdx());
+        }
         this.viewDefineSql = viewDefineSql;
         this.isColocateMVIndex = isColocateMVIndex;
         this.whereClause = whereClause;
     }
 
+    protected RollupJobV2(RollupJobV2 job) {
+        super(job);
+        if (job.physicalPartitionIdToBaseRollupTabletIdMap != null) {
+            this.physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+            for (Map.Entry<Long, Map<Long, Long>> entry : job.physicalPartitionIdToBaseRollupTabletIdMap.entrySet()) {
+                Map<Long, Long> tabletIdMap = Maps.newHashMap();
+                if (entry.getValue() != null) {
+                    tabletIdMap.putAll(entry.getValue());
+                }
+                this.physicalPartitionIdToBaseRollupTabletIdMap.put(entry.getKey(), tabletIdMap);
+            }
+        } else {
+            this.physicalPartitionIdToBaseRollupTabletIdMap = null;
+        }
+        if (job.physicalPartitionIdToRollupIndex != null) {
+            this.physicalPartitionIdToRollupIndex = Maps.newHashMap();
+            this.physicalPartitionIdToRollupIndex.putAll(job.physicalPartitionIdToRollupIndex);
+        } else {
+            this.physicalPartitionIdToRollupIndex = null;
+        }
+        this.baseIndexMetaId = job.baseIndexMetaId;
+        this.rollupIndexMetaId = job.rollupIndexMetaId;
+        this.baseIndexName = job.baseIndexName;
+        this.rollupIndexName = job.rollupIndexName;
+        this.rollupSchema = job.rollupSchema == null ? null : new ArrayList<>(job.rollupSchema);
+        this.rollupSchemaVersion = job.rollupSchemaVersion;
+        this.baseSchemaHash = job.baseSchemaHash;
+        this.rollupSchemaHash = job.rollupSchemaHash;
+        this.rollupKeysType = job.rollupKeysType;
+        this.rollupShortKeyColumnCount = job.rollupShortKeyColumnCount;
+        this.origStmt = job.origStmt;
+        this.watershedTxnId = job.watershedTxnId;
+        this.viewDefineSql = job.viewDefineSql;
+        this.isColocateMVIndex = job.isColocateMVIndex;
+    }
+
+    @Override
     public void addTabletIdMap(long partitionId, long rollupTabletId, long baseTabletId) {
         Map<Long, Long> tabletIdMap =
-                partitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
+                physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
         tabletIdMap.put(rollupTabletId, baseTabletId);
     }
 
+    @Override
     public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
-        this.partitionIdToRollupIndex.put(partitionId, mvIndex);
+        this.physicalPartitionIdToRollupIndex.put(partitionId, mvIndex);
     }
 
     public String getRollupIndexName() {
         return rollupIndexName;
+    }
+
+    @VisibleForTesting
+    public void setIsCancelling(boolean isCancelling) {
+        this.isCancelling.set(isCancelling);
+    }
+
+    @VisibleForTesting
+    public boolean isCancelling() {
+        return this.isCancelling.get();
+    }
+
+    @VisibleForTesting
+    public void setWaitingCreatingReplica(boolean waitingCreatingReplica) {
+        this.waitingCreatingReplica.set(waitingCreatingReplica);
+    }
+
+    @VisibleForTesting
+    public boolean waitingCreatingReplica() {
+        return this.waitingCreatingReplica.get();
     }
 
     /**
@@ -216,7 +318,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
 
         LOG.info("begin to send create rollup replica tasks. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
@@ -229,32 +331,48 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         AgentBatchTask batchTask = new AgentBatchTask();
         // count total replica num
         int totalReplicaNum = 0;
-        for (MaterializedIndex rollupIdx : partitionIdToRollupIndex.values()) {
+        for (MaterializedIndex rollupIdx : physicalPartitionIdToRollupIndex.values()) {
             for (Tablet tablet : rollupIdx.getTablets()) {
                 totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<Long, Long>(totalReplicaNum);
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
-            MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+        createReplicaLatch = countDownLatch;
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            throw new AlterCancelException("Table " + tableId + " does not exist");
+        }
+
+        try (AutoCloseableLock ignore =
+                new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
-            for (Map.Entry<Long, MaterializedIndex> entry : this.partitionIdToRollupIndex.entrySet()) {
+            for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 if (partition == null) {
                     continue;
                 }
-                TStorageMedium storageMedium = tbl.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-                TTabletType tabletType = tbl.getPartitionInfo().getTabletType(partitionId);
+                TStorageMedium storageMedium = tbl.getPartitionInfo()
+                        .getDataProperty(partition.getParentId()).getStorageMedium();
                 MaterializedIndex rollupIndex = entry.getValue();
 
-                Map<Long, Long> tabletIdMap = this.partitionIdToBaseRollupTabletIdMap.get(partitionId);
+                TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                        .setId(rollupIndexMetaId) // For newly created materialized, schema id equals to index meta id
+                        .setVersion(rollupSchemaVersion)
+                        .setKeysType(rollupKeysType)
+                        .setShortKeyColumnCount(rollupShortKeyColumnCount)
+                        .setSchemaHash(rollupSchemaHash)
+                        .setStorageType(TStorageType.COLUMN)
+                        .setBloomFilterColumnNames(tbl.getBfColumnIds())
+                        .setBloomFilterFpp(tbl.getBfFpp())
+                        .setIndexes(OlapTable.getIndexesBySchema(tbl.getCopiedIndexes(), rollupSchema))
+                        .setSortKeyIndexes(null) // Rollup tablets does not have sort key
+                        .setSortKeyUniqueIds(null)
+                        .addColumns(rollupSchema)
+                        .setPrimaryKeyEncodingType(tbl.getPrimaryKeyEncodingType())
+                        .build().toTabletSchema();
+
+                Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
@@ -262,27 +380,29 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         long backendId = rollupReplica.getBackendId();
                         Preconditions.checkNotNull(tabletIdMap.get(rollupTabletId)); // baseTabletId
                         countDownLatch.addMark(backendId, rollupTabletId);
-                        // create replica with version 1.
-                        // version will be updated by following load process, or when rollup task finished.
-                        CreateReplicaTask createReplicaTask = new CreateReplicaTask(
-                                backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
-                                rollupShortKeyColumnCount, rollupSchemaHash,
-                                Partition.PARTITION_INIT_VERSION,
-                                rollupKeysType, TStorageType.COLUMN, storageMedium,
-                                rollupSchema, tbl.getCopiedBfColumns(), tbl.getBfFpp(), countDownLatch,
-                                tbl.getCopiedIndexes(),
-                                tbl.isInMemory(),
-                                tbl.enablePersistentIndex(),
-                                tbl.primaryIndexCacheExpireSec(),
-                                tabletType, tbl.getCompressionType(), index.getSortKeyIdxes(),
-                                index.getSortKeyUniqueIds(), true);
-                        createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
-                        batchTask.addTask(createReplicaTask);
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                .setNodeId(backendId)
+                                .setDbId(dbId)
+                                .setTableId(tableId)
+                                .setPartitionId(partitionId)
+                                .setIndexId(rollupIndexMetaId)
+                                .setTabletId(rollupTabletId)
+                                .setVersion(Partition.PARTITION_INIT_VERSION)
+                                .setStorageMedium(storageMedium)
+                                .setLatch(countDownLatch)
+                                .setEnablePersistentIndex(tbl.enablePersistentIndex())
+                                .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
+                                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                                .setCompressionType(tbl.getCompressionType())
+                                .setCompressionLevel(tbl.getCompressionLevel())
+                                .setCreateSchemaFile(true)
+                                .setBaseTabletId(tabletIdMap.get(rollupTabletId))
+                                .setTabletSchema(tabletSchema)
+                                .build();
+                        batchTask.addTask(task);
                     } // end for rollupReplicas
                 } // end for rollupTablets
             }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (!FeConstants.runningUnitTest) {
@@ -293,10 +413,17 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     Config.max_create_table_timeout_second * 1000L);
             boolean ok = false;
             try {
+                waitingCreatingReplica.set(true);
+                if (isCancelling.get()) {
+                    AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                    return;
+                }
                 ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
                 ok = false;
+            } finally {
+                waitingCreatingReplica.set(false);
             }
 
             if (!ok || !countDownLatch.getStatus().ok()) {
@@ -319,26 +446,22 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         // create all rollup replicas success.
         // add rollup index to globalStateMgr
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
-            Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
-            addRollupIndexToCatalog(tbl);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+        tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            throw new AlterCancelException("Table " + tableId + " does not exist");
+        }
+        Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
+        try (AutoCloseableLock ignore =
+                new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+            this.watershedTxnId =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            final OlapTable finalTbl = tbl;
+            persistStateChange(this, JobState.WAITING_TXN, () -> addRollupIndexToCatalog(finalTbl));
         }
 
-        this.watershedTxnId =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
 
-        // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("transfer rollup job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -346,16 +469,16 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long partitionId = physicalPartition.getId();
-                MaterializedIndex rollupIndex = this.partitionIdToRollupIndex.get(partitionId);
+                MaterializedIndex rollupIndex = this.physicalPartitionIdToRollupIndex.get(partitionId);
                 Preconditions.checkNotNull(rollupIndex);
                 Preconditions.checkState(rollupIndex.getState() == IndexState.SHADOW, rollupIndex.getState());
                 physicalPartition.createRollupIndex(rollupIndex);
             }
         }
 
-        tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, 0 /* initial schema version */,
+        tbl.setIndexMeta(rollupIndexMetaId, rollupIndexName, rollupSchema, rollupSchemaVersion /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
-        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(rollupIndexId);
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(rollupIndexMetaId);
         Preconditions.checkNotNull(indexMeta);
         indexMeta.setDbId(dbId);
         indexMeta.setViewDefineSql(viewDefineSql);
@@ -364,8 +487,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         tbl.rebuildFullSchema();
     }
 
-    private Expr analyzeExpr(Type type, String name, Expr defineExpr, Map<String, SlotDescriptor> slotDescByName,
-                             List<Expr> outputExprs, OlapTable tbl, TableName tableName) throws AlterCancelException {
+    public static Expr analyzeExpr(SelectAnalyzer.RewriteAliasVisitor visitor,
+                                   Type type, String name, Expr defineExpr,
+                                   Map<String, SlotDescriptor> slotDescByName) throws AlterCancelException {
         List<SlotRef> slots = new ArrayList<>();
         defineExpr.collect(SlotRef.class, slots);
         for (SlotRef slot : slots) {
@@ -384,32 +508,126 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         for (SlotRef slot : slots) {
             SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
             Preconditions.checkNotNull(slotDesc);
-            smap.getLhs().add(slot);
             SlotRef slotRef = new SlotRef(slotDesc);
             slotRef.setColumnName(slot.getColumnName());
-            smap.getRhs().add(slotRef);
+            smap.put(slot, slotRef);
         }
-        Expr newExpr = defineExpr.clone(smap);
-        // sourceScope must be set null tableName for its Field in RelationFields
-        // because we hope slotRef can not be resolved in sourceScope but can be
-        // resolved in outputScope to force to replace the node using outputExprs.
-        Scope sourceScope = new Scope(RelationId.anonymous(),
-                new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                new Field(col.getName(), col.getType(), null, null))
-                        .collect(Collectors.toList())));
-        Scope outputScope = new Scope(RelationId.anonymous(),
-                new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                new Field(col.getName(), col.getType(), tableName, null))
-                        .collect(Collectors.toList())));
-        SelectAnalyzer.RewriteAliasVisitor visitor =
-                new SelectAnalyzer.RewriteAliasVisitor(sourceScope, outputScope,
-                        outputExprs, new ConnectContext());
+        Expr newExpr = ExprSubstitutionVisitor.rewrite(defineExpr, smap);
         newExpr = newExpr.accept(visitor, null);
-        newExpr = Expr.analyzeAndCastFold(newExpr);
-        if (!newExpr.getType().equals(type)) {
+        newExpr = ExprUtils.analyzeAndCastFold(newExpr);
+        Type newType = newExpr.getType();
+        if (!type.isFullyCompatible(newType)) {
             newExpr = new CastExpr(type, newExpr);
         }
         return newExpr;
+    }
+
+    // DB lock should be hold already
+    public static AlterReplicaTask.RollupJobV2Params analyzeAndCreateRollupJobV2Params(OlapTable tbl,
+                                                                                       List<Column> rollupSchema,
+                                                                                       Expr whereClause,
+                                                                                       String dbFullName)
+            throws AlterCancelException {
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
+        Map<String, SlotDescriptor> slotDescByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        List<Column> rollupColumns = new ArrayList<Column>();
+        Set<String> columnNames = new HashSet<String>();
+        Set<String> baseTableColumnNames = Sets.newHashSet();
+        for (Column column : tbl.getBaseSchema()) {
+            rollupColumns.add(column);
+            columnNames.add(column.getName());
+            baseTableColumnNames.add(column.getName());
+        }
+        Set<String> usedBaseTableColNames = Sets.newLinkedHashSet();
+        for (Column column : rollupSchema) {
+            if (!columnNames.contains(column.getName())) {
+                rollupColumns.add(column);
+            } else {
+                usedBaseTableColNames.add(column.getName());
+            }
+        }
+
+        /*
+         * The expression substitution is needed here, because all slotRefs in
+         * definedExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
+         * if it is init by SlotDescriptor. The slot information will be used by be to identify
+         * the column location in a chunk.
+         */
+        for (Column column : tbl.getBaseSchema()) {
+            SlotDescriptor destSlotDesc = descTable.addSlotDescriptor(tupleDesc);
+            destSlotDesc.setIsMaterialized(true);
+            destSlotDesc.setColumn(column);
+            destSlotDesc.setIsNullable(column.isAllowNull());
+
+            slotDescByName.put(column.getName(), destSlotDesc);
+        }
+
+        List<Expr> outputExprs = Lists.newArrayList();
+        for (Column col : tbl.getBaseSchema()) {
+            SlotDescriptor slotDesc = slotDescByName.get(col.getName());
+            if (slotDesc == null) {
+                throw new AlterCancelException("Expression for materialized view column can not find " +
+                        "the ref column");
+            }
+            SlotRef slotRef = new SlotRef(slotDesc);
+            slotRef.setColumnName(col.getName());
+            outputExprs.add(slotRef);
+        }
+
+        TableName tableName = new TableName(dbFullName, tbl.getName());
+        Map<String, Expr> defineExprs = Maps.newHashMap();
+
+        // sourceScope must be set null tableName for its Field in RelationFields
+        // because we hope slotRef can not be resolved in sourceScope but can be
+        // resolved in outputScope to force to replace the node using outputExprs.
+        SelectAnalyzer.RewriteAliasVisitor visitor = MVUtils.buildRewriteAliasVisitor(ConnectContext.buildInner(),
+                tbl, tableName, outputExprs);
+        for (Column column : rollupColumns) {
+            if (column.getDefineExpr() == null) {
+                continue;
+            }
+
+            Expr definedExpr = analyzeExpr(visitor, column.getType(), column.getName(),
+                    column.getDefineExpr(), slotDescByName);
+
+            defineExprs.put(column.getName(), definedExpr);
+
+            List<SlotRef> slots = Lists.newArrayList();
+            definedExpr.collect(SlotRef.class, slots);
+            slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
+        }
+
+        Expr whereExpr = null;
+        if (whereClause != null) {
+            Type type = BooleanType.BOOLEAN;
+            whereExpr = analyzeExpr(visitor, type, CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME,
+                    whereClause, slotDescByName);
+            List<SlotRef> slots = Lists.newArrayList();
+            whereExpr.collect(SlotRef.class, slots);
+            slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
+        }
+
+        for (String refColName : usedBaseTableColNames) {
+            if (!baseTableColumnNames.contains(refColName)) {
+                throw new AlterCancelException("Materialized view's ref column " + refColName + " is not " +
+                        "found in the base table.");
+            }
+        }
+
+        // make sure the key columns are in the front of the list which is the limitation of the be `ChunkAggregator`
+        List<ColumnId> usedColIds = Lists.newArrayList();
+        List<ColumnId> nonKeyColIds = Lists.newArrayList();
+        for (String name : usedBaseTableColNames) {
+            Column col = tbl.getColumn(name);
+            if (col.isKey()) {
+                usedColIds.add(col.getColumnId());
+            } else {
+                nonKeyColIds.add(col.getColumnId());
+            }
+        }
+        usedColIds.addAll(nonKeyColIds);
+        return new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable.toThrift(), usedColIds);
     }
 
     /**
@@ -432,20 +650,25 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         LOG.info("previous transactions are all finished, begin to send rollup tasks. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            throw new AlterCancelException("Table " + tableId + " does not exist");
+        }
 
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
+        // initially, rollup index id and rollup index meta id are the same
+        long rollupIndexId = rollupIndexMetaId;
+        Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
+        try (AutoCloseableLock ignore =
+                new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
-            for (Map.Entry<Long, MaterializedIndex> entry : this.partitionIdToRollupIndex.entrySet()) {
+            // only needs to analyze once
+            AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
+                    analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
+            for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
@@ -454,106 +677,30 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 long visibleVersion = partition.getVisibleVersion();
 
                 MaterializedIndex rollupIndex = entry.getValue();
-                Map<Long, Long> tabletIdMap = this.partitionIdToBaseRollupTabletIdMap.get(partitionId);
+                Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
 
-                    DescriptorTable descTable = new DescriptorTable();
-                    TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
-                    Map<String, SlotDescriptor> slotDescByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-                    List<Column> rollupColumns = new ArrayList<Column>();
-                    Set<String> columnNames = new HashSet<String>();
-                    Set<String> baseTableColumnNames = Sets.newHashSet();
-                    for (Column column : tbl.getBaseSchema()) {
-                        rollupColumns.add(column);
-                        columnNames.add(column.getName());
-                        baseTableColumnNames.add(column.getName());
-                    }
-                    Set<String> usedBaseTableColNames = Sets.newLinkedHashSet();
-                    for (Column column : rollupSchema) {
-                        if (!columnNames.contains(column.getName())) {
-                            rollupColumns.add(column);
-                        } else {
-                            usedBaseTableColNames.add(column.getName());
-                        }
-                    }
-
-                    /*
-                     * The expression substitution is needed here, because all slotRefs in
-                     * definedExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                     * if it is init by SlotDescriptor. The slot information will be used by be to identify
-                     * the column location in a chunk.
-                     */
-                    for (Column column : tbl.getBaseSchema()) {
-                        SlotDescriptor destSlotDesc = descTable.addSlotDescriptor(tupleDesc);
-                        destSlotDesc.setIsMaterialized(true);
-                        destSlotDesc.setColumn(column);
-                        destSlotDesc.setIsNullable(column.isAllowNull());
-
-                        slotDescByName.put(column.getName(), destSlotDesc);
-                    }
-
-                    List<Expr> outputExprs = Lists.newArrayList();
-                    for (Column col : tbl.getBaseSchema()) {
-                        SlotDescriptor slotDesc = slotDescByName.get(col.getName());
-                        if (slotDesc == null) {
-                            throw new AlterCancelException("Expression for materialized view column can not find " +
-                                    "the ref column");
-                        }
-                        SlotRef slotRef = new SlotRef(slotDesc);
-                        slotRef.setColumnName(col.getName());
-                        outputExprs.add(slotRef);
-                    }
-
-                    TableName tableName = new TableName(db.getFullName(), tbl.getName());
-                    Map<String, Expr> defineExprs = Maps.newHashMap();
-                    for (Column column : rollupColumns) {
-                        if (column.getDefineExpr() == null) {
-                            continue;
-                        }
-
-                        Expr definedExpr = analyzeExpr(column.getType(), column.getName(), column.getDefineExpr(),
-                                slotDescByName, outputExprs, tbl, tableName);
-
-                        defineExprs.put(column.getName(), definedExpr);
-
-                        List<SlotRef> slots = Lists.newArrayList();
-                        definedExpr.collect(SlotRef.class, slots);
-                        slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
-                    }
-
-                    Expr whereExpr = null;
-                    if (whereClause != null) {
-                        Type type = ScalarType.createType(PrimitiveType.BOOLEAN);
-                        whereExpr = analyzeExpr(type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME, whereClause,
-                                slotDescByName, outputExprs, tbl, tableName);
-                        List<SlotRef> slots = Lists.newArrayList();
-                        whereExpr.collect(SlotRef.class, slots);
-                        slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
-                    }
-
                     List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
-                    for (String refColName : usedBaseTableColNames) {
-                        if (!baseTableColumnNames.contains(refColName)) {
-                            throw new AlterCancelException("Materialized view's ref column " + refColName + " is not " +
-                                    "found in the base table.");
-                        }
+                    List<TColumn> baseTColumn = indexToThriftColumns.get(baseIndexMetaId);
+                    if (baseTColumn == null) {
+                        baseTColumn = tbl.getIndexMetaByMetaId(baseIndexMetaId).getSchema()
+                                .stream()
+                                .map(Column::toThrift)
+                                .collect(Collectors.toList());
+                        indexToThriftColumns.put(baseIndexMetaId, baseTColumn);
                     }
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable,
-                                    Lists.newLinkedList(usedBaseTableColNames));
+
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                                 baseTabletId, rollupReplica.getId(), rollupSchemaHash, baseSchemaHash, visibleVersion, jobId,
-                                rollupJobV2Params);
+                                rollupJobV2Params, baseTColumn);
                         rollupBatchTask.addTask(rollupTask);
                     }
                 }
             }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
 
         AgentTaskQueue.addBatchTask(rollupBatchTask);
@@ -579,27 +726,21 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // must check if db or table still exist first.
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
 
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
         if (!rollupBatchTask.isFinished()) {
             LOG.info("rollup tasks not finished. job: {}", jobId);
             List<AgentTask> tasks = rollupBatchTask.getUnfinishedTasks(2000);
             for (AgentTask task : tasks) {
-                if (task.getFailedTimes() >= 3) {
+                if (task.isFailed() || task.getFailedTimes() >= 3) {
                     throw new AlterCancelException("rollup task failed after try three times: " + task.getErrorMsg());
                 }
             }
@@ -610,14 +751,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
          * all tasks are finished. check the integrity.
          * we just check whether all rollup replicas are healthy.
          */
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
-            }
+        try (AutoCloseableLock ignore =
+                new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
-            for (Map.Entry<Long, MaterializedIndex> entry : this.partitionIdToRollupIndex.entrySet()) {
+            for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 if (partition == null) {
@@ -625,7 +762,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
 
                 long visiableVersion = partition.getVisibleVersion();
-                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getId());
+                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getParentId());
 
                 MaterializedIndex rollupIndex = entry.getValue();
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
@@ -647,39 +784,53 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 } // end for tablets
             } // end for partitions
 
-            onFinished(tbl);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            this.finishedTimeMs = System.currentTimeMillis();
+            persistStateChange(this, JobState.FINISHED, () -> onFinished(tbl));
         }
 
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("rollup job finished: {}", jobId);
+
         this.span.end();
     }
 
     @Override
-    protected void runFinishedRewritingJob() {
+    protected void runFinishedRewritingJob() throws AlterCancelException {
         // nothing to do
     }
 
     private void onFinished(OlapTable tbl) {
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex rollupIndex = physicalPartition.getIndex(rollupIndexId);
-                Preconditions.checkNotNull(rollupIndex, rollupIndexId);
+                MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
+                Preconditions.checkNotNull(rollupIndex, rollupIndexMetaId);
                 for (Tablet tablet : rollupIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         replica.setState(ReplicaState.NORMAL);
                     }
                 }
-                physicalPartition.visualiseShadowIndex(rollupIndexId, false);
+                physicalPartition.visualiseShadowIndex(rollupIndex.getId(), false);
             }
         }
         tbl.rebuildFullSchema();
-        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        tbl.lastSchemaUpdateTime.set(System.nanoTime());
+    }
+
+    @Override
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                return cancelInternal(errMsg);
+            }
+        } finally {
+            isCancelling.set(false);
+        }
     }
 
     /**
@@ -691,13 +842,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         if (jobState.isFinalState()) {
             return false;
         }
-        cancelInternal();
 
-        jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, this::cancelInternal);
+
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
@@ -707,33 +857,30 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // clear tasks if has
         AgentTaskQueue.removeBatchTask(rollupBatchTask, TTaskType.ALTER);
         // remove all rollup indexes, and set state to NORMAL
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
-            try {
-                OlapTable tbl = (OlapTable) db.getTable(tableId);
-                if (tbl != null) {
-                    for (Long partitionId : partitionIdToRollupIndex.keySet()) {
-                        MaterializedIndex rollupIndex = partitionIdToRollupIndex.get(partitionId);
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            if (tbl != null) {
+                try (AutoCloseableLock ignore =
+                        new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                    for (Long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
+                        MaterializedIndex rollupIndex = physicalPartitionIdToRollupIndex.get(partitionId);
                         for (Tablet rollupTablet : rollupIndex.getTablets()) {
                             invertedIndex.deleteTablet(rollupTablet.getId());
                         }
                         PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
-                        partition.deleteRollupIndex(rollupIndexId);
+                        partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
                     }
                     tbl.deleteIndexInfo(rollupIndexName);
                 }
-            } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
             }
         }
     }
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     protected boolean isPreviousLoadFinished() throws AnalysisException {
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
@@ -743,22 +890,21 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * These changes should be same as changes in RollupHander.processAddRollup()
      */
     private void replayPending(RollupJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                // table may be dropped before replaying this log. just return
-                return;
-            }
+
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            // table may be dropped before replaying this log. just return
+            return;
+        }
+
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()),
+                LockType.WRITE)) {
             addTabletToInvertedIndex(tbl);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // to make sure that this job will run runPendingJob() again to create the rollup replicas
@@ -769,13 +915,15 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     private void addTabletToInvertedIndex(OlapTable tbl) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        // initially, rollup index id and rollup index meta id are the same
+        long rollupIndexId = rollupIndexMetaId;
         // add all rollup replicas to tablet inverted index
-        for (Long partitionId : partitionIdToRollupIndex.keySet()) {
-            MaterializedIndex rollupIndex = partitionIdToRollupIndex.get(partitionId);
-            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-            TabletMeta rollupTabletMeta = new TabletMeta(dbId, tableId, partitionId, rollupIndexId,
-                    rollupSchemaHash, medium);
+        for (Long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
+            MaterializedIndex rollupIndex = physicalPartitionIdToRollupIndex.get(partitionId);
+            PhysicalPartition physicalPartition = tbl.getPhysicalPartition(partitionId);
+            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+            TabletMeta rollupTabletMeta = new TabletMeta(dbId, tableId, partitionId, rollupIndexId, medium);
 
             for (Tablet rollupTablet : rollupIndex.getTablets()) {
                 invertedIndex.addTablet(rollupTablet.getId(), rollupTabletMeta);
@@ -791,22 +939,20 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * Should replay all changes in runPendingJob()
      */
     private void replayWaitingTxn(RollupJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
-                // table may be dropped before replaying this log. just return
-                return;
-            }
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (tbl == null) {
+            // table may be dropped before replaying this log. just return
+            return;
+        }
+
+        try (AutoCloseableLock ignore =
+                new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             addRollupIndexToCatalog(tbl);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // should still be in WAITING_TXN state, so that the alter tasks will be resend again
@@ -821,18 +967,15 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * Should replay all changes in runRuningJob()
      */
     private void replayFinished(RollupJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
-            try {
-                OlapTable tbl = (OlapTable) db.getTable(tableId);
-                if (tbl != null) {
-                    Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            if (tbl != null) {
+                Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
+                try (AutoCloseableLock ignore
+                        = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
                     onFinished(tbl);
                 }
-            } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
             }
         }
 
@@ -883,7 +1026,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         info.add(TimeUtils.longToTimeString(finishedTimeMs));
         info.add(baseIndexName);
         info.add(rollupIndexName);
-        info.add(rollupIndexId);
+        info.add(rollupIndexMetaId);
         info.add(watershedTxnId);
         info.add(jobState.name());
         info.add(errMsg);
@@ -913,8 +1056,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return taskInfos;
     }
 
+    @Override
     public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
-        return partitionIdToRollupIndex;
+        return physicalPartitionIdToRollupIndex;
     }
 
     private void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
@@ -926,51 +1070,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
             }
         }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
-        Text.writeString(out, json);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            long partitionId = in.readLong();
-            int size2 = in.readInt();
-            Map<Long, Long> tabletIdMap =
-                    partitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
-            for (int j = 0; j < size2; j++) {
-                long rollupTabletId = in.readLong();
-                long baseTabletId = in.readLong();
-                tabletIdMap.put(rollupTabletId, baseTabletId);
-            }
-
-            partitionIdToRollupIndex.put(partitionId, MaterializedIndex.read(in));
-        }
-
-        baseIndexId = in.readLong();
-        rollupIndexId = in.readLong();
-        baseIndexName = Text.readString(in);
-        rollupIndexName = Text.readString(in);
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            Column column = Column.read(in);
-            rollupSchema.add(column);
-        }
-        baseSchemaHash = in.readInt();
-        rollupSchemaHash = in.readInt();
-
-        rollupKeysType = KeysType.valueOf(Text.readString(in));
-        rollupShortKeyColumnCount = in.readShort();
-
-        watershedTxnId = in.readLong();
-        Text.readString(in); // placeholder
     }
 
     @Override
@@ -989,10 +1088,15 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(origStmt);
-        if (columnNameToDefineExpr.containsKey(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME)) {
-            whereClause = columnNameToDefineExpr.get(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME);
+        if (columnNameToDefineExpr.containsKey(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME)) {
+            whereClause = columnNameToDefineExpr.get(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME);
         }
         setColumnsDefineExpr(columnNameToDefineExpr);
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new RollupJobV2(this);
     }
 
     @Override

@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <base/testutil/assert.h>
 #include <benchmark/benchmark.h>
-#include <testutil/assert.h>
 
 #include <memory>
 
-#include "column/datum_tuple.h"
-#include "common/config.h"
-#include "runtime/chunk_cursor.h"
+#include "base/random/random.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "types/bitmap_value.h"
-#include "util/random.h"
 
 /* test result
 |value_count|start|end|mem usage|disk size (v1)|disk size (v2)|

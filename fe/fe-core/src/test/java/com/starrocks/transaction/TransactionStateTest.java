@@ -21,66 +21,109 @@ import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnPrepareMode;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.jetbrains.annotations.NotNull;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
+import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TransactionStateTest {
 
     private static String fileName = "./TransactionStateTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
     }
 
     @Test
-    public void testSerDe() throws IOException {
-        // 1. Write objects to file
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        UUID uuid = UUID.randomUUID();
+    public void testSerDe() {
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
+        transactionState.setReason("persistent reason");
+        transactionState.setTemporaryReason("temporary reason");
 
-        transactionState.write(out);
-        out.flush();
-        out.close();
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        Assertions.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
+        Assertions.assertEquals("persistent reason", readTransactionState.getReason());
+        Assertions.assertFalse(json.contains("temporary reason"));
+    }
 
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        TransactionState readTransactionState = new TransactionState();
-        readTransactionState.readFields(in);
+    @Test
+    public void testCopyConstructor() {
+        TxnCoordinator coordinator = new TxnCoordinator(TxnSourceType.BE, "127.0.0.1");
+        TransactionState original = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label123", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, coordinator, 50000L, 60 * 1000L);
 
-        Assert.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
-        in.close();
+        Set<Long> errorReplicas = Sets.newHashSet(10001L);
+        original.setErrorReplicas(errorReplicas);
+
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(20000L);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(30000L, 10L, 100L);
+        partitionCommitInfo.setDataVersion(11L);
+        partitionCommitInfo.setVersionEpoch(12L);
+        partitionCommitInfo.setIsDoubleWrite(true);
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 123L;
+        partitionCommitInfo.getTabletStats().put(40000L, stat);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        original.putIdToTableCommitInfo(20000L, tableCommitInfo);
+
+        TransactionState copied = new TransactionState(original);
+        Assertions.assertSame(original.getTableIdList(), copied.getTableIdList());
+        Assertions.assertSame(original.getCoordinator(), copied.getCoordinator());
+        Assertions.assertSame(original.getErrorReplicas(), copied.getErrorReplicas());
+
+        Assertions.assertNotSame(original.getIdToTableCommitInfos(), copied.getIdToTableCommitInfos());
+        TableCommitInfo copiedTableCommitInfo = copied.getTableCommitInfo(20000L);
+        Assertions.assertNotSame(tableCommitInfo, copiedTableCommitInfo);
+        Assertions.assertNotNull(copiedTableCommitInfo);
+
+        PartitionCommitInfo copiedPartitionCommitInfo = copiedTableCommitInfo.getPartitionCommitInfo(30000L);
+        Assertions.assertNotSame(partitionCommitInfo, copiedPartitionCommitInfo);
+        Assertions.assertNotNull(copiedPartitionCommitInfo);
+
+        tableCommitInfo.removePartition(30000L);
+        Assertions.assertNotNull(copiedTableCommitInfo.getPartitionCommitInfo(30000L));
+
+        partitionCommitInfo.setVersion(20L);
+        assertEquals(10L, copiedPartitionCommitInfo.getVersion());
+        assertEquals(Long.valueOf(123L), copiedPartitionCommitInfo.getTabletStats().get(40000L).numRows);
     }
 
     @Test
@@ -92,8 +135,8 @@ public class TransactionStateTest {
             // System.out.printf("normal: %d abnormal: %d  size: %d\n", txnFinishStatePB.normalReplicas.size(),
             //        txnFinishStatePB.abnormalReplicasWithVersion.size(), bytes.length);
             TxnFinishStatePB txn2 = finishStatePBCodec.decode(bytes);
-            Assert.assertEquals(txnFinishStatePB.normalReplicas.size(), txn2.normalReplicas.size());
-            Assert.assertEquals(txnFinishStatePB.abnormalReplicasWithVersion.size(), txn2.abnormalReplicasWithVersion.size());
+            Assertions.assertEquals(txnFinishStatePB.normalReplicas.size(), txn2.normalReplicas.size());
+            Assertions.assertEquals(txnFinishStatePB.abnormalReplicasWithVersion.size(), txn2.abnormalReplicasWithVersion.size());
         }
     }
 
@@ -104,8 +147,8 @@ public class TransactionStateTest {
             String json = GsonUtils.GSON.toJson(s1);
             // System.out.printf("json: %s\n", json);
             TxnFinishState s2 = GsonUtils.GSON.fromJson(json, TxnFinishState.class);
-            Assert.assertEquals(s1.normalReplicas.size(), s2.normalReplicas.size());
-            Assert.assertEquals(s1.abnormalReplicasWithVersion.size(), s2.abnormalReplicasWithVersion.size());
+            Assertions.assertEquals(s1.normalReplicas.size(), s2.normalReplicas.size());
+            Assertions.assertEquals(s1.abnormalReplicasWithVersion.size(), s2.abnormalReplicasWithVersion.size());
         }
     }
 
@@ -124,12 +167,9 @@ public class TransactionStateTest {
     }
 
     @Test
-    public void testSerDeTxnStateNewFinish() throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        DataOutputStream dataOut = new DataOutputStream(out);
-        UUID uuid = UUID.randomUUID();
+    public void testSerDeTxnStateNewFinish() {
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
 
@@ -139,19 +179,10 @@ public class TransactionStateTest {
         transactionState.clearErrorMsg();
         transactionState.setNewFinish();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
-        transactionState.write(dataOut);
 
-        byte[] bytes = out.toByteArray();
-        System.out.printf("TransactionState size: %d\n", bytes.length);
-
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes));
-        TransactionState readTransactionState = new TransactionState();
-        try {
-            readTransactionState.readFields(in);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        Assert.assertTrue(readTransactionState.isNewFinish());
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        assertTrue(readTransactionState.isNewFinish());
     }
 
     @Test
@@ -161,36 +192,236 @@ public class TransactionStateTest {
         nonRunningStatus.add(TransactionStatus.VISIBLE);
         nonRunningStatus.add(TransactionStatus.ABORTED);
 
-        UUID uuid = UUID.randomUUID();
         for (TransactionStatus status : TransactionStatus.values()) {
             TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                    3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                    3000, "label123", UUIDUtil.genTUniqueId(),
                     LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                     60 * 1000L);
             transactionState.setTransactionStatus(status);
-            Assert.assertEquals(nonRunningStatus.contains(status), !transactionState.isRunning());
+            Assertions.assertEquals(nonRunningStatus.contains(status), !transactionState.isRunning());
         }
     }
 
     @Test
-    public void testCommitInfos() {
-        UUID uuid = UUID.randomUUID();
-        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
-                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
-                60 * 1000L);
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001));
-        TabletCommitInfo info1 = new TabletCommitInfo(10001, 10001);
-        TabletCommitInfo info2 = new TabletCommitInfo(10001, 10002);
-        TabletCommitInfo info3 = new TabletCommitInfo(10002, 10002);
+    public void testCheckReplicaNeedSkip() {
+        TransactionState state = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L), 3000, "label123",
+                UUIDUtil.genTUniqueId(), LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"),
+                50000L, 60 * 1000L);
+
+        PartitionCommitInfo pcInfo = new PartitionCommitInfo(1L, 100L, 1L);
+
+        Tablet tablet0 = new LocalTablet(1001L);
+        Tablet tablet1 = new LocalTablet(10001L);
+        Tablet tablet2 = new LocalTablet(10002L);
+
+        TabletCommitInfo info1 = new TabletCommitInfo(10001L, 10001L);
+        TabletCommitInfo info2 = new TabletCommitInfo(10001L, 10002L);
+        TabletCommitInfo info3 = new TabletCommitInfo(10002L, 10002L);
         List<TabletCommitInfo> infos = new ArrayList<>();
         infos.add(info1);
         infos.add(info2);
         infos.add(info3);
-        transactionState.setTabletCommitInfos(infos);
-        Assert.assertFalse(transactionState.tabletCommitInfosContainsReplica(1001, 1001));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10001));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10002));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10002, 10002));
+        state.setTabletCommitInfos(infos);
+
+        // replica state is not normal and clone
+        assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.ALTER, 1L, 0), pcInfo));
+        assertFalse(
+                state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.SCHEMA_CHANGE, 1L, 0), pcInfo));
+        assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+        assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.CLONE, 1L, 0), pcInfo));
+
+        // replica is in tabletCommitInfos
+        assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(2L, 10001L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(3L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        assertFalse(state.checkReplicaNeedSkip(tablet2, new Replica(4L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+
+        // replica current version >= commit version
+        assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 100L, 0), pcInfo));
+
+        // follower tabletCommitInfos is null
+        Deencapsulation.setField(state, "tabletCommitInfos", null);
+        assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+
+        // follower tabletCommitInfos is null and unknownReplicas contains the replica
+        state.addUnknownReplica(5L);
+        assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+    }
+
+    @Test
+    public void testTimeout() {
+        {
+            TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L),
+                    3000, "label123", UUIDUtil.genTUniqueId(),
+                    LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                    1000L);
+
+            txn.setTransactionStatus(TransactionStatus.PREPARE);
+            txn.setPrepareTime(1);
+            assertEquals(1, txn.getPrepareTime());
+            assertFalse(txn.isTimeout(500));
+            assertTrue(txn.isTimeout(1500));
+
+            txn.setTransactionStatus(TransactionStatus.PREPARED);
+            txn.setPreparedTimeAndTimeout(2000, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS);
+            assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L));
+            assertTrue(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setPreparedTimeAndTimeout(3000, 0);
+            assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L));
+            assertTrue(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setPreparedTimeAndTimeout(4000, 10_000, TxnPrepareMode.INTERNAL_ONE_PHASE);
+            assertEquals(txn.getPrepareTime() + txn.getTimeoutMs(), txn.getTimeoutDeadlineMs());
+            assertTrue(txn.isTimeout(txn.getPrepareTime() + txn.getTimeoutMs() + 1));
+
+            txn.setTransactionStatus(TransactionStatus.COMMITTED);
+            assertFalse(txn.isTimeout(4000));
+        }
+
+        {
+            TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L),
+                    3000, "label123", UUIDUtil.genTUniqueId(),
+                    LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                    1000L);
+
+            txn.setTransactionStatus(TransactionStatus.PREPARE);
+            txn.setPrepareTime(1);
+            assertEquals(1, txn.getPrepareTime());
+            assertFalse(txn.isTimeout(500));
+            assertTrue(txn.isTimeout(1500));
+
+            txn.setTransactionStatus(TransactionStatus.PREPARED);
+            txn.setPreparedTimeAndTimeout(2000, 1000);
+            assertEquals(1000, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(2500));
+            assertTrue(txn.isTimeout(3500));
+
+            txn.setTransactionStatus(TransactionStatus.COMMITTED);
+            assertFalse(txn.isTimeout(4000));
+        }
+    }
+
+    @Test
+    public void testAddLoadId() {
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_addLoadId", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        TUniqueId id1 = UUIDUtil.genTUniqueId();
+        TUniqueId id2 = UUIDUtil.genTUniqueId();
+
+        txn.addLoadId(id1);
+        txn.addLoadId(id2);
+
+        List<TUniqueId> ids = txn.getLoadIds();
+        Assertions.assertNotNull(ids);
+        assertEquals(2, ids.size());
+        assertEquals(id1, ids.get(0));
+        assertEquals(id2, ids.get(1));
+    }
+
+    @Test
+    public void testShadowRewriteViaSourceType() {
+        // isShadowRewrite() is now driven solely by LoadJobSourceType.SHADOW_REWRITE on the txn.
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_shadow", null,
+                LoadJobSourceType.SHADOW_REWRITE, new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
+        assertTrue(txn.isShadowRewrite());
+
+        TransactionState normal = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_normal", null,
+                LoadJobSourceType.INSERT_STREAMING, new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
+        assertFalse(normal.isShadowRewrite());
+
+        // Verify sourceType round-trips through GSON (it is serialized as "st" on TransactionState).
+        String json = GsonUtils.GSON.toJson(txn);
+        TransactionState replayed = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        assertTrue(replayed.isShadowRewrite());
+    }
+
+    @Test
+    public void testPartitionLoadedIndexes() {
+        long tableId = 100L;
+        long physicalPartitionId = 200L;
+        long indexMetaId1 = 300L;
+        long indexId11 = 300L;
+        long indexId12 = 301L;
+        long indexMetaId2 = 400L;
+        long indexId21 = 400L;
+        long indexId22 = 401L;
+
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(tableId),
+                3000, "label_partition_indexes", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        // Mock PhysicalPartition and MaterializedIndex
+        MaterializedIndex baseIndex1 = new MaterializedIndex(indexId11, indexMetaId1, MaterializedIndex.IndexState.NORMAL, 0L);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, physicalPartitionId, baseIndex1);
+        MaterializedIndex rollupIndex1 = new MaterializedIndex(indexId21, indexMetaId2, MaterializedIndex.IndexState.NORMAL, 1L);
+        physicalPartition.createRollupIndex(rollupIndex1);
+
+        // Test fallback (no indexes added yet)
+        List<MaterializedIndex> loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size()); // Should return all indexes by default
+        List<Long> loadedIndexIds = loadedIndexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList());
+        assertTrue(loadedIndexIds.contains(indexId11));
+        assertTrue(loadedIndexIds.contains(indexId21));
+
+        // Multi-version materialized index
+        MaterializedIndex baseIndex2 = new MaterializedIndex(indexId12, indexMetaId1, MaterializedIndex.IndexState.NORMAL, 0L);
+        physicalPartition.addMaterializedIndex(baseIndex2, true);
+        MaterializedIndex rollupIndex2 = new MaterializedIndex(indexId22, indexMetaId2, MaterializedIndex.IndexState.NORMAL, 1L);
+        physicalPartition.addMaterializedIndex(rollupIndex2, false);
+
+        // Test fallback (no indexes added yet)
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size()); // Should return all latest indexes by default
+        loadedIndexIds = loadedIndexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList());
+        assertTrue(loadedIndexIds.contains(indexId12));
+        assertTrue(loadedIndexIds.contains(indexId22));
+
+        // Add 2 specific indexes
+        loadedIndexIds = Lists.newArrayList(indexId11, indexId21);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+
+        // Test retrieval
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId11, loadedIndexes.get(0).getId());
+        assertEquals(indexId21, loadedIndexes.get(1).getId());
+
+        // Add same physicalPartitionId with 2 specific latest indexes failed
+        loadedIndexIds = Lists.newArrayList(indexId12, indexId22);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId11, loadedIndexes.get(0).getId()); // Still indexId11
+        assertEquals(indexId21, loadedIndexes.get(1).getId()); // Still indexId21
+
+        // Clear loadedTblPartitionIndexes
+        Map<Long, Map<Long, List<Long>>> loadedTblPartitionIndexes = Deencapsulation.getField(txn, "loadedTblPartitionIndexes");
+        loadedTblPartitionIndexes.clear();
+
+        // Add 2 specific latest indexes
+        loadedIndexIds = Lists.newArrayList(indexId12, indexId22);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+
+        // Test retrieval
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId12, loadedIndexes.get(0).getId());
+        assertEquals(indexId22, loadedIndexes.get(1).getId());
+
+        // Test Serialization/Deserialization
+        String json = GsonUtils.GSON.toJson(txn);
+        TransactionState readTxn = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        List<MaterializedIndex> readLoadedIndexes = readTxn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, readLoadedIndexes.size());
+        assertEquals(indexId12, readLoadedIndexes.get(0).getId());
+        assertEquals(indexId22, readLoadedIndexes.get(1).getId());
     }
 }

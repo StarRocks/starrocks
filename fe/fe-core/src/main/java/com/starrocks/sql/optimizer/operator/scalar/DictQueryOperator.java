@@ -17,8 +17,8 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TDictQueryExpr;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
@@ -27,15 +27,16 @@ public class DictQueryOperator extends CallOperator {
     private final TDictQueryExpr dictQueryExpr;
     private final Function fn;
 
-    public DictQueryOperator(List<ScalarOperator> arguments, TDictQueryExpr dictQueryExpr, Function fn) {
-        super(FunctionSet.DICT_MAPPING, Type.BIGINT, arguments);
+    public DictQueryOperator(List<ScalarOperator> arguments, TDictQueryExpr dictQueryExpr, Function fn,
+                             Type type) {
+        super(FunctionSet.DICT_MAPPING, type, arguments);
         this.dictQueryExpr = dictQueryExpr;
         this.fn = fn;
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitDictQueryOperator(this, context);
+        return  visitor.visitDictQueryOperator(this, context);
     }
 
     public TDictQueryExpr getDictQueryExpr() {

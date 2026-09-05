@@ -14,24 +14,42 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
+    private final ScalarOperator skewColumn;
+    private final List<ScalarOperator> skewValues;
+    private Optional<PhysicalHashJoinOperator> skewJoinFriend = Optional.empty();
+
+    // Only meaningful for skew join: 0=left child, 1=right child, -1=unknown/not skew join.
+    // TODO(stephen): Support runtime filters for right-skew joins safely.
+    private int skewSideChildIndex = -1;
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
                                     long limit,
                                     ScalarOperator predicate,
-                                    Projection projection) {
-        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
+                                    Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators,
+                                    Projection projection,
+                                    ScalarOperator skewColumn,
+                                    List<ScalarOperator> skewValues) {
+
+        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate,
+                predicateCommonOperators, projection);
+        this.skewColumn = skewColumn;
+        this.skewValues = skewValues;
     }
 
     @Override
@@ -57,6 +75,30 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
     @Override
     public String getJoinAlgo() {
         return "HASH";
+    }
+
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
+    }
+
+    public Optional<PhysicalHashJoinOperator> getSkewJoinFriend() {
+        return skewJoinFriend;
+    }
+
+    public void setSkewJoinFriend(PhysicalHashJoinOperator skewJoinFriend) {
+        this.skewJoinFriend = Optional.ofNullable(skewJoinFriend);
+    }
+
+    public int getSkewSideChildIndex() {
+        return skewSideChildIndex;
+    }
+
+    public void setSkewSideChildIndex(int skewSideChildIndex) {
+        this.skewSideChildIndex = skewSideChildIndex;
     }
 
     @Override

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the absolute value of the numeric value x."
 ---
 
 # abs
 
-## Description
+
 
 Returns the absolute value of the numeric value `x`. If the input value is NULL, NULL is returned.
 

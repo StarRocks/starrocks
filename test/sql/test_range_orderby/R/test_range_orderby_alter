@@ -1,0 +1,130 @@
+-- name: test_range_orderby_alter @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t values (1, 1, 300, 'c'), (2, 2, 200, 'b'), (3, 3, 100, 'a');
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	300	c
+2	2	200	b
+3	3	100	a
+-- !result
+alter table t set ('file_bundling' = 'false');
+-- result:
+E: (1064, 'file_bundling cannot be disabled on a range-distributed primary key table whose ORDER BY key differs from the primary key')
+-- !result
+alter table t order by (v2, v1);
+-- result:
+E: (1064, 'Modifying sort key (ALTER TABLE ... ORDER BY) is not supported on tables with range distribution, because the sort key defines tablet boundaries.')
+-- !result
+alter table t add column v3 int not null default '9';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t order by k1;
+-- result:
+1	1	300	c	9
+2	2	200	b	9
+3	3	100	a	9
+-- !result
+insert into t values (4, 4, 50, 'x', 7);
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	300	c	9
+2	2	200	b	9
+3	3	100	a	9
+4	4	50	x	7
+-- !result
+select distribute_type, primary_key, sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't';
+-- result:
+RANGE	`k1`, `k2`	`v1`, `v2`
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+-- name: test_range_orderby_alter_back_to_pk @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t values (1, 1, 300, 'c'), (2, 2, 200, 'b'), (3, 3, 100, 'a');
+-- result:
+-- !result
+alter table t order by (k1, k2);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select distribute_type, primary_key, sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't';
+-- result:
+RANGE	`k1`, `k2`	`k1`, `k2`
+-- !result
+select * from t order by k1;
+-- result:
+1	1	300	c
+2	2	200	b
+3	3	100	a
+-- !result
+insert into t values (2, 2, 20, 'bb');
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	300	c
+2	2	20	bb
+3	3	100	a
+-- !result
+alter table t set ('file_bundling' = 'false');
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+3
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

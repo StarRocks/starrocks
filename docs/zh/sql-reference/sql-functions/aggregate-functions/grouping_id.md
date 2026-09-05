@@ -1,11 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "grouping_id 用于区分相同分组标准的分组统计结果。"
 ---
 
 
 # grouping_id
 
-## 功能
+
 
 用于区分相同分组标准的分组统计结果。
 

@@ -54,7 +54,10 @@ enum TPartitionType {
 
   // unordered partition on a set of exprs
   // (only use in bucket shuffle join)
-  BUCKET_SHUFFLE_HASH_PARTITIONED
+  BUCKET_SHUFFLE_HASH_PARTITIONED,
+
+  // Part of the data is hashed, and the other part is broadcast or randomly sent
+  HYBRID_HASH_PARTITIONED
 }
 
 enum TDistributionType {
@@ -62,6 +65,16 @@ enum TDistributionType {
   BROADCAST,
   SHUFFLE,
   GATHER
+}
+
+enum TBucketFunction {
+  NATIVE,
+  MURMUR3_X86_32
+}
+
+struct TBucketProperty {
+  1: optional TBucketFunction bucket_func;
+  2: optional i32 bucket_num;
 }
 
 // TODO(zc): Refine
@@ -97,6 +110,7 @@ struct TDataPartition {
   1: required TPartitionType type
   2: optional list<Exprs.TExpr> partition_exprs
   3: optional list<TRangePartition> partition_infos
+  4: optional list<TBucketProperty> bucket_properties
 }
 
 

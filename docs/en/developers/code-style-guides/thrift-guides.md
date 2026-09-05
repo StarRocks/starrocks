@@ -1,8 +1,9 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "As the project involving, any fields may become optional."
 ---
 
-# Rules
+# Thrift Guides
 
 ## Never use required
 

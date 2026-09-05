@@ -120,10 +120,33 @@ struct TStatisticData {
     // the batch load version
     15: optional binary hll
     16: optional string partitionName
+    17: optional i64 collectionSize
 }
 
 // Result data for user variable
 struct TVariableData {
     1: optional bool isNull
     2: optional binary result
+}
+
+struct TIcebergMetadata {
+    1: optional i32 content
+    2: optional string file_path
+    3: optional string file_format
+    4: optional i32 spec_id
+    5: optional binary partition_data
+    6: optional i64 record_count
+    7: optional i64 file_size_in_bytes
+    8: optional list<i64> split_offsets
+    9: optional i32 sort_id
+    10: optional list<i32> equality_ids
+    11: optional i64 file_sequence_number
+    12: optional i64 data_sequence_number
+    13: optional binary column_stats;
+    14: optional binary key_metadata;
+}
+
+// Metadata data for metadata table
+struct TMetadataEntry {
+    1: optional TIcebergMetadata iceberg_metadata;
 }

@@ -15,32 +15,37 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 
 public class DDLTestBase {
 
-    protected static Analyzer analyzer;
     protected static ConnectContext ctx;
     protected static StarRocksAssert starRocksAssert;
 
-    @Before
-    public void setUp() throws Exception {
+    @BeforeAll
+    public static void beforeAll() {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), ctx);
+        starRocksAssert = new StarRocksAssert(ctx);
 
         FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(ctx);
+        Config.enable_new_publish_mechanism = false;
+        Config.tablet_sched_checker_interval_seconds = 10;
+        Config.tablet_sched_repair_delay_factor_second = 10;
+        Config.alter_scheduler_interval_millisecond = 1000;
+    }
+
+    @BeforeEach
+    public void setUp() throws Exception {
         starRocksAssert.withDatabase(GlobalStateMgrTestUtil.testDb1)
                 .useDatabase(GlobalStateMgrTestUtil.testDb1);
-
         starRocksAssert.withTable("CREATE TABLE `testTable1` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
@@ -52,5 +57,30 @@ public class DDLTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE `testTable7` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE testTable2\n" +
+                        "(\n" +
+                        "    v1 date,\n" +
+                        "    v2 int,\n" +
+                        "    v3 int\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(`v1`)\n" +
+                        "PARTITION BY RANGE(v1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(v1) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
     }
 }

@@ -1,0 +1,46 @@
+---
+displayed_sidebar: docs
+description: "partitions_metaはテーブルのパーティションに関する情報を提供します。"
+---
+
+# partitions_meta
+
+`partitions_meta` はテーブルのパーティションに関する情報を提供します。
+
+`partitions_meta` には以下のフィールドが提供されています:
+
+| **フィールド**                      | **説明**                                         |
+| ----------------------------- | ------------------------------------------------ |
+| DB_NAME                       | パーティションが属するデータベースの名前。       |
+| TABLE_NAME                    | パーティションが属するテーブルの名前。           |
+| PARTITION_NAME                | パーティションの名前。                           |
+| PARTITION_ID                  | パーティションの ID。                            |
+| COMPACT_VERSION               | パーティションのコンパクトバージョン。           |
+| VISIBLE_VERSION               | ��ーティションの可視バージョン。                 |
+| VISIBLE_VERSION_TIME          | パーティションの可視バージョン時刻。             |
+| NEXT_VERSION                  | パーティションの次のバージョン。                 |
+| DATA_VERSION                  | パーティションのデータバージョン。               |
+| VERSION_EPOCH                 | パーティションのバージョンエポック。             |
+| VERSION_TXN_TYPE              | パーティションのバージョン Txn タイプ。          |
+| PARTITION_KEY                 | パーティションのパーティションキー。             |
+| PARTITION_VALUE               | パーティションの値（例: `Range` または `List`）。 |
+| DISTRIBUTION_KEY              | パーティションの分散キー。                       |
+| BUCKETS                       | パーティション内のバケット数。Range 分散を使用するテーブルでは、この値はパーティションのベースインデックスにおける実際のタブレット数であり、タブレットの分割およびマージに応じて変化します。同じパーティション内のロールアップインデックスは異なるタブレット数を持つことがあります。 |
+| REPLICATION_NUM               | パーティションのレプリケーション数。             |
+| STORAGE_MEDIUM                | パーティションのストレージメディア。             |
+| COOLDOWN_TIME                 | パーティションのクールダウン時間。               |
+| LAST_CONSISTENCY_CHECK_TIME   | パーティションの最終整合性チェック時刻。         |
+| IS_IN_MEMORY                  | パーティションがメモリ内にあるかどうか（`true`）またはそうでないか（`false`）。 |
+| IS_TEMP                       | パーティションが一時的であるかどうか（`true`）またはそうでないか（`false`）。 |
+| DATA_SIZE                     | パーティションのデータサイズ。                   |
+| ROW_COUNT                     | パーティション内の行数。                         |
+| ENABLE_DATACACHE              | パーティションでデータキャッシュが有効になっているかどうか（`true`）またはそうでないか（`false`）。 |
+| AVG_CS                        | パーティションの平均コンパクションスコア。       |
+| P50_CS                        | パーティションの 50 パーセンタイルコンパクションスコア。 |
+| MAX_CS                        | パーティションの最��コンパクションスコア。       |
+| STORAGE_PATH                  | パーティションのストレージパス。                 |
+| STORAGE_SIZE                  | パーティションのストレージサイズ。               |
+| METADATA_SWITCH_VERSION       | パーティションのメタデータスイッチバージョン。   |
+| TABLET_BALANCED               | Tablet の配置がパーティション内で均等に分散されているかどうか。 |
+| LAST_UPDATE_TIME              | パーティションが最後にユーザー書き込み（ロード / INSERT / DELETE / UPDATE）で変更された時刻。 |
+| LAST_ACCESS_TIME              | パーティションが最後にユーザーステートメント（クエリ、`INSERT ... SELECT`、`INSERT OVERWRITE`、CTAS、主キーテーブルの `UPDATE`/`DELETE`、マテリアライズドビューのリフレッシュ、`EXPORT`）で読み取られた時刻。内部の統計情報収集による読み取りは除外されます。現在は FE メモリのみに保持され（永続化されない）、クエリ時に FE 間で集約されます。 |

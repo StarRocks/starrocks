@@ -1,25 +1,3 @@
-[sql]
-select
-    o_orderpriority,
-    count(*) as order_count
-from
-    orders
-where
-        o_orderdate >= date '1994-09-01'
-  and o_orderdate < date '1994-12-01'
-  and exists (
-        select
-            *
-        from
-            lineitem
-        where
-                l_orderkey = o_orderkey
-          and l_receiptdate > l_commitdate
-    )
-group by
-    o_orderpriority
-order by
-    o_orderpriority ;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:6: O_ORDERPRIORITY | 29: count
@@ -80,7 +58,6 @@ PREDICATES: 23: L_RECEIPTDATE > 22: L_COMMITDATE
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=300000000
 avgRowSize=16.0
 
@@ -103,7 +80,6 @@ PREDICATES: 5: O_ORDERDATE >= '1994-09-01', 5: O_ORDERDATE < '1994-12-01'
 partitions=1/1
 rollup: orders
 tabletRatio=10/10
-tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5675676
 avgRowSize=27.0
 [end]

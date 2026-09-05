@@ -16,30 +16,69 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class TPCDSPlanTest extends TPCDSPlanTestBase {
     Map<String, Long> tpcdsStats = null;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
+        super.setUp();
         tpcdsStats = getTPCDSTableStats();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         setTPCDSTableStats(tpcdsStats);
+    }
+
+    /**
+     * Q05 joins web_site onto a column that reaches it from the nullable side of a LEFT OUTER
+     * JOIN, so the resulting runtime filter fits in neither child of that join: the left side
+     * does not have the column, and filtering the right side would change which left rows get
+     * NULL-extended. The join itself is the only place it can sit -- and a hash-join build
+     * operator does consume a local runtime in-filter, so the placement does real work.
+     *
+     * This is the shape that makes JoinNode.canEvaluateRuntimeFilter() matter: declaring a join
+     * unable to use a runtime filter would silently drop this one, which no result-comparing
+     * test would notice because the query would still return the same rows, just more slowly.
+     */
+    @Test
+    public void testRuntimeFilterStaysOnOuterJoinWhenProbeColumnIsNullable() throws Exception {
+        String plan = getVerboseExplain(Q05);
+        Assertions.assertTrue(nodeTypesHoldingRuntimeFilter(plan).contains("HASH JOIN"),
+                "expected a probe runtime filter recorded on a join node, plan was:\n" + plan);
+    }
+
+    private static Set<String> nodeTypesHoldingRuntimeFilter(String verbosePlan) {
+        Pattern nodeHeader = Pattern.compile("^\\s*\\|?-*\\s*\\d+:([A-Za-z][\\w -]*)");
+        Set<String> holders = new HashSet<>();
+        String current = "<none>";
+        for (String line : verbosePlan.split("\n")) {
+            Matcher m = nodeHeader.matcher(line);
+            if (m.find()) {
+                current = m.group(1).trim();
+            }
+            if (line.contains("probe runtime filters")) {
+                holders.add(current);
+            }
+        }
+        return holders;
     }
 
     @Test
@@ -540,13 +579,13 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
     @Test
     public void testQ80_2() throws Exception {
         String planFragment = getFragmentPlan(Q80);
-        Assert.assertFalse(planFragment.contains("cross join"));
+        Assertions.assertFalse(planFragment.contains("cross join"));
     }
 
     @Test
     public void testQ95_2() throws Exception {
         String planFragment = getFragmentPlan(Q95);
-        Assert.assertFalse(planFragment.contains("cross join"));
+        Assertions.assertFalse(planFragment.contains("cross join"));
     }
 
     @Test
@@ -564,9 +603,9 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = false;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
 
-        Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
-        Assert.assertTrue(plan.contains("  13:Decode\n" +
-                "  |  <dict id 73> : <string id 15>"));
+        assertContains(plan, "dict_col=c_birth_country");
+        assertContains(plan, "  13:Decode\n" +
+                "  |  <dict id 73> : <string id 15>");
     }
 
     @Test
@@ -598,7 +637,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = false;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
 
-        Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
+        assertContains(plan, "dict_col=c_birth_country");
     }
 
     @Test

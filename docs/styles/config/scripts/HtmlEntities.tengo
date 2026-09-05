@@ -1,0 +1,54 @@
+// HtmlEntities.tengo
+//
+// Detect bare HTML entities &lt; and &gt; outside code blocks.
+//
+// These appear when angle-bracket characters are HTML-escaped in markdown body
+// text. Docusaurus/MDX renders them as literal < and > on the page, but they
+// make the source harder to read and can confuse the remark
+// parse→translate→stringify roundtrip used for automated translation (the
+// translator may re-escape or mis-handle the entities, producing garbled
+// output).
+//
+// Use the literal characters instead, or backtick inline code for operators:
+//   Bad:  filter conditions such as =, &lt;, &gt;
+//   Good: filter conditions such as =, <, >
+//   Good: filter conditions such as `=`, `<`, `>`
+//
+// Code regions excluded from flagging:
+//   - Backtick fenced code blocks:  ```[lang]\n...\n```
+//   - Tilde fenced code blocks:     ~~~[lang]\n...\n~~~
+//   - Inline code spans:            `...`
+
+text := import("text")
+
+code_regions := []
+
+for groups in text.re_find("(?s)```[^\n]*\n.*?\n[ \t]*```[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("(?s)~~~[^\n]*\n.*?\n[ \t]*~~~[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("`+[^`\n]+`+", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+matches := []
+for groups in text.re_find(`&(?:lt|gt);`, scope, -1) {
+    hit := groups[0]
+    inside := false
+    for r in code_regions {
+        if hit.begin >= r[0] && hit.begin < r[1] {
+            inside = true
+            break
+        }
+    }
+    if !inside {
+        matches = append(matches, {begin: hit.begin, end: hit.end})
+    }
+}

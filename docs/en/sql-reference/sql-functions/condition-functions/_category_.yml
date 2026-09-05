@@ -1,0 +1,7 @@
+position: 10 # float position is supported
+label: 'Condition'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: condition-functions

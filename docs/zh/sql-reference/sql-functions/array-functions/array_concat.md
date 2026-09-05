@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将多个数组拼接成一个包含所有元素的数组。"
 ---
 
 # array_concat
 
-## 功能
+
 
 将多个数组拼接成一个数组。拼接后的数组包含多个数组里的所有元素。待拼接的数组元素类型可以相同，也可以不同，但是建议对相同元素类型的数组进行拼接。
 

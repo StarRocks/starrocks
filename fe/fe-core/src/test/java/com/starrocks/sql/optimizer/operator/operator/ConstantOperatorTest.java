@@ -14,13 +14,21 @@
 
 package com.starrocks.sql.optimizer.operator.operator;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.type.CharType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 public class ConstantOperatorTest {
     @Test
@@ -56,13 +64,13 @@ public class ConstantOperatorTest {
 
         for (String[] c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c[0]);
-            Assert.assertEquals(c[1], in.castTo(Type.DATE).get().getDate().toString());
-            Assert.assertEquals(c[2], in.castTo(Type.DATETIME).get().getDate().toString());
+            Assertions.assertEquals(c[1], in.castTo(DateType.DATE).get().getDate().toString());
+            Assertions.assertEquals(c[2], in.castTo(DateType.DATETIME).get().getDate().toString());
         }
     }
 
     @Test
-    public void testCaseToDateInvalid() {
+    public void testCastToDateInvalid() {
         String[] testCases = {
                 // Invalid year.
                 "20190-05-31",
@@ -104,42 +112,109 @@ public class ConstantOperatorTest {
         };
         for (String c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c);
-            Assert.assertFalse(in.castTo(Type.DATE).isPresent());
-            Assert.assertFalse(in.castTo(Type.DATETIME).isPresent());
+            Assertions.assertFalse(in.castTo(DateType.DATE).isPresent());
+            Assertions.assertFalse(in.castTo(DateType.DATETIME).isPresent());
         }
     }
 
     @Test
-    public void testCaseDateToNumber() throws Exception {
+    public void testCastDateToNumber() throws Exception {
         ConstantOperator date = ConstantOperator.createDate(LocalDateTime.of(2023, 01, 01, 0, 0));
         ConstantOperator datetime = ConstantOperator.createDatetime(LocalDateTime.of(2023, 01, 01, 0, 0, 0));
 
         ConstantOperator intNumber = ConstantOperator.createInt(20230101);
-        Assert.assertEquals(intNumber, date.castTo(Type.INT).get());
+        Assertions.assertEquals(intNumber, date.castTo(IntegerType.INT).get());
 
         ConstantOperator dateBigintNumber = ConstantOperator.createBigint(20230101L);
-        Assert.assertEquals(dateBigintNumber, date.castTo(Type.BIGINT).get());
+        Assertions.assertEquals(dateBigintNumber, date.castTo(IntegerType.BIGINT).get());
 
         ConstantOperator datetimeBigintNumber = ConstantOperator.createBigint(20230101000000L);
-        Assert.assertEquals(datetimeBigintNumber, datetime.castTo(Type.BIGINT).get());
+        Assertions.assertEquals(datetimeBigintNumber, datetime.castTo(IntegerType.BIGINT).get());
 
         ConstantOperator dateLargeintNumber = ConstantOperator.createLargeInt(new BigInteger("20230101"));
-        Assert.assertEquals(dateLargeintNumber, date.castTo(Type.LARGEINT).get());
+        Assertions.assertEquals(dateLargeintNumber, date.castTo(IntegerType.LARGEINT).get());
 
         ConstantOperator datetimeLargeintNumber = ConstantOperator.createLargeInt(new BigInteger("20230101000000"));
-        Assert.assertEquals(datetimeLargeintNumber, datetime.castTo(Type.LARGEINT).get());
+        Assertions.assertEquals(datetimeLargeintNumber, datetime.castTo(IntegerType.LARGEINT).get());
 
         ConstantOperator dateFloatNumber = ConstantOperator.createFloat(20230101);
-        Assert.assertEquals(dateFloatNumber, date.castTo(Type.FLOAT).get());
+        Assertions.assertEquals(dateFloatNumber, date.castTo(FloatType.FLOAT).get());
 
         ConstantOperator datetimeFloatNumber = ConstantOperator.createFloat(20230101000000L);
-        Assert.assertEquals(datetimeFloatNumber, datetime.castTo(Type.FLOAT).get());
+        Assertions.assertEquals(datetimeFloatNumber, datetime.castTo(FloatType.FLOAT).get());
 
         ConstantOperator dateDoubleNumber = ConstantOperator.createDouble(20230101);
-        Assert.assertEquals(dateDoubleNumber, date.castTo(Type.DOUBLE).get());
+        Assertions.assertEquals(dateDoubleNumber, date.castTo(FloatType.DOUBLE).get());
 
         ConstantOperator datetimeDoubleNumber = ConstantOperator.createDouble(20230101000000L);
-        Assert.assertEquals(datetimeDoubleNumber, datetime.castTo(Type.DOUBLE).get());
+        Assertions.assertEquals(datetimeDoubleNumber, datetime.castTo(FloatType.DOUBLE).get());
+    }
+
+    @Test
+    public void testCastTimeToDateTime() {
+        LocalDateTime now = LocalDateTime.now().withNano(0);
+        ConstantOperator time = ConstantOperator.createTime(now.getHour() * 3600D + now.getMinute() * 60D + now.getSecond());
+        ConstantOperator datetime = ConstantOperator.createDatetime(now);
+        Assertions.assertEquals(datetime, time.castTo(DateType.DATETIME).get());
+    }
+
+    @Test
+    public void testCastBinaryToStringKeepsTheBytes() {
+        byte[] bytes = "zz".getBytes(StandardCharsets.UTF_8);
+        ConstantOperator binary = ConstantOperator.createBinary(bytes, VarbinaryType.VARBINARY);
+
+        // The BE casts binary to string by handing the underlying bytes over untouched, folding must agree.
+        String folded = binary.castTo(VarcharType.VARCHAR).get().getVarchar();
+        Assertions.assertEquals("zz", folded);
+        Assertions.assertFalse(folded.startsWith("[B@"), folded);
+
+        // The folded value used to be the identity hash code of the byte[], so it differed on every call.
+        Assertions.assertEquals(folded, binary.castTo(VarcharType.VARCHAR).get().getVarchar());
+        Assertions.assertEquals(binary.castTo(VarcharType.VARCHAR).get(), binary.castTo(VarcharType.VARCHAR).get());
+
+        // An equal but distinct constant, i.e. a different byte[] instance, folds to the same value.
+        ConstantOperator otherInstance =
+                ConstantOperator.createBinary("zz".getBytes(StandardCharsets.UTF_8), VarbinaryType.VARBINARY);
+        Assertions.assertEquals(folded, otherInstance.castTo(VarcharType.VARCHAR).get().getVarchar());
+
+        // CHAR and sized VARCHAR take the same path, the BE does not truncate to the target length either.
+        Assertions.assertEquals("zz", binary.castTo(CharType.CHAR).get().getVarchar());
+        Assertions.assertEquals("zz", binary.castTo(TypeFactory.createVarcharType(1)).get().getVarchar());
+    }
+
+    @Test
+    public void testCastBinaryToBinaryKeepsTheBytes() {
+        byte[] bytes = "zz".getBytes(StandardCharsets.UTF_8);
+        ConstantOperator binary = ConstantOperator.createBinary(bytes, VarbinaryType.VARBINARY);
+
+        Assertions.assertArrayEquals(bytes, binary.castTo(VarbinaryType.VARBINARY).get().getBinary());
+        Assertions.assertArrayEquals(bytes, binary.castTo(TypeFactory.createVarbinary(10)).get().getBinary());
+    }
+
+    @Test
+    public void testCastNonUtf8BinaryToStringIsNotFolded() {
+        // 0xFF is not valid UTF-8: decoding it would substitute U+FFFD and the folded constant would no
+        // longer carry the bytes the BE would produce, so the cast has to be left to the BE.
+        ConstantOperator binary = ConstantOperator.createBinary(new byte[] {(byte) 0xFF}, VarbinaryType.VARBINARY);
+        Assertions.assertEquals(Optional.empty(), binary.castTo(VarcharType.VARCHAR));
+        Assertions.assertEquals(Optional.empty(), binary.castTo(CharType.CHAR));
+    }
+
+    @Test
+    public void testCastBinaryToOtherTypesIsNotFolded() {
+        ConstantOperator binary =
+                ConstantOperator.createBinary("12".getBytes(StandardCharsets.UTF_8), VarbinaryType.VARBINARY);
+
+        // The BE only supports casting a binary value to a string, folding anything else would make the
+        // constant path disagree with the non-folded one.
+        Assertions.assertEquals(Optional.empty(), binary.castTo(IntegerType.INT));
+        Assertions.assertEquals(Optional.empty(), binary.castTo(IntegerType.BIGINT));
+        Assertions.assertEquals(Optional.empty(), binary.castTo(FloatType.DOUBLE));
+        Assertions.assertEquals(Optional.empty(), binary.castTo(DateType.DATE));
+
+        // A null binary constant used to be folded into the literal string "null".
+        Assertions.assertEquals(Optional.empty(),
+                ConstantOperator.createNull(VarbinaryType.VARBINARY).castTo(VarcharType.VARCHAR));
     }
 
     @Test
@@ -148,56 +223,56 @@ public class ConstantOperatorTest {
             // tinyint
             ConstantOperator var1 = ConstantOperator.createTinyInt((byte) 10);
             ConstantOperator var2 = ConstantOperator.createTinyInt((byte) 20);
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // smallint
             ConstantOperator var1 = ConstantOperator.createSmallInt((short) 10);
             ConstantOperator var2 = ConstantOperator.createSmallInt((short) 20);
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // int
             ConstantOperator var1 = ConstantOperator.createInt(10);
             ConstantOperator var2 = ConstantOperator.createInt(20);
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // long
             ConstantOperator var1 = ConstantOperator.createBigint(10);
             ConstantOperator var2 = ConstantOperator.createBigint(20);
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // large int
             ConstantOperator var1 = ConstantOperator.createLargeInt(BigInteger.valueOf(10));
             ConstantOperator var2 = ConstantOperator.createLargeInt(BigInteger.valueOf(20));
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // date
             ConstantOperator var1 = ConstantOperator.createDate(LocalDateTime.of(2023, 10, 5, 0, 0, 0));
             ConstantOperator var2 = ConstantOperator.createDate(LocalDateTime.of(2023, 10, 15, 0, 0, 0));
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // datetime
             ConstantOperator var1 = ConstantOperator.createDatetime(LocalDateTime.of(2023, 10, 5, 0, 0, 0));
             ConstantOperator var2 = ConstantOperator.createDatetime(LocalDateTime.of(2023, 10, 5, 0, 0, 10));
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
     }
 }

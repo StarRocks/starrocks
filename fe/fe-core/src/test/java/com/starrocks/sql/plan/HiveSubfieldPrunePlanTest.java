@@ -14,12 +14,12 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class HiveSubfieldPrunePlanTest extends PlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -30,6 +30,6 @@ public class HiveSubfieldPrunePlanTest extends PlanTestBase {
         String sql = "with stream as (select array_agg(col_struct.c0) as t1 from hive0.subfield_db.subfield group by " +
                 "col_int) select t1 from stream";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "Pruned type: 2 [col_struct] <-> [struct<c0 int(11)>]");
+        assertContains(plan, "Pruned type: 2 [col_struct] <-> [struct<`c0` int(11)>]");
     }
 }

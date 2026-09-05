@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回存在于第一个 Bitmap 中但不存在于第二个 Bitmap 中的值。"
 ---
 
 # bitmap_andnot
 
-## 功能
+
 
 计算两个输入的 bitmap 的差集。差集是指包含所有存在于第一个集合且不存在于第二个集合的元素的集合。
 

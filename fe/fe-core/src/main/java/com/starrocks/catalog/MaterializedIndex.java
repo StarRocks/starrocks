@@ -38,20 +38,20 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
+import com.starrocks.clone.BalanceStat;
+import com.starrocks.clone.BalanceStat.BalanceType;
+import com.starrocks.common.Range;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 public class MaterializedIndex extends MetaObject implements Writable, GsonPostProcessable {
@@ -98,6 +98,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     @SerializedName(value = "id")
     private long id;
+    @SerializedName(value = "metaId")
+    private long metaId = 0L;
     @SerializedName(value = "state")
     private IndexState state;
     @SerializedName(value = "rowCount")
@@ -105,16 +107,31 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     private Map<Long, Tablet> idToTablets;
     @SerializedName(value = "tablets")
-    // this is for keeping tablet order
     private List<Tablet> tablets;
+
+    @SerializedName(value = "shardGroupId")
+    private long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
+
+    // The partition version at which this index generation became the serving generation: the
+    // tablet split/merge commit version that installed it. 0 for a generation created with the
+    // partition and for any index not produced by a reshard, so a 0 here means "start of this
+    // partition's history" rather than "version 0". The tablets of this generation hold no
+    // metadata below it -- the retiring generation's last data version is takeoverVersion - 1 --
+    // which is what the autovacuum retain floor needs in order not to ask a backend to retain a
+    // version that does not exist for the tablets it is sending.
+    @SerializedName(value = "takeoverVersion")
+    private long takeoverVersion = 0;
 
     // If this is an index of LakeTable and the index state is SHADOW, all transactions
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
     // PublishVersionRequest requests to BE nodes.
     private long visibleTxnId;
 
+    // Tablet distribution balance stat
+    private AtomicReference<BalanceStat> balanceStat = new AtomicReference<>(BalanceStat.BALANCED_STAT);
+
     public MaterializedIndex() {
-        this(0, IndexState.NORMAL);
+        this(0, IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
     }
 
     public MaterializedIndex(long id) {
@@ -122,7 +139,19 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public MaterializedIndex(long id, @Nullable IndexState state) {
-        this(id, state, 0);
+        this(id, state, 0, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state, long shardGroupId) {
+        this(id, state, 0, shardGroupId);
+    }
+
+    public MaterializedIndex(long id, long metaId, @Nullable IndexState state, long shardGroupId) {
+        this(id, metaId, state, 0, shardGroupId);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
+        this(id, id, state, visibleTxnId, shardGroupId);
     }
 
     /**
@@ -131,16 +160,19 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      * {@code visibleTxnId} will be ignored if {@code state} is not {@code IndexState.SHADOW}
      *
      * @param id           the id of the index
+     * @param metaId       the meta id of the index
      * @param state        the state of the index
      * @param visibleTxnId the minimum transaction id that can see this index.
      */
-    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId) {
+    public MaterializedIndex(long id, long metaId, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
         this.id = id;
+        this.metaId = metaId;
         this.state = state == null ? IndexState.NORMAL : state;
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
         this.visibleTxnId = (this.state == IndexState.SHADOW) ? visibleTxnId : 0;
+        this.shardGroupId = shardGroupId;
     }
 
     /**
@@ -169,12 +201,28 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         this.visibleTxnId = visibleTxnId;
     }
 
+    public void setShardGroupId(long shardGroupId) {
+        this.shardGroupId = shardGroupId;
+    }
+
+    public long getShardGroupId() {
+        return shardGroupId;
+    }
+
+    public void setTakeoverVersion(long takeoverVersion) {
+        this.takeoverVersion = takeoverVersion;
+    }
+
+    public long getTakeoverVersion() {
+        return takeoverVersion;
+    }
+
     public List<Tablet> getTablets() {
         return tablets;
     }
 
     public List<Long> getTabletIdsInOrder() {
-        List<Long> tabletIds = Lists.newArrayList();
+        List<Long> tabletIds = Lists.newArrayListWithCapacity(tablets.size());
         for (Tablet tablet : tablets) {
             tabletIds.add(tablet.getId());
         }
@@ -198,16 +246,30 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         idToTablets.put(tablet.getId(), tablet);
         tablets.add(tablet);
         if (updateInvertedIndex) {
-            GlobalStateMgr.getCurrentInvertedIndex().addTablet(tablet.getId(), tabletMeta);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tablet.getId(), tabletMeta);
         }
     }
 
-    public void setIdForRestore(long idxId) {
-        this.id = idxId;
+    public Tablet removeTablet(long tabletId) {
+        Tablet tablet = idToTablets.remove(tabletId);
+        if (tablet != null) {
+            tablets.remove(tablet);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
+        }
+        return tablet;
+    }
+
+    public void setIdForRestore(long idxMetaId) {
+        this.id = idxMetaId;
+        this.metaId = idxMetaId;
     }
 
     public long getId() {
         return id;
+    }
+
+    public long getMetaId() {
+        return metaId;
     }
 
     public void setState(IndexState state) {
@@ -227,9 +289,13 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public long getDataSize() {
+        return getDataSize(false);
+    }
+
+    public long getDataSize(boolean singleReplica) {
         long dataSize = 0;
         for (Tablet tablet : getTablets()) {
-            dataSize += tablet.getDataSize(false);
+            dataSize += tablet.getDataSize(singleReplica);
         }
         return dataSize;
     }
@@ -272,49 +338,20 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return -1;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        out.writeLong(id);
-
-        Text.writeString(out, state.name());
-        out.writeLong(rowCount);
-
-        int tabletCount = tablets.size();
-        out.writeInt(tabletCount);
-        for (Tablet tablet : tablets) {
-            tablet.write(out);
-        }
-
-        out.writeLong(-1L); // For rollback compatibility of field rollupIndexId
-        out.writeLong(-1L); // For rollback compatibility of field rollupFinishedVersion
+    public void setBalanceStat(BalanceStat balanceStat) {
+        this.balanceStat.set(balanceStat);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        id = in.readLong();
-
-        state = IndexState.valueOf(Text.readString(in));
-        rowCount = in.readLong();
-
-        int tabletCount = in.readInt();
-        for (int i = 0; i < tabletCount; ++i) {
-            // LakeTablet uses json serialization.
-            Tablet tablet = LocalTablet.read(in);
-            tablets.add(tablet);
-            idToTablets.put(tablet.getId(), tablet);
-        }
-
-        in.readLong(); // For backward compatibility of field rollupIndexId
-        in.readLong(); // For backward compatibility of field rollupFinishedVersion
+    public BalanceStat getBalanceStat() {
+        return balanceStat.get();
     }
 
-    public static MaterializedIndex read(DataInput in) throws IOException {
-        MaterializedIndex materializedIndex = new MaterializedIndex();
-        materializedIndex.readFields(in);
-        return materializedIndex;
+    public boolean isTabletBalanced() {
+        return getBalanceStat().isBalanced();
+    }
+
+    public BalanceType getBalanceType() {
+        return getBalanceStat().getBalanceType();
     }
 
     @Override
@@ -331,19 +368,21 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             return false;
         }
         MaterializedIndex other = (MaterializedIndex) obj;
-        return idToTablets.equals(other.idToTablets) && state.equals(other.state) && (rowCount == other.rowCount) &&
-                (visibleTxnId == other.visibleTxnId);
+        return idToTablets.equals(other.idToTablets) && state.equals(other.state) && (rowCount == other.rowCount)
+                && (visibleTxnId == other.visibleTxnId);
     }
 
     @Override
     public String toString() {
         StringBuilder buffer = new StringBuilder();
         buffer.append("index id: ").append(id).append("; ");
+        buffer.append("index meta id: ").append(metaId).append("; ");
         buffer.append("index state: ").append(state.name()).append("; ");
-
+        buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
+        buffer.append("takeoverVersion: ").append(takeoverVersion).append("; ");
         buffer.append("row count: ").append(rowCount).append("; ");
-        buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");
+        buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("tablets: [");
         for (Tablet tablet : tablets) {
             buffer.append("tablet: ").append(tablet.toString()).append(", ");
@@ -358,6 +397,62 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         // build "idToTablets" from "tablets"
         for (Tablet tablet : tablets) {
             idToTablets.put(tablet.getId(), tablet);
+        }
+        if (metaId == 0L) {
+            metaId = id;
+        }
+        // Share adjacent tablet range bounds to reduce memory usage
+        shareAdjacentTabletRangeBounds();
+    }
+
+    /**
+     * Shares adjacent tablet range bounds to reduce memory usage.
+     * For adjacent tablets where upperBound[i-1] equals lowerBound[i],
+     * makes them share the same Tuple object instance.
+     *
+     * <p>This method validates that adjacent tablet ranges are continuous:
+     * the previous tablet's upper bound must equal the current tablet's lower bound,
+     * and neither bound can be null.
+     *
+     * <p>For non-range distribution tables, TabletRange may be null, in which case
+     * this method skips processing for those tablets.
+     *
+     * <p>This method should be called after deserialization or tablet split
+     * operations to optimize memory usage.
+     *
+     * @throws IllegalStateException if adjacent tablet ranges are not continuous
+     *         or if any bound is null (when both TabletRanges are non-null)
+     */
+    public void shareAdjacentTabletRangeBounds() {
+        for (int i = 1; i < tablets.size(); i++) {
+            Tablet prevTablet = tablets.get(i - 1);
+            Tablet currTablet = tablets.get(i);
+
+            TabletRange prevTabletRange = prevTablet.getRange();
+            TabletRange currTabletRange = currTablet.getRange();
+            // Skip if either TabletRange is null (non-range distribution tables)
+            if (prevTabletRange == null || currTabletRange == null) {
+                break;
+            }
+
+            Range<Tuple> prevRange = prevTabletRange.getRange();
+            Range<Tuple> currRange = currTabletRange.getRange();
+
+            Tuple prevUpperBound = prevRange.getUpperBound();
+            Tuple currLowerBound = currRange.getLowerBound();
+
+            // Validate range continuity
+            if (prevUpperBound == null || currLowerBound == null || !prevUpperBound.equals(currLowerBound)) {
+                continue;
+            }
+
+            // Share the same Tuple object: use prevUpperBound as the shared bound
+            Range<Tuple> newRange = Range.of(
+                    prevUpperBound,  // Share the same Tuple object
+                    currRange.getUpperBound(),
+                    currRange.isLowerBoundIncluded(),
+                    currRange.isUpperBoundIncluded());
+            currTablet.setRange(new TabletRange(newRange));
         }
     }
 }

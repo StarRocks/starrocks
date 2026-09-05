@@ -36,15 +36,20 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Version;
+import com.starrocks.common.util.MachineInfo;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /*
  * fe_host:fe_http_port/api/bootstrap
@@ -53,14 +58,9 @@ import io.netty.handler.codec.http.HttpMethod;
  * {"status":"FAILED","msg":"err info..."}
  */
 public class BootstrapFinishAction extends RestBaseAction {
-    private static final String CLUSTER_ID = "cluster_id";
-    private static final String TOKEN = "token";
+    private static final Logger LOG = LogManager.getLogger(BootstrapFinishAction.class);
 
-    public static final String REPLAYED_JOURNAL_ID = "replayedJournalId";
-    public static final String QUERY_PORT = "queryPort";
-    public static final String RPC_PORT = "rpcPort";
-    public static final String FE_START_TIME = "feStartTime";
-    public static final String FE_VERSION = "feVersion";
+    private static final String TOKEN = "token";
 
     public BootstrapFinishAction(ActionController controller) {
         super(controller);
@@ -70,67 +70,69 @@ public class BootstrapFinishAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/bootstrap", new BootstrapFinishAction(controller));
     }
 
+    // Always anonymous, even under enable_http_auth: the FE-to-FE heartbeat (HeartbeatMgr)
+    // polls this with the cluster token, not HTTP Basic, so gating it would break peer-FE
+    // heartbeats.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         boolean isReady = GlobalStateMgr.getCurrentState().isReady();
 
         // to json response
-        BootstrapResult result = null;
+        BootstrapResult result;
         if (isReady) {
             result = new BootstrapResult();
-            String clusterIdStr = request.getSingleParameter(CLUSTER_ID);
             String token = request.getSingleParameter(TOKEN);
-            if (!Strings.isNullOrEmpty(clusterIdStr) && !Strings.isNullOrEmpty(token)) {
-                // cluster id or token is provided, return more info
-                int clusterId = 0;
-                try {
-                    clusterId = Integer.parseInt(clusterIdStr);
-                } catch (NumberFormatException e) {
+            if (!Strings.isNullOrEmpty(token)) {
+                if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
                     result.status = ActionStatus.FAILED;
-                    result.msg = "invalid cluster id format: " + clusterIdStr;
-                }
-
-                if (result.status == ActionStatus.OK) {
-                    if (clusterId != GlobalStateMgr.getCurrentState().getClusterId()) {
-                        result.status = ActionStatus.FAILED;
-                        result.msg = "invalid cluster id: " + GlobalStateMgr.getCurrentState().getClusterId();
-                    }
-                }
-
-                if (result.status == ActionStatus.OK) {
-                    if (!token.equals(GlobalStateMgr.getCurrentState().getToken())) {
-                        result.status = ActionStatus.FAILED;
-                        result.msg = "invalid token: " + GlobalStateMgr.getCurrentState().getToken();
-                    }
-                }
-
-                if (result.status == ActionStatus.OK) {
+                    LOG.info("invalid token: {}", token);
+                    result.msg = "invalid parameter";
+                } else {
                     // cluster id and token are valid, return replayed journal id
                     long replayedJournalId = GlobalStateMgr.getCurrentState().getReplayedJournalId();
                     long feStartTime = GlobalStateMgr.getCurrentState().getFeStartTime();
-                    result.setMaxReplayedJournal(replayedJournalId);
+                    result.setReplayedJournal(replayedJournalId);
                     result.setQueryPort(Config.query_port);
                     result.setRpcPort(Config.rpc_port);
                     result.setFeStartTime(feStartTime);
                     result.setFeVersion(Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
+                    result.setHeapUsedPercent(JvmStats.getJvmHeapUsedPercent());
+                    result.setCpuCores(MachineInfo.getInstance().getCpuCores());
+                    result.setMacAddress(MachineInfo.getInstance().getMacAddress());
                 }
             }
         } else {
             result = new BootstrapResult("not ready");
         }
 
-        // send result
+        // send the result
         response.setContentType("application/json");
         response.getContent().append(result.toJson());
         sendResult(request, response);
     }
 
     public static class BootstrapResult extends RestBaseResult {
+        @SerializedName("replayedJournalId")
         private long replayedJournalId = 0;
+        @SerializedName("queryPort")
         private int queryPort = 0;
+        @SerializedName("rpcPort")
         private int rpcPort = 0;
+        @SerializedName("feStartTime")
         private long feStartTime = 0;
+        @SerializedName("feVersion")
         private String feVersion;
+        @SerializedName("heapUsedPercent")
+        private float heapUsedPercent;
+        @SerializedName("cpuCores")
+        private int cpuCores;
+        @SerializedName("macAddress")
+        private String macAddress;
 
         public BootstrapResult() {
             super();
@@ -140,11 +142,11 @@ public class BootstrapFinishAction extends RestBaseAction {
             super(msg);
         }
 
-        public void setMaxReplayedJournal(long replayedJournalId) {
+        public void setReplayedJournal(long replayedJournalId) {
             this.replayedJournalId = replayedJournalId;
         }
 
-        public long getMaxReplayedJournal() {
+        public long getReplayedJournal() {
             return replayedJournalId;
         }
 
@@ -180,10 +182,39 @@ public class BootstrapFinishAction extends RestBaseAction {
             this.feVersion = feVersion;
         }
 
+        public float getHeapUsedPercent() {
+            return heapUsedPercent;
+        }
+
+        public void setHeapUsedPercent(float heapUsedPercent) {
+            this.heapUsedPercent = heapUsedPercent;
+        }
+
+        public int getCpuCores() {
+            return cpuCores;
+        }
+
+        public void setCpuCores(int cpuCores) {
+            this.cpuCores = cpuCores;
+        }
+
+        public String getMacAddress() {
+            return macAddress;
+        }
+
+        public void setMacAddress(String macAddress) {
+            this.macAddress = macAddress;
+        }
+
         @Override
         public String toJson() {
             Gson gson = new Gson();
             return gson.toJson(this);
+        }
+
+        public static BootstrapResult fromJson(String jsonStr) {
+            Gson gson = new Gson();
+            return gson.fromJson(jsonStr, BootstrapResult.class);
         }
     }
 }

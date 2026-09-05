@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回两个DATETIME类型值之间的差值。"
 ---
 
 # timediff
 
-## 功能
+
 
 返回两个 DATETIME 类型值之间的差值。
 

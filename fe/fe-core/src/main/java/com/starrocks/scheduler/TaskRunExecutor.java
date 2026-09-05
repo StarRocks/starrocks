@@ -15,50 +15,105 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class TaskRunExecutor {
     private static final Logger LOG = LogManager.getLogger(TaskRunExecutor.class);
-    private final ExecutorService taskRunPool = Executors.newCachedThreadPool();
+    // Not final: leader demotion shuts the pool down (shutdownNow interrupts in-flight task runs so
+    // their INSERTs abort instead of racing the next leader's re-driven run of the same task) and
+    // TaskManager.start() rebuilds it on re-election.
+    private volatile ExecutorService taskRunPool = ThreadPoolManager
+            .newDaemonCacheThreadPool(Config.max_task_runs_threads_num, "starrocks-taskrun-pool", true);
 
-    public void executeTaskRun(TaskRun taskRun) {
+    /** Demotion: stop accepting task runs and interrupt in-flight ones (their transactions abort). */
+    public void shutdownNow() {
+        taskRunPool.shutdownNow();
+    }
+
+    /**
+     * Straggler predicate for the re-activation cleanliness gate: shut down by a previous demotion
+     * but a task-run thread is still running. A fresh/running pool is not shut down, so it never trips.
+     */
+    public boolean stoppedButNotTerminated() {
+        ExecutorService pool = taskRunPool;
+        return pool.isShutdown() && !pool.isTerminated();
+    }
+
+    public boolean awaitTermination(long timeoutMs) throws InterruptedException {
+        return taskRunPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS);
+    }
+
+    /** Rebuild the pool on re-election after a demotion shut it down. Called from TaskManager.start(). */
+    public void rebuildIfShutdown() {
+        ExecutorService pool = taskRunPool;
+        if (pool.isShutdown()) {
+            taskRunPool = ThreadPoolManager.newDaemonCacheThreadPool(
+                    Config.max_task_runs_threads_num, "starrocks-taskrun-pool", true);
+        }
+    }
+
+    /**
+     * Async execute a task-run, use the return value to indicate submit success or not
+     */
+    public boolean executeTaskRun(TaskRun taskRun) {
         if (taskRun == null) {
-            return;
+            LOG.warn("TaskRun is null, avoid execute it again");
+            return false;
         }
         TaskRunStatus status = taskRun.getStatus();
         if (status == null) {
-            return;
+            LOG.warn("TaskRun {}/{} has no state, avoid execute it again", status.getTaskName(),
+                    status.getQueryId());
+            return false;
         }
-        if (status.getState() == Constants.TaskRunState.SUCCESS ||
-                status.getState() == Constants.TaskRunState.FAILED) {
-            LOG.warn("TaskRun {} is in final status {} ", status.getQueryId(), status.getState());
-            return;
+        if (status.getState() != Constants.TaskRunState.PENDING) {
+            LOG.warn("TaskRun {}/{} is in {} state, avoid execute it again", status.getTaskName(),
+                    status.getQueryId(), status.getState());
+            return false;
         }
 
+        if (taskRunPool.isShutdown()) {
+            // Leader demotion already stopped the pool; do not journal a PENDING -> RUNNING transition
+            // for a run that can never start here. The re-elected leader re-drives it from PENDING.
+            LOG.warn("taskRunPool is shut down (leader demoting), refuse task run {}", status.getTaskName());
+            return false;
+        }
+
+        // Persist state change
+        TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
+                Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+            taskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
+            taskRun.getStatus().setProcessStartTime(System.currentTimeMillis());
+        });
+
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
-            status.setState(Constants.TaskRunState.RUNNING);
             try {
-                boolean isSuccess = taskRun.executeTaskRun();
-                if (isSuccess) {
-                    status.setState(Constants.TaskRunState.SUCCESS);
-                } else {
-                    status.setState(Constants.TaskRunState.FAILED);
-                }
+                Constants.TaskRunState runState = taskRun.executeTaskRun();
+                status.setState(runState);
             } catch (Exception ex) {
                 LOG.warn("failed to execute TaskRun.", ex);
                 status.setState(Constants.TaskRunState.FAILED);
                 status.setErrorCode(-1);
-                status.setErrorMessage(ex.toString());
+                status.setErrorMessage(ex.getMessage());
             } finally {
+                // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
                 ConnectContext.remove();
                 status.setFinishTime(System.currentTimeMillis());
+                WarehouseIdleChecker.updateJobLastFinishTime(taskRun.getRunCtx().getCurrentWarehouseId(),
+                        "TaskRun: name[" + status.getTaskName() + "]");
             }
             return status.getState();
         }, taskRunPool);
@@ -69,6 +124,7 @@ public class TaskRunExecutor {
                 taskRun.getFuture().completeExceptionally(e);
             }
         });
+        return true;
     }
 
 }

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Converts the number x from one numeric base system to another, and returns the result as a string value."
 ---
 
 # conv
 
-## Description
+
 
 Converts the number `x` from one numeric base system to another, and returns the result as a string value.
 

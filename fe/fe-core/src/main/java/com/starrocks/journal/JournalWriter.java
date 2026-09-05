@@ -15,6 +15,7 @@
 
 package com.starrocks.journal;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
@@ -25,6 +26,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * An independent thread to write journals by batch asynchronously.
@@ -33,16 +36,31 @@ import java.util.concurrent.BlockingQueue;
  * After committing, JournalWriter will notify the caller thread for consistency.
  */
 public class JournalWriter {
+    private enum WriterState {
+        // Normal serving state. New append tasks are accepted and fatal journal failures
+        // keep the historical process-exit behavior.
+        RUNNING,
+        // Demotion drain is in progress. Commit failures and interrupts are converted into graceful
+        // task aborts (WRITER_ABORTED) instead of exiting the process, so in-flight writes unwind.
+        SEALING,
+        // The writer daemon has stopped; any straggler task taken from the queue is aborted.
+        CLOSED
+    }
+
     public static final Logger LOG = LogManager.getLogger(JournalWriter.class);
     // other threads can put log to this queue by calling Editlog.logEdit()
-    private BlockingQueue<JournalTask> journalQueue;
-    private Journal journal;
+    private final BlockingQueue<JournalTask> journalQueue;
+    private final Journal journal;
+    private final JournalType journalType;
 
     // used for checking if edit log need to roll
     protected long rollJournalCounter = 0;
+    // total estimated bytes written since the last roll, for the size-based roll trigger
+    protected long rollJournalBytes = 0;
     // increment journal id
     // this is the persisted journal id
     protected long nextVisibleJournalId = -1;
+    private volatile long lastCommittedJournalId = -1L;
 
     // belows are variables that will reset every batch
     // store journal tasks of this batch
@@ -53,6 +71,7 @@ public class JournalWriter {
     private long startTimeNano;
     // batch size in bytes
     private long uncommittedEstimatedBytes;
+    private long currentBatchBytes;
 
     /**
      * If this flag is set true, we will roll journal,
@@ -64,42 +83,145 @@ public class JournalWriter {
     /** Last timestamp in millisecond to log the commit triggered by delay. */
     private long lastLogTimeForDelayTriggeredCommit = -1;
 
+    private long lastSlowEditLogTimeNs = -1L;
+    private final AtomicReference<WriterState> writerState = new AtomicReference<>(WriterState.RUNNING);
+    private volatile Daemon daemon;
+    // Cooperative stop signal for the writer worker. close() sets it and joins; the worker polls the
+    // queue with a timeout and re-checks it each round. The worker is deliberately NEVER interrupted:
+    // an interrupt landing inside a BDB JE call (commit, journal roll) would invalidate the whole
+    // Environment, which the demoted node still needs to replay the journal as a follower.
+    private volatile boolean stopRequested = false;
+
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
+        this.journalType = journal == null ? null : JournalType.fromPrefix(journal.getPrefix());
     }
 
     /**
      * reset journal id & roll journal as a start
      */
     public void init(long maxJournalId) throws JournalException {
+        init(-1L, maxJournalId);
+    }
+
+    public void init(long minJournalId, long maxJournalId) throws JournalException {
+        if (journalType != null) {
+            MetricRepo.initializeEditLogRetained(journalType, minJournalId, maxJournalId);
+        }
         this.nextVisibleJournalId = maxJournalId + 1;
+        this.lastCommittedJournalId = maxJournalId;
+        this.writerState.set(WriterState.RUNNING);
         this.journal.rollJournal(this.nextVisibleJournalId);
     }
 
     public void startDaemon() {
         // ensure init() is called.
         assert (nextVisibleJournalId > 0);
+        stopRequested = false;
+        Daemon previous = daemon;
+        if (previous != null && previous.isAlive()) {
+            String msg = "previous JournalWriter daemon is still alive on restart, will exit now.";
+            LOG.error(msg);
+            Util.stdoutWithTime(msg);
+            System.exit(-1);
+        }
         Daemon d = new Daemon("JournalWriter", 0L) {
             @Override
             protected void runOneCycle() {
                 try {
                     writeOneBatch();
                 } catch (InterruptedException e) {
-                    String msg = "got interrupted exception when trying to write one batch, will exit now.";
-                    LOG.error(msg, e);
-                    // TODO we should exit gracefully on InterruptedException
-                    Util.stdoutWithTime(msg);
-                    System.exit(-1);
+                    if (writerState.get() == WriterState.RUNNING) {
+                        String msg = "journal writer interrupted while running, will exit now.";
+                        LOG.error(msg, e);
+                        Util.stdoutWithTime(msg);
+                        System.exit(-1);
+                    }
+                    LOG.info("journal writer interrupted while in state {}, will stop", writerState.get());
+                } catch (Throwable t) {
+                    if (writerState.get() != WriterState.RUNNING) {
+                        LOG.warn("journal writer hit error while in state {}, will stop without exit",
+                                writerState.get(), t);
+                        writerState.set(WriterState.CLOSED);
+                    } else {
+                        String msg = "got exception when trying to write one batch, will exit now.";
+                        LOG.error(msg, t);
+                        Util.stdoutWithTime(msg);
+                        System.exit(-1);
+                    }
                 }
             }
         };
+        daemon = d;
         d.start();
     }
 
+    /**
+     * Flip the writer out of RUNNING so a commit failure or interrupt during the demotion drain becomes a
+     * graceful task abort instead of a process exit. Idempotent; a no-op once already sealing/closed.
+     */
+    public void beginSeal() {
+        writerState.compareAndSet(WriterState.RUNNING, WriterState.SEALING);
+    }
+
+    /**
+     * Stop the writer daemon and return the last committed journal id. Call only after the WAL admission
+     * gate is closed and all in-flight leader writes have drained (EditLog.awaitWalDrained), which
+     * guarantees the journal queue is empty here.
+     */
+    public long close(long timeoutMs) {
+        // Flip out of RUNNING (if still running) so stopDaemon's interrupt is a graceful stop rather than the
+        // RUNNING-state process exit in runOneCycle.
+        writerState.compareAndSet(WriterState.RUNNING, WriterState.SEALING);
+        stopDaemon(timeoutMs);
+        writerState.set(WriterState.CLOSED);
+        Preconditions.checkState(journalQueue.isEmpty(),
+                "journal queue not empty after draining in-flight leader writes: remaining=%s", journalQueue.size());
+        return lastCommittedJournalId;
+    }
+
+    private void stopDaemon(long timeoutMs) {
+        Daemon d = daemon;
+        if (d == null) {
+            return;
+        }
+        stopRequested = true;
+        d.setStop();
+        // No interrupt: the worker polls the queue with a timeout and re-checks stopRequested each
+        // round, so it stops within ~100ms on its own. Interrupting it could land inside a BDB JE
+        // call and invalidate the environment the demoted node still needs for replay.
+        try {
+            d.join(Math.max(1L, timeoutMs));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("interrupted while waiting for journal writer daemon to stop", e);
+        }
+        if (d.isAlive()) {
+            LOG.warn("journal writer daemon did not stop within {}ms; keeping reference so restart fails fast",
+                    timeoutMs);
+        } else {
+            daemon = null;
+        }
+    }
+
     protected void writeOneBatch() throws InterruptedException {
-        // waiting if necessary until an element becomes available
-        currentJournal = journalQueue.take();
+        // Wait until an element becomes available, polling so a cooperative stop (close() sets
+        // stopRequested; no interrupt, see the field comment) is observed within one poll round.
+        currentJournal = null;
+        while (currentJournal == null) {
+            if (stopRequested) {
+                return;
+            }
+            currentJournal = journalQueue.poll(100L, TimeUnit.MILLISECONDS);
+        }
+
+        if (writerState.get() == WriterState.CLOSED) {
+            // Writer already stopped serving; abort the straggler so its waiter unwinds instead of hanging.
+            abortJournalTask(currentJournal, "journal writer is closed");
+            return;
+        }
+
         long nextJournalId = nextVisibleJournalId;
         initBatch();
 
@@ -109,6 +231,7 @@ public class JournalWriter {
             while (true) {
                 journal.batchWriteAppend(nextJournalId, currentJournal.getBuffer());
                 currentBatchTasks.add(currentJournal);
+                currentBatchBytes += currentJournal.estimatedSizeByte();
                 nextJournalId += 1;
 
                 if (shouldCommitNow()) {
@@ -123,22 +246,50 @@ public class JournalWriter {
             abortJournalTask(currentJournal, e.getMessage());
         } finally {
             try {
-                // commit
-                journal.batchWriteCommit();
+                // commit. The retry predicate only gates *retries*: the first commit attempt always runs, so
+                // healthy batches still become durable while the writer is SEALING during a demotion drain.
+                // Retries stay OFF during SEALING on purpose: SEALING only exists while demoting, and
+                // demotion implies BDB mastership already moved, so a commit failure here is deterministic
+                // (this node is a replica) - retrying cannot succeed and would only burn the drain budget.
+                journal.batchWriteCommit(() -> writerState.get() == WriterState.RUNNING);
                 LOG.debug("batch write commit success, from {} - {}", nextVisibleJournalId, nextJournalId);
                 nextVisibleJournalId = nextJournalId;
+                lastCommittedJournalId = nextJournalId - 1;
+                if (journalType != null) {
+                    MetricRepo.recordEditLogBatch(
+                            journalType, lastCommittedJournalId, currentBatchTasks.size(), currentBatchBytes);
+                }
                 markCurrentBatchSucceed();
-            } catch (JournalException e) {
-                // abort
+            } catch (JournalException | InterruptedException e) {
+                // Both failure kinds must resolve the batch: waiters block uninterruptibly on task
+                // completion (EditLog.waitForCommit), so a batch that never settles would pin them and
+                // the WAL fence forever. Nothing interrupts the writer anymore (close() stops it
+                // cooperatively), so the InterruptedException arm is defense in depth.
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 LOG.warn("failed to commit batch, will abort current {} journals.",
                         currentBatchTasks.size(), e);
                 try {
                     journal.batchWriteAbort();
                 } catch (JournalException e2) {
-                    LOG.warn("failed to abort batch, will ignore and continue.", e);
+                    LOG.warn("failed to abort batch, will ignore and continue.", e2);
                 }
-                abortCurrentBatch(e.getMessage());
+                if (writerState.get() == WriterState.RUNNING) {
+                    // Commit failure while still serving is fatal (abortJournalTask exits the process).
+                    abortCurrentBatch(String.valueOf(e.getMessage()));
+                } else {
+                    // Demotion drain (SEALING/CLOSED): unblock waiters with a terminal WRITER_ABORTED so they
+                    // stop retrying and release the WAL fence, letting the drain converge instead of exiting.
+                    abortCurrentBatch(String.valueOf(e.getMessage()), new JournalWriteException(
+                            JournalWriteException.Reason.WRITER_ABORTED, "journal commit failed while sealing", e));
+                }
             }
+        }
+
+        if (writerState.get() != WriterState.RUNNING) {
+            updateBatchMetrics();
+            return;
         }
 
         rollJournalAfterBatch();
@@ -149,6 +300,7 @@ public class JournalWriter {
     private void initBatch() {
         startTimeNano = System.nanoTime();
         uncommittedEstimatedBytes = 0;
+        currentBatchBytes = 0L;
         currentBatchTasks.clear();
     }
 
@@ -164,15 +316,30 @@ public class JournalWriter {
         }
     }
 
+    private void abortCurrentBatch(String errMsg, Exception cause) {
+        for (JournalTask t : currentBatchTasks) {
+            abortJournalTask(t, errMsg, cause);
+        }
+    }
+
     /**
      * We should notify the caller to rollback or report error on abort, like this.
-     *
      * task.markAbort();
-     *
      * But now we have to exit for historical reason.
      * Note that if we exit here, the final clause(commit current batch) will not be executed.
      */
     protected void abortJournalTask(JournalTask task, String msg) {
+        abortJournalTask(task, msg, null);
+    }
+
+    protected void abortJournalTask(JournalTask task, String msg, Exception cause) {
+        if (writerState.get() != WriterState.RUNNING) {
+            if (task != null) {
+                task.markAbort(cause != null ? cause : new JournalWriteException(
+                        JournalWriteException.Reason.WRITER_ABORTED, msg));
+            }
+            return;
+        }
         LOG.error(msg);
         Util.stdoutWithTime(msg);
         System.exit(-1);
@@ -203,7 +370,7 @@ public class JournalWriter {
 
         // 3. check uncommitted journals by size
         uncommittedEstimatedBytes += currentJournal.estimatedSizeByte();
-        if (uncommittedEstimatedBytes >= Config.metadata_journal_max_batch_size_mb * 1024 * 1024) {
+        if (uncommittedEstimatedBytes >= (long) Config.metadata_journal_max_batch_size_mb * 1024 * 1024) {
             LOG.warn("uncommitted estimated bytes {} >= {}MB, will commit now",
                     uncommittedEstimatedBytes, Config.metadata_journal_max_batch_size_mb);
             return true;
@@ -217,9 +384,20 @@ public class JournalWriter {
      * update all metrics after batch write
      */
     private void updateBatchMetrics() {
-        if (MetricRepo.isInit) {
+        // Log slow edit log write if needed.
+        long currentTimeNs = System.nanoTime();
+        long durationMs = (currentTimeNs - startTimeNano) / 1000000;
+        final long DEFAULT_EDIT_LOG_SLOW_LOGGING_INTERVAL_NS = 2000000000L; // 2 seconds
+        if (durationMs > Config.edit_log_write_slow_log_threshold_ms &&
+                currentTimeNs - lastSlowEditLogTimeNs > DEFAULT_EDIT_LOG_SLOW_LOGGING_INTERVAL_NS) {
+            LOG.warn("slow edit log write, batch size: {}, took: {}ms, current journal queue size: {}," +
+                    " please check the IO pressure of FE LEADER node or the latency between LEADER and FOLLOWER nodes",
+                    currentBatchTasks.size(), durationMs, journalQueue.size());
+            lastSlowEditLogTimeNs = currentTimeNs;
+        }
+        if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_EDIT_LOG_WRITE.increase((long) currentBatchTasks.size());
-            MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
+            MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update(durationMs);
             MetricRepo.HISTO_JOURNAL_WRITE_BATCH.update(currentBatchTasks.size());
             MetricRepo.HISTO_JOURNAL_WRITE_BYTES.update(uncommittedEstimatedBytes);
             MetricRepo.GAUGE_STACKED_JOURNAL_NUM.setValue((long) journalQueue.size());
@@ -237,6 +415,15 @@ public class JournalWriter {
         forceRollJournal = true;
     }
 
+    public long getLastCommittedJournalId() {
+        return lastCommittedJournalId;
+    }
+
+    boolean isDaemonAlive() {
+        Daemon d = daemon;
+        return d != null && d.isAlive();
+    }
+
     private boolean needForceRollJournal() {
         if (forceRollJournal) {
             // Reset flag, alter system create image only trigger new image once
@@ -249,10 +436,24 @@ public class JournalWriter {
 
     private void rollJournalAfterBatch() {
         rollJournalCounter += currentBatchTasks.size();
-        if (rollJournalCounter >= Config.edit_log_roll_num || needForceRollJournal()) {
+        for (JournalTask task : currentBatchTasks) {
+            rollJournalBytes += task.estimatedSizeByte();
+        }
+        boolean rollByCount = rollJournalCounter >= Config.edit_log_roll_num;
+        boolean rollByBytes = Config.edit_log_roll_bytes > 0 && rollJournalBytes >= Config.edit_log_roll_bytes;
+        if (rollByCount || rollByBytes || needForceRollJournal()) {
             try {
                 journal.rollJournal(nextVisibleJournalId);
             } catch (JournalException e) {
+                if (writerState.get() != WriterState.RUNNING) {
+                    // beginSeal flipped the state while this roll was in flight (the batch itself is
+                    // already committed and its tasks settled). On a demoting node BDB is a replica,
+                    // so the roll deterministically fails - stop quietly instead of turning a graceful
+                    // demotion into a process restart; the next activation re-inits the writer anyway.
+                    LOG.warn("failed to roll journal {} while in state {}, will stop without exit",
+                            nextVisibleJournalId, writerState.get(), e);
+                    return;
+                }
                 String msg = String.format("failed to roll journal %d, will exit", nextVisibleJournalId);
                 LOG.error(msg, e);
                 Util.stdoutWithTime(msg);
@@ -260,14 +461,19 @@ public class JournalWriter {
                 System.exit(-1);
             }
             String reason;
-            if (rollJournalCounter >= Config.edit_log_roll_num) {
+            if (rollByCount) {
                 reason = String.format("rollEditCounter %d >= edit_log_roll_num %d",
                         rollJournalCounter, Config.edit_log_roll_num);
+            } else if (rollByBytes) {
+                reason = String.format("rollEditBytes %d >= edit_log_roll_bytes %d",
+                        rollJournalBytes, Config.edit_log_roll_bytes);
             } else {
                 reason = "triggering a new checkpoint manually";
             }
             LOG.info("edit log rolled because {}", reason);
             rollJournalCounter = 0;
+            rollJournalBytes = 0;
         }
     }
+
 }

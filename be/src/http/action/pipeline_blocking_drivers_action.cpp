@@ -20,13 +20,20 @@
 
 #include <string>
 
+#include "base/uid_util.h"
 #include "common/logging.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 
 namespace starrocks {
 
@@ -110,7 +117,7 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
                         if (driver_info.is_fragment_cancelled) {
                             is_fragment_cancelled = true;
                         }
-                        status = std::move(driver_info.fragment_status);
+                        status = driver_info.fragment_status;
                     }
 
                     rapidjson::Document fragment_obj;
@@ -138,10 +145,14 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
 
         auto iterate_func_generator = [](QueryMap& query_map) {
             return [&query_map](pipeline::DriverConstRawPtr driver) {
-                TUniqueId query_id = driver->query_ctx()->query_id();
-                TUniqueId fragment_id = driver->fragment_ctx()->fragment_instance_id();
-                bool is_cancelled = driver->fragment_ctx()->is_canceled();
-                std::string status = driver->fragment_ctx()->final_status().to_string();
+                TUniqueId query_id = driver->query_runtime_state()->query_id();
+                auto* runtime_state = driver->runtime_state();
+                DCHECK(runtime_state != nullptr);
+                auto* fragment_ctx = runtime_state->fragment_ctx();
+                DCHECK(fragment_ctx != nullptr);
+                TUniqueId fragment_id = fragment_ctx->fragment_instance_id();
+                bool is_cancelled = runtime_state->is_cancelled();
+                std::string status = fragment_ctx->final_status().to_string();
                 int32_t driver_id = driver->driver_id();
                 pipeline::DriverState state = driver->driver_state();
                 std::string driver_desc = driver->to_readable_string();
@@ -159,15 +170,12 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
             };
         };
 
-        QueryMap query_map_not_in_wg;
-        _exec_env->wg_driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_not_in_wg));
-        rapidjson::Document queries_not_in_wg_obj = query_map_to_doc_func(query_map_not_in_wg);
-
         QueryMap query_map_in_wg;
-        _exec_env->wg_driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_in_wg));
+        _exec_env->workgroup_manager()->for_each_executors([&](const workgroup::PipelineExecutorSet& executor) {
+            executor.driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_in_wg));
+        });
         rapidjson::Document queries_in_wg_obj = query_map_to_doc_func(query_map_in_wg);
 
-        root.AddMember("queries_not_in_workgroup", queries_not_in_wg_obj, allocator);
         root.AddMember("queries_in_workgroup", queries_in_wg_obj, allocator);
     });
 }

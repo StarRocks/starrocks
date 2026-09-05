@@ -13,26 +13,28 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class FeMetricsSystemTable {
+    public static final String NAME = "fe_metrics";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.FE_METRICS_ID,
-                "fe_metrics",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("FE_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("LABELS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("VALUE", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("FE_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("LABELS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("VALUE", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_FE_METRICS);
     }
 }

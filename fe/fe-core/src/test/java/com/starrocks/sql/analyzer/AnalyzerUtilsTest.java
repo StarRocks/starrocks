@@ -14,33 +14,47 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AnalyzerUtilsTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.dynamic_partition_enable = false;
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -54,14 +68,33 @@ public class AnalyzerUtilsTest {
                         "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
-                        ");");
+                        ");")
+                .withTable("CREATE TABLE `relation_src` (\n" +
+                        "  `k1` int NOT NULL\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
+                .withTable("CREATE TABLE `relation_target` (\n" +
+                        "  `k1` int NOT NULL\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
+                .withView("CREATE VIEW relation_view AS SELECT k1 FROM relation_src;")
+                .withMaterializedView("CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS " +
+                        "SELECT * FROM bill_detail;");
     }
 
     @Test
     public void testGetFormatPartitionValue() {
-        Assert.assertEquals("_11", AnalyzerUtils.getFormatPartitionValue("-11"));
-        Assert.assertEquals("20200101", AnalyzerUtils.getFormatPartitionValue("2020-01-01"));
-        Assert.assertEquals("676d5dde", AnalyzerUtils.getFormatPartitionValue("杭州"));
+        Assertions.assertEquals("_11", AnalyzerUtils.getFormatPartitionValue("-11"));
+        Assertions.assertEquals("20200101", AnalyzerUtils.getFormatPartitionValue("2020-01-01"));
+        Assertions.assertEquals("676d5dde", AnalyzerUtils.getFormatPartitionValue("杭州"));
     }
 
     @Test
@@ -70,19 +103,122 @@ public class AnalyzerUtilsTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Expr expr = queryStatement.getQueryRelation().getOutputExpression().get(0);
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.VARCHAR, "bill_code", false);
-        ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", Type.VARCHAR);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, VarcharType.VARCHAR, "bill_code", false);
+        ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", VarcharType.VARCHAR);
         boolean success = ColumnFilterConverter.rewritePredicate(expr, columnRefOperator, constantOperator);
-        Assert.assertTrue(success);
+        Assertions.assertTrue(success);
         Expr shouldReplaceExpr = expr.getChild(0).getChild(0);
-        Assert.assertTrue(shouldReplaceExpr instanceof StringLiteral);
+        Assertions.assertTrue(shouldReplaceExpr instanceof StringLiteral);
     }
 
     @Test
     public void testConvertCatalogMaxStringToOlapMaxString() {
-        ScalarType catalogString = ScalarType.createDefaultCatalogString();
+        ScalarType catalogString = TypeFactory.createDefaultCatalogString();
         ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
-        Assert.assertEquals(ScalarType.OLAP_MAX_VARCHAR_LENGTH, convertedString.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), convertedString.getLength());
     }
 
+    @Test
+    public void testTransformVarcharPreferStringFalseKeepsDeclaredLength() {
+        ScalarType narrow = TypeFactory.createVarcharType(64);
+        ScalarType result = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true, false);
+        Assertions.assertEquals(64, result.getLength());
+    }
+
+    @Test
+    public void testTransformVarcharPreferStringTrueWidensToMax() {
+        ScalarType narrow = TypeFactory.createVarcharType(64);
+        ScalarType result = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true, true);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), result.getLength());
+    }
+
+    @Test
+    public void testTransformUnboundedVarcharWidensRegardlessOfPreferString() {
+        ScalarType unbounded = TypeFactory.createVarcharType(-1);
+        ScalarType keepLen = (ScalarType) AnalyzerUtils.transformTableColumnType(unbounded, true, false);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), keepLen.getLength());
+        ScalarType preferStr = (ScalarType) AnalyzerUtils.transformTableColumnType(unbounded, true, true);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), preferStr.getLength());
+    }
+
+    @Test
+    public void testTransformTwoArgOverloadFollowsConfigFlag() {
+        ScalarType narrow = TypeFactory.createVarcharType(64);
+        boolean saved = Config.transform_type_prefer_string_for_varchar;
+        try {
+            Config.transform_type_prefer_string_for_varchar = true;
+            ScalarType widened = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true);
+            Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), widened.getLength());
+
+            Config.transform_type_prefer_string_for_varchar = false;
+            ScalarType preserved = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true);
+            Assertions.assertEquals(64, preserved.getLength());
+        } finally {
+            Config.transform_type_prefer_string_for_varchar = saved;
+        }
+    }
+
+    @Test
+    public void testCopyOlapTable() throws Exception {
+        {
+            String sql = "select count(*) from bill_detail;";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            Set<OlapTable> tables = Sets.newHashSet();
+            AnalyzerUtils.copyOlapTable(stmt, tables);
+            Assertions.assertEquals(1, tables.size());
+            Assertions.assertInstanceOf(LakeTable.class, tables.iterator().next());
+            Assertions.assertSame(starRocksAssert.getTable("test", "bill_detail"), tables.iterator().next());
+            Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(stmt));
+        }
+
+        {
+            String sql = "select count(*) from mv1;";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            Set<OlapTable> tables = Sets.newHashSet();
+            AnalyzerUtils.copyOlapTable(stmt, tables);
+            Assertions.assertEquals(1, tables.size());
+            Assertions.assertInstanceOf(LakeMaterializedView.class, tables.iterator().next());
+            Assertions.assertSame(starRocksAssert.getTable("test", "mv1"), tables.iterator().next());
+            Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(stmt));
+        }
+    }
+
+    @Test
+    public void testCollectAllTableAndViewRelationNames() throws Exception {
+        StatementBase insertStmt = UtFrameUtils.parseStmtWithNewParser(
+                "insert into relation_target " + "select src.k1 from relation_view rv " +
+                        "join relation_src src on rv.k1 = src.k1 " + "join relation_view rv2 on rv2.k1 = src.k1",
+                starRocksAssert.getCtx());
+        List<String> relationNames = AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(insertStmt);
+        Assertions.assertEquals(Arrays.asList(qualifiedRelationName("test", "relation_view"),
+                qualifiedRelationName("test", "relation_src")), relationNames);
+
+        StatementBase cteStmt = UtFrameUtils.parseStmtWithNewParser("with cte as (select k1 from relation_src) " +
+                "select cte.k1 from cte join relation_view rv on cte.k1 = rv.k1", starRocksAssert.getCtx());
+        Assertions.assertEquals(Arrays.asList(qualifiedRelationName("test", "relation_src"),
+                        qualifiedRelationName("test", "relation_view")),
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(cteStmt));
+    }
+
+    @Test
+    public void testCollectAllConnectorTableAndViewWithViewDefinitions() throws Exception {
+        starRocksAssert.withView("CREATE VIEW relation_nested_view AS SELECT k1 FROM relation_view;");
+        try {
+            QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                    "SELECT k1 FROM relation_nested_view", starRocksAssert.getCtx());
+            Set<String> tableNames = AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(queryStatement)
+                    .values().stream()
+                    .map(Table::getName)
+                    .collect(Collectors.toSet());
+
+            Assertions.assertEquals(Sets.newHashSet("relation_src", "relation_view", "relation_nested_view"),
+                    tableNames);
+        } finally {
+            starRocksAssert.dropView("relation_nested_view");
+        }
+    }
+
+    private String qualifiedRelationName(String dbName, String tableName) {
+        return String.format("%s.%s.%s", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tableName);
+    }
 }

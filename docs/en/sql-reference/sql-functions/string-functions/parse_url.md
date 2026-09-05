@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Parses a URL string and extracts a specified component such as host, path, or query parameter."
 ---
 
 # parse_url
 
-## Description
+
 
 Parses a URL and extracts a component from this URL.
 

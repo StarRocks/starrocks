@@ -16,13 +16,13 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
@@ -33,16 +33,26 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     private long dbId;
 
     @SerializedName(value = "refreshType")
-    private MaterializedView.RefreshType refreshType;
+    private MaterializedViewRefreshType refreshType;
 
     @SerializedName(value = "asyncRefreshContext")
     private MaterializedView.AsyncRefreshContext asyncRefreshContext;
 
+    // Wall-clock confirm time; unlike lastRefreshTime it is not recomputable from the version map, so it must be logged.
+    @SerializedName(value = "lastFreshnessConfirmedAt")
+    private long lastFreshnessConfirmedAt;
+
     public ChangeMaterializedViewRefreshSchemeLog(MaterializedView materializedView) {
+        this(materializedView, materializedView.getRefreshScheme());
+    }
+
+    public ChangeMaterializedViewRefreshSchemeLog(MaterializedView materializedView,
+                                                  MaterializedView.MvRefreshScheme refreshScheme) {
         this.id = materializedView.getId();
         this.dbId = materializedView.getDbId();
-        this.refreshType = materializedView.getRefreshScheme().getType();
-        this.asyncRefreshContext = materializedView.getRefreshScheme().getAsyncRefreshContext().copy();
+        this.refreshType = refreshScheme.getType();
+        this.asyncRefreshContext = refreshScheme.getAsyncRefreshContext().copy();
+        this.lastFreshnessConfirmedAt = refreshScheme.getLastFreshnessConfirmedAt();
     }
 
     public ChangeMaterializedViewRefreshSchemeLog() {
@@ -56,7 +66,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         return dbId;
     }
 
-    public MaterializedView.RefreshType getRefreshType() {
+    public MaterializedViewRefreshType  getRefreshType() {
         return refreshType;
     }
 
@@ -64,10 +74,8 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         return asyncRefreshContext;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+    public long getLastFreshnessConfirmedAt() {
+        return lastFreshnessConfirmedAt;
     }
 
     public static ChangeMaterializedViewRefreshSchemeLog read(DataInput in) throws IOException {

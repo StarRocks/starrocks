@@ -29,6 +29,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -49,6 +50,7 @@ public class HiveConnectorInternalMgr {
     private final CachingRemoteFileConf remoteFileConf;
 
     private ExecutorService refreshHiveMetastoreExecutor;
+    private ExecutorService refreshHiveExternalTableExecutor;
     private ExecutorService refreshRemoteFileExecutor;
     private ExecutorService pullRemoteFileExecutor;
     private ExecutorService updateRemoteFilesExecutor;
@@ -100,6 +102,9 @@ public class HiveConnectorInternalMgr {
         if (enableMetastoreCache && refreshHiveMetastoreExecutor != null) {
             refreshHiveMetastoreExecutor.shutdown();
         }
+        if (enableMetastoreCache && refreshHiveExternalTableExecutor != null) {
+            refreshHiveExternalTableExecutor.shutdown();
+        }
         if (enableRemoteFileCache && refreshRemoteFileExecutor != null) {
             refreshRemoteFileExecutor.shutdown();
         }
@@ -118,13 +123,15 @@ public class HiveConnectorInternalMgr {
         } else {
             refreshHiveMetastoreExecutor = Executors.newCachedThreadPool(
                     new ThreadFactoryBuilder().setNameFormat("hive-metastore-refresh-%d").build());
-            baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                    hiveMetastore,
+            refreshHiveExternalTableExecutor = Executors.newCachedThreadPool(
+                    new ThreadFactoryBuilder().setNameFormat("hive-external-table-refresh-%d").build());
+            baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
+                    new ReentrantExecutor(refreshHiveExternalTableExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     hmsConf.getCacheTtlSec(),
                     enableHmsEventsIncrementalSync ? NEVER_REFRESH : hmsConf.getCacheRefreshIntervalSec(),
-                    hmsConf.getCacheMaxNum(),
-                    hmsConf.enableListNamesCache());
+                    hmsConf.getCacheMaxNum(), hmsConf.enableListNamesCache(),
+                    Optional.of(new AvroSchemaResolver(hdfsEnvironment.getConfiguration())));
         }
 
         return baseHiveMetastore;
@@ -146,7 +153,7 @@ public class HiveConnectorInternalMgr {
                     new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getRefreshMaxThreadNum()),
                     remoteFileConf.getCacheTtlSec(),
                     enableHmsEventsIncrementalSync ? NEVER_REFRESH : remoteFileConf.getCacheRefreshIntervalSec(),
-                    remoteFileConf.getCacheMaxSize());
+                    remoteFileConf.getMemSizeRatio());
         }
 
         return baseRemoteFileIO;
@@ -173,12 +180,6 @@ public class HiveConnectorInternalMgr {
     public Executor getUpdateStatisticsExecutor() {
         Executor baseExecutor = Executors.newCachedThreadPool(
                 new ThreadFactoryBuilder().setNameFormat("hive-metastore-update-%d").build());
-        return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
-    }
-
-    public Executor getRefreshOthersFeExecutor() {
-        Executor baseExecutor = Executors.newCachedThreadPool(
-                new ThreadFactoryBuilder().setNameFormat("refresh-others-fe-hive-metadata-cache-%d").build());
         return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
     }
 

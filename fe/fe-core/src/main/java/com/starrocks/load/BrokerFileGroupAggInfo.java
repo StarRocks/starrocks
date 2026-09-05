@@ -25,9 +25,6 @@ import com.starrocks.common.io.Writable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -215,29 +212,6 @@ public class BrokerFileGroupAggInfo implements Writable {
         return sb.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // The pull load source info doesn't need to be persisted.
-        // It will be recreated by origin stmt in prepare of load job.
-        // write 0 just for compatibility
-        out.writeInt(0);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        int mapSize = in.readInt();
-        // just for compatibility, the following read objects are useless
-        for (int i = 0; i < mapSize; ++i) {
-            long id = in.readLong();
-            int listSize = in.readInt();
-            for (int j = 0; j < listSize; ++j) {
-                BrokerFileGroup fileGroup = BrokerFileGroup.read(in);
-            }
-        }
-    }
 
-    public static BrokerFileGroupAggInfo read(DataInput in) throws IOException {
-        BrokerFileGroupAggInfo sourceInfo = new BrokerFileGroupAggInfo();
-        sourceInfo.readFields(in);
-        return sourceInfo;
-    }
 }

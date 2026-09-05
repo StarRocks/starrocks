@@ -19,11 +19,22 @@
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/txn_log.h"
+
+namespace starrocks {
+class TxnLogPB;
+class TabletMetadataPB;
+class RowsetMetadataPB;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 class Tablet;
-class TxnLogPB;
-class TabletMetadataPB;
+
+// Does this rowset hold any rows? Neither the rowset-level count nor the segment count alone can
+// answer it -- see the definition for why. Callers use it to decide whether an op_write carries
+// anything at all.
+bool rowset_holds_rows(const RowsetMetadataPB& rowset);
 
 class TxnLogApplier {
 public:
@@ -31,14 +42,30 @@ public:
 
     virtual Status init() { return Status::OK(); }
 
-    virtual Status apply(const TxnLogPB& tnx_log) = 0;
+    virtual Status apply(const TxnLogPB& txn_log) = 0;
+
+    virtual Status apply(const TxnLogVector& txn_logs) = 0;
 
     virtual Status finish() = 0;
 
-    virtual std::shared_ptr<std::vector<std::string>> trash_files() = 0;
+    // Mark this publish iteration as carrying a "no-op apply" — i.e. a txn that
+    // produces no rowset changes against the metadata. Used by:
+    //   (1) compaction whose txnlog is missing + force_publish=true (legacy
+    //       "empty compaction" path), and
+    //   (2) admin-issued no-op publish (ADMIN SKIP COMMITTED TRANSACTION,
+    //       TxnInfoPB.no_op_publish=true).
+    // The flag drives downstream PK persistent-index handling in finish() to
+    // still load the primary index even when no rowsets changed, so a later
+    // real compaction does not skip due to a stale in-memory index.
+    void observe_no_op_apply() { _has_no_op_apply = true; }
+
+protected:
+    bool _has_no_op_apply = false;
+    bool _skip_write_tablet_metadata = false;
 };
 
-std::unique_ptr<TxnLogApplier> new_txn_log_applier(Tablet tablet, MutableTabletMetadataPtr metadata,
-                                                   int64_t new_version);
+std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
+                                                   int64_t new_version, bool rebuild_pindex,
+                                                   bool skip_write_tablet_metadata);
 
 } // namespace starrocks::lake

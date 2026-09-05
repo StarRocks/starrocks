@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Computes the arc cosine of an argument."
 ---
 
 # acos
 
-## Description
+
 
 Computes the arc cosine of an argument.
 

@@ -14,8 +14,8 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 
 public interface BackendSelector {
-    void computeScanRangeAssignment() throws UserException;
+    void computeScanRangeAssignment() throws StarRocksException;
 }

@@ -18,13 +18,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
@@ -32,42 +28,38 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.HiveStorageFormat;
-import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class FileTable extends Table {
     public static final String JSON_KEY_FILE_PATH = "path";
     public static final String JSON_KEY_FORMAT = "format";
     private static final String JSON_RECURSIVE_DIRECTORIES = "enable_recursive_listing";
-    private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
+    private static final String JSON_ENABLE_WILDCARDS = "enable_wildcards";
 
     public static final String JSON_KEY_COLUMN_SEPARATOR = "column_separator";
     public static final String JSON_KEY_ROW_DELIMITER = "row_delimiter";
     public static final String JSON_KEY_COLLECTION_DELIMITER = "collection_delimiter";
     public static final String JSON_KEY_MAP_DELIMITER = "map_delimiter";
 
-    private static final ImmutableMap<String, RemoteFileInputFormat> SUPPORTED_FORMAT = ImmutableMap.of(
-            "parquet", RemoteFileInputFormat.PARQUET,
-            "orc", RemoteFileInputFormat.ORC,
-            "text", RemoteFileInputFormat.TEXT,
-            "avro", RemoteFileInputFormat.AVRO,
-            "rctext", RemoteFileInputFormat.RCTEXT,
-            "rcbinary", RemoteFileInputFormat.RCBINARY,
-            "sequence", RemoteFileInputFormat.SEQUENCE);
+    private static final ImmutableMap<String, HiveStorageFormat> SUPPORTED_FORMAT = ImmutableMap.of(
+            "parquet", HiveStorageFormat.PARQUET,
+            "orc", HiveStorageFormat.ORC,
+            "text", HiveStorageFormat.TEXTFILE,
+            "avro", HiveStorageFormat.AVRO,
+            "rctext", HiveStorageFormat.RCTEXT,
+            "rcbinary", HiveStorageFormat.RCBINARY,
+            "sequence", HiveStorageFormat.SEQUENCE);
 
     @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
@@ -102,20 +94,17 @@ public class FileTable extends Table {
             throw new DdlException("not supported format: " + format);
         }
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
-        fileProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
+        fileProperties.put(CloudConfigurationConstants.AZURE_PATH_KEY, path);
     }
 
+    @Override
     public String getTableLocation() {
         return fileProperties.get(JSON_KEY_FILE_PATH);
     }
 
-    public RemoteFileInputFormat getFileFormat() {
+    public HiveStorageFormat getFileFormat() {
         String format = fileProperties.get(JSON_KEY_FORMAT).toLowerCase();
-        if (SUPPORTED_FORMAT.containsKey(format)) {
-            return SUPPORTED_FORMAT.get(format);
-        } else {
-            return RemoteFileInputFormat.UNKNOWN;
-        }
+        return SUPPORTED_FORMAT.getOrDefault(format, HiveStorageFormat.UNSUPPORTED);
     }
 
     public Map<String, String> getFileProperties() {
@@ -127,10 +116,11 @@ public class FileTable extends Table {
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
-        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
+        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive);
+        boolean enableWildCards = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_ENABLE_WILDCARDS, "false"));
 
         try {
-            Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFiles(pathKey);
+            Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFiles(pathKey, enableWildCards);
             if (result.isEmpty()) {
                 throw new DdlException("No file exists for FileTable: " + this.getName());
             }
@@ -152,9 +142,9 @@ public class FileTable extends Table {
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
         List<RemoteFileDesc> fileDescs = getFileDescsFromHdfs();
 
-        RemoteFileInputFormat format = getFileFormat();
+        HiveStorageFormat format = getFileFormat();
         TextFileFormatDesc textFileFormatDesc = null;
-        if (format.equals(RemoteFileInputFormat.TEXT)) {
+        if (format.equals(HiveStorageFormat.TEXTFILE)) {
             textFileFormatDesc = new TextFileFormatDesc(
                     fileProperties.getOrDefault(JSON_KEY_COLUMN_SEPARATOR, "\t"),
                     fileProperties.getOrDefault(JSON_KEY_ROW_DELIMITER, "\n"),
@@ -190,7 +180,7 @@ public class FileTable extends Table {
                 0, "", "");
         tTableDescriptor.setFileTable(tFileTable);
 
-        HiveStorageFormat storageFormat = HiveStorageFormat.get(fileProperties.get(JSON_KEY_FORMAT));
+        HiveStorageFormat storageFormat = getFileFormat();
         tFileTable.setSerde_lib(storageFormat.getSerde());
         tFileTable.setInput_format(storageFormat.getInputFormat());
 
@@ -203,46 +193,13 @@ public class FileTable extends Table {
 
         tFileTable.setHive_column_names(columnNames);
         tFileTable.setHive_column_types(columnTypes);
+        tFileTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         return tTableDescriptor;
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        JsonObject jsonObject = new JsonObject();
-        if (!fileProperties.isEmpty()) {
-            JsonObject jfileProperties = new JsonObject();
-            for (Map.Entry<String, String> entry : fileProperties.entrySet()) {
-                jfileProperties.addProperty(entry.getKey(), entry.getValue());
-            }
-            jsonObject.add(JSON_KEY_FILE_PROPERTIES, jfileProperties);
-        }
-        Text.writeString(out, jsonObject.toString());
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        String json = Text.readString(in);
-        JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
-
-        if (jsonObject.has(JSON_KEY_FILE_PROPERTIES)) {
-            JsonObject jHiveProperties = jsonObject.getAsJsonObject(JSON_KEY_FILE_PROPERTIES);
-            for (Map.Entry<String, JsonElement> entry : jHiveProperties.entrySet()) {
-                fileProperties.put(entry.getKey(), entry.getValue().getAsString());
-            }
-        }
-    }
-
-    @Override
     public void onReload() {
-    }
-
-    @Override
-    public void onDrop(Database db, boolean force, boolean replay) {
     }
 
     @Override

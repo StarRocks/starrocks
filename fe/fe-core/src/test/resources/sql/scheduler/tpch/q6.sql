@@ -1,19 +1,9 @@
-[sql]
-select
-    sum(l_extendedprice * l_discount) as revenue
-from
-    lineitem
-where
-        l_shipdate >= date '1995-01-01'
-  and l_shipdate < date '1996-01-01'
-  and l_discount between 0.02 and 0.04
-  and l_quantity < 24 ;
 [scheduler]
 PLAN FRAGMENT 0(F01)
   DOP: 16
   INSTANCES
     INSTANCE(0-F01#0)
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -94,4 +84,3 @@ PLAN FRAGMENT 1
      cardinality=1
      avgRowSize=36.0
 [end]
-

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将 BITMAP 中的所有值组合成 BIGINT 类型的数组。"
 ---
 
 # bitmap_to_array
 
-## 功能
+
 
 将 BITMAP 中的所有值组合成 BIGINT 类型的数组。
 

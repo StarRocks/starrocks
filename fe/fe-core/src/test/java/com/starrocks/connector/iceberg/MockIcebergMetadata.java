@@ -12,45 +12,66 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.tvr.TvrDeltaStats;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersion;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
+import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PointerType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.UnknownType;
+import com.starrocks.type.VarcharType;
+import com.starrocks.type.VariantType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.types.Types;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.connector.iceberg.MIcebergTableMeta.MOCKED_ICEBERG_TABLES;
 import static org.apache.iceberg.types.Types.NestedField.required;
 
 public class MockIcebergMetadata implements ConnectorMetadata {
@@ -59,18 +80,56 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_ICEBERG_CATALOG_NAME = "iceberg0";
     public static final String MOCKED_UNPARTITIONED_DB_NAME = "unpartitioned_db";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";
+    public static final String MOCKED_PARTITIONED_TRANSFORMS_DB_NAME = "partitioned_transforms_db";
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
+    public static final String MOCKED_UNPARTITIONED_V2_TABLE_NAME = "t0_v2";
+    public static final String MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME = "variant_t0";
+    public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
+    public static final String MOCKED_UNKNOWN_TYPE_TABLE_NAME = "t_unknown_types";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "t1";
+    public static final String MOCKED_PARTITIONED_V2_TABLE_NAME = "t1_v2";
+    // date partition table
+    public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "t2";
 
     // string partition table
     public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME1 = "part_tbl1";
     public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME2 = "part_tbl2";
     public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME3 = "part_tbl3";
 
+    // partition table with transforms
+    public static final String MOCKED_PARTITIONED_YEAR_TABLE_NAME = "t0_year";
+    public static final String MOCKED_PARTITIONED_MONTH_TABLE_NAME = "t0_month";
+    public static final String MOCKED_PARTITIONED_DAY_TABLE_NAME = "t0_day";
+    public static final String MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME = "t0_day_with_null_partition";
+    public static final String MOCKED_PARTITIONED_HOUR_TABLE_NAME = "t0_hour";
+    public static final String MOCKED_PARTITIONED_BUCKET_TABLE_NAME = "t0_bucket";
+    public static final String MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME = "t0_truncate";
+    // partition table with transforms and partition column type is timestamp with timezone
+    public static final String MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME = "t0_year_tz";
+    public static final String MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME = "t0_month_tz";
+    public static final String MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME = "t0_day_tz";
+    public static final String MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME = "t0_hour_tz";
+    // partition table with partition evolutions
+    public static final String MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME = "t0_date_month_identity_evolution";
+
     private static final List<String> PARTITION_TABLE_NAMES = ImmutableList.of(MOCKED_PARTITIONED_TABLE_NAME1,
-            MOCKED_STRING_PARTITIONED_TABLE_NAME1, MOCKED_STRING_PARTITIONED_TABLE_NAME2,
+            MOCKED_PARTITIONED_V2_TABLE_NAME,
+            MOCKED_PARTITIONED_TABLE_NAME2,
+            MOCKED_STRING_PARTITIONED_TABLE_NAME1,
+            MOCKED_STRING_PARTITIONED_TABLE_NAME2,
             MOCKED_STRING_PARTITIONED_TABLE_NAME3);
+
+    private static final List<String> PARTITION_TRANSFORM_TABLE_NAMES =
+            ImmutableList.of(MOCKED_PARTITIONED_YEAR_TABLE_NAME, MOCKED_PARTITIONED_MONTH_TABLE_NAME,
+                    MOCKED_PARTITIONED_DAY_TABLE_NAME,
+                    MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME,
+                    MOCKED_PARTITIONED_HOUR_TABLE_NAME,
+                    MOCKED_PARTITIONED_BUCKET_TABLE_NAME,
+                    MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME,
+                    MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME, MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME,
+                    MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME, MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME,
+                    MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME);
 
     private static final List<String> PARTITION_NAMES_0 = Lists.newArrayList("date=2020-01-01",
             "date=2020-01-02",
@@ -79,6 +138,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     private static final List<String> PARTITION_NAMES_1 = Lists.newArrayList("d=2023-08-01",
             "d=2023-08-02",
             "d=2023-08-03");
+    private static final long PARTITION_INIT_VERSION = 100;
+
     public static String getStarRocksHome() throws IOException {
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {
@@ -88,46 +149,122 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
     static {
         try {
             mockUnPartitionedTable();
+            mockUnknownTypeTable();
             mockPartitionedTable();
+            mockPartitionTransforms();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static List<Column> addMetaColumns(List<Column> originalColumns) {
+        ImmutableList.Builder<Column> builder = ImmutableList.builder();
+        builder.addAll(originalColumns);
+        Column filePathColumn = new Column(IcebergTable.FILE_PATH, StringType.STRING, true);
+        Column rowPositionColumn = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true);
+        filePathColumn.setIsHidden(true);
+        rowPositionColumn.setIsHidden(true);
+        builder.add(filePathColumn);
+        builder.add(rowPositionColumn);
+        return builder.build();
     }
 
     public static void mockUnPartitionedTable() throws IOException {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_UNPARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_UNPARTITIONED_DB_NAME);
 
-        List<Column> schemas = ImmutableList.of(new Column("id", Type.INT, true),
-                new Column("data", Type.STRING, true),
-                new Column("date", Type.STRING, true));
-
-        Schema schema =
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_TABLE_NAME0,
+                ImmutableList.of(new Column("id", IntegerType.INT, true),
+                        new Column("data", StringType.STRING, true),
+                        new Column("date", StringType.STRING, true)),
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(4, "data", Types.StringType.get()),
-                        required(5, "date", Types.StringType.get()));
-        PartitionSpec spec =
-                PartitionSpec.builderFor(schema).build();
+                        required(5, "date", Types.StringType.get())),
+                3);
+        // V2 unpartitioned table for UPDATE tests (format version 2)
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_V2_TABLE_NAME,
+                ImmutableList.of(new Column("id", IntegerType.INT, true),
+                        new Column("data", StringType.STRING, true),
+                        new Column("date", StringType.STRING, true)),
+                new Schema(required(3, "id", Types.IntegerType.get()),
+                        required(4, "data", Types.StringType.get()),
+                        required(5, "date", Types.StringType.get())),
+                2);
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME,
+                ImmutableList.of(new Column("id", IntegerType.INT, true),
+                        new Column("v", VariantType.VARIANT, true)),
+                new Schema(required(3, "id", Types.IntegerType.get()),
+                        required(4, "v", Types.VariantType.get())),
+                3);
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_TABLE_NUMERIC,
+                ImmutableList.of(new Column("id", IntegerType.INT, true),
+                        new Column("c1", IntegerType.INT, true),
+                        new Column("c2", IntegerType.INT, true)),
+                new Schema(required(6, "id", Types.IntegerType.get()),
+                        required(7, "c1", Types.IntegerType.get()),
+                        required(8, "c2", Types.IntegerType.get())),
+                3);
+    }
+
+    private static void registerUnpartitionedTable(Map<String, IcebergTableInfo> icebergTableInfoMap,
+                                                   String tableName,
+                                                   List<Column> schemas,
+                                                   Schema schema,
+                                                   int formatVersion) throws IOException {
+        List<Column> fullSchemas = addMetaColumns(schemas);
+        PartitionSpec spec = PartitionSpec.builderFor(schema).build();
+        TestTables.TestTable baseTable = TestTables.create(
+                new File(getStarRocksHome() + "/" + MOCKED_UNPARTITIONED_DB_NAME + "/" + tableName),
+                tableName, schema, spec, formatVersion);
+
+        MockIcebergTable mockIcebergTable = new MockIcebergTable(tableName.hashCode(), tableName,
+                MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
+                tableName, fullSchemas, baseTable, null, "");
+
+        List<String> colNames = fullSchemas.stream().map(Column::getName).collect(Collectors.toList());
+        Map<String, ColumnStatistic> columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                col -> ColumnStatistic.unknown()));
+
+        icebergTableInfoMap.put(tableName,
+                new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
+    }
+
+    public static void mockUnknownTypeTable() throws IOException {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_UNPARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
+        Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_UNPARTITIONED_DB_NAME);
+
+        List<Column> schemas = ImmutableList.of(
+                new Column("id", IntegerType.INT, true),
+                new Column("data", StringType.STRING, true),
+                new Column("geo_col", UnknownType.UNKNOWN_TYPE, true),
+                new Column("ts_nano_col", UnknownType.UNKNOWN_TYPE, true));
+        schemas = addMetaColumns(schemas);
+
+        Schema schema = new Schema(
+                required(3, "id", Types.IntegerType.get()),
+                required(4, "data", Types.StringType.get()),
+                required(5, "geo_col", Types.StringType.get()),
+                required(6, "ts_nano_col", Types.StringType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).build();
         TestTables.TestTable baseTable = TestTables.create(
                 new File(getStarRocksHome() + "/" + MOCKED_UNPARTITIONED_DB_NAME + "/" +
-                        MOCKED_UNPARTITIONED_TABLE_NAME0), MOCKED_UNPARTITIONED_TABLE_NAME0,
-                schema, spec, 1);
+                        MOCKED_UNKNOWN_TYPE_TABLE_NAME), MOCKED_UNKNOWN_TYPE_TABLE_NAME,
+                schema, spec, 3);
 
-        String tableIdentifier = Joiner.on(":").join(MOCKED_UNPARTITIONED_TABLE_NAME0, UUID.randomUUID());
-        MockIcebergTable mockIcebergTable = new MockIcebergTable(1, MOCKED_UNPARTITIONED_TABLE_NAME0,
+        MockIcebergTable mockIcebergTable = new MockIcebergTable(2, MOCKED_UNKNOWN_TYPE_TABLE_NAME,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
-                MOCKED_UNPARTITIONED_TABLE_NAME0, schemas, baseTable, null,
-                tableIdentifier);
+                MOCKED_UNKNOWN_TYPE_TABLE_NAME, schemas, baseTable, null, "");
 
         Map<String, ColumnStatistic> columnStatisticMap;
         List<String> colNames = schemas.stream().map(Column::getName).collect(Collectors.toList());
         columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
                 col -> ColumnStatistic.unknown()));
 
-        icebergTableInfoMap.put(MOCKED_UNPARTITIONED_TABLE_NAME0,
+        icebergTableInfoMap.put(MOCKED_UNKNOWN_TYPE_TABLE_NAME,
                 new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
     }
 
@@ -136,38 +273,79 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
 
         for (String tblName : PARTITION_TABLE_NAMES) {
-            List<Column> columns = getSchema(tblName);
-            MockIcebergTable icebergTable = getIcebergTable(tblName, columns);
+            List<Column> columns = getPartitionedTableSchema(tblName);
+            columns = addMetaColumns(columns);
+
+            MockIcebergTable icebergTable = getPartitionIcebergTable(tblName, columns);
             Map<String, ColumnStatistic> columnStatisticMap;
             List<String> colNames = columns.stream().map(Column::getName).collect(Collectors.toList());
             columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
                     col -> ColumnStatistic.unknown()));
-            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
-                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_0, 100,
-                        columnStatisticMap));
+            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1) ||
+                    tblName.equals(MOCKED_PARTITIONED_V2_TABLE_NAME)) {
+                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_0,
+                        100, columnStatisticMap));
+            } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_0,
+                        100, columnStatisticMap));
             } else {
-                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_1, 100,
-                        columnStatisticMap));
+                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_1,
+                        100, columnStatisticMap));
             }
         }
     }
 
-    private static List<Column> getSchema(String tblName) {
-        if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
-            return ImmutableList.of(new Column("id", Type.INT, true),
-                    new Column("data", Type.STRING, true),
-                    new Column("date", Type.STRING, true));
-        } else {
-            return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                    new Column("c", Type.INT), new Column("d", Type.VARCHAR));
+    public static void mockPartitionTransforms() throws IOException {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_TRANSFORMS_DB_NAME, new CaseInsensitiveMap<>());
+        Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_TRANSFORMS_DB_NAME);
+
+        List<String> allTableNames = Lists.newArrayList(PARTITION_TRANSFORM_TABLE_NAMES);
+        MOCKED_ICEBERG_TABLES.keySet().stream().forEach(allTableNames::add);
+        for (String tblName : allTableNames) {
+            List<Column> columns = getPartitionedTransformTableSchema(tblName);
+            MockIcebergTable icebergTable = getPartitionTransformIcebergTable(tblName, columns);
+            List<String> partitionNames = getTransformTablePartitionNames(tblName);
+            Map<String, ColumnStatistic> columnStatisticMap;
+            List<String> colNames = columns.stream().map(Column::getName).collect(Collectors.toList());
+            columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                    col -> ColumnStatistic.unknown()));
+            icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, partitionNames,
+                    100, columnStatisticMap));
         }
     }
 
-    private static Schema getIcebergSchema(String tblName) {
-        if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
+    private static List<Column> getPartitionedTableSchema(String tblName) {
+        if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1) ||
+                tblName.equals(MOCKED_PARTITIONED_V2_TABLE_NAME)) {
+            return ImmutableList.of(new Column("id", IntegerType.INT, true),
+                    new Column("data", StringType.STRING, true),
+                    new Column("date", StringType.STRING, true));
+        } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+            return ImmutableList.of(new Column("id", IntegerType.INT, true),
+                    new Column("data", StringType.STRING, true),
+                    new Column("date", DateType.DATE, true));
+        } else {
+            return Arrays.asList(new Column("a", VarcharType.VARCHAR), new Column("b", VarcharType.VARCHAR),
+                    new Column("c", IntegerType.INT), new Column("d", VarcharType.VARCHAR));
+        }
+    }
+
+    private static List<Column> getPartitionedTransformTableSchema(String tblName) {
+        return ImmutableList.of(new Column("id", IntegerType.INT, true),
+                new Column("data", StringType.STRING, true),
+                new Column("ts", DateType.DATETIME, true));
+    }
+
+    private static Schema getIcebergPartitionSchema(String tblName) {
+        if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1) ||
+                tblName.equals(MOCKED_PARTITIONED_V2_TABLE_NAME)) {
             return new Schema(required(3, "id", Types.IntegerType.get()),
                     required(4, "data", Types.StringType.get()),
                     required(5, "date", Types.StringType.get()));
+        } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+            return new Schema(required(3, "id", Types.IntegerType.get()),
+                    required(4, "data", Types.StringType.get()),
+                    required(5, "date", Types.DateType.get()));
         } else {
             return new Schema(required(3, "a", Types.StringType.get()),
                     required(4, "b", Types.StringType.get()),
@@ -176,15 +354,41 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    private static TestTables.TestTable getTestTable(String tblName, Schema schema) throws IOException {
+    private static Schema getIcebergPartitionTransformSchema(String tblName) {
+        if (tblName.endsWith("tz")) {
+            return new Schema(required(3, "id", Types.IntegerType.get()),
+                    required(4, "data", Types.StringType.get()),
+                    required(5, "ts", Types.TimestampType.withZone()));
+        } else {
+            return new Schema(required(3, "id", Types.IntegerType.get()),
+                    required(4, "data", Types.StringType.get()),
+                    required(5, "ts", Types.TimestampType.withoutZone()));
+        }
+    }
+
+    private static TestTables.TestTable getPartitionIdentityTable(String tblName, Schema schema) throws IOException {
         if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
             PartitionSpec spec =
                     PartitionSpec.builderFor(schema).identity("date").build();
-            return  TestTables.create(
+            return TestTables.create(
                     new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
                             + MOCKED_PARTITIONED_TABLE_NAME1), MOCKED_PARTITIONED_TABLE_NAME1,
+                    schema, spec, 3);
+        } else if (tblName.equals(MOCKED_PARTITIONED_V2_TABLE_NAME)) {
+            // V2 partitioned table for UPDATE tests
+            PartitionSpec spec =
+                    PartitionSpec.builderFor(schema).identity("date").build();
+            return TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
+                            + MOCKED_PARTITIONED_V2_TABLE_NAME), MOCKED_PARTITIONED_V2_TABLE_NAME,
+                    schema, spec, 2);
+        } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+            PartitionSpec spec =
+                    PartitionSpec.builderFor(schema).identity("date").build();
+            return TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
+                            + MOCKED_PARTITIONED_TABLE_NAME2), MOCKED_PARTITIONED_TABLE_NAME2,
                     schema, spec, 1);
-
         } else {
             PartitionSpec spec =
                     PartitionSpec.builderFor(schema).identity("d").build();
@@ -195,33 +399,222 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    public static MockIcebergTable getIcebergTable(String tblName, List<Column> schemas) throws IOException {
-        Schema schema = getIcebergSchema(tblName);
-        TestTables.TestTable baseTable = getTestTable(tblName, schema);
+    private static TestTables.TestTable getPartitionTransformTable(String tblName, Schema schema) throws IOException {
+        switch (tblName) {
+            case MOCKED_PARTITIONED_YEAR_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).year("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_YEAR_TABLE_NAME), MOCKED_PARTITIONED_YEAR_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_MONTH_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).month("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_MONTH_TABLE_NAME), MOCKED_PARTITIONED_MONTH_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_DAY_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).day("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_DAY_TABLE_NAME), MOCKED_PARTITIONED_DAY_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).day("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME),
+                        MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_HOUR_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).hour("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_HOUR_TABLE_NAME), MOCKED_PARTITIONED_HOUR_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_BUCKET_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).bucket("ts", 10).build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_BUCKET_TABLE_NAME), MOCKED_PARTITIONED_BUCKET_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).truncate("data", 5).build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME), MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).year("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME), MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).month("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME), MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).day("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME), MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).hour("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME), MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).month("ts").build();
+                File file = new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                        + MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME);
 
-        String tableIdentifier = Joiner.on(":").join(tblName, UUID.randomUUID());
+                TestTables.TestTable table = TestTables.create(
+                        file,
+                        MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME,
+                        schema, spec, 1);
+                TableMetadata evolutionMetaData = TableMetadata.buildFrom(table.ops().current())
+                        .addPartitionSpec(PartitionSpec.builderFor(table.ops().current().schema()).identity("ts").build())
+                        .build();
+
+                table.ops().commit(table.ops().current(), evolutionMetaData);
+                return table;
+            }
+            default: {
+                if (MOCKED_ICEBERG_TABLES.containsKey(tblName)) {
+                    MIcebergTable table = MOCKED_ICEBERG_TABLES.get(tblName);
+                    return table.getTestTable(schema);
+                }
+            }
+        }
+        return null;
+    }
+
+    public static List<String> getTransformTablePartitionNames(String tblName) {
+        switch (tblName) {
+            case MOCKED_PARTITIONED_YEAR_TABLE_NAME:
+            case MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME:
+                return Lists.newArrayList("ts_year=2019", "ts_year=2020",
+                        "ts_year=2021", "ts_year=2022", "ts_year=2023");
+            case MOCKED_PARTITIONED_MONTH_TABLE_NAME:
+            case MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME:
+                return Lists.newArrayList("ts_month=2022-01", "ts_month=2022-02",
+                        "ts_month=2022-03", "ts_month=2022-04", "ts_month=2022-05");
+            case MOCKED_PARTITIONED_DAY_TABLE_NAME:
+            case MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME:
+                return Lists.newArrayList("ts_day=2022-01-01", "ts_day=2022-01-02",
+                        "ts_day=2022-01-03", "ts_day=2022-01-04", "ts_day=2022-01-05");
+            case MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME:
+                return Lists.newArrayList("ts_day=2022-01-01", "ts_day=2022-01-02",
+                        "ts_day=2022-01-03", "ts_day=2022-01-04", "ts_day=2022-01-05", "ts_day=null");
+            case MOCKED_PARTITIONED_HOUR_TABLE_NAME:
+            case MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME:
+                return Lists.newArrayList("ts_hour=2022-01-01-00", "ts_hour=2022-01-01-01",
+                        "ts_hour=2022-01-01-02", "ts_hour=2022-01-01-03", "ts_hour=2022-01-01-04");
+            case MOCKED_PARTITIONED_BUCKET_TABLE_NAME:
+                return Lists.newArrayList("ts_bucket=0", "ts_bucket=1",
+                        "ts_bucket=2", "ts_bucket=3", "ts_bucket=4");
+            case MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME:
+                return Lists.newArrayList("data_trunc=aaaaa", "data_trunc=bbbbb",
+                        "data_trunc=ccccc", "data_trunc=ddddd", "data_trunc=eeeee");
+            case MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME:
+                return Lists.newArrayList("ts=2024-01-01", "ts_month=2024-01",
+                        "ts=2024-02", "ts=2024-03");
+            default: {
+                if (MOCKED_ICEBERG_TABLES.containsKey(tblName)) {
+                    MIcebergTable table = MOCKED_ICEBERG_TABLES.get(tblName);
+                    return table.getTransformTablePartitionNames(tblName);
+                }
+            }
+        }
+        return null;
+    }
+
+    public static MockIcebergTable getPartitionIcebergTable(String tblName, List<Column> schemas) throws IOException {
+        Schema schema = getIcebergPartitionSchema(tblName);
+        TestTables.TestTable baseTable = getPartitionIdentityTable(tblName, schema);
+
         return new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
-                null, MOCKED_PARTITIONED_DB_NAME, tblName, schemas, baseTable, null,
-                tableIdentifier);
+                null, MOCKED_PARTITIONED_DB_NAME, tblName, schemas, baseTable, null, "");
+    }
+
+    public static MockIcebergTable getPartitionTransformIcebergTable(String tblName, List<Column> schemas)
+            throws IOException {
+        Schema schema = getIcebergPartitionTransformSchema(tblName);
+        TestTables.TestTable baseTable = getPartitionTransformTable(tblName, schema);
+
+        return new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
+                null, MOCKED_PARTITIONED_TRANSFORMS_DB_NAME, tblName, schemas, baseTable, null, "");
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public com.starrocks.catalog.Table.TableType getTableType() {
+        return ICEBERG;
+    }
+
+    @Override
+    public Database getDb(ConnectContext context, String dbName) {
         return new Database(idGen.getAndIncrement(), dbName);
     }
 
     @Override
-    public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
+    public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
         readLock();
         try {
-            return MOCK_TABLE_MAP.get(dbName).get(tblName).icebergTable;
+            Map<String, IcebergTableInfo> dbTables = MOCK_TABLE_MAP.get(dbName);
+            if (dbTables == null) {
+                return getView(context, dbName, tblName);
+            }
+            IcebergTableInfo tableInfo = dbTables.get(tblName);
+            if (tableInfo == null) {
+                return getView(context, dbName, tblName);
+            }
+            MockIcebergTable t = tableInfo.icebergTable;
+            MockIcebergTable t1 = new MockIcebergTable(t.getId(), t.getName(), t.getCatalogName(), t.getResourceName(),
+                    t.getCatalogDBName(), t.getCatalogTableName(),
+                    t.getBaseSchema(), t.getNativeTable(), t.getIcebergProperties(),
+                    t.getComment());
+            ConnectorTableInfo info = GlobalStateMgr.getCurrentState()
+                    .getConnectorTblMetaInfoMgr()
+                    .getConnectorTableInfo(t.getCatalogName(), t.getCatalogDBName(), t.getTableIdentifier());
+            if (info != null && info.getRelatedMaterializedViews() != null) {
+                t1.getRelatedMaterializedViews().addAll(info.getRelatedMaterializedViews());
+            }
+            return t1;
         } finally {
             readUnlock();
         }
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName) {
+    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadataRequestContext requestContext) {
         readLock();
         try {
             return MOCK_TABLE_MAP.get(dbName).get(tableName).partitionNames;
@@ -231,11 +624,75 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<PartitionInfo> getPartitions(com.starrocks.catalog.Table table, List<String> partitionNames) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        readLock();
+        try {
+            Map<String, PartitionInfo> partitionInfoMap = MOCK_TABLE_MAP.get(icebergTable.getCatalogDBName()).
+                    get(icebergTable.getCatalogTableName()).partitionInfoMap;
+            if (icebergTable.isUnPartitioned()) {
+                return Lists.newArrayList(partitionInfoMap.get(icebergTable.getCatalogTableName()));
+            } else {
+                return partitionNames.stream().map(partitionInfoMap::get).collect(Collectors.toList());
+            }
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, com.starrocks.catalog.Table table) {
+        return TvrTableSnapshot.of(TvrVersion.of(1L));
+    }
+
+    @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, com.starrocks.catalog.Table table, long version) {
+        Snapshot snapshot = ((IcebergTable) table).getNativeTable().snapshot(version);
+        return snapshot == null ? Optional.empty() : Optional.of(snapshot.timestampMillis());
+    }
+
+    // ConnectorMetadata's default returns TvrTableSnapshot.empty(), which leaves the planned scan
+    // pinned to the MIN snapshot (0 partitions, no data) -- low-cardinality dict collection and the
+    // group-by min/max rule both then no-op. Mirror production's IcebergMetadata.getTableVersionRange:
+    // no bounds -> current snapshot; any bound -> TvrTableDelta so time-travel/delta tests keep the
+    // correct TVR shape. Only VERSION pointers are resolvable here; TEMPORAL would need a snapshot
+    // history that the mock does not carry.
+    @Override
+    public TvrVersionRange getTableVersionRange(
+            String dbName, com.starrocks.catalog.Table table,
+            Optional<ConnectorTableVersion> startVersion,
+            Optional<ConnectorTableVersion> endVersion) {
+        if (startVersion.isEmpty() && endVersion.isEmpty()) {
+            return getCurrentTvrSnapshot(dbName, table);
+        }
+        Optional<Long> start = startVersion.map(MockIcebergMetadata::snapshotIdFromVersion);
+        Optional<Long> end = endVersion.map(MockIcebergMetadata::snapshotIdFromVersion);
+        return TvrTableDelta.of(start, end);
+    }
+
+    private static long snapshotIdFromVersion(ConnectorTableVersion version) {
+        if (version.getPointerType() != PointerType.VERSION) {
+            throw new UnsupportedOperationException(
+                    "MockIcebergMetadata only resolves VERSION pointers; got " + version.getPointerType());
+        }
+        return version.getConstantOperator().getBigint();
+    }
+
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, com.starrocks.catalog.Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        TvrVersionRange currentRange = getCurrentTvrSnapshot(dbName, table);
+        TvrTableDeltaTrait delta = TvrTableDeltaTrait.ofMonotonic(
+                TvrTableDelta.of(TvrVersion.of(1L), currentRange.to),
+                TvrDeltaStats.EMPTY);
+        return Lists.newArrayList(delta);
+    }
+
+    @Override
     public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table table,
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate, long limit) {
+                                         ScalarOperator predicate, long limit, TvrVersionRange version) {
         MockIcebergTable icebergTable = (MockIcebergTable) table;
-        String hiveDb = icebergTable.getRemoteDbName();
+        String hiveDb = icebergTable.getCatalogDBName();
         String tblName = icebergTable.getName();
 
         readLock();
@@ -245,17 +702,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             builder.setOutputRowCount(info.rowCount);
             for (ColumnRefOperator columnRefOperator : columns.keySet()) {
                 ColumnStatistic columnStatistic = info.columnStatsMap.get(columnRefOperator.getName());
+                if (columnStatistic == null) {
+                    columnStatistic = ColumnStatistic.unknown();
+                }
                 builder.addColumnStatistic(columnRefOperator, columnStatistic);
             }
             return builder.build();
         } finally {
             readUnlock();
         }
-    }
-
-    @Override
-    public List<PartitionKey> getPrunedPartitions(com.starrocks.catalog.Table table, ScalarOperator predicate, long limit) {
-        return new ArrayList<>();
     }
 
     public void addRowsToPartition(String dbName, String tableName, int rowCount, String partitionName) {
@@ -275,31 +730,91 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    public void updatePartitions(String dbName, String tableName, List<String> partitionNames) {
+        writeLock();
+        try {
+            Map<String, PartitionInfo> partitionInfoMap = MOCK_TABLE_MAP.get(dbName).get(tableName).partitionInfoMap;
+            for (String partitionName : partitionNames) {
+                if (partitionInfoMap.containsKey(partitionName)) {
+                    long modifyTime = partitionInfoMap.get(partitionName).getModifiedTime() + 1;
+                    partitionInfoMap.put(partitionName, new Partition(modifyTime));
+                } else {
+                    partitionInfoMap.put(partitionName, new Partition(PARTITION_INIT_VERSION));
+                }
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
     private static class IcebergTableInfo {
         private MockIcebergTable icebergTable;
-        private List<String> partitionNames;
-        private long rowCount;
-        private Map<String, ColumnStatistic> columnStatsMap;
+        private final List<String> partitionNames;
+        private final Map<String, PartitionInfo> partitionInfoMap;
+        private final long rowCount;
+        private final Map<String, ColumnStatistic> columnStatsMap;
 
-        public IcebergTableInfo(MockIcebergTable icebergTable, List<String> partitionNames, long rowCount,
-                                Map<String, ColumnStatistic> columnStatsMap) {
+        public IcebergTableInfo(MockIcebergTable icebergTable, List<String> partitionNames,
+                                long rowCount, Map<String, ColumnStatistic> columnStatsMap) {
             this.icebergTable = icebergTable;
             this.partitionNames = partitionNames;
+            this.partitionInfoMap = Maps.newHashMap();
             this.rowCount = rowCount;
             this.columnStatsMap = columnStatsMap;
+            initPartitionInfos(partitionNames);
+        }
+
+        private void initPartitionInfos(List<String> partitionNames) {
+            if (partitionNames.isEmpty()) {
+                partitionInfoMap.put(icebergTable.getCatalogTableName(), new Partition(PARTITION_INIT_VERSION));
+            } else {
+                for (String partitionName : partitionNames) {
+                    partitionInfoMap.put(partitionName, new Partition(PARTITION_INIT_VERSION));
+                }
+            }
         }
     }
 
     private void writeLock() {
         lock.writeLock().lock();
     }
+
     private void writeUnlock() {
         lock.writeLock().unlock();
     }
+
     private void readLock() {
         lock.readLock().lock();
     }
+
     private void readUnlock() {
         lock.readLock().unlock();
+    }
+
+    public com.starrocks.catalog.Table getView(ConnectContext context, String dbName, String viewName) {
+        // Return a mock IcebergView for testing
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("iceberg_view")) {
+            List<Column> schema = Lists.newArrayList(
+                    new Column("id", IntegerType.INT),
+                    new Column("data", VarcharType.VARCHAR),
+                    new Column("date", DateType.DATE)
+            );
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
+                    "view_location", Maps.newHashMap());
+        }
+        // A pair of mutually-referencing views (cyc_a -> cyc_b -> cyc_a) used to verify cyclic
+        // connector-view detection. Each lookup mints a *fresh* id, mirroring
+        // IcebergApiConverter.toView (CONNECTOR_ID_GENERATOR.getNextId()), so the id can never be
+        // used to detect re-entry.
+        if (dbName.equalsIgnoreCase("view_db")
+                && (viewName.equalsIgnoreCase("cyc_a") || viewName.equalsIgnoreCase("cyc_b"))) {
+            List<Column> schema = Lists.newArrayList(new Column("id", IntegerType.INT));
+            String other = viewName.equalsIgnoreCase("cyc_a") ? "cyc_b" : "cyc_a";
+            String def = "SELECT id FROM " + MOCKED_ICEBERG_CATALOG_NAME + ".view_db." + other;
+            return new IcebergView(idGen.getAndIncrement(), MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    def, MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
+        }
+        return null;
     }
 }

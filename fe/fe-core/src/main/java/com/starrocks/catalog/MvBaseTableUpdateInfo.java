@@ -1,0 +1,67 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.catalog;
+
+import com.starrocks.sql.common.PCellSortedSet;
+
+/**
+ * Store the update information of base table for MV
+ */
+public class MvBaseTableUpdateInfo {
+    // The partition names of base table that have been updated
+    private final PCellSortedSet toRefreshPCells = PCellSortedSet.of();
+    // The base table partition cells snapshot
+    private final PCellSortedSet refBaseTablePCells = PCellSortedSet.of();
+    // If the base table is a mv, needs to record the mapping of mv partition name to partition range
+    private final PCellSortedSet refBaseNestedMVPCells = PCellSortedSet.of();
+
+    public MvBaseTableUpdateInfo() {
+    }
+
+    public static MvBaseTableUpdateInfo of() {
+        return new MvBaseTableUpdateInfo();
+    }
+
+    public PCellSortedSet getRefBaseNestedMVPCells() {
+        return refBaseNestedMVPCells;
+    }
+
+    public void addMVPartitionNameToCellMap(PCellSortedSet partitionNameToRangeMap) {
+        refBaseNestedMVPCells.addAll(partitionNameToRangeMap);
+    }
+
+    public PCellSortedSet getToRefreshPCells() {
+        return toRefreshPCells;
+    }
+
+    public PCellSortedSet getRefBaseTablePCells() {
+        return refBaseTablePCells;
+    }
+
+    /**
+     * Add partition names that base table needs to be refreshed
+     * @param toRefreshPartitionNames the partition names that need to be refreshed
+     */
+    public void addToRefreshPartitionNames(PCellSortedSet toRefreshPartitionNames) {
+        this.toRefreshPCells.addAll(toRefreshPartitionNames);
+    }
+
+    @Override
+    public String toString() {
+        return "{" +
+                ", toRefreshPartitionNames=" + toRefreshPCells +
+                '}';
+    }
+}

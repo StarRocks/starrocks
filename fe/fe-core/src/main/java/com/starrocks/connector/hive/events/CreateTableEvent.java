@@ -17,7 +17,7 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.CreateTableMessage;
 
@@ -30,12 +30,12 @@ public class CreateTableEvent extends MetastoreTableEvent {
     public static final String CREATE_TABLE_EVENT_TYPE = "CREATE_TABLE";
 
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
-                                                 CacheUpdateProcessor cacheProcessor, String catalogName) {
+                                                 HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         return Lists.newArrayList(new CreateTableEvent(event, cacheProcessor, catalogName));
     }
 
     private CreateTableEvent(NotificationEvent event,
-                             CacheUpdateProcessor cacheProcessor, String catalogName)
+                             HiveCacheUpdateProcessor cacheProcessor, String catalogName)
             throws MetastoreNotificationException {
         super(event, cacheProcessor, catalogName);
         Preconditions.checkArgument(MetastoreEventType.CREATE_TABLE.equals(getEventType()));

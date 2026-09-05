@@ -1,0 +1,978 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.lake.qe.scheduler;
+
+import com.google.api.client.util.Lists;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
+import com.starrocks.qe.ColocatedBackendSelector;
+import com.starrocks.qe.FragmentScanRangeAssignment;
+import com.starrocks.qe.HostBlacklist;
+import com.starrocks.qe.NormalBackendSelector;
+import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
+import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.qe.scheduler.NonRecoverableException;
+import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocation;
+import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+public class DefaultSharedDataWorkerProviderTest {
+    private Map<Long, ComputeNode> id2Backend;
+    private Map<Long, ComputeNode> id2ComputeNode;
+    private Map<Long, ComputeNode> id2AllNodes;
+
+    private static <C extends ComputeNode> Map<Long, C> genWorkers(long startId, long endId,
+                                                                   Supplier<C> factory) {
+        Map<Long, C> res = new HashMap<>();
+        for (long i = startId; i < endId; i++) {
+            C worker = factory.get();
+            worker.setId(i);
+            worker.setAlive(true);
+            worker.setHost("host#" + i);
+            worker.setBePort(80);
+            res.put(i, worker);
+        }
+        return res;
+    }
+
+    @BeforeAll
+    public static void setUpTestSuite() {
+        SimpleScheduler.getHostBlacklist().disableAutoUpdate();
+    }
+
+    @BeforeEach
+    public void setUp() {
+        // clear the block list
+        SimpleScheduler.getHostBlacklist().clear();
+
+        // Generate mock Workers
+        // BE, 1-10
+        id2Backend = genWorkers(1, 11, Backend::new);
+        // CN, 11-15
+        id2ComputeNode = genWorkers(11, 16, ComputeNode::new);
+        // all nodes
+        id2AllNodes = Maps.newHashMap(id2Backend);
+        id2AllNodes.putAll(id2ComputeNode);
+
+        // Setup MockUp
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        new Expectations(warehouseManager) {
+            {
+                warehouseManager.getAllComputeNodeIds((ComputeResource) any);
+                result = Lists.newArrayList(id2AllNodes.keySet());
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                ComputeNode node = id2ComputeNode.get(nodeId);
+                if (node == null) {
+                    node = id2Backend.get(nodeId);
+                }
+                return node;
+            }
+        };
+    }
+
+    private WorkerProvider newWorkerProvider() {
+        return newWorkerProvider(BlacklistBackupRoutingPolicy.getDefault());
+    }
+
+    private WorkerProvider newWorkerProvider(BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy) {
+        return new DefaultSharedDataWorkerProvider.Factory(blacklistBackupRoutingPolicy).captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
+                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {
+        Assertions.assertTrue(workerProvider.isWorkerSelected(workerId));
+        Assertions.assertTrue(workerProvider.getSelectedWorkerIds().contains(workerId));
+    }
+
+    private List<Long> prepareNodeAliveAndBlock(SystemInfoService sysInfo, HostBlacklist blockList) {
+        // for every even number of worker, take in turn to set to alive=false and inBlock=true.
+        // [0:alive=false, 1, 2:inBlock=true, 3, 4:alive=false, ...]
+        List<Long> availList = Lists.newArrayList(id2AllNodes.keySet());
+        boolean flip = true;
+        for (int i = 0; i < id2AllNodes.size(); i += 2) {
+            ComputeNode node = sysInfo.getBackendOrComputeNode(i);
+            if (node != null) {
+                if (flip) {
+                    node.setAlive(false);
+                } else {
+                    blockList.add(node.getId());
+                }
+                flip = !flip;
+                availList.remove(node.getId());
+            }
+        }
+        return availList;
+    }
+
+    private ComputeNode createTestComputeNode(long id, String host, int port) {
+        ComputeNode node = new ComputeNode(id, host, port);
+        node.setAlive(true);
+        return node;
+    }
+
+    @Test
+    public void testCaptureAvailableWorkers() {
+        long deadBEId = 1L;
+        long deadCNId = 11L;
+        long inBlacklistBEId = 3L;
+        long inBlacklistCNId = 13L;
+
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+
+        blockList.add(inBlacklistBEId);
+        blockList.add(inBlacklistCNId);
+        id2Backend.get(deadBEId).setAlive(false);
+        id2ComputeNode.get(deadCNId).setAlive(false);
+
+        Set<Long> nonAvailableWorkerId = ImmutableSet.of(deadBEId, deadCNId, inBlacklistBEId, inBlacklistCNId);
+        WorkerProvider workerProvider = newWorkerProvider();
+
+        Optional<Long> maxId = id2Backend.keySet().stream().max(Comparator.naturalOrder());
+        Assertions.assertFalse(maxId.isEmpty());
+        for (long id : id2AllNodes.keySet()) {
+            ComputeNode worker = workerProvider.getWorkerById(id);
+            if (nonAvailableWorkerId.contains(id)) {
+                Assertions.assertNull(worker);
+            } else {
+                Assertions.assertEquals(id, worker.getId());
+                if (id <= maxId.get()) {
+                    Assertions.assertTrue(worker instanceof Backend);
+                } else {
+                    Assertions.assertFalse(worker instanceof Backend);
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testSelectWorker() throws StarRocksException {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+        WorkerProvider provider = newWorkerProvider();
+
+        // intend to iterate the id out of the actual range.
+        for (long id = -1; id < id2AllNodes.size() + 5; id++) {
+            if (availList.contains(id)) {
+                provider.selectWorker(id);
+                testUsingWorkerHelper(provider, id);
+            } else {
+                long finalId = id;
+                Assertions.assertThrows(NonRecoverableException.class, () -> provider.selectWorker(finalId));
+            }
+        }
+    }
+
+    @Test
+    public void testGetAllWorkers() {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+        WorkerProvider provider = newWorkerProvider();
+        // allWorkers returns only available workers
+        Collection<ComputeNode> allWorkers = provider.getAllWorkers();
+
+        Assertions.assertEquals(availList.size(), allWorkers.size());
+        for (ComputeNode node : allWorkers) {
+            Assertions.assertTrue(availList.contains(node.getId()));
+        }
+        List<Long> allWorkerIds = allWorkers.stream().map(ComputeNode::getId).collect(Collectors.toList());
+        for (long availId : availList) {
+            Assertions.assertTrue(allWorkerIds.contains(availId));
+        }
+        // strictly the same
+        List<Long> allAvailNodeIds = provider.getAllAvailableNodes();
+        Assertions.assertEquals(allWorkerIds, allAvailNodeIds);
+    }
+
+    private static void testSelectNextWorkerHelper(WorkerProvider workerProvider,
+                                                   Map<Long, ComputeNode> id2Worker)
+            throws StarRocksException {
+        Set<Long> selectedWorkers = new HashSet<>(id2Worker.size());
+        for (int i = 0; i < id2Worker.size(); i++) {
+            long workerId = workerProvider.selectNextWorker();
+            Assertions.assertFalse(selectedWorkers.contains(workerId));
+            selectedWorkers.add(workerId);
+            testUsingWorkerHelper(workerProvider, workerId);
+        }
+    }
+
+    @Test
+    public void testSelectNextWorker() throws StarRocksException {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.clear();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+        { // test backend nodes only
+            ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
+            for (long backendId : id2Backend.keySet()) {
+                if (availList.contains(backendId)) {
+                    builder.put(backendId, id2Backend.get(backendId));
+                }
+            }
+            ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
+            WorkerProvider workerProvider =
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2Backend), availableId2ComputeNode,
+                            WarehouseManager.DEFAULT_RESOURCE);
+            testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
+        }
+
+        { // test compute nodes only
+            ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
+            for (long backendId : id2ComputeNode.keySet()) {
+                if (availList.contains(backendId)) {
+                    builder.put(backendId, id2ComputeNode.get(backendId));
+                }
+            }
+            ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
+            WorkerProvider workerProvider =
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2ComputeNode), availableId2ComputeNode,
+                            WarehouseManager.DEFAULT_RESOURCE);
+            testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
+        }
+
+        { // test both backends and compute nodes
+            ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
+            for (long backendId : id2AllNodes.keySet()) {
+                if (availList.contains(backendId)) {
+                    builder.put(backendId, id2AllNodes.get(backendId));
+                }
+            }
+            ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
+            WorkerProvider workerProvider =
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), availableId2ComputeNode,
+                            WarehouseManager.DEFAULT_RESOURCE);
+            testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
+        }
+
+        { // test no available worker to select
+            WorkerProvider workerProvider =
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of(),
+                            WarehouseManager.DEFAULT_RESOURCE);
+
+            Exception e = Assertions.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
+            Assertions.assertTrue(e.getMessage().contains(
+                    "Compute node not found. Check if any compute node is down. nodeId: -1 " +
+                            "compute node: [host#1 alive: true, available: false, inBlacklist: false] " +
+                            "[host#2 alive: false, available: false, inBlacklist: false] " +
+                            "[host#3 alive: true, available: false, inBlacklist: false] " +
+                            "[host#4 alive: true, available: false, inBlacklist: true] " +
+                            "[host#5 alive: true, available: false, inBlacklist: false] " +
+                            "[host#6 alive: false, available: false, inBlacklist: false] " +
+                            "[host#7 alive: true, available: false, inBlacklist: false] " +
+                            "[host#8 alive: true, available: false, inBlacklist: true] " +
+                            "[host#9 alive: true, available: false, inBlacklist: false] " +
+                            "[host#10 alive: false, available: false, inBlacklist: false] " +
+                            "[host#11 alive: true, available: false, inBlacklist: false] " +
+                            "[host#12 alive: true, available: false, inBlacklist: true] " +
+                            "[host#13 alive: true, available: false, inBlacklist: false] " +
+                            "[host#14 alive: false, available: false, inBlacklist: false] " +
+                            "[host#15 alive: true, available: false, inBlacklist: false] "));
+        }
+    }
+
+    @Test
+    public void testChooseAllComputedNodes() {
+        { // empty compute nodes
+            WorkerProvider workerProvider = new DefaultSharedDataWorkerProvider(ImmutableMap.of(), ImmutableMap.of(),
+                    WarehouseManager.DEFAULT_RESOURCE);
+            Assertions.assertTrue(workerProvider.selectAllComputeNodes().isEmpty());
+        }
+
+        { // both compute nodes and backend are treated as compute nodes
+            WorkerProvider workerProvider =
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
+                            ImmutableMap.copyOf(id2AllNodes), WarehouseManager.DEFAULT_RESOURCE);
+
+            List<Long> computeNodeIds = workerProvider.selectAllComputeNodes();
+            Assertions.assertEquals(id2AllNodes.size(), computeNodeIds.size());
+            Set<Long> computeNodeIdSet = new HashSet<>(computeNodeIds);
+            for (ComputeNode computeNode : id2AllNodes.values()) {
+                Assertions.assertTrue(computeNodeIdSet.contains(computeNode.getId()));
+                testUsingWorkerHelper(workerProvider, computeNode.getId());
+            }
+        }
+    }
+
+    @Test
+    public void testIsDataNodeAvailable() {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.clear();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+        WorkerProvider provider = newWorkerProvider();
+
+        for (long id = -1; id < 16; id++) {
+            boolean isAvail = provider.isDataNodeAvailable(id);
+            ComputeNode worker = provider.getWorkerById(id);
+            if (!availList.contains(id)) {
+                Assertions.assertFalse(isAvail);
+            } else {
+                Assertions.assertEquals(id2AllNodes.get(id), worker);
+                Assertions.assertTrue(isAvail);
+            }
+        }
+    }
+
+    @Test
+    public void testReportBackendNotFoundException() {
+        WorkerProvider workerProvider = newWorkerProvider();
+        Assertions.assertThrows(NonRecoverableException.class, workerProvider::reportDataNodeNotFoundException);
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#CIRCULAR}:
+     * for each primary id, every {@code selectBackupWorker} call returns the same next id on the sorted ring
+     * (an eligible node other than the primary).
+     */
+    @Test
+    public void testSelectBackupWorkersEvenlySelected() {
+        Set<Long> counters = Sets.newHashSet();
+        WorkerProvider workerProvider = newWorkerProvider(BlacklistBackupRoutingPolicy.CIRCULAR);
+        Assertions.assertTrue(workerProvider.allowUsingBackupNode());
+        for (long id : id2AllNodes.keySet()) {
+            long backupId = -1;
+            for (int j = 0; j < 100; ++j) {
+                long selectedId = workerProvider.selectBackupWorker(id);
+                Assertions.assertTrue(selectedId > 0);
+                // cannot choose itself
+                Assertions.assertNotEquals(id, selectedId);
+                if (backupId == -1) {
+                    backupId = selectedId;
+                } else {
+                    // always get the same node
+                    Assertions.assertEquals(backupId, selectedId);
+                }
+            }
+            Assertions.assertTrue(backupId != -1);
+            Assertions.assertFalse(counters.contains(backupId));
+            counters.add(backupId);
+        }
+        // every node is chosen as a backup node once
+        Assertions.assertEquals(id2AllNodes.size(), counters.size());
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#RANDOM}:
+     * each call returns some eligible backup (not the primary); successive draws may differ.
+     */
+    @Test
+    public void testSelectBackupWorkersRandomFromEligibleBuddies() {
+        WorkerProvider workerProvider = newWorkerProvider(BlacklistBackupRoutingPolicy.RANDOM);
+        Assertions.assertTrue(workerProvider.allowUsingBackupNode());
+        for (long id : id2AllNodes.keySet()) {
+            Set<Long> expectedBuddies = id2AllNodes.keySet().stream()
+                    .filter(buddyId -> buddyId != id)
+                    .collect(Collectors.toSet());
+            Assertions.assertFalse(expectedBuddies.isEmpty());
+            for (int j = 0; j < 100; ++j) {
+                long selectedId = workerProvider.selectBackupWorker(id);
+                Assertions.assertTrue(selectedId > 0);
+                // cannot choose itself
+                Assertions.assertNotEquals(id, selectedId);
+                // the backup node is in the expected buddies
+                Assertions.assertTrue(expectedBuddies.contains(selectedId));
+            }
+        }
+    }
+
+    @Test
+    public void testIsPreferComputeNode() {
+        WorkerProvider provider = newWorkerProvider();
+        Assertions.assertTrue(provider.isPreferComputeNode());
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#CIRCULAR}:
+     * when the plan primary is not in the available snapshot, {@code selectBackupWorker} still picks an eligible
+     * backup; repeated calls match until that id is blocklisted, then the ring walk advances to the next eligible.
+     */
+    @Test
+    public void testSelectBackupWorkerCircularExhaustsEligibles() {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+
+        Optional<Long> unavail = id2AllNodes.keySet().stream().filter(x -> !availList.contains(x)).findAny();
+        Assertions.assertTrue(unavail.isPresent());
+
+        long unavailWorkerId = unavail.get();
+        WorkerProvider provider = newWorkerProvider(BlacklistBackupRoutingPolicy.CIRCULAR);
+
+        int selectCount = 0;
+        List<Long> selectedNodeId = Lists.newArrayList();
+
+        while (selectCount < availList.size() * 2 + 1) { // make sure the while loop will stop
+            Assertions.assertFalse(provider.isDataNodeAvailable(unavailWorkerId));
+            long alterNodeId = provider.selectBackupWorker(unavailWorkerId);
+            if (alterNodeId == -1) {
+                break;
+            }
+            // the backup node is not itself
+            Assertions.assertNotEquals(unavailWorkerId, alterNodeId);
+            // the backup node is not any of the node before
+            Assertions.assertFalse(selectedNodeId.contains(alterNodeId));
+
+            for (int j = 0; j < 10; ++j) {
+                long selectAgainId = provider.selectBackupWorker(unavailWorkerId);
+                Assertions.assertEquals(alterNodeId, selectAgainId);
+            }
+            ++selectCount;
+            // make it in blockList, so next time it will choose a different node
+            blockList.add(alterNodeId);
+            selectedNodeId.add(alterNodeId);
+        }
+        // all nodes are in block list, no nodes can be selected anymore
+        Assertions.assertEquals(-1, provider.selectBackupWorker(unavailWorkerId));
+        // all the nodes are selected ever
+        Assertions.assertEquals(selectedNodeId.size(), availList.size());
+
+        // a random workerId that doesn't exist in workerProvider
+        Assertions.assertEquals(-1, provider.selectBackupWorker(15678));
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#RANDOM}:
+     * when the plan primary is not in the available snapshot, {@code selectBackupWorker} still picks an eligible
+     * backup; until the blocklist changes, repeated calls may return any value in the current eligible set, and
+     * successive blocklist updates eventually exhaust eligibles.
+     */
+    @Test
+    public void testSelectBackupWorkerRandomExhaustsEligibles() {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+
+        Optional<Long> unavail = id2AllNodes.keySet().stream().filter(x -> !availList.contains(x)).findAny();
+        Assertions.assertTrue(unavail.isPresent());
+
+        long unavailWorkerId = unavail.get();
+        WorkerProvider provider = newWorkerProvider(BlacklistBackupRoutingPolicy.RANDOM);
+
+        Set<Long> initialBuddyPool = ImmutableSet.copyOf(availList);
+
+        int selectCount = 0;
+        List<Long> selectedNodeId = Lists.newArrayList();
+
+        while (selectCount < availList.size() * 2 + 1) { // make sure the while loop will stop
+            Assertions.assertFalse(provider.isDataNodeAvailable(unavailWorkerId));
+            Set<Long> expectedBeforePick = availList.stream()
+                    .filter(nodeId -> !SimpleScheduler.isInBlocklist(nodeId))
+                    .collect(Collectors.toSet());
+            long alterNodeId = provider.selectBackupWorker(unavailWorkerId);
+            if (alterNodeId == -1) {
+                break;
+            }
+            // the backup is among currently non-blocklisted avail nodes (RANDOM pool for this round)
+            Assertions.assertTrue(expectedBeforePick.contains(alterNodeId));
+            // the backup node is not itself
+            Assertions.assertNotEquals(unavailWorkerId, alterNodeId);
+            // the backup node is not any of the node before
+            Assertions.assertFalse(selectedNodeId.contains(alterNodeId));
+
+            for (int j = 0; j < 10; ++j) {
+                long selectAgainId = provider.selectBackupWorker(unavailWorkerId);
+                Assertions.assertTrue(expectedBeforePick.contains(selectAgainId),
+                        "repeated calls draw from the same eligible set until blocklist changes");
+                Assertions.assertNotEquals(unavailWorkerId, selectAgainId);
+            }
+            ++selectCount;
+            // make it in blockList, so next time it will choose a different node
+            blockList.add(alterNodeId);
+            selectedNodeId.add(alterNodeId);
+        }
+        // all nodes are in block list, no nodes can be selected anymore
+        Assertions.assertEquals(-1, provider.selectBackupWorker(unavailWorkerId));
+        // all the nodes are selected ever
+        Assertions.assertEquals(initialBuddyPool, ImmutableSet.copyOf(selectedNodeId),
+                "each iteration blocklists one new buddy until the initial pool is drained");
+
+        // a random workerId that doesn't exist in workerProvider
+        Assertions.assertEquals(-1, provider.selectBackupWorker(15678));
+    }
+
+    private OlapScanNode newOlapScanNode(int id, int numBuckets) {
+        // copy from fe/fe-core/src/test/java/com/starrocks/qe/ColocatedBackendSelectorTest.java
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexMetaId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", IntegerType.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+        table.setDefaultDistributionInfo(new HashDistributionInfo(numBuckets, Collections.emptyList()));
+        desc.setTable(table);
+        return new OlapScanNode(new PlanNodeId(id), desc, "OlapScanNode", table.getBaseIndexMetaId());
+    }
+
+    private ArrayListMultimap<Integer, TScanRangeLocations> genBucketSeq2Locations(
+            Map<Integer, List<Long>> bucketSeqToBackends,
+            int numTabletsPerBucket) {
+        // copy from fe/fe-core/src/test/java/com/starrocks/qe/ColocatedBackendSelectorTest.java
+        ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
+        bucketSeqToBackends.forEach((bucketSeq, backends) -> {
+            for (int i = 0; i < numTabletsPerBucket; i++) {
+                TScanRangeLocations bucketLocations = new TScanRangeLocations();
+
+                bucketLocations.setScan_range(new TScanRange().setInternal_scan_range(new TInternalScanRange()));
+
+                List<TScanRangeLocation> locations = backends.stream()
+                        .map(backendId -> new TScanRangeLocation().setBackend_id(backendId))
+                        .collect(Collectors.toList());
+                bucketLocations.setLocations(locations);
+
+                bucketSeq2locations.put(bucketSeq, bucketLocations);
+            }
+        });
+
+        return bucketSeq2locations;
+    }
+
+    /**
+     * Generate a list of ScanRangeLocations, contains n element for bucketNum
+     *
+     * @param n         number of ScanRangeLocations
+     * @param bucketNum number of buckets
+     * @return lists of ScanRangeLocations
+     */
+    private List<TScanRangeLocations> generateScanRangeLocations(Map<Long, ComputeNode> nodes, int n, int bucketNum) {
+        List<TScanRangeLocations> locations = Lists.newArrayList();
+        int currentBucketIndex = 0;
+        Iterator<Map.Entry<Long, ComputeNode>> iterator = nodes.entrySet().iterator();
+        for (int i = 0; i < n; ++i) {
+            if (!iterator.hasNext()) {
+                iterator = nodes.entrySet().iterator();
+            }
+            TInternalScanRange internalRange = new TInternalScanRange();
+            internalRange.setBucket_sequence(currentBucketIndex);
+            internalRange.setRow_count(1);
+
+            TScanRange range = new TScanRange();
+            range.setInternal_scan_range(internalRange);
+
+            TScanRangeLocations loc = new TScanRangeLocations();
+            loc.setScan_range(range);
+
+            TScanRangeLocation location = new TScanRangeLocation();
+            ComputeNode node = iterator.next().getValue();
+            location.setBackend_id(node.getId());
+            location.setServer(node.getAddress());
+            loc.addToLocations(location);
+
+            locations.add(loc);
+            currentBucketIndex = (currentBucketIndex + 1) % bucketNum;
+        }
+        return locations;
+    }
+
+    @Test
+    public void testNormalBackendSelectorWithSharedDataWorkerProvider() {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.clear();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+
+        int bucketNum = 3;
+        OlapScanNode scanNode = newOlapScanNode(1, bucketNum);
+        List<TScanRangeLocations> scanLocations = generateScanRangeLocations(id2AllNodes, 10, bucketNum);
+
+        WorkerProvider provider = newWorkerProvider();
+
+        int nonAvailNum = 0;
+        for (TScanRangeLocations locations : scanLocations) {
+            for (TScanRangeLocation location : locations.getLocations()) {
+                if (!provider.isDataNodeAvailable(location.getBackend_id())) {
+                    ++nonAvailNum;
+                }
+            }
+        }
+        // the scanRangeLocations contains non-avail locations
+        Assertions.assertTrue(nonAvailNum > 0);
+
+        { // normal case
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            NormalBackendSelector selector =
+                    new NormalBackendSelector(scanNode, scanLocations, assignment, provider, false);
+            // the computation will not fail even though there are non-available locations
+            ExceptionChecker.expectThrowsNoException(selector::computeScanRangeAssignment);
+
+            // check the assignment, should be all in the availList
+            for (long id : assignment.keySet()) {
+                Assertions.assertTrue(availList.contains(id));
+            }
+        }
+
+        { // make only one node available, the final assignment will be all on the single available node
+            ComputeNode availNode = id2AllNodes.get(availList.get(0));
+            WorkerProvider provider1 = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
+                    ImmutableMap.of(availNode.getId(), availNode), WarehouseManager.DEFAULT_RESOURCE);
+
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            NormalBackendSelector selector =
+                    new NormalBackendSelector(scanNode, scanLocations, assignment, provider1, false);
+            // the computation will not fail even though there are non-available locations
+            ExceptionChecker.expectThrowsNoException(selector::computeScanRangeAssignment);
+
+            Assertions.assertEquals(1, assignment.size());
+            // check the assignment, should be all in the availList
+            for (long id : assignment.keySet()) {
+                Assertions.assertEquals(availNode.getId(), id);
+            }
+        }
+
+        { // make no node available. Exception throws
+            WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
+                    ImmutableMap.of(), WarehouseManager.DEFAULT_RESOURCE);
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            NormalBackendSelector selector =
+                    new NormalBackendSelector(scanNode, scanLocations, assignment, providerNoAvailNode, false);
+            Assertions.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
+        }
+    }
+
+    @Test
+    public void testNormalBackendSelectorWithBackupNodeSelection() throws StarRocksException {
+        // Test the new backup node selection functionality in shared-data mode
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.clear();
+
+        // Create a custom WorkerProvider that allows backup node selection
+        ImmutableMap<Long, ComputeNode> allNodes = ImmutableMap.<Long, ComputeNode>builder()
+                .put(1L, createTestComputeNode(1L, "host1", 9030))
+                .put(2L, createTestComputeNode(2L, "host2", 9030))
+                .put(3L, createTestComputeNode(3L, "host3", 9030))
+                .put(4L, createTestComputeNode(4L, "host4", 9030))
+                .build();
+
+        // Make nodes 1 and 2 unavailable, nodes 3 and 4 available
+        ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of(
+                3L, allNodes.get(3L),
+                4L, allNodes.get(4L)
+        );
+
+        // Create a mock WorkerProvider that supports backup node selection
+        WorkerProvider backupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
+                WarehouseManager.DEFAULT_RESOURCE) {
+            @Override
+            public long selectBackupWorker(long workerId) {
+                // Map unavailable nodes to available backup nodes
+                if (workerId == 1L) {
+                    return 3L;
+                }
+                if (workerId == 2L) {
+                    return 4L;
+                }
+                return -1L;
+            }
+        };
+
+        int bucketNum = 2;
+        OlapScanNode scanNode = newOlapScanNode(1, bucketNum);
+
+        // Create scan locations where some replicas are on unavailable nodes
+        List<TScanRangeLocations> scanLocations = new ArrayList<>();
+
+        // First scan range: replicas on nodes 1 and 2 (both unavailable)
+        TScanRangeLocations locations1 = new TScanRangeLocations();
+        TInternalScanRange internalRange1 = new TInternalScanRange();
+        internalRange1.setRow_count(100);
+        locations1.setScan_range(new TScanRange().setInternal_scan_range(internalRange1));
+
+        TScanRangeLocation loc1a = new TScanRangeLocation();
+        loc1a.setBackend_id(1L); // Unavailable
+
+        TScanRangeLocation loc1b = new TScanRangeLocation();
+        loc1b.setBackend_id(2L); // Unavailable
+
+        locations1.addToLocations(loc1a);
+        locations1.addToLocations(loc1b);
+        scanLocations.add(locations1);
+
+        // Second scan range: replicas on nodes 3 and 4 (both available)
+        TScanRangeLocations locations2 = new TScanRangeLocations();
+        TInternalScanRange internalRange2 = new TInternalScanRange();
+        internalRange2.setRow_count(200);
+        locations2.setScan_range(new TScanRange().setInternal_scan_range(internalRange2));
+
+        TScanRangeLocation loc2a = new TScanRangeLocation();
+        loc2a.setBackend_id(3L); // Available
+
+        TScanRangeLocation loc2b = new TScanRangeLocation();
+        loc2b.setBackend_id(4L); // Available
+
+        locations2.addToLocations(loc2a);
+        locations2.addToLocations(loc2b);
+        scanLocations.add(locations2);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        NormalBackendSelector selector =
+                new NormalBackendSelector(scanNode, scanLocations, assignment, backupWorkerProvider, false);
+
+        // This should succeed with backup node selection
+        ExceptionChecker.expectThrowsNoException(selector::computeScanRangeAssignment);
+
+        // Check that assignments were made
+        Assertions.assertFalse(assignment.isEmpty());
+
+        // Check that backup nodes (3 and 4) were selected
+        boolean node3Selected = false;
+        boolean node4Selected = false;
+        for (long nodeId : assignment.keySet()) {
+            if (nodeId == 3L) {
+                node3Selected = true;
+            }
+            if (nodeId == 4L) {
+                node4Selected = true;
+            }
+        }
+
+        // At least one of the backup nodes should be selected
+        Assertions.assertTrue(node3Selected || node4Selected);
+    }
+
+    @Test
+    public void testNormalBackendSelectorWithNoBackupAvailable() {
+        // Test case where all replicas are unavailable and no backup is available
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.clear();
+
+        // Create a custom WorkerProvider that allows backup node selection
+        ImmutableMap<Long, ComputeNode> allNodes = ImmutableMap.<Long, ComputeNode>builder()
+                .put(1L, createTestComputeNode(1L, "host1", 9030))
+                .put(2L, createTestComputeNode(2L, "host2", 9030))
+                .build();
+
+        // No available nodes
+        ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of();
+
+        // Create a mock WorkerProvider that supports backup node selection but returns no backup
+        WorkerProvider noBackupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
+                WarehouseManager.DEFAULT_RESOURCE) {
+            @Override
+            public long selectBackupWorker(long workerId) {
+                // No backup available
+                return -1L;
+            }
+        };
+
+        int bucketNum = 1;
+        OlapScanNode scanNode = newOlapScanNode(1, bucketNum);
+
+        // Create scan locations where all replicas are on unavailable nodes
+        List<TScanRangeLocations> scanLocations = new ArrayList<>();
+
+        TScanRangeLocations locations1 = new TScanRangeLocations();
+        TInternalScanRange internalRange1 = new TInternalScanRange();
+        internalRange1.setRow_count(100);
+        locations1.setScan_range(new TScanRange().setInternal_scan_range(internalRange1));
+
+        TScanRangeLocation loc1a = new TScanRangeLocation();
+        loc1a.setBackend_id(1L); // Unavailable
+
+        TScanRangeLocation loc1b = new TScanRangeLocation();
+        loc1b.setBackend_id(2L); // Unavailable
+
+        locations1.addToLocations(loc1a);
+        locations1.addToLocations(loc1b);
+        scanLocations.add(locations1);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        NormalBackendSelector selector =
+                new NormalBackendSelector(scanNode, scanLocations, assignment, noBackupWorkerProvider, false);
+
+        // This should throw an exception since no backup nodes are available
+        Assertions.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
+    }
+
+    @Test
+    public void testCollocationBackendSelectorWithSharedDataWorkerProvider() {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.clear();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+
+        int bucketNum = 6;
+        OlapScanNode scanNode = newOlapScanNode(10, bucketNum);
+        final Map<Integer, List<Long>> bucketSeqToBackends = ImmutableMap.of(
+                0, ImmutableList.of(1L),
+                1, ImmutableList.of(2L),
+                2, ImmutableList.of(3L),
+                3, ImmutableList.of(4L),
+                4, ImmutableList.of(5L),
+                5, ImmutableList.of(6L)
+        );
+        scanNode.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends, 3));
+        List<TScanRangeLocations> scanLocations = generateScanRangeLocations(id2AllNodes, 10, bucketNum);
+        WorkerProvider provider = newWorkerProvider();
+
+        int nonAvailNum = 0;
+        for (TScanRangeLocations locations : scanLocations) {
+            for (TScanRangeLocation location : locations.getLocations()) {
+                if (!provider.isDataNodeAvailable(location.getBackend_id())) {
+                    ++nonAvailNum;
+                }
+            }
+        }
+        // the scanRangeLocations contains non-avail locations
+        Assertions.assertTrue(nonAvailNum > 0);
+
+        { // normal case
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(
+                    scanNode.getBucketNums(), 1, Optional.empty());
+            ColocatedBackendSelector selector =
+                    new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider, 1);
+            // the computation will not fail even though there are non-available locations
+            ExceptionChecker.expectThrowsNoException(selector::computeScanRangeAssignment);
+
+            // check the assignment, should be all in the availList
+            for (long id : assignment.keySet()) {
+                Assertions.assertTrue(availList.contains(id));
+            }
+        }
+
+        { // make only one node available, the final assignment will be all on the single available node
+            ComputeNode availNode = id2AllNodes.get(availList.get(0));
+            WorkerProvider provider1 = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
+                    ImmutableMap.of(availNode.getId(), availNode), WarehouseManager.DEFAULT_RESOURCE);
+
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(
+                    scanNode.getBucketNums(), 1, Optional.empty());
+            ColocatedBackendSelector selector =
+                    new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider1, 1);
+            // the computation will not fail even though there are non-available locations
+            ExceptionChecker.expectThrowsNoException(selector::computeScanRangeAssignment);
+
+            Assertions.assertEquals(1, assignment.size());
+            // check the assignment, should be all in the availList
+            for (long id : assignment.keySet()) {
+                Assertions.assertEquals(availNode.getId(), id);
+            }
+        }
+
+        { // make no node available. Exception throws
+            WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
+                    ImmutableMap.of(), WarehouseManager.DEFAULT_RESOURCE);
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(
+                    scanNode.getBucketNums(), 1, Optional.empty());
+            ColocatedBackendSelector selector =
+                    new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, providerNoAvailNode, 1);
+            Assertions.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
+        }
+    }
+
+    @Test
+    public void testNextWorkerOverflow() throws NonRecoverableException {
+        WorkerProvider provider =
+                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes),
+                        WarehouseManager.DEFAULT_RESOURCE);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = provider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
+        DefaultSharedDataWorkerProvider.getNextComputeNodeIndexer().set(Integer.MAX_VALUE);
+        for (int i = 0; i < 100; i++) {
+            Long workerId = provider.selectNextWorker();
+            assertThat(workerId).isNotNegative();
+        }
+    }
+
+    @Test
+    public void testReportNotFoundException() {
+        WorkerProvider provider = new DefaultSharedDataWorkerProvider(
+                ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes), WarehouseManager.DEFAULT_RESOURCE);
+
+        assertThatThrownBy(provider::reportWorkerNotFoundException)
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
+                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+        assertThatThrownBy(() -> provider.reportWorkerNotFoundException("prefix:"))
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("prefix:Compute node not found. Check if any compute node is down. " +
+                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+
+        assertThatThrownBy(provider::reportDataNodeNotFoundException)
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
+                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+
+        assertThatThrownBy(() -> provider.selectWorker(9999)) // select a non-existing worker
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
+                        "nodeId: 9999 compute node: , compute resource: {warehouseId=0");
+    }
+}

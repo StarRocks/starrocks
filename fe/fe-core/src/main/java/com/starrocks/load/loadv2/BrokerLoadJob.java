@@ -36,10 +36,13 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.alter.reshard.presplit.BrokerLoadPreSplitHook;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
@@ -48,44 +51,54 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.task.PriorityLeaderTask;
+import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
-import org.apache.hadoop.util.ThreadUtil;
+import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 /**
  * There are 3 steps in BrokerLoadJob: BrokerPendingTask, LoadLoadingTask, CommitAndPublishTxn.
@@ -97,8 +110,10 @@ public class BrokerLoadJob extends BulkLoadJob {
 
     private static final Logger LOG = LogManager.getLogger(BrokerLoadJob.class);
     private ConnectContext context;
+    private transient PreSplitProfile preSplitProfile = new PreSplitProfile();
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
     private long writeDurationMs = 0;
+    private LoadStmt stmt;
 
     // only for log replay
     public BrokerLoadJob() {
@@ -111,24 +126,58 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.context = context;
     }
 
-    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
+    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, LoadStmt stmt, ConnectContext context)
             throws MetaNotFoundException {
-        super(dbId, label, originStmt);
+        super(dbId, label, stmt != null ? stmt.getOrigStmt() : null);
         this.timeoutSecond = Config.broker_load_default_timeout_second;
-        this.brokerDesc = brokerDesc;
+        this.brokerPersistInfo =
+                brokerDesc != null ? new BrokerPropertiesPersistInfo(brokerDesc.getName(), brokerDesc.getProperties()) : null;
         this.jobType = EtlJobType.BROKER;
         this.context = context;
+        this.stmt = stmt;
+        if (context != null) {
+            this.warehouseId = context.getCurrentWarehouseId();
+        }
     }
 
     @Override
     public void beginTxn()
-            throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond);
+                        timeoutSecond, computeResource);
+    }
+
+    /**
+     * Override the framework's {@link LoadJob#unprotectedExecute()} to defer both
+     * {@link #beginTxn()} and the {@code PENDING → LOADING} state transition until
+     * the pre-split hook returns inside {@link #createLoadingTask}.
+     *
+     * <p>The framework default — {@code beginTxn} then {@code unprotectedExecuteJob} —
+     * would allocate {@code T_load} before the pre-split hook fires. The reshard
+     * daemon's cleanup-phase {@code isPreviousTransactionsFinished(endTransactionId, ...)}
+     * wait would then include {@code T_load}, deadlocking against any synchronous
+     * pre-split await. Deferring {@code beginTxn} until after the hook keeps
+     * {@code T_load > endTransactionId} by construction.
+     *
+     * <p>State stays {@code PENDING} during the pending-task + hook window so
+     * {@link LoadJob#processTimeout} can still cancel a stuck load. A
+     * {@code LOADING} state with {@code transactionId == 0} would otherwise be a
+     * zombie: the GTM has no txn to time out, and {@code processTimeout} only acts
+     * on {@code PENDING}.
+     */
+    @Override
+    public void unprotectedExecute() throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException,
+            DuplicatedRequestException, LoadException {
+        if (state != JobState.PENDING) {
+            return;
+        }
+        unprotectedExecuteJob();
+        // beginTxn() and unprotectedUpdateState(JobState.LOADING) intentionally
+        // omitted — both move into createLoadingTask after the pre-split hook.
     }
 
     @Override
@@ -137,15 +186,15 @@ public class BrokerLoadJob extends BulkLoadJob {
 
         try {
             if (stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY)) {
-                priority = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
+                int prio = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
                 AlterLoadJobOperationLog log = new AlterLoadJobOperationLog(id,
                         stmt.getAnalyzedJobProperties());
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log, wal -> setPriority(prio));
 
                 for (LoadTask loadTask : newLoadingTasks) {
                     GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().updatePriority(
                             loadTask.getSignature(),
-                            priority);
+                            prio);
                 }
             }
 
@@ -158,13 +207,19 @@ public class BrokerLoadJob extends BulkLoadJob {
     @Override
     public void replayAlterJob(AlterLoadJobOperationLog log) {
         if (log.getJobProperties().containsKey(LoadStmt.PRIORITY)) {
-            priority = LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY));
+            setPriority(LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY)));
         }
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
     }
 
     @Override
     protected void unprotectedExecuteJob() throws LoadException {
-        LoadTask task = new BrokerLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(), brokerDesc);
+        LoadTask task = new BrokerLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(),
+                brokerPersistInfo == null ? null :
+                        new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
         idToTasks.put(task.getSignature(), task);
         submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
     }
@@ -228,23 +283,103 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("database_id", dbId)
                     .add("error_msg", "Failed to divide job into loading task.")
                     .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true);
             return;
         }
     }
 
-    private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws UserException {
-        // divide job into broker loading task by table
+    /**
+     * Orchestrate the deferred Broker Load lifecycle (see {@link #unprotectedExecute()}
+     * for why each step is where it is). The flow reads top-to-bottom: snapshot
+     * inputs, fire the pre-split hook (which sync-awaits the daemon), then open
+     * the load transaction and build/submit the actual loading tasks against the
+     * post-pre-split tablet layout.
+     */
+    private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws StarRocksException {
+        BrokerDesc brokerDesc = newBrokerDescFromPersistInfo();
+        ensureConnectContext(db);
+        List<PreSplitHookInput> perTableInputs = snapshotPerTableInputsUnderReadLock(db, attachment);
+        PreSplitProfile currentPreSplitProfile = getOrCreatePreSplitProfile();
+
+        // Fire the hook OUTSIDE the DB lock (sampling can take seconds).
+        // See unprotectedExecute() for why T_load is deferred until after this returns.
+        // shouldAbort = this::isTxnDone: if the job goes terminal during the wait
+        // (processTimeout, user cancel), the hook releases the pending-task scheduler
+        // slot promptly instead of holding it until the post-submit deadline expires.
+        firePreSplitHooks(context, db, brokerDesc, computeResource, perTableInputs, sessionVariables,
+                this::isTxnDone, currentPreSplitProfile);
+
+        if (!beginTransaction()) {
+            return;
+        }
+        buildLoadingTasksUnderReadLock(db, perTableInputs, brokerDesc, currentPreSplitProfile);
+        // Submit outside the DB lock; submit() can block when the loading-task scheduler queue is full.
+        for (LoadTask loadTask : newLoadingTasks) {
+            submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
+        }
+    }
+
+    private BrokerDesc newBrokerDescFromPersistInfo() {
+        return brokerPersistInfo == null
+                ? null
+                : new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+    }
+
+    /**
+     * Rebuild the {@link ConnectContext} from persisted session vars when it was
+     * lost across FE failover. Both the pre-split hook's {@code bindScope} and
+     * {@link LoadLoadingTask} need a non-null context.
+     */
+    private void ensureConnectContext(Database db) throws DdlException {
+        if (context != null) {
+            return;
+        }
+        String qualifiedUser = sessionVariables.get(CURRENT_QUALIFIED_USER_KEY);
+        if (qualifiedUser == null) {
+            throw new DdlException("Failed to divide job into loading task when user is null");
+        }
+        UserIdentity userIdentity = UserIdentityUtils.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY));
+        if (userIdentity == null) {
+            throw new DdlException("Failed to divide job into loading task when user identity is missing or invalid");
+        }
+        context = new ConnectContext();
+        context.setDatabase(db.getFullName());
+        context.setQualifiedUser(qualifiedUser);
+        context.setCurrentUserIdentity(userIdentity);
+        context.setCurrentRoleIds(userIdentity);
+        // Restore the load's warehouse + compute resource (both persisted) onto the
+        // rebuilt context so the pre-split hook acts on the load's warehouse, not the
+        // default. The multi-partition path's submitForPartitionsCombined →
+        // LocalMetastore.addPartitions(ctx, ...) reads ctx.getCurrentComputeResource();
+        // without this, an FE-failover-replayed partitioned load on a non-default
+        // warehouse would pre-create its partitions on the default warehouse while the
+        // load txn + tasks run on the persisted one. Warehouse id MUST precede the
+        // compute resource — ConnectContext re-acquires the resource if the two disagree.
+        context.setCurrentWarehouseId(warehouseId);
+        context.setCurrentComputeResource(computeResource);
+    }
+
+    /**
+     * Snapshot, under a single DB READ lock, the per-table inputs the pre-split
+     * hook needs: table reference + broker file groups + resolved file statuses
+     * from the pending task. Intentionally does NOT build {@link LoadLoadingTask}s
+     * here — those must be built AFTER {@code beginTxn} so
+     * {@code LoadPlanner.plan()} sees the post-pre-split tablet layout.
+     */
+    private List<PreSplitHookInput> snapshotPerTableInputsUnderReadLock(
+            Database db, BrokerPendingTaskAttachment attachment) throws MetaNotFoundException {
+        Map<FileGroupAggKey, List<BrokerFileGroup>> fileGroupsByAggregationKey =
+                fileGroupAggInfo.getAggKeyToFileGroups();
+        List<PreSplitHookInput> perTableInputs = new ArrayList<>(fileGroupsByAggregationKey.size());
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            for (Map.Entry<FileGroupAggKey, List<BrokerFileGroup>> entry : fileGroupAggInfo.getAggKeyToFileGroups()
-                    .entrySet()) {
-                FileGroupAggKey aggKey = entry.getKey();
-                List<BrokerFileGroup> brokerFileGroups = entry.getValue();
-                long tableId = aggKey.getTableId();
-                OlapTable table = (OlapTable) db.getTable(tableId);
-                if (table == null) {
+            for (Map.Entry<FileGroupAggKey, List<BrokerFileGroup>> entry : fileGroupsByAggregationKey.entrySet()) {
+                FileGroupAggKey aggregationKey = entry.getKey();
+                long tableId = aggregationKey.getTableId();
+                OlapTable targetTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), tableId);
+                if (targetTable == null) {
                     LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                             .add("database_id", dbId)
                             .add("table_id", tableId)
@@ -253,36 +388,108 @@ public class BrokerLoadJob extends BulkLoadJob {
                     throw new MetaNotFoundException("Failed to divide job into loading task when table "
                             + tableId + " not found");
                 }
+                perTableInputs.add(new PreSplitHookInput(
+                        targetTable, entry.getValue(), attachment.getFileStatusByTable(aggregationKey)));
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+        return perTableInputs;
+    }
 
-                if (context == null) {
-                    context = new ConnectContext();
-                    context.setDatabase(db.getFullName());
-                    if (sessionVariables.get(CURRENT_QUALIFIED_USER_KEY) != null) {
-                        context.setQualifiedUser(sessionVariables.get(CURRENT_QUALIFIED_USER_KEY));
-                        context.setCurrentUserIdentity(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
-                        context.setCurrentRoleIds(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
-                    } else {
-                        throw new DdlException("Failed to divide job into loading task when user is null");
-                    }
-                }
+    /**
+     * Call {@link #beginTxn()} and transition {@code PENDING → LOADING}
+     * atomically under the job write lock. Returns {@code false} when:
+     * <ul>
+     *   <li>the job is no longer {@code PENDING} (a concurrent timeout or user
+     *       cancel reached a final state while we waited on the pre-split hook
+     *       — beginning a txn at that point would leak it because the GTM
+     *       callback was already deregistered);</li>
+     *   <li>{@code beginTxn} rejects the load (label collision, quota, etc.)
+     *       — the job is cancelled before returning.</li>
+     * </ul>
+     * Caller must stop processing when this returns {@code false}. See
+     * {@link #unprotectedExecute()} for the deferred-{@code beginTxn} rationale.
+     */
+    private boolean beginTransaction() {
+        writeLock();
+        try {
+            if (state != JobState.PENDING) {
+                LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
+                        .add("state", state)
+                        .add("msg", "broker load job is no longer PENDING after pre-split hook; "
+                                + "skip beginTxn and transition")
+                        .build());
+                return false;
+            }
+            beginTxn();
+            unprotectedUpdateState(JobState.LOADING);
+            return true;
+        } catch (LabelAlreadyUsedException | RunningTxnExceedException | AnalysisException
+                | DuplicatedRequestException transactionFailure) {
+            LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
+                    .add("error_msg", "Failed to begin broker-load transaction after pre-split hook: "
+                            + transactionFailure.getMessage())
+                    .build(), transactionFailure);
+            // unprotectedExecuteCancel guards abortTransaction with hasBegunTransaction()
+            // so the no-txn-yet case is handled cleanly.
+            unprotectedExecuteCancel(
+                    new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, transactionFailure.getMessage()),
+                    true, true);
+            return false;
+        } finally {
+            writeUnlock();
+        }
+    }
 
-                String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
-                TPartialUpdateMode mode = TPartialUpdateMode.UNKNOWN_MODE;
-                if (partialUpdateMode.equals("column")) {
-                    mode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
-                } else if (partialUpdateMode.equals("auto")) {
-                    mode = TPartialUpdateMode.AUTO_MODE;
-                } else if (partialUpdateMode.equals("row")) {
-                    mode = TPartialUpdateMode.ROW_MODE;
+    private static TPartialUpdateMode resolvePartialUpdateThriftMode(String partialUpdateMode) {
+        return switch (partialUpdateMode) {
+            case "column" -> TPartialUpdateMode.COLUMN_UPSERT_MODE;
+            case "auto" -> TPartialUpdateMode.AUTO_MODE;
+            case "row" -> TPartialUpdateMode.ROW_MODE;
+            default -> TPartialUpdateMode.UNKNOWN_MODE;
+        };
+    }
+
+    /**
+     * Build {@link LoadLoadingTask}s and call {@code task.prepare()} under a
+     * fresh DB READ lock. {@code LoadPlanner.plan()} reads table metadata and
+     * pins the sink plan to whatever tablet layout is currently visible — and
+     * by the time we get here the pre-split hook has already returned, so the
+     * layout is the post-pre-split one.
+     *
+     * <p>The {@code OlapTable} captured in {@link #snapshotPerTableInputsUnderReadLock}
+     * is stale: up to {@code tablet_pre_split_post_submit_wait_seconds} (300s
+     * default) elapses between the snapshot and this method while the pre-split
+     * hook sync-awaits the reshard daemon. Re-resolve each table by id under
+     * the freshly-acquired READ lock and identity-check against the snapshot —
+     * if the table was dropped or replaced by DROP/CREATE under the same id,
+     * fail the load cleanly rather than planning against the wrong object.
+     */
+    private void buildLoadingTasksUnderReadLock(
+            Database db, List<PreSplitHookInput> perTableInputs, BrokerDesc brokerDesc,
+            PreSplitProfile currentPreSplitProfile) throws StarRocksException {
+        TPartialUpdateMode partialUpdateThriftMode = resolvePartialUpdateThriftMode(partialUpdateMode);
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            for (PreSplitHookInput input : perTableInputs) {
+                OlapTable snapshotTable = input.targetTable();
+                long tableId = snapshotTable.getId();
+                OlapTable currentTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), tableId);
+                if (currentTable != snapshotTable) {
+                    throw new MetaNotFoundException("Target table " + tableId
+                            + " was dropped or replaced while pre-split await was in flight");
                 }
-                UUID uuid = UUID.randomUUID();
-                TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+                TUniqueId loadId = UUIDUtil.genTUniqueId();
+                int fileNum = input.fileStatuses().stream().mapToInt(List::size).sum();
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
-                        .setTable(table)
+                        .setTable(currentTable)
                         .setBrokerDesc(brokerDesc)
-                        .setFileGroups(brokerFileGroups)
+                        .setFileGroups(input.fileGroups())
                         .setJobDeadlineMs(getDeadlineMs())
                         .setExecMemLimit(loadMemLimit)
                         .setStrictMode(strictMode)
@@ -297,37 +504,254 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setLoadJobType(TLoadJobType.BROKER)
                         .setPriority(priority)
                         .setOriginStmt(originStmt)
-                        .setPartialUpdateMode(mode)
-                        .setFileStatusList(attachment.getFileStatusByTable(aggKey))
-                        .setFileNum(attachment.getFileNumByTable(aggKey))
+                        .setLoadStmt(stmt)
+                        .setPartialUpdateMode(partialUpdateThriftMode)
+                        .setFileStatusList(input.fileStatuses())
+                        .setFileNum(fileNum)
                         .setLoadId(loadId)
+                        .setJSONOptions(jsonOptions)
+                        .setComputeResource(computeResource)
+                        .setPreSplitProfile(currentPreSplitProfile)
                         .build();
 
                 task.prepare();
 
-                // update total loading task scan range num
                 idToTasks.put(task.getSignature(), task);
-                // idToTasks contains previous LoadPendingTasks, so idToTasks is just used to save all tasks.
-                // use newLoadingTasks to save new created loading tasks and submit them later.
+                loadIds.add(DebugUtil.printId(loadId));
                 newLoadingTasks.add(task);
-                // load id will be added to loadStatistic when executing this task
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+    }
 
-                // save all related tables and rollups in transaction state
-                TransactionState txnState =
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(dbId, transactionId);
-                if (txnState == null) {
-                    throw new UserException("txn does not exist: " + transactionId);
+    private PreSplitProfile getOrCreatePreSplitProfile() {
+        if (preSplitProfile == null) {
+            preSplitProfile = new PreSplitProfile();
+        }
+        return preSplitProfile;
+    }
+
+    /**
+     * Fire the Sample-Based Tablet Pre-Split hook for each per-table input
+     * snapshot. The hook sync-awaits the reshard daemon's FINISHED transition
+     * (single- and multi-partition paths) — see
+     * {@link BrokerLoadPreSplitHook}. We bind the job's {@link ConnectContext}
+     * so the coordinator's session-var check sees the load's session, not
+     * whatever stale thread-local is set. We also apply the persisted opt-out
+     * value so a submit-time {@code SET enable_tablet_pre_split = false}
+     * survives FE failover (the recreated context otherwise has the default
+     * value).
+     *
+     * <p>{@code shouldAbort} is threaded through each per-table hook so the
+     * sync-await releases its scheduler slot promptly when the calling load
+     * goes terminal. The outer-loop check exits before the NEXT table's hook
+     * fires (the current table's hook already obeys {@code shouldAbort}
+     * inside its await).
+     *
+     * <p>Package-private so {@code BrokerLoadJobPreSplitFiringTest} can drive
+     * it directly without standing up the full {@code createLoadingTask}
+     * fixture.
+     */
+    static void firePreSplitHooks(
+            ConnectContext context, Database db, BrokerDesc brokerDesc, ComputeResource computeResource,
+            List<PreSplitHookInput> preSplitInputs, Map<String, String> sessionVariables,
+            BooleanSupplier shouldAbort, PreSplitProfile preSplitProfile) {
+        if (preSplitInputs.isEmpty()) {
+            return;
+        }
+        String persistedPreSplitOptOut = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
+        if (persistedPreSplitOptOut != null) {
+            context.getSessionVariable().setEnableTabletPreSplit(Boolean.parseBoolean(persistedPreSplitOptOut));
+        }
+        try (ConnectContext.ScopeGuard ignored = context.bindScope()) {
+            for (PreSplitHookInput input : preSplitInputs) {
+                if (shouldAbort.getAsBoolean()) {
+                    return;
                 }
-                txnState.addTableIndexes(table);
+                BrokerLoadPreSplitHook.maybeRunPreSplit(
+                        context, db, input.targetTable(), brokerDesc,
+                        input.fileGroups(), input.fileStatuses(), computeResource, shouldAbort, preSplitProfile);
+            }
+        }
+    }
+
+    /** Per-table inputs captured under the DB read lock so the pre-split hook can fire outside it. */
+    record PreSplitHookInput(
+            OlapTable targetTable, List<BrokerFileGroup> fileGroups,
+            List<List<TBrokerFileStatus>> fileStatuses) {
+    }
+
+    @Override
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
+        writeLock();
+        try {
+            // check if job has been completed
+            if (isTxnDone()) {
+                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
+                        .add("state", state)
+                        .add("error_msg", "this task will be ignored when job is: " + state)
+                        .build());
+                WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
+                        "BrokerLoad: jobId[" + id + "] label[" + label + "]");
+                return;
             }
 
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+            FailMsg failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason);
+            boolean needRetry = isRetryable(failMsg);
+            if (!needRetry) {
+                // record attachment in load job
+                unprotectUpdateLoadingStatus(txnState);
+                // cancel load job
+                unprotectedExecuteCancel(failMsg, true, false);
+                return;
+            }
 
-        // Submit task outside the database lock, cause it may take a while if task queue is full.
-        for (LoadTask loadTask : newLoadingTasks) {
-            submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
+            failMsg.setMsg(txnStatusChangeReason + ". Retry again");
+            unprotectedRetryFromPending(failMsg,
+                    String.format("broker load job %d with txn id %d failed",
+                            id, txnState.getTransactionId()));
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Restart the load as a fresh PENDING attempt: log, decrement retryTime,
+     * clear in-flight task state, flip state, and call
+     * {@link #unprotectedExecute()} to resubmit. Caller must hold the job
+     * write lock. Used by both {@link #afterAborted} (GTM-driven retry after
+     * txn abort) and {@link #retryWithoutTransaction} (no-txn retry when the
+     * pending task fails before {@code beginTxn}).
+     */
+    private void unprotectedRetryFromPending(FailMsg failMsg, String retryReason) {
+        LOG.warn("{}; start retry, remaining retry time: {}", retryReason, retryTime);
+        retryTime--;
+        unprotectedClearTasksBeforeRetry(failMsg);
+        try {
+            state = JobState.PENDING;
+            unprotectedExecute();
+        } catch (Exception e) {
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true);
+        }
+    }
+
+    @Override
+    public void afterVisible(TransactionState txnState) {
+        super.afterVisible(txnState);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "BrokerLoad: jobId[" + id + "] label[" + label + "]");
+    }
+
+    /**
+     * This method is used to replay the cancelled state of load job
+     *
+     * @param txnState
+     */
+    @Override
+    public void replayOnAborted(TransactionState txnState) {
+        writeLock();
+        try {
+            replayTxnAttachment(txnState);
+            failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
+            finishTimestamp = txnState.getFinishTime();
+            state = JobState.CANCELLED;
+            if (!isRetryable(failMsg)) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+                return;
+            }
+            retryTime--;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    @Override
+    protected void reset() {
+        super.reset();
+        preSplitProfile = new PreSplitProfile();
+        if (context != null) {
+            context.setStartTime();
+            createTimestamp = context.getStartTime();
+        }
+    }
+
+    protected void unprotectedClearTasksBeforeRetry(FailMsg failMsg) {
+        // get load ids of all loading tasks, we will cancel their coordinator process later
+        List<TUniqueId> loadIds = Lists.newArrayList();
+        for (PriorityLeaderTask loadTask : idToTasks.values()) {
+            if (loadTask instanceof LoadLoadingTask) {
+                loadIds.add(((LoadLoadingTask) loadTask).getLoadId());
+            }
+        }
+        newLoadingTasks.clear();
+        reset();
+
+        this.failMsg = null; // when retry, user should not see previous fail msg
+        this.progress = 0; // reset progress
+        // Clear the previous attempt's transaction id so hasBegunTransaction()
+        // reflects only the new attempt. The previous txn was already aborted by
+        // the GTM (or never begun, when the pending task failed before beginTxn).
+        // Leaving it set would make the new attempt's abort/cancel paths target
+        // an already-aborted txn.
+        this.transactionId = 0L;
+        // cancel all running coordinators, so that the scheduler's worker thread will be released
+        for (TUniqueId loadId : loadIds) {
+            Coordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(loadId);
+            if (coordinator != null) {
+                coordinator.cancel(failMsg.getMsg());
+            }
+        }
+    }
+
+    /**
+     * Drive the retry path directly when the broker pending task fails BEFORE
+     * {@link #beginTxn()} runs (during the pre-split hook window). No GTM
+     * record exists to abort, so {@code afterAborted} cannot drive retry —
+     * mirror its retry block here. Stale callbacks from a prior attempt's
+     * tasks are ignored under the job write lock.
+     */
+    @Override
+    protected void retryWithoutTransaction(long taskId, FailMsg failMsg) {
+        writeLock();
+        try {
+            if (isTxnDone()) {
+                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
+                        .add("state", state)
+                        .add("error_msg", "broker load is already in a final state; skip retry")
+                        .build());
+                return;
+            }
+            // Skip duplicate failure callbacks for an already-succeeded pending task.
+            if (finishedTaskIds.contains(taskId)) {
+                LOG.debug("broker load job {}: duplicate failure callback for already-finished " +
+                        "task {}; skip no-txn retry", id, taskId);
+                return;
+            }
+            // Skip stale callbacks from a prior attempt — only the current attempt's
+            // pending task should drive retry. LoadTask fires its onTaskFinished /
+            // onTaskFailed callback exactly once per task instance, and the instanceof
+            // check excludes LoadLoadingTask entries that share idToTasks once
+            // beginTxn has run (those go through the normal abort path instead).
+            LoadTask failedTask = idToTasks.get(taskId);
+            if (!(failedTask instanceof BrokerLoadPendingTask)) {
+                LOG.debug("broker load job {}: failure callback for task {} is not the current " +
+                        "pending task (got {}); skip no-txn retry",
+                        id, taskId, failedTask == null ? "null" : failedTask.getClass().getSimpleName());
+                return;
+            }
+            // Recheck under the lock: if beginTxn ran concurrently, the normal abort
+            // path handles failures from now on — don't double-drive retry.
+            if (hasBegunTransaction()) {
+                LOG.debug("broker load job {}: transaction was begun concurrently; " +
+                        "skip no-txn retry path", id);
+                return;
+            }
+            FailMsg retryMsg = new FailMsg(failMsg.getCancelType(),
+                    failMsg.getMsg() + ". Retry again (pending task failed before transaction was begun)");
+            unprotectedRetryFromPending(retryMsg,
+                    String.format("broker load job %d pending-task failed before transaction was begun", id));
+        } finally {
+            writeUnlock();
         }
     }
 
@@ -375,7 +799,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
                             DataQualityException.QUALITY_FAIL_MSG +
                                     ". You can find detailed error message from running `TrackingSQL`."),
-                    true, true);
+                    true);
             return;
         }
         Database db = null;
@@ -386,7 +810,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("database_id", dbId)
                     .add("error_msg", "db has been deleted when job is loading")
                     .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
             return;
         }
         while (true) {
@@ -396,32 +820,29 @@ public class BrokerLoadJob extends BulkLoadJob {
             } catch (CommitRateExceededException e) {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
-            } catch (UserException e) {
-                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
-                        .add("database_id", dbId)
-                        .add("error_msg", "Failed to commit txn with error:" + e.getMessage())
-                        .build(), e);
-                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+            } catch (StarRocksException e) {
+                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
                 break;
             }
         }
     }
 
-    private void commitTransactionUnderDatabaseLock(Database db) throws UserException {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
-                    .add("txn_id", transactionId)
-                    .add("msg", "Load job try to commit txn")
-                    .build());
-            // Update the write duration before committing the transaction.
-            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-            TransactionState transactionState = transactionMgr.getTransactionState(dbId, transactionId);
-            if (transactionState != null) {
-                transactionState.setWriteDurationMs(writeDurationMs);
-            }
+    private void commitTransactionUnderDatabaseLock(Database db) throws StarRocksException {
+        LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
+                .add("txn_id", transactionId)
+                .add("msg", "Load job try to commit txn")
+                .build());
+        // Update the write duration before committing the transaction.
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState transactionState = transactionMgr.getTransactionState(dbId, transactionId);
+        if (transactionState != null) {
+            transactionState.setWriteDurationMs(writeDurationMs);
+        }
 
+        List<Long> tableIdList = transactionState.getTableIdList();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        try {
             transactionMgr.commitTransaction(dbId, transactionId, commitInfos, failInfos,
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp, finishTimestamp, state,
                             failMsg));
@@ -444,7 +865,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
             });
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
     }
 
@@ -521,5 +942,12 @@ public class BrokerLoadJob extends BulkLoadJob {
             value += Long.valueOf(deltaValue);
         }
         return String.valueOf(value);
+    }
+
+    @Override
+    protected void updateTabletFailInfos(TaskAttachment attachment) {
+        if (attachment instanceof BrokerLoadingTaskAttachment) {
+            failInfos.addAll(((BrokerLoadingTaskAttachment) attachment).getFailInfoList());
+        }
     }
 }

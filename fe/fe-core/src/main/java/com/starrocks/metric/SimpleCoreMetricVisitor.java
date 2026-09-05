@@ -62,7 +62,7 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
     public static final String JVM_OLD_USED_PERCENT = "jvm_old_used_percent";
     public static final String JVM_THREAD = "jvm_thread";
 
-    public static final String MAX_JOURMAL_ID = "max_journal_id";
+    public static final String MAX_JOURNAL_ID = "max_journal_id";
     public static final String CONNECTION_TOTAL = "connection_total";
     public static final String QUERY_LATENCY_MS = "query_latency_ms";
 
@@ -72,16 +72,19 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
 
     public static final String MAX_TABLET_COMPACTION_SCORE = "max_tablet_compaction_score";
 
+    public static final String CACHE_MISS_RATIO = "cache_miss_ratio";
+
     private static final Map<String, String> CORE_METRICS = Maps.newHashMap();
 
     static {
-        CORE_METRICS.put(MAX_JOURMAL_ID, TYPE_LONG);
+        CORE_METRICS.put(MAX_JOURNAL_ID, TYPE_LONG);
         CORE_METRICS.put(CONNECTION_TOTAL, TYPE_LONG);
         CORE_METRICS.put(QUERY_LATENCY_MS, TYPE_LONG);
         CORE_METRICS.put(QUERY_PER_SECOND, TYPE_DOUBLE);
         CORE_METRICS.put(REQUEST_PER_SECOND, TYPE_DOUBLE);
         CORE_METRICS.put(QUERY_ERR_RATE, TYPE_DOUBLE);
         CORE_METRICS.put(MAX_TABLET_COMPACTION_SCORE, TYPE_LONG);
+        CORE_METRICS.put(CACHE_MISS_RATIO, TYPE_DOUBLE);
     }
 
     private StringBuilder sb;
@@ -97,13 +100,13 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
         while (memIter.hasNext()) {
             MemoryPool memPool = memIter.next();
             if (memPool.getName().equalsIgnoreCase("young")) {
-                long used = memPool.getUsed().getBytes();
-                long max = memPool.getMax().getBytes();
+                long used = memPool.getUsed();
+                long max = memPool.getMax();
                 String percent = String.format("%.1f", (double) used / (max + 1) * 100);
                 sb.append(Joiner.on(" ").join(JVM_YOUNG_USED_PERCENT, TYPE_DOUBLE, percent)).append("\n");
             } else if (memPool.getName().equalsIgnoreCase("old")) {
-                long used = memPool.getUsed().getBytes();
-                long max = memPool.getMax().getBytes();
+                long used = memPool.getUsed();
+                long max = memPool.getMax();
                 String percent = String.format("%.1f", (double) used / (max + 1) * 100);
                 sb.append(Joiner.on(" ").join(JVM_OLD_USED_PERCENT, TYPE_DOUBLE, percent)).append("\n");
             }
@@ -131,7 +134,16 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
     }
 
     @Override
+    public void visitHistogram(HistogramMetric histogram) {
+    }
+
+    @Override
     public void visitHistogram(String name, Histogram histogram) {
+        // skip HistogramMetric since it needs extra processing
+        if (histogram instanceof HistogramMetric) {
+            visitHistogram((HistogramMetric) histogram);
+            return;
+        }
         if (!CORE_METRICS.containsKey(name)) {
             return;
         }
@@ -147,16 +159,18 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
 
     @Override
     public void getNodeInfo() {
-        long feDeadNum = GlobalStateMgr.getCurrentState().getFrontends(null).stream().filter(f -> !f.isAlive()).count();
+        long feDeadNum = GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getFrontends(null).stream().filter(f -> !f.isAlive()).count();
         long beDeadNum =
-                GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values().stream().filter(b -> !b.isAlive())
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values().stream()
+                        .filter(b -> !b.isAlive())
                         .count();
         long brokerDeadNum =
                 GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)
                         .count();
-        sb.append(prefix + "_frontend_dead_num").append(" ").append(String.valueOf(feDeadNum)).append("\n");
-        sb.append(prefix + "_backend_dead_num").append(" ").append(String.valueOf(beDeadNum)).append("\n");
-        sb.append(prefix + "_broker_dead_num").append(" ").append(String.valueOf(brokerDeadNum)).append("\n");
+        sb.append(prefix).append("_frontend_dead_num").append(" ").append(feDeadNum).append("\n");
+        sb.append(prefix).append("_backend_dead_num").append(" ").append(beDeadNum).append("\n");
+        sb.append(prefix).append("_broker_dead_num").append(" ").append(brokerDeadNum).append("\n");
     }
 
     @Override

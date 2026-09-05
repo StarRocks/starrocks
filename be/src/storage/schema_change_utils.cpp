@@ -14,16 +14,19 @@
 
 #include "storage/schema_change_utils.h"
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
+#include "column/type_converter.h"
+#include "exprs/expr_factory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/chunk_helper.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 
@@ -31,12 +34,16 @@ ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& new_schema) {
     _schema_mapping.resize(new_schema->num_columns());
 }
 
-ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+ChunkChanger::ChunkChanger(TabletSchemaCSPtr base_schema, const TabletSchemaCSPtr& new_schema,
                            std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type)
         : _base_schema(std::move(base_schema)),
           _base_table_column_names(base_table_column_names),
           _alter_job_type(alter_job_type) {
-    _schema_mapping.resize(new_schema->num_columns());
+    size_t num_columns = new_schema->num_columns();
+    if (num_columns > 0 && new_schema->column(num_columns - 1).name() == Schema::FULL_ROW_COLUMN) {
+        num_columns--;
+    }
+    _schema_mapping.resize(num_columns);
 }
 
 ChunkChanger::~ChunkChanger() {
@@ -48,9 +55,9 @@ ChunkChanger::~ChunkChanger() {
     }
 }
 
-void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals) {
-    _state = _obj_pool.add(
-            new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
+void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals,
+                                      ExecEnv* exec_env) {
+    _state = _obj_pool.add(new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, exec_env));
 }
 
 ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
@@ -60,24 +67,24 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
     return &_schema_mapping[column_index];
 }
 
-#define TYPE_REINTERPRET_CAST(FromType, ToType)      \
-    {                                                \
-        size_t row_num = base_chunk->num_rows();     \
-        for (size_t row = 0; row < row_num; ++row) { \
-            Datum base_datum = base_col->get(row);   \
-            Datum new_datum;                         \
-            if (base_datum.is_null()) {              \
-                new_datum.set_null();                \
-                new_col->append_datum(new_datum);    \
-                continue;                            \
-            }                                        \
-            FromType src;                            \
-            src = base_datum.get<FromType>();        \
-            ToType dst = static_cast<ToType>(src);   \
-            new_datum.set(dst);                      \
-            new_col->append_datum(new_datum);        \
-        }                                            \
-        break;                                       \
+#define TYPE_REINTERPRET_CAST(FromType, ToType)                         \
+    {                                                                   \
+        size_t row_num = base_chunk->num_rows();                        \
+        for (size_t row = 0; row < row_num; ++row) {                    \
+            Datum base_datum = base_col->get(row);                      \
+            Datum new_datum;                                            \
+            if (base_datum.is_null()) {                                 \
+                new_datum.set_null();                                   \
+                new_col->as_mutable_raw_ptr()->append_datum(new_datum); \
+                continue;                                               \
+            }                                                           \
+            FromType src;                                               \
+            src = base_datum.get<FromType>();                           \
+            ToType dst = static_cast<ToType>(src);                      \
+            new_datum.set(dst);                                         \
+            new_col->as_mutable_raw_ptr()->append_datum(new_datum);     \
+        }                                                               \
+        break;                                                          \
     }
 
 #define CONVERT_FROM_TYPE(from_type)                                                \
@@ -131,7 +138,7 @@ public:
 
     template <LogicalType from_type, LogicalType to_type>
     void add_convert_type_mapping() {
-        _convert_type_set.emplace(std::make_pair(from_type, to_type));
+        _convert_type_set.emplace(from_type, to_type);
     }
 
 private:
@@ -212,9 +219,15 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
-Buffer<uint8_t> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
+StatusOr<Buffer<uint8_t>> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
     DCHECK(_where_expr != nullptr);
-    ColumnPtr filter_col = _where_expr->evaluate(chunk.get()).value();
+    auto res = _where_expr->evaluate(chunk.get());
+    if (!res.ok()) {
+        std::stringstream ss;
+        ss << "execute where expr failed: " << res.status().message();
+        return Status::InternalError(ss.str());
+    }
+    ColumnPtr filter_col = std::move(res.value());
 
     size_t size = filter_col->size();
     Buffer<uint8_t> filter(size, 0);
@@ -227,6 +240,13 @@ Buffer<uint8_t> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
 
 bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
                                    const Schema& new_schema, MemPool* mem_pool) {
+    TypeInfoAllocator type_info_allocator;
+    const TypeInfoAllocator* allocator = nullptr;
+    if (mem_pool != nullptr) {
+        type_info_allocator = make_type_info_allocator(mem_pool);
+        allocator = &type_info_allocator;
+    }
+
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
@@ -243,9 +263,20 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         }
         if (_where_expr) {
-            auto filter = _execute_where_expr(base_chunk);
+            auto res = _execute_where_expr(base_chunk);
+            if (!res.ok()) {
+                LOG(WARNING) << res.status();
+                return false;
+            }
+            auto filter = std::move(res.value());
+            // If no filtered rows are left, return directly
+            if (SIMD::all_zeros(filter)) {
+                base_chunk->set_num_rows(0);
+                return true;
+            }
             base_chunk->filter(filter);
         }
+        DCHECK(!base_chunk->is_empty());
     }
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
@@ -259,6 +290,9 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             // init for expression evaluation only
             auto new_col_status = (_schema_mapping[i].mv_expr_ctx)->evaluate(base_chunk.get());
             if (!new_col_status.ok()) {
+                LOG(WARNING) << "expr evaluate failed for rollup column: column_index=" << i
+                             << ", column_name=" << new_schema.field(i)->name() << ", ref_column=" << ref_column
+                             << ", status: " << new_col_status.status();
                 return false;
             }
             auto new_col = new_col_status.value();
@@ -268,18 +302,11 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 return false;
             }
 
-            if (new_col->only_null()) {
-                // unfold only null columns to avoid no default values.
-                auto unfold_col = new_col->clone_empty();
-                unfold_col->append_nulls(new_col->size());
-                new_col = std::move(unfold_col);
-            } else {
-                // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
-                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
-            }
+            const auto& type_desc = _schema_mapping[i].mv_expr_ctx->root()->type();
+            new_col = ColumnHelper::unfold_const_column(type_desc, new_col->size(), new_col);
 
             if (new_schema.field(i)->is_nullable()) {
-                new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                new_col = ColumnHelper::cast_to_nullable_column(std::move(new_col));
             }
 #ifdef BE_TEST
             VLOG(2) << "evaluate result:" << new_col->debug_string();
@@ -302,12 +329,12 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             VLOG(2) << "i=" << i << ", ref_column=" << ref_column << ", base_index=" << base_index
                     << ", ref_type=" << ref_type << ", new_type=" << new_type;
 
-            ColumnPtr& base_col = base_chunk->get_column_by_index(base_index);
-            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+            auto& base_col = base_chunk->get_column_by_index(base_index);
+            auto& new_col = new_chunk->get_column_by_index(i);
             if (new_type == ref_type && (!is_decimalv3_field_type(new_type) ||
                                          (reftype_precision == newtype_precision && reftype_scale == newtype_scale))) {
                 if (new_col->is_nullable() != base_col->is_nullable()) {
-                    new_col->append(*base_col.get());
+                    new_col->as_mutable_raw_ptr()->append(*base_col);
                 } else {
                     new_col = base_col;
                 }
@@ -318,7 +345,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
-                                                      new_col.get(), mem_pool);
+                                                      new_col->as_mutable_raw_ptr(), allocator);
                 if (!st.ok()) {
                     LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
                                  << logical_type_to_string(new_type);
@@ -358,7 +385,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         } else {
             VLOG(2) << "no ref column: i=" << i << ", ref_column=" << ref_column;
-            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+            auto* new_col = new_chunk->get_column_raw_ptr_by_index(i);
             for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                 new_col->append_datum(_schema_mapping[i].default_value_datum);
             }
@@ -378,13 +405,22 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
     }
 
     for (auto it : _gc_exprs) {
+        // |it.first| is the generated column's position in the new schema and comes from the FE,
+        // never index the chunk with it without checking.
+        if (it.first < 0 || it.first >= static_cast<int>(new_chunk->num_columns())) {
+            return Status::InternalError("generated column index out of range: " + std::to_string(it.first) +
+                                         ", new schema has " + std::to_string(new_chunk->num_columns()) + " columns");
+        }
+        Column* target = new_chunk->get_column_raw_ptr_by_index(it.first);
+        if (!target->is_nullable()) {
+            return Status::InternalError("generated column is expected to be nullable: " + std::to_string(it.first));
+        }
         ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(new_chunk.get()));
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))->reset_column();
-            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))
-                    ->append_nulls(new_chunk->num_rows());
+            target->reset_column();
+            target->append_nulls(new_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             new_chunk->get_column_by_index(it.first).swap(tmp);
         } else {
@@ -392,8 +428,8 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
             // it maybe a constant column or some other column type.
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
-            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))
-                    ->swap_by_data_column(output_column);
+            auto* col = down_cast<NullableColumn*>(target);
+            col->swap_by_data_column(output_column);
         }
     }
 
@@ -460,7 +496,7 @@ Status ChunkChanger::prepare() {
 
 Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
                                               const std::vector<uint32_t>& all_ref_columns_ids,
-                                              int base_schema_columns) {
+                                              const std::vector<uint32_t>& new_columns_ids) {
     if (_gc_exprs.size() == 0) {
         return Status::OK();
     }
@@ -473,16 +509,35 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
 
     auto tmp_new_chunk = new_chunk->clone_empty();
 
-    for (auto it : _gc_exprs) {
-        // cid for new partial schema
-        int cid = it.first - base_schema_columns;
-        ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(read_chunk.get()));
+    // |new_columns_ids| is the very vector the partial schema was built from, so its i-th entry is
+    // the generated column that sits in the i-th chunk column. Walk it instead of deriving the
+    // chunk index from the column id: any such derivation silently breaks as soon as something
+    // shifts the generated columns inside the new schema, e.g. an ordinary column added by the
+    // same ALTER, which is placed before them.
+    if (new_columns_ids.size() != tmp_new_chunk->num_columns()) {
+        return Status::InternalError("partial schema has " + std::to_string(tmp_new_chunk->num_columns()) +
+                                     " columns but " + std::to_string(new_columns_ids.size()) +
+                                     " generated columns are expected");
+    }
+
+    for (size_t cid = 0; cid < new_columns_ids.size(); ++cid) {
+        auto expr_iter = _gc_exprs.find(static_cast<int>(new_columns_ids[cid]));
+        if (expr_iter == _gc_exprs.end()) {
+            return Status::InternalError("no generated column expression for column " +
+                                         std::to_string(new_columns_ids[cid]));
+        }
+        Column* target = tmp_new_chunk->get_column_raw_ptr_by_index(cid);
+        if (!target->is_nullable()) {
+            return Status::InternalError("generated column is expected to be nullable: " +
+                                         std::to_string(new_columns_ids[cid]));
+        }
+        ASSIGN_OR_RETURN(ColumnPtr tmp, expr_iter->second->evaluate(read_chunk.get()));
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))->reset_column();
-            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))
-                    ->append_nulls(read_chunk->num_rows());
+            auto* col = down_cast<NullableColumn*>(target);
+            col->reset_column();
+            col->append_nulls(read_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             tmp_new_chunk->get_column_by_index(cid).swap(tmp);
         } else {
@@ -490,8 +545,8 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
             // it maybe a constant column or some other column type
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
-            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))
-                    ->swap_by_data_column(output_column);
+            auto* col = down_cast<NullableColumn*>(target);
+            col->swap_by_data_column(output_column);
         }
     }
 
@@ -544,10 +599,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
     RETURN_IF_ERROR(parse_request_normal(base_schema, new_schema, chunk_changer, materialized_view_param_map,
                                          where_expr, has_delete_predicates, sc_sorting, sc_directly,
                                          generated_column_idxs));
-    if (base_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        return parse_request_for_pk(base_schema, new_schema, sc_sorting, sc_directly);
-    }
-    return Status::OK();
+    return parse_request_for_sort_key(base_schema, new_schema, sc_sorting, sc_directly);
 }
 
 Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_schema,
@@ -560,6 +612,11 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     for (int i = 0; i < new_schema->num_columns(); ++i) {
         const TabletColumn& new_column = new_schema->column(i);
         std::string column_name(new_column.name());
+        if (column_name == Schema::FULL_ROW_COLUMN) {
+            // need to regenerate full_row column
+            *sc_directly = true;
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (materialized_view_param_map.find(column_name) != materialized_view_param_map.end()) {
@@ -569,8 +626,8 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 if (runtime_state == nullptr) {
                     return Status::InternalError("change materialized view but query_options/query_globals is not set");
                 }
-                RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), *(mvParam.mv_expr),
-                                                       &(column_mapping->mv_expr_ctx), runtime_state));
+                RETURN_IF_ERROR(ExprFactory::create_expr_tree(chunk_changer->get_object_pool(), *(mvParam.mv_expr),
+                                                              &(column_mapping->mv_expr_ctx), runtime_state));
                 RETURN_IF_ERROR(column_mapping->mv_expr_ctx->prepare(runtime_state));
                 RETURN_IF_ERROR(column_mapping->mv_expr_ctx->open(runtime_state));
             }
@@ -634,6 +691,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     int num_default_value = 0;
 
     for (int i = 0; i < new_schema->num_key_columns(); ++i) {
+        if (new_schema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (column_mapping->ref_column < 0) {
@@ -677,6 +737,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     }
 
     for (size_t i = 0; i < new_schema->num_columns(); ++i) {
+        if (new_schema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_mapping->ref_column < 0) {
             continue;
@@ -699,6 +762,18 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
             } else if (new_column.has_bitmap_index() != ref_column.has_bitmap_index()) {
                 *sc_directly = true;
                 return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), GIN) !=
+                       base_schema->has_index(ref_column.unique_id(), GIN)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), NGRAMBF) !=
+                       base_schema->has_index(ref_column.unique_id(), NGRAMBF)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), VECTOR) !=
+                       base_schema->has_index(ref_column.unique_id(), VECTOR)) {
+                *sc_directly = true;
+                return Status::OK();
             }
         }
     }
@@ -714,16 +789,18 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     return Status::OK();
 }
 
-Status SchemaChangeUtils::parse_request_for_pk(const TabletSchemaCSPtr& base_schema,
-                                               const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
-                                               bool* sc_directly) {
+Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& base_schema,
+                                                     const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
+                                                     bool* sc_directly) {
     const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
     const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
     std::vector<int32_t> base_sort_key_unique_ids;
     std::vector<int32_t> new_sort_key_unique_ids;
+    base_sort_key_unique_ids.reserve(base_sort_key_idxes.size());
     for (auto idx : base_sort_key_idxes) {
         base_sort_key_unique_ids.emplace_back(base_schema->column(idx).unique_id());
     }
+    new_sort_key_unique_ids.reserve(new_sort_key_idxes.size());
     for (auto idx : new_sort_key_idxes) {
         new_sort_key_unique_ids.emplace_back(new_schema->column(idx).unique_id());
     }
@@ -773,8 +850,17 @@ Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, con
             break;
         }
         case TYPE_JSON: {
-            column_mapping->default_json = std::make_unique<JsonValue>(value);
-            column_mapping->default_value_datum.set_json(column_mapping->default_json.get());
+            auto json_or = JsonValue::parse_json_or_string(Slice(value));
+            if (!json_or.ok()) {
+                // If JSON parse fails, treat as NULL to avoid query errors
+                // This prevents returning malformed data when FE validation is bypassed
+                LOG(WARNING) << "Failed to parse JSON default value '" << value
+                             << "', treating as NULL: " << json_or.status();
+                column_mapping->default_value_datum.set_null();
+            } else {
+                column_mapping->default_json = std::make_unique<JsonValue>(std::move(json_or.value()));
+                column_mapping->default_value_datum.set_json(column_mapping->default_json.get());
+            }
             break;
         }
         default:

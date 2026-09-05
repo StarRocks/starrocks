@@ -1,0 +1,83 @@
+-- name: test_jvm_decimal_udf @no_arrow_flight_sql
+
+-- Scalar UDF: BigDecimal evaluate(BigDecimal, BigDecimal)
+CREATE FUNCTION dec_add(DECIMAL(18, 4), DECIMAL(18, 4))
+RETURNS DECIMAL(20, 4)
+PROPERTIES (
+    "symbol" = "UDFDecimalAdd",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/decimal.jar"
+);
+
+CREATE FUNCTION dec_array_add(array<DECIMAL(18, 4)>, array<DECIMAL(18, 4)>)
+RETURNS array<DECIMAL(20, 4)>
+PROPERTIES (
+    "symbol" = "UDFDecimalArrayAdd",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/decimal.jar"
+);
+
+-- Aggregate UDF: BigDecimal finalize(State)
+CREATE AGGREGATE FUNCTION dec_sum(DECIMAL(18, 4))
+RETURNS DECIMAL(38, 4)
+PROPERTIES (
+    "symbol" = "DecimalSum",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/decimal.jar"
+);
+
+CREATE TABLE t_dec (
+    id INT,
+    d18_4 DECIMAL(18, 4),
+    d10_2 DECIMAL(10, 2)
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_dec VALUES
+    (1, 12345.6789, 100.10),
+    (2, -12345.6789, 200.20),
+    (3, 0, 300.30),
+    (4, NULL, 400.40),
+    (5, 99999999999999.9999, 500.50);
+
+-- Scalar UDF correctness
+SELECT id, dec_add(d18_4, d18_4) FROM t_dec ORDER BY id;
+
+SELECT id, dec_array_add([d18_4], [d18_4]) FROM t_dec ORDER BY id;
+
+-- Constant argument path
+SELECT id, dec_add(d18_4, CAST('1.0001' AS DECIMAL(18, 4))) FROM t_dec ORDER BY id;
+
+-- NULL handling
+SELECT dec_add(d18_4, NULL) FROM t_dec WHERE id = 1;
+
+-- UDAF correctness
+SELECT dec_sum(d18_4) FROM t_dec;
+
+-- UDAF GROUP BY
+SELECT id % 2 AS g, dec_sum(d10_2) FROM t_dec GROUP BY g ORDER BY g;
+
+-- Overflow: REPORT_ERROR mode aborts the query when the sum exceeds DECIMAL(20, 4)
+CREATE FUNCTION dec_add_narrow(DECIMAL(18, 4), DECIMAL(18, 4))
+RETURNS DECIMAL(18, 4)
+PROPERTIES (
+    "symbol" = "UDFDecimalAdd",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/decimal.jar"
+);
+
+SET sql_mode = 'ERROR_IF_OVERFLOW';
+-- Expect error: 99999999999999.9999 + 99999999999999.9999 = 199999999999999.9998
+-- which has 15 integer digits and does not fit in DECIMAL(18, 4) (max 14 integer digits).
+SELECT dec_add_narrow(d18_4, d18_4) FROM t_dec WHERE id = 5;
+
+SET sql_mode = '';
+-- Same query under default mode returns NULL for the offending row.
+SELECT dec_add_narrow(d18_4, d18_4) FROM t_dec WHERE id = 5;
+
+DROP FUNCTION dec_add(DECIMAL(18, 4), DECIMAL(18, 4));
+DROP FUNCTION dec_add_narrow(DECIMAL(18, 4), DECIMAL(18, 4));
+DROP FUNCTION dec_sum(DECIMAL(18, 4));
+DROP TABLE t_dec;

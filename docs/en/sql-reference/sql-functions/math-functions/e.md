@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the constant e (the base of natural logarithms)."
 ---
 
 # e
 
-## Description
+
 
 Returns the constant e (the base of natural logarithms).
 

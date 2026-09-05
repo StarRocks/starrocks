@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "对数组中的所有元素求和，支持Lambda表达式作为高阶函数。"
 ---
 
 # array_sum
 
-## 功能
+
 
 对数组中的所有元素求和。
 

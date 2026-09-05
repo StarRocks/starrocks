@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将数字从一个进制转换为另一个进制，并以字符串形式返回结果。"
 ---
 
 # conv
 
-## 功能
+
 
 对输入的参数 `x` 进行进制转换。
 

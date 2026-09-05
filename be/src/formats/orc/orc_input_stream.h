@@ -14,21 +14,17 @@
 
 #pragma once
 
-#include <boost/algorithm/string.hpp>
+#include <atomic>
+#include <cstdint>
 #include <orc/OrcFile.hh>
+#include <string>
+#include <vector>
 
-#include "column/column_helper.h"
-#include "common/object_pool.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "exprs/runtime_filter_bank.h"
-#include "formats/orc/orc_mapping.h"
-#include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 namespace starrocks {
 
 class RandomAccessFile;
+struct FormatScannerStats;
 
 class ORCHdfsFileStream : public orc::InputStream {
 public:
@@ -38,14 +34,14 @@ public:
     };
 
     // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream);
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, SharedBufferedInputStream* sb_stream);
 
     ~ORCHdfsFileStream() override = default;
 
     uint64_t getLength() const override { return _length; }
 
     // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
-    uint64_t getNaturalReadSize() const override { return config::orc_natural_read_size; }
+    uint64_t getNaturalReadSize() const override;
 
     // It's for read size after doing seek.
     // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
@@ -61,31 +57,30 @@ public:
     // And this value can not be too small because if we can not read a row group in a single shot,
     // we will fallback to read in normal size, and we pay cost of a extra read.
 
-    uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
+    uint64_t getNaturalReadSizeAfterSeek() const override;
 
-    void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) override;
     void read(void* buf, uint64_t length, uint64_t offset) override;
 
     const std::string& getName() const override;
 
-    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
-    void clearIORanges() override;
+    void set_lazy_column_coalesce_counter(std::atomic<int32_t>* lazy_column_coalesce_counter) {
+        _lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    }
+    void set_app_stats(FormatScannerStats* stats) { _app_stats = stats; }
+    bool isIOCoalesceEnabled() const override;
+    bool isIOAdaptiveCoalesceEnabled() const override;
+    bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const override;
+    void releaseToOffset(const int64_t offset) override;
     void setIORanges(std::vector<IORange>& io_ranges) override;
-    void setStripes(std::vector<StripeInformation>&& stripes);
+    Status setIORanges(const std::vector<SharedBufferedInputStream::IORange>& io_ranges,
+                       const bool coalesce_active_lazy_column = true);
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() override;
 
 private:
-    void doRead(void* buf, uint64_t length, uint64_t offset);
-    bool canUseCacheBuffer(uint64_t offset, uint64_t length);
-    uint64_t computeCacheFullStripeSize(uint64_t offset, uint64_t length);
-
     RandomAccessFile* _file;
     uint64_t _length;
-    std::vector<char> _cache_buffer;
-    uint64_t _cache_offset;
-    io::SharedBufferedInputStream* _sb_stream;
-
-    bool _tiny_stripe_read = false;
-    uint64_t _last_stripe_index = 0;
-    std::vector<StripeInformation> _stripes;
+    SharedBufferedInputStream* _sb_stream;
+    std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
+    FormatScannerStats* _app_stats = nullptr;
 };
 } // namespace starrocks

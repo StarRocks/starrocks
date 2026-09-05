@@ -16,25 +16,40 @@ package com.starrocks.sql.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.ExecGroup;
+import com.starrocks.planner.HashJoinNode;
+import com.starrocks.planner.IcebergMetadataDeleteNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class ExecPlan {
@@ -45,7 +60,14 @@ public class ExecPlan {
     private final DescriptorTable descTbl = new DescriptorTable();
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
+    private final List<PlanFragment> preExecutedFragments = new ArrayList<>();
     private final Map<Integer, PlanFragment> cteProduceFragments = Maps.newHashMap();
+    // splitProduceFragments and joinNodeMap is used for skew join
+    private final Map<Integer, PlanFragment> splitProduceFragments = Maps.newHashMap();
+
+    private final Map<PhysicalHashJoinOperator, HashJoinNode> joinNodeMap = new HashMap<>();
+    private final Map<PhysicalScanOperator, ScanNode> scanNodeMap = new HashMap<>();
+
     private int planCount = 0;
 
     private final OptExpression physicalPlan;
@@ -54,8 +76,21 @@ public class ExecPlan {
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
     private final Map<Integer, OptExpression> optExpressions = Maps.newHashMap();
+    private List<ExecGroup> execGroups = new ArrayList<>();
 
     private volatile ProfilingExecPlan profilingPlan;
+    private LogicalPlan logicalPlan;
+    private ColumnRefFactory columnRefFactory;
+
+    private List<Integer> collectExecStatsIds;
+
+    private final boolean isShortCircuit;
+
+    private long useBaseline = -1;
+
+    private Set<Long> duplicatedLakeScanTableIds;
+    // Captured lazily only for plans containing an AIProject.
+    private SystemChatConfig systemChatConfig;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -64,14 +99,26 @@ public class ExecPlan {
         colNames = new ArrayList<>();
         physicalPlan = null;
         outputColumns = new ArrayList<>();
+        isShortCircuit = false;
     }
 
     public ExecPlan(ConnectContext connectContext, List<String> colNames,
-                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns) {
+                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns, boolean isShortCircuit) {
         this.connectContext = connectContext;
         this.colNames = colNames;
         this.physicalPlan = physicalPlan;
         this.outputColumns = outputColumns;
+        this.isShortCircuit = isShortCircuit;
+    }
+
+    // for broker load plan
+    public ExecPlan(ConnectContext connectContext, List<PlanFragment> fragments) {
+        this.connectContext = connectContext;
+        this.colNames = new ArrayList<>();
+        this.physicalPlan = null;
+        this.outputColumns = new ArrayList<>();
+        this.fragments.addAll(fragments);
+        this.isShortCircuit = false;
     }
 
     public ConnectContext getConnectContext() {
@@ -82,6 +129,47 @@ public class ExecPlan {
         return scanNodes;
     }
 
+    SystemChatConfig getOrCreateSystemChatConfig() {
+        if (systemChatConfig == null) {
+            systemChatConfig = AIModelConfigs.systemChatSnapshot(
+                    AIModelConfigs.DefaultModelRequirement.OPTIONAL);
+        }
+        return systemChatConfig;
+    }
+
+    // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one
+    // table). Derived lazily from the physical plan and consulted per scan to gate the prepared physical split
+    // scan, whose per-scan reuse of a shared prepared read state is unsafe when the same table feeds two scans.
+    public Set<Long> getDuplicatedLakeScanTableIds() {
+        if (duplicatedLakeScanTableIds == null) {
+            Map<Long, Integer> counts = new HashMap<>();
+            countLakeScanTableIds(physicalPlan, counts);
+            Set<Long> duplicated = new HashSet<>();
+            counts.forEach((tableId, count) -> {
+                if (count >= 2) {
+                    duplicated.add(tableId);
+                }
+            });
+            duplicatedLakeScanTableIds = duplicated;
+        }
+        return duplicatedLakeScanTableIds;
+    }
+
+    private static void countLakeScanTableIds(OptExpression optExpression, Map<Long, Integer> counts) {
+        if (optExpression == null) {
+            return;
+        }
+        if (optExpression.getOp() instanceof PhysicalOlapScanOperator) {
+            Table table = ((PhysicalOlapScanOperator) optExpression.getOp()).getTable();
+            if (table != null && table.isCloudNativeTableOrMaterializedView()) {
+                counts.merge(table.getId(), 1, Integer::sum);
+            }
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            countLakeScanTableIds(child, counts);
+        }
+    }
+
     public List<Expr> getOutputExprs() {
         return outputExprs;
     }
@@ -90,8 +178,21 @@ public class ExecPlan {
         return fragments;
     }
 
+    public List<PlanFragment> getPreExecutedFragments() {
+        return preExecutedFragments;
+    }
+
     public PlanFragment getTopFragment() {
         return fragments.get(0);
+    }
+
+    /**
+     * Check if this plan is for Iceberg metadata-level delete operation.
+     * Metadata delete is performed without generating position delete files.
+     */
+    public boolean isIcebergMetadataDelete() {
+        return fragments.size() == 1
+                && fragments.get(0).getPlanRoot() instanceof IcebergMetadataDeleteNode;
     }
 
     public DescriptorTable getDescTbl() {
@@ -126,6 +227,18 @@ public class ExecPlan {
         return cteProduceFragments;
     }
 
+    public Map<Integer, PlanFragment> getSplitProduceFragments() {
+        return splitProduceFragments;
+    }
+
+    public Map<PhysicalHashJoinOperator, HashJoinNode> getJoinNodeMap() {
+        return joinNodeMap;
+    }
+    
+    public Map<PhysicalScanOperator, ScanNode> getScanNodeMap() {
+        return scanNodeMap;
+    }
+
     public OptExpression getPhysicalPlan() {
         return physicalPlan;
     }
@@ -134,8 +247,33 @@ public class ExecPlan {
         return outputColumns;
     }
 
+    public void setExecGroups(List<ExecGroup> execGroups) {
+        this.execGroups = execGroups;
+    }
+
+    public List<ExecGroup> getExecGroups() {
+        return this.execGroups;
+    }
+
+    public void setUseBaseline(long useBaseline) {
+        this.useBaseline = useBaseline;
+    }
+
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
+        optExpression.getOp().setPlanNodeId(id);
         optExpressions.put(id, optExpression);
+    }
+
+    public static void assignOperatorIds(OptExpression root) {
+        IdGenerator<PlanNodeId> operatorIdGenerator = PlanNodeId.createGenerator();
+        assignOperatorIds(root, operatorIdGenerator);
+    }
+
+    private static void assignOperatorIds(OptExpression root, IdGenerator<PlanNodeId> operatorIdGenerator) {
+        root.getOp().setOperatorId(operatorIdGenerator.getNextId().asInt());
+        for (OptExpression child : root.getInputs()) {
+            assignOperatorIds(child, operatorIdGenerator);
+        }
     }
 
     public OptExpression getOptExpression(int planNodeId) {
@@ -165,11 +303,25 @@ public class ExecPlan {
 
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
+
+        if (level == TExplainLevel.VERBOSE || level == TExplainLevel.COSTS) {
+            if (FeConstants.showFragmentCost) {
+                final String prefix = "  ";
+                AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+                str.append("PLAN COST").append("\n")
+                        .append(prefix).append("CPU: ").append(auditEvent.planCpuCosts).append("\n")
+                        .append(prefix).append("Memory: ").append(auditEvent.planMemCosts).append("\n\n");
+            }
+        }
+
         if (level == null) {
             str.append(Explain.toString(physicalPlan, outputColumns));
         } else {
             if (planCount != 0) {
                 str.append("There are ").append(planCount).append(" plans in optimizer search space\n");
+            }
+            if (useBaseline > 0) {
+                str.append("Using baseline plan[").append(useBaseline).append("]\n\n");
             }
 
             for (int i = 0; i < fragments.size(); ++i) {
@@ -202,10 +354,38 @@ public class ExecPlan {
             case VERBOSE:
                 tlevel = TExplainLevel.VERBOSE;
                 break;
-            case COST:
+            case COSTS:
                 tlevel = TExplainLevel.COSTS;
                 break;
         }
         return getExplainString(tlevel);
+    }
+
+    public LogicalPlan getLogicalPlan() {
+        return logicalPlan;
+    }
+
+    public void setLogicalPlan(LogicalPlan logicalPlan) {
+        this.logicalPlan = logicalPlan;
+    }
+
+    public ColumnRefFactory getColumnRefFactory() {
+        return columnRefFactory;
+    }
+
+    public void setColumnRefFactory(ColumnRefFactory columnRefFactory) {
+        this.columnRefFactory = columnRefFactory;
+    }
+
+    public List<Integer> getCollectExecStatsIds() {
+        return collectExecStatsIds;
+    }
+
+    public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
+        this.collectExecStatsIds = collectExecStatsIds;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
     }
 }

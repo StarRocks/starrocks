@@ -16,20 +16,21 @@
 
 #include <atomic>
 
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks {
 class DataStreamRecvr;
-class RowDescriptor;
 namespace pipeline {
 class ExchangeSourceOperator : public SourceOperator {
 public:
     ExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
             : SourceOperator(factory, id, "exchange_source", plan_node_id, false, driver_sequence) {}
 
-    virtual ~ExchangeSourceOperator() = default;
+    ~ExchangeSourceOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+
+    Status prepare_local_state(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -39,6 +40,8 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    std::string get_name() const override;
+
 private:
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
     std::atomic<bool> _is_finishing = false;
@@ -47,13 +50,16 @@ private:
 class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     ExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, const TExchangeNode& texchange_node,
-                                  int32_t num_sender, const RowDescriptor& row_desc)
+                                  int32_t num_sender, RecordDescriptor record_desc, bool enable_pipeline_level_shuffle)
             : SourceOperatorFactory(id, "exchange_source", plan_node_id),
               _texchange_node(texchange_node),
               _num_sender(num_sender),
-              _row_desc(row_desc) {}
+              _record_desc(std::move(record_desc)),
+              _enable_pipeline_level_shuffle(enable_pipeline_level_shuffle) {}
 
-    virtual ~ExchangeSourceOperatorFactory();
+    ~ExchangeSourceOperatorFactory() override;
+
+    bool support_event_scheduler() const override { return true; }
 
     const TExchangeNode& texchange_node() { return _texchange_node; }
 
@@ -70,12 +76,13 @@ public:
     std::shared_ptr<DataStreamRecvr> create_stream_recvr(RuntimeState* state);
     void close_stream_recvr();
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 private:
     const TExchangeNode& _texchange_node;
     const int32_t _num_sender;
-    const RowDescriptor& _row_desc;
+    const RecordDescriptor _record_desc;
+    const bool _enable_pipeline_level_shuffle;
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
     std::atomic<int64_t> _stream_recvr_cnt = 0;
 };

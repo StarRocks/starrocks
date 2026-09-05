@@ -16,8 +16,8 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
-#include "runtime/types.h"
+#include "formats/io/formatted_output_stream_string.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 
@@ -98,19 +98,35 @@ TEST_F(NullableConverterTest, test_read_string_invalid_value_as_error) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(NullableConverterTest, test_write_string) {
+TEST_F(NullableConverterTest, test_write_string_nullable_column) {
     auto conv = csv::get_converter(_type, true);
     auto col = ColumnHelper::create_column(_type, true);
     col->append_datum(Datum()); // null
     col->append_datum((int32_t)10);
 
-    csv::OutputStreamString buff;
+    formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("\\N10null10", buff.as_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(NullableConverterTest, test_write_string_not_nullable_column) {
+    auto conv = csv::get_converter(_type, true);
+    auto col = ColumnHelper::create_column(_type, false);
+    col->append_datum((int32_t)1);
+    col->append_datum((int32_t)10);
+
+    formats::FormattedOutputStreamString buff;
+    ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
+    ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
+    ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 0, Converter::Options()).ok());
+    ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 1, Converter::Options()).ok());
+    ASSERT_TRUE(buff.finalize().ok());
+    ASSERT_EQ("110110", buff.as_string());
 }
 
 } // namespace starrocks::csv

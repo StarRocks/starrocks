@@ -14,13 +14,16 @@
 
 #include "storage/update_compaction_state.h"
 
+#include "column/chunk_factory.h"
+#include "common/config_exec_fwd.h"
+#include "common/stack_util.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/stack_util.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -66,34 +69,36 @@ Status CompactionState::load_segments(Rowset* rowset, uint32_t segment_id) {
 static const size_t large_compaction_memory_threshold = 1000000000;
 
 Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
+    CHECK_MEM_LIMIT("CompactionState::_load_segments");
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
 
-    std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
+    MutableColumnPtr pk_column;
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column,
+                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, true));
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
-    auto res = rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats);
+    auto res = rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &stats);
     if (!res.ok()) {
         return res.status();
     }
 
     auto& itrs = res.value();
-    CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
 
     auto update_manager = StorageEngine::instance()->update_manager();
     auto tracker = update_manager->compaction_state_mem_tracker();
 
     // only hold pkey, so can use larger chunk size
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
+    ChunkUniquePtr chunk_shared_ptr;
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size));
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = itrs[segment_id].get();
@@ -113,11 +118,12 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
             } else if (!st.ok()) {
                 return st;
             } else {
-                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
             }
         }
         itr->close();
-        CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
+        RETURN_ERROR_IF_FALSE(col->size() == num_rows, "read segment: iter rows != num rows");
     }
     dest = std::move(col);
     _memory_usage += dest->memory_usage();
@@ -142,7 +148,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     return Status::OK();
 }
 
-void CompactionState::release_segments(Rowset* rowset, uint32_t segment_id) {
+void CompactionState::release_segment(uint32_t segment_id) {
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }
@@ -150,7 +156,7 @@ void CompactionState::release_segments(Rowset* rowset, uint32_t segment_id) {
     auto tracker = update_manager->compaction_state_mem_tracker();
     _memory_usage -= pk_cols[segment_id]->memory_usage();
     tracker->release(pk_cols[segment_id]->memory_usage());
-    pk_cols[segment_id]->reset_column();
+    pk_cols[segment_id].reset();
 }
 
 Status CompactionState::_do_load(Rowset* rowset) {

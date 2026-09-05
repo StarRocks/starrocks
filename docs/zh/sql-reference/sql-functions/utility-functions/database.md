@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回当前会话所在的数据库名称。"
 ---
 
 # database
 
-## 功能
+
 
 查询当前会话所在的数据库。如果未选定数据库，返回空值。
 
@@ -39,4 +40,4 @@ select database();
 
 ## 相关 SQL
 
-[USE](../../sql-statements/data-definition/USE.md)：切换到指定数据库。
+[USE](../../sql-statements/Database/USE.md)：切换到指定数据库。

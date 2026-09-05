@@ -16,6 +16,8 @@
 
 #include <memory>
 
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+
 namespace starrocks::pipeline {
 
 class CollectStatsContext;

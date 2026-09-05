@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/partition/partition_hash_map.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 
@@ -200,5 +200,9 @@ struct PartitionHashMapVariant {
     size_t memory_usage() const;
 
     bool is_nullable() const;
+
+    void set_passthrough();
+
+    void set_enable_pre_agg();
 };
 } // namespace starrocks

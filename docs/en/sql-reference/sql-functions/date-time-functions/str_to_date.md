@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Converts a string into a DATETIME value according to the specified format."
 ---
 
 # str_to_date
 
-## Description
+
 
 Converts a string into a DATETIME value according to the specified format. If the conversion fails, NULL is returned.
 

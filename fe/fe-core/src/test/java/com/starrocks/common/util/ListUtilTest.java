@@ -18,17 +18,16 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.Lists;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-public class ListUtilTest {
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
+public class ListUtilTest {
 
     @Test
     public void testSplitBySizeNormal() {
@@ -37,10 +36,10 @@ public class ListUtilTest {
 
         List<List<Integer>> splitLists = ListUtil.splitBySize(lists, expectSize);
 
-        Assert.assertEquals(splitLists.size(), 3);
-        Assert.assertEquals(splitLists.get(0).size(), 3);
-        Assert.assertEquals(splitLists.get(1).size(), 2);
-        Assert.assertEquals(splitLists.get(2).size(), 2);
+        Assertions.assertEquals(splitLists.size(), 3);
+        Assertions.assertEquals(splitLists.get(0).size(), 3);
+        Assertions.assertEquals(splitLists.get(1).size(), 2);
+        Assertions.assertEquals(splitLists.get(2).size(), 2);
     }
 
     @Test
@@ -50,8 +49,8 @@ public class ListUtilTest {
 
         List<List<Integer>> splitLists = ListUtil.splitBySize(lists, expectSize);
 
-        Assert.assertEquals(splitLists.size(), 1);
-        Assert.assertEquals(lists, splitLists.get(0));
+        Assertions.assertEquals(splitLists.size(), 1);
+        Assertions.assertEquals(lists, splitLists.get(0));
     }
 
     @Test
@@ -61,10 +60,10 @@ public class ListUtilTest {
 
         List<List<Integer>> splitLists = ListUtil.splitBySize(lists, expectSize);
 
-        Assert.assertEquals(splitLists.size(), lists.size());
-        Assert.assertTrue(splitLists.get(0).get(0) == 1);
-        Assert.assertTrue(splitLists.get(1).get(0) == 2);
-        Assert.assertTrue(splitLists.get(2).get(0) == 3);
+        Assertions.assertEquals(splitLists.size(), lists.size());
+        Assertions.assertTrue(splitLists.get(0).get(0) == 1);
+        Assertions.assertTrue(splitLists.get(1).get(0) == 2);
+        Assertions.assertTrue(splitLists.get(2).get(0) == 3);
     }
 
     @Test
@@ -74,7 +73,7 @@ public class ListUtilTest {
 
         List<List<Integer>> splitLists = ListUtil.splitBySize(lists, expectSize);
 
-        Assert.assertEquals(splitLists.size(), lists.size());
+        Assertions.assertEquals(splitLists.size(), lists.size());
     }
 
     @Test
@@ -82,10 +81,8 @@ public class ListUtilTest {
         List<Integer> lists = null;
         int expectSize = 10;
 
-        expectedEx.expect(NullPointerException.class);
-        expectedEx.expectMessage("list must not be null");
-
-        ListUtil.splitBySize(lists, expectSize);
+        Throwable exception = assertThrows(NullPointerException.class, () -> ListUtil.splitBySize(lists, expectSize));
+        assertThat(exception.getMessage(), containsString("list must not be null"));
     }
 
     @Test
@@ -93,9 +90,7 @@ public class ListUtilTest {
         List<Integer> lists = Lists.newArrayList(1, 2, 3);
         int expectSize = -1;
 
-        expectedEx.expect(IllegalArgumentException.class);
-        expectedEx.expectMessage("expectedSize must larger than 0");
-
-        ListUtil.splitBySize(lists, expectSize);
+        Throwable exception = assertThrows(IllegalArgumentException.class, () -> ListUtil.splitBySize(lists, expectSize));
+        assertThat(exception.getMessage(), containsString("expectedSize must larger than 0"));
     }
 }

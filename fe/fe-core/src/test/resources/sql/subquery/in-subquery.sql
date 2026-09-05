@@ -56,6 +56,51 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [
 [end]
 
 [sql]
+select t0.v1 from t0 where 1 not in (select t3.v11 from t3)
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [5: v11 = 1] post-join-predicate [null])
+    SCAN (columns[1: v1] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v11] predicate[5: v11 = 1 OR 5: v11 = 1 IS NULL])
+[end]
+
+[sql]
+select t0.v1 from t0 where 1 not in (select t3.v11 from t3) and v2 = 3
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [5: v11 = 1] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 3])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v11] predicate[5: v11 = 1 OR 5: v11 = 1 IS NULL])
+[end]
+
+[sql]
+select t0.v1 from t0 where 1 not in (select t3.v11 from t3 where v12 != v3) and v2 = 3
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [5: v11 = 1 AND 6: v12 != 3: v3] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v11, 6: v12] predicate[5: v11 = 1 OR 5: v11 = 1 IS NULL])
+[end]
+
+[sql]
+select t0.v1 from t0 where 1 not in (select t3.v11 from t3 where v12 = 1) and v2 = 3
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [5: v11 = 1] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 3])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v11, 6: v12] predicate[5: v11 = 1 OR 5: v11 = 1 IS NULL AND 6: v12 = 1])
+[end]
+
+[sql]
+select t0.v1 from t0 where null not in (select t3.v11 from t3)
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [null] post-join-predicate [null])
+    SCAN (columns[1: v1] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[4: v10] predicate[null])
+[end]
+
+[sql]
 select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where t0.v3 = t3.v12)
 [result]
 NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])
@@ -211,7 +256,7 @@ LEFT SEMI JOIN (join-predicate [3: v3 = 8: max] post-join-predicate [null])
 [sql]
 select v2, min(v1) from t0 group by v2 having min(v1) not in (select v4 from t1 where v5 = v2);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [4: min = 5: v4 AND 2: v2 = 6: v5] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [4: min = 5: v4 AND 6: v5 = 2: v2] post-join-predicate [null])
     AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
         EXCHANGE SHUFFLE[2]
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
@@ -223,7 +268,7 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [4: min = 5: v4 AND 2: v2 = 6: v5] pos
 [sql]
 select v2, min(v1) from t0 group by v2 having v2 not in (select v4 from t1 where v5 = v2);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v4 AND 2: v2 = 6: v5] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v4 AND 6: v5 = 2: v2] post-join-predicate [null])
     AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
         EXCHANGE SHUFFLE[2]
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
@@ -327,7 +372,7 @@ select v3, v1 from t0 where (t0.v3 = 3 or t0.v2 not in (select v6 from t1 where 
 [result]
 CTEAnchor(cteid=1)
     CTEProducer(cteid=1)
-        SCAN (columns[5: v5, 6: v6] predicate[null])
+        SCAN (columns[5: v5, 6: v6] predicate[5: v5 = 4])
     LEFT OUTER JOIN (join-predicate [1: v1 = 11: v5] post-join-predicate [3: v3 = 3 OR NOT CASE WHEN 12: countRows IS NULL OR 12: countRows = 0 THEN false WHEN 2: v2 IS NULL THEN null WHEN 8: v6 IS NOT NULL THEN true WHEN 13: countNotNulls < 12: countRows THEN null ELSE false END])
         LEFT OUTER JOIN (join-predicate [2: v2 = 8: v6 AND 1: v1 = 9: v5] post-join-predicate [null])
             SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 4])
@@ -335,14 +380,12 @@ CTEAnchor(cteid=1)
                 AGGREGATE ([GLOBAL] aggregate [{}] group by [[8: v6, 9: v5]] having [null]
                     EXCHANGE SHUFFLE[8, 9]
                         AGGREGATE ([LOCAL] aggregate [{}] group by [[8: v6, 9: v5]] having [null]
-                            PREDICATE 9: v5 = 4
-                                CTEConsumer(cteid=1)
+                            CTEConsumer(cteid=1)
         EXCHANGE SHUFFLE[11]
             AGGREGATE ([GLOBAL] aggregate [{12: countRows=count(12: countRows), 13: countNotNulls=count(13: countNotNulls)}] group by [[11: v5]] having [null]
                 EXCHANGE SHUFFLE[11]
                     AGGREGATE ([LOCAL] aggregate [{12: countRows=count(1), 13: countNotNulls=count(10: v6)}] group by [[11: v5]] having [null]
-                        PREDICATE 11: v5 = 4
-                            CTEConsumer(cteid=1)
+                        CTEConsumer(cteid=1)
 [end]
 
 [sql]
@@ -420,7 +463,7 @@ CTEAnchor(cteid=1)
 [sql]
 select v3, v1 from t0 where (t0.v3 = 3 or t0.v2 in (select v6 from t1 where v5 = v1)) and t0.v2 not in (select v5 from t1 where v4 = v2);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 9: v5 AND 2: v2 = 8: v4] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 9: v5 AND 8: v4 = 2: v2] post-join-predicate [null])
     CTEAnchor(cteid=1)
         CTEProducer(cteid=1)
             SCAN (columns[5: v5, 6: v6] predicate[null])
@@ -620,7 +663,7 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [18: cast = 19: cast AND add(19: cast,
 [sql]
 select t0.v1 from t0 left join t1 on true where t0.v1 + t1.v4 not in (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [18: cast = 19: cast AND 21: add = 20: cast AND add(add(20: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [18: cast = 19: cast AND 20: cast = 21: add AND add(add(20: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
     RIGHT OUTER JOIN (join-predicate [null] post-join-predicate [null])
         EXCHANGE GATHER
             SCAN (columns[4: v4, 5: v5] predicate[null])
@@ -673,7 +716,7 @@ LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v
 [sql]
 select * from t0 where (v1, v2) NOT IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10)
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v6] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 6: v6 = 3: v3] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         SCAN (columns[4: v4, 5: v5, 6: v6] predicate[5: v5 > 10])
@@ -691,10 +734,10 @@ LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v
 [sql]
 select * from test_all_type where (t1e, t1f) IN (select v4, v5 from t1)
 [result]
-LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 6: t1f = 17: cast] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [5: t1e = 15: cast AND 6: t1f = 16: cast] post-join-predicate [null])
     SCAN (columns[1: t1a, 2: t1b, 3: t1c, 4: t1d, 5: t1e, 6: t1f, 7: t1g, 8: id_datetime, 9: id_date, 10: id_decimal] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[11: v4, 12: v5] predicate[cast(11: v4 as double) IS NOT NULL AND cast(12: v5 as double) IS NOT NULL])
+        SCAN (columns[11: v4, 12: v5] predicate[cast(11: v4 as float) IS NOT NULL AND cast(12: v5 as double) IS NOT NULL])
 [end]
 
 [sql]
@@ -703,24 +746,26 @@ select t0.v1 from t0 where (v1 + 10, v2 + v2) IN (select t1.v4 + t1.v5, t1.v5 fr
 LEFT SEMI JOIN (join-predicate [9: add = 7: expr AND 10: add = 5: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4, 5: v5] predicate[add(4: v4, 5: v5) IS NOT NULL AND 5: v5 IS NOT NULL])
+        PREDICATE 7: expr IS NOT NULL
+            SCAN (columns[4: v4, 5: v5] predicate[5: v5 IS NOT NULL])
 [end]
 
 [sql]
 select 1 from customer where (C_NATIONKEY, C_NAME) IN (select P_NAME, P_RETAILPRICE from part)
 [result]
-RIGHT SEMI JOIN (join-predicate [11: P_NAME = 22: cast AND 17: P_RETAILPRICE = 23: cast] post-join-predicate [null])
-    EXCHANGE SHUFFLE[11, 17]
-        SCAN (columns[17: P_RETAILPRICE, 11: P_NAME] predicate[null])
-    EXCHANGE SHUFFLE[22, 23]
-        SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
+LEFT SEMI JOIN (join-predicate [22: cast = 23: cast AND 24: cast = 17: P_RETAILPRICE] post-join-predicate [null])
+    SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[17: P_RETAILPRICE, 11: P_NAME] predicate[cast(11: P_NAME as double) IS NOT NULL])
 [end]
 
 [sql]
 select 1 from customer where (C_NATIONKEY, C_NAME) IN (select "aa", 123.45)
 [result]
-LEFT SEMI JOIN (join-predicate [15: cast = 11: expr AND 2: C_NAME = 16: cast] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 17: cast = 18: cast] post-join-predicate [null])
     SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
     EXCHANGE BROADCAST
-        VALUES (null)
+        PREDICATE cast(aa as double) IS NOT NULL
+            VALUES (null)
 [end]
+

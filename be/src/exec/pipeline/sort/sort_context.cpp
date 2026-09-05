@@ -18,13 +18,17 @@
 #include <mutex>
 #include <utility>
 
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sorting.h"
-#include "exprs/runtime_filter_bank.h"
-#include "runtime/chunk_cursor.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sort_cursor.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -56,9 +60,36 @@ bool SortContext::is_partition_ready() const {
     });
 }
 
+Status SortContext::spiller_task_status() const {
+    for (const auto& sorter : _chunks_sorter_partitions) {
+        if (sorter->spiller() != nullptr) {
+            if (Status st = sorter->spiller()->task_status(); !st.ok()) {
+                return st;
+            }
+        }
+    }
+    return Status::OK();
+}
+
+void SortContext::subscribe_source_to_spillers(RuntimeState* state, PipelineObserver* observer) {
+    for (auto& sorter : _chunks_sorter_partitions) {
+        if (sorter->spiller() != nullptr) {
+            sorter->spiller()->observable().subscribe_source(state, observer);
+        }
+    }
+}
+
+// Cancel is intentionally minimal. Each partition spiller's cancel is already driven from the sink side
+// (SpillablePartitionSortSinkOperator::set_finishing/set_finished call _chunks_sorter->cancel() ->
+// _spiller->cancel() when cancelled), and any in-flight restore/flush IO holds its own query-lifetime pin
+// for the duration of its completion, so an explicit per-spiller cancel() here would be redundant (and
+// could only race the IO task's own guard); none is issued.
 void SortContext::cancel() {}
 
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
+    // Propagate a partition spiller task error before touching the merger, which would otherwise stall on a
+    // not-eos no-data cursor.
+    RETURN_IF_ERROR(spiller_task_status());
     RETURN_IF_ERROR(_init_merger());
 
     while (_required_rows > 0 && !_merger.is_eos()) {
@@ -118,6 +149,13 @@ Status SortContext::_init_merger() {
             auto& partition_sorter = _chunks_sorter_partitions[i];
             ChunkPtr chunk;
             Status st = partition_sorter->get_next(&chunk, eos);
+            // Propagate non-EOF errors instead of silently dropping them.
+            // Without this, a spiller restore failure leaves the merger cursor in a
+            // not-eos / no-data limbo and the source operator hangs.
+            if (!st.ok() && !st.is_end_of_file()) {
+                cancel_fragment_context(_state->fragment_ctx(), st);
+                *eos = true;
+            }
             if (!st.ok() || *eos || chunk == nullptr) {
                 return false;
             }
@@ -137,9 +175,12 @@ Status SortContext::_init_merger() {
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
                                        std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
                                        const std::vector<bool>& is_null_first,
-                                       [[maybe_unused]] const std::vector<TExpr>& partition_exprs, int64_t offset,
-                                       int64_t limit, const std::string& sort_keys,
-                                       const std::vector<OrderByType>& order_by_types,
+                                       [[maybe_unused]] const std::vector<TExpr>& partition_exprs,
+                                       [[maybe_unused]] bool enable_pre_agg,
+                                       [[maybe_unused]] const std::vector<TExpr>& t_pre_agg_exprs,
+                                       [[maybe_unused]] const std::vector<TSlotId>& t_pre_agg_output_slot_id,
+                                       int64_t offset, int64_t limit, const std::string& sort_keys,
+                                       [[maybe_unused]] bool has_outer_join_child,
                                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters)
         : _state(state),
           _topn_type(topn_type),

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Verifies whether a role (or a nested role) is active in the current session."
 ---
 
 # is_role_in_session
 
-## Description
+
 
 Verifies whether a role (or a nested role) is active in the current session.
 

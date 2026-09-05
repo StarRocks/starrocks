@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -54,11 +55,14 @@ import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Formatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -89,6 +93,9 @@ public class RuntimeProfile {
 
     private String name;
     private double localTimePercent;
+    // The version of this profile. It is used to prevent updating this profile
+    // from an old one.
+    private volatile long version = 0;
 
     public RuntimeProfile(String name) {
         this();
@@ -131,6 +138,16 @@ public class RuntimeProfile {
         return addCounter(name, type, strategy, ROOT_COUNTER);
     }
 
+    @VisibleForTesting
+    public void addCounter(String name, String parentName, Counter counter) {
+        this.counterMap.put(name, Pair.create(counter, parentName));
+        if (!childCounterMap.containsKey(parentName)) {
+            childCounterMap.putIfAbsent(parentName, Sets.newConcurrentHashSet());
+        }
+        Set<String> childNames = childCounterMap.get(parentName);
+        childNames.add(name);
+    }
+
     public Counter addCounter(String name, TUnit type, TCounterStrategy strategy, String parentName) {
         if (strategy == null) {
             strategy = Counter.createStrategy(type);
@@ -139,8 +156,8 @@ public class RuntimeProfile {
         if (pair != null) {
             return pair.first;
         } else {
-            Preconditions.checkState(parentName.equals(ROOT_COUNTER)
-                    || this.counterMap.containsKey(parentName));
+            Preconditions.checkState(parentName.equals(ROOT_COUNTER) || this.counterMap.containsKey(parentName),
+                    String.format("dangling counter %s->%s", parentName, name));
             Counter newCounter = new Counter(type, strategy, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
@@ -160,6 +177,9 @@ public class RuntimeProfile {
 
         // Remove from its parent sub sets
         Pair<Counter, String> pair = counterMap.get(name);
+        if (pair == null) {
+            return;
+        }
         String parentName = pair.second;
         if (childCounterMap.containsKey(parentName)) {
             Set<String> childNames = childCounterMap.get(parentName);
@@ -221,6 +241,12 @@ public class RuntimeProfile {
                 Counter srcCounter = srcProfile.counterMap.get(name).first;
                 Counter newCounter = addCounter(name, srcCounter.getType(), srcCounter.getStrategy(), parentName);
                 newCounter.setValue(srcCounter.getValue());
+                if (srcCounter.getMinValue().isPresent()) {
+                    newCounter.setMinValue(srcCounter.getMinValue().get());
+                }
+                if (srcCounter.getMaxValue().isPresent()) {
+                    newCounter.setMaxValue(srcCounter.getMaxValue().get());
+                }
             }
 
             Set<String> childNames = srcProfile.childCounterMap.get(name);
@@ -232,18 +258,37 @@ public class RuntimeProfile {
         }
     }
 
+    public long getVersion() {
+        return version;
+    }
+
     public void update(final TRuntimeProfileTree thriftProfile) {
         Reference<Integer> idx = new Reference<>(0);
-        update(thriftProfile.nodes, idx);
+        update(thriftProfile.nodes, idx, false);
         Preconditions.checkState(idx.getRef().equals(thriftProfile.nodes.size()));
     }
 
-    // preorder traversal, idx should be modified in the traversal process
-    private void update(List<TRuntimeProfileNode> nodes, Reference<Integer> idx) {
+    // Update a subtree of profiles from nodes, rooted at idx. It will do a preorder
+    // traversal, and modify idx in the traversal process. idx will point to the node
+    // immediately following this subtree after the traversal. If the version of the
+    // parent node, or the version of root node for this subtree is older, skip to update
+    // the profile of subtree, but still traverse the nodes to get the node immediately
+    // following this subtree.
+    private void update(List<TRuntimeProfileNode> nodes, Reference<Integer> idx, boolean isParentNodeOld) {
         TRuntimeProfileNode node = nodes.get(idx.getRef());
 
+        boolean isNodeOld;
+        if (isParentNodeOld || (node.isSetVersion() && node.version < version)) {
+            isNodeOld = true;
+        } else {
+            isNodeOld = false;
+            if (node.isSetVersion()) {
+                version = node.version;
+            }
+        }
+
         // update this level's counters
-        if (node.counters != null) {
+        if (!isNodeOld && node.counters != null) {
             // mapping from counterName to parentCounterName
             Map<String, String> child2ParentMap = Maps.newHashMap();
             if (node.child_counters_map != null) {
@@ -267,18 +312,32 @@ public class RuntimeProfile {
                     Pair<Counter, String> pair = counterMap.get(topName);
                     TCounter tcounter = tCounterMap.get(topName);
                     String parentName = child2ParentMap.get(topName);
+                    Counter counter = null;
                     if (pair == null && tcounter != null && parentName != null) {
-                        Counter counter =
-                                addCounter(topName, tcounter.type, tcounter.strategy, parentName);
+                        counter = addCounter(topName, tcounter.type, tcounter.strategy, parentName);
                         counter.setValue(tcounter.value);
                         counter.setStrategy(tcounter.strategy);
-                        tCounterMap.remove(topName);
                     } else if (pair != null && tcounter != null) {
+                        counter = pair.first;
                         if (pair.first.getType() != tcounter.type) {
                             LOG.error("Cannot update counters with the same name but different types"
                                     + " type=" + tcounter.type);
                         } else {
                             pair.first.setValue(tcounter.value);
+                        }
+                    }
+
+                    if (counter != null) {
+                        // Running profile will report multiple times, we only need the last time value
+                        if (tcounter.isSetMin_value()) {
+                            counter.setMinValue(tcounter.getMin_value());
+                        } else {
+                            counter.clearMinValue();
+                        }
+                        if (tcounter.isSetMax_value()) {
+                            counter.setMaxValue(tcounter.getMax_value());
+                        } else {
+                            counter.clearMaxValue();
                         }
                         tCounterMap.remove(topName);
                     }
@@ -296,11 +355,13 @@ public class RuntimeProfile {
             // Second, processing the remaining counters, set ROOT_COUNTER as it's parent
             for (TCounter tcounter : tCounterMap.values()) {
                 Pair<Counter, String> pair = counterMap.get(tcounter.name);
+                Counter counter = null;
                 if (pair == null) {
-                    Counter counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy);
+                    counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy);
                     counter.setValue(tcounter.value);
                     counter.setStrategy(tcounter.strategy);
                 } else {
+                    counter = pair.first;
                     if (pair.first.getType() != tcounter.type) {
                         LOG.error("Cannot update counters with the same name but different types"
                                 + " type=" + tcounter.type);
@@ -308,10 +369,22 @@ public class RuntimeProfile {
                         pair.first.setValue(tcounter.value);
                     }
                 }
+
+                // Running profile will report multiple times, we only need the last time value
+                if (tcounter.isSetMin_value()) {
+                    counter.setMinValue(tcounter.getMin_value());
+                } else {
+                    counter.clearMinValue();
+                }
+                if (tcounter.isSetMax_value()) {
+                    counter.setMaxValue(tcounter.getMax_value());
+                } else {
+                    counter.clearMaxValue();
+                }
             }
         }
 
-        if (node.info_strings_display_order != null) {
+        if (!isNodeOld && node.info_strings_display_order != null) {
             Map<String, String> nodeInfoStrings = node.info_strings;
             for (String key : node.info_strings_display_order) {
                 String value = nodeInfoStrings.get(key);
@@ -330,7 +403,7 @@ public class RuntimeProfile {
                 childProfile = new RuntimeProfile(childName);
                 addChild(childProfile);
             }
-            childProfile.update(nodes, idx);
+            childProfile.update(nodes, idx, isNodeOld);
         }
     }
 
@@ -340,7 +413,17 @@ public class RuntimeProfile {
     //  3. Counters
     //  4. Children
     public void prettyPrint(StringBuilder builder, String prefix) {
-        ProfileFormatter formatter = new DefaultProfileFormatter(builder);
+        prettyPrint(builder, prefix, 1);
+    }
+
+    /**
+     * Print the profile with specified format version.
+     * @param builder StringBuilder to append output
+     * @param prefix prefix for indentation
+     * @param formatVersion 1 = legacy (separate MIN/MAX counters), 2 = compact (inline min/max)
+     */
+    public void prettyPrint(StringBuilder builder, String prefix, int formatVersion) {
+        ProfileFormatter formatter = new DefaultProfileFormatter(builder, formatVersion);
         formatter.format(this, prefix);
     }
 
@@ -354,6 +437,35 @@ public class RuntimeProfile {
             return null;
         }
         return printCounter(counter.getValue(), counter.getType());
+    }
+
+    /**
+     * Print counter value with min/max statistics if available.
+     * Format: "value (min: minValue, max: maxValue)" when min/max are different from value.
+     */
+    public static String printCounterWithMinMax(Counter counter) {
+        if (counter == null) {
+            return null;
+        }
+        String valueStr = printCounter(counter.getValue(), counter.getType());
+        
+        // If min/max values are present and different from the main value, append them
+        Optional<Long> minOpt = counter.getMinValue();
+        Optional<Long> maxOpt = counter.getMaxValue();
+        if (minOpt.isPresent() && maxOpt.isPresent()) {
+            long minVal = minOpt.get();
+            long maxVal = maxOpt.get();
+            long value = counter.getValue();
+            
+            // Only show min/max if they differ from the aggregated value
+            if (minVal != value || maxVal != value) {
+                String minStr = printCounter(minVal, counter.getType());
+                String maxStr = printCounter(maxVal, counter.getType());
+                return valueStr + " [" + minStr + ", " + maxStr + "]";
+            }
+        }
+        
+        return valueStr;
     }
 
     private static String printCounter(long value, TUnit type) {
@@ -414,6 +526,7 @@ public class RuntimeProfile {
         return builder.toString();
     }
 
+    // concurrency safe
     public void addChild(RuntimeProfile child) {
         if (child == null) {
             return;
@@ -422,6 +535,18 @@ public class RuntimeProfile {
         childMap.put(child.name, child);
         Pair<RuntimeProfile, Boolean> pair = Pair.create(child, true);
         childList.add(pair);
+    }
+
+    // concurrency safe
+    public void addChildren(List<RuntimeProfile> children) {
+        if (children.isEmpty()) {
+            return;
+        }
+        final RuntimeProfile child = children.get(0);
+        childMap.put(child.name, child);
+        List<Pair<RuntimeProfile, Boolean>> childList =
+                children.stream().map(c -> new Pair<>(c, true)).collect(Collectors.toList());
+        this.childList.addAll(childList);
     }
 
     public void removeChild(String childName) {
@@ -498,13 +623,24 @@ public class RuntimeProfile {
                 if ((pos = key.indexOf("__DUP(")) != -1) {
                     originalKey = key.substring(0, pos);
                 }
-                int i = 0;
+                int offset = -1;
+                int previousOffset;
+                int step = 1;
                 while (true) {
-                    String indexedKey = String.format("%s__DUP(%d)", originalKey, i++);
+                    previousOffset = offset;
+                    offset += step;
+                    String indexedKey = String.format("%s__DUP(%d)", originalKey, offset);
                     if (!this.infoStrings.containsKey(indexedKey)) {
-                        this.infoStrings.put(indexedKey, value);
-                        break;
+                        if (step == 1) {
+                            this.infoStrings.put(indexedKey, value);
+                            break;
+                        }
+                        // Forward too much, try to forward half of the former size
+                        offset = previousOffset;
+                        step >>= 1;
+                        continue;
                     }
+                    step <<= 1;
                 }
             }
         });
@@ -538,6 +674,50 @@ public class RuntimeProfile {
     // or null if this map contains no mapping for the key.
     public String getInfoString(String key) {
         return infoStrings.get(key);
+    }
+
+    // Serializes profile to thrift. Not threadsafe.
+    public TRuntimeProfileTree toThrift() {
+        TRuntimeProfileTree profileTree = new TRuntimeProfileTree();
+        profileTree.setNodes(new ArrayList<>());
+        toThrift(profileTree.nodes);
+        return profileTree;
+    }
+
+    // Flatten the tree of runtime profiles by in-order traversal. Not threadsafe.
+    private void toThrift(List<TRuntimeProfileNode> nodes) {
+        TRuntimeProfileNode node = new TRuntimeProfileNode();
+        nodes.add(node);
+
+        node.setName(name);
+        node.setNum_children(childMap.size());
+        node.setIndent(true);
+        node.setVersion(version);
+
+        for (Map.Entry<String, Pair<Counter, String>> entry : counterMap.entrySet()) {
+            Counter counter = entry.getValue().first;
+            TCounter tCounter = new TCounter();
+            tCounter.setName(entry.getKey());
+            tCounter.setValue(counter.getValue());
+            tCounter.setType(counter.getType());
+            tCounter.setStrategy(counter.getStrategy());
+            counter.getMinValue().ifPresent(tCounter::setMin_value);
+            counter.getMaxValue().ifPresent(tCounter::setMax_value);
+            node.addToCounters(tCounter);
+        }
+
+        for (Map.Entry<String, Set<String>> entry : childCounterMap.entrySet()) {
+            node.putToChild_counters_map(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+
+        for (Map.Entry<String, String> entry : infoStrings.entrySet()) {
+            node.putToInfo_strings(entry.getKey(), entry.getValue());
+            node.addToInfo_strings_display_order(entry.getKey());
+        }
+
+        for (RuntimeProfile child : childMap.values()) {
+            child.toThrift(nodes);
+        }
     }
 
     // Merge all the isomorphic sub profiles and the caller must know for sure
@@ -578,7 +758,10 @@ public class RuntimeProfile {
                         continue;
                     }
                     Pair<Counter, String> pair = profile.counterMap.get(name);
-                    Preconditions.checkNotNull(pair);
+                    if (pair == null) {
+                        LOG.warn("missing counter, profileName={}, counterName={}", profile.name, name);
+                        continue;
+                    }
                     Counter counter = pair.first;
                     String parentName = pair.second;
 
@@ -594,7 +777,8 @@ public class RuntimeProfile {
                     TUnit existType = levelCounters.get(name).first;
                     if (!existType.equals(counter.getType())) {
                         LOG.warn(
-                                "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
+                                "find non-isomorphic counter, profileName={}, counterName={}, existType={}, " +
+                                        "anotherType={}",
                                 mergedProfile.name, name, existType.name(), counter.getType().name());
                         continue;
                     }
@@ -652,20 +836,33 @@ public class RuntimeProfile {
                 }
 
                 if (!counter.isSkipMinMax()) {
-                    Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
-                    if (minCounter != null) {
+                    if (counter.getMinValue().isPresent()) {
                         alreadyMerged = true;
-                        if (minCounter.getValue() < minValue) {
-                            minValue = minCounter.getValue();
+                        minValue = Math.min(counter.getMinValue().get(), minValue);
+                    } else {
+                        // TODO: keep compatible with older version backend, can be removed in next version
+                        Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
+                        if (minCounter != null) {
+                            alreadyMerged = true;
+                            if (minCounter.getValue() < minValue) {
+                                minValue = minCounter.getValue();
+                            }
                         }
                     }
-                    Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
-                    if (maxCounter != null) {
+                    if (counter.getMaxValue().isPresent()) {
                         alreadyMerged = true;
-                        if (maxCounter.getValue() > maxValue) {
-                            maxValue = maxCounter.getValue();
+                        maxValue = Math.max(counter.getMaxValue().get(), maxValue);
+                    } else {
+                        // TODO: keep compatible with older version backend, can be removed in next version
+                        Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
+                        if (maxCounter != null) {
+                            alreadyMerged = true;
+                            if (maxCounter.getValue() > maxValue) {
+                                maxValue = maxCounter.getValue();
+                            }
                         }
                     }
+
                 }
 
                 counters.add(counter);
@@ -698,8 +895,14 @@ public class RuntimeProfile {
                     Counter maxCounter =
                             mergedProfile.addCounter(MERGED_INFO_PREFIX_MAX + name, type, mergedCounter.getStrategy(),
                                     name);
-                    minCounter.setValue(minValue);
-                    maxCounter.setValue(maxValue);
+                    if (minValue != Integer.MAX_VALUE) {
+                        mergedCounter.setMinValue(minValue);
+                        minCounter.setValue(minValue);
+                    }
+                    if (maxValue != Integer.MIN_VALUE) {
+                        mergedCounter.setMaxValue(maxValue);
+                        maxCounter.setValue(maxValue);
+                    }
                 }
             }
 
@@ -724,7 +927,7 @@ public class RuntimeProfile {
                     RuntimeProfile child = profile.getChild(childName);
                     if (child == null) {
                         identical = false;
-                        LOG.info("find non-isomorphic children, profileName={}, requiredChildName={}",
+                        LOG.debug("find non-isomorphic children, profileName={}, requiredChildName={}",
                                 profile.name, childName);
                         continue;
                     }
@@ -775,13 +978,20 @@ public class RuntimeProfile {
     static class DefaultProfileFormatter implements ProfileFormatter {
 
         private final StringBuilder builder;
+        // Format version: 1 = legacy (separate MIN/MAX counters), 2 = compact (inline min/max)
+        private final int formatVersion;
 
         DefaultProfileFormatter(StringBuilder builder) {
+            this(builder, 1);
+        }
+
+        DefaultProfileFormatter(StringBuilder builder, int formatVersion) {
             this.builder = builder;
+            this.formatVersion = formatVersion;
         }
 
         DefaultProfileFormatter() {
-            this.builder = new StringBuilder();
+            this(new StringBuilder(), 1);
         }
 
         @Override
@@ -846,27 +1056,48 @@ public class RuntimeProfile {
             List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
             childNames.sort(String::compareTo);
 
-            // Keep MIN/MAX metrics head of other child counters
-            List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
-            List<String> otherChildNames = Lists.newArrayListWithCapacity(childNames.size());
-            for (String childName : childNames) {
-                if (childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
-                        || childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
-                    minMaxChildNames.add(childName);
-                } else {
-                    otherChildNames.add(childName);
-                }
-            }
-            List<String> reorderedChildNames = Lists.newArrayListWithCapacity(childNames.size());
-            reorderedChildNames.addAll(minMaxChildNames);
-            reorderedChildNames.addAll(otherChildNames);
+            Map<String, Counter> counterMap = profile.getCounterMap();
 
-            for (String childName : reorderedChildNames) {
-                Counter childCounter = profile.getCounterMap().get(childName);
-                Preconditions.checkState(childCounter != null);
-                builder.append(prefix).append("   - ").append(childName).append(": ")
-                        .append(printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
-                this.printChildCounters(profile, prefix + "  ", childName);
+            if (formatVersion >= 2) {
+                // Compact format: skip MIN/MAX counters and inline them with the main counter
+                for (String childName : childNames) {
+                    // Skip __MIN_OF_ and __MAX_OF_ counters - they will be shown inline
+                    if (childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
+                            || childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
+                        continue;
+                    }
+
+                    Counter childCounter = counterMap.get(childName);
+                    Preconditions.checkState(childCounter != null);
+
+                    // Use printCounterWithMinMax to show inline min/max if available
+                    builder.append(prefix).append("   - ").append(childName).append(": ")
+                            .append(printCounterWithMinMax(childCounter)).append("\n");
+                    this.printChildCounters(profile, prefix + "  ", childName);
+                }
+            } else {
+                // Legacy format: keep MIN/MAX metrics head of other child counters
+                List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
+                List<String> otherChildNames = Lists.newArrayListWithCapacity(childNames.size());
+                for (String childName : childNames) {
+                    if (childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
+                            || childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
+                        minMaxChildNames.add(childName);
+                    } else {
+                        otherChildNames.add(childName);
+                    }
+                }
+                List<String> reorderedChildNames = Lists.newArrayListWithCapacity(childNames.size());
+                reorderedChildNames.addAll(minMaxChildNames);
+                reorderedChildNames.addAll(otherChildNames);
+
+                for (String childName : reorderedChildNames) {
+                    Counter childCounter = counterMap.get(childName);
+                    Preconditions.checkState(childCounter != null);
+                    builder.append(prefix).append("   - ").append(childName).append(": ")
+                            .append(printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
+                    this.printChildCounters(profile, prefix + "  ", childName);
+                }
             }
         }
     }

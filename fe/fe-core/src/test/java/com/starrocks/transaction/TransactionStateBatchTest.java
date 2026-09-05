@@ -15,77 +15,112 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
-import com.starrocks.thrift.TUniqueId;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.proto.TabletStatPB;
+import com.starrocks.system.ComputeNode;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 
 public class TransactionStateBatchTest {
     private static String fileName = "./TransactionStateBatchTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
     }
 
     @Test
-    public void testSerDe() throws IOException, UserException {
-        // 1. Write objects to file
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
+    public void testPutBeTablets() {
         Long dbId = 1000L;
         Long tableId = 20000L;
-        UUID uuid = UUID.randomUUID();
         List<TransactionState> transactionStateList = new ArrayList<TransactionState>();
         TransactionState transactionState1 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3000, "label1", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label1", UUIDUtil.genTUniqueId(),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
-        uuid = UUID.randomUUID();
         TransactionState transactionState2 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3001, "label2", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3001, "label2", UUIDUtil.genTUniqueId(),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
         transactionStateList.add(transactionState1);
         transactionStateList.add(transactionState2);
-
         TransactionStateBatch stateBatch = new TransactionStateBatch(transactionStateList);
-        stateBatch.write(out);
-        out.flush();
-        out.close();
 
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        TransactionStateBatch readTransactionStateBatch = TransactionStateBatch.read(in);
+        long partitionId1 = 1;
+        long partitionId2 = 2;
+        Map<ComputeNode, List<Long>> nodeToTablets1 = new HashMap<>();
+        ComputeNode node1 = new ComputeNode(1, "host", 9050);
+        ComputeNode node2 = new ComputeNode(2, "host", 9050);
+        nodeToTablets1.put(node1, Lists.newArrayList(1L, 2L));
+        nodeToTablets1.put(node2, Lists.newArrayList(3L, 4L));
+        Map<ComputeNode, List<Long>> nodeToTablets2 = new HashMap<>();
+        nodeToTablets2.put(node1, Lists.newArrayList(2L, 3L, 4L));
 
-        Assert.assertEquals(readTransactionStateBatch.getTableId(), tableId.longValue());
-        Assert.assertEquals(2, readTransactionStateBatch.getTxnIds().size());
+        stateBatch.putBeTablets(partitionId1, nodeToTablets1);
+        stateBatch.putBeTablets(partitionId1, nodeToTablets2);
+        Assertions.assertEquals(1, stateBatch.getPartitionToTablets().size());
+        Assertions.assertEquals(4, stateBatch.getPartitionToTablets().get(partitionId1).get(node1).size());
+        Assertions.assertEquals(2, stateBatch.getPartitionToTablets().get(partitionId1).get(node2).size());
 
-        TransactionState state = readTransactionStateBatch.index(0);
-        Assert.assertEquals(state.getTransactionId(), 3000L);
-        Assert.assertEquals(state.getTransactionId(), transactionState1.getTransactionId());
-        Assert.assertEquals(state.getDbId(), dbId.longValue());
+        stateBatch.putBeTablets(partitionId2, nodeToTablets2);
+        Assertions.assertEquals(2, stateBatch.getPartitionToTablets().size());
+    }
 
-        readTransactionStateBatch.setTransactionStatus(TransactionStatus.VISIBLE);
-        Assert.assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
+    @Test
+    public void testSetTabletStats() {
+        long dbId = 1000L;
+        long tableId = 20000L;
+        long partitionId = 7L;
+        TransactionState[] txns = new TransactionState[] {
+                new TransactionState(dbId, Lists.newArrayList(tableId), 3000, "label1", UUIDUtil.genTUniqueId(),
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                        new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                        60 * 1000L),
+                new TransactionState(dbId, Lists.newArrayList(tableId), 3001, "label2", UUIDUtil.genTUniqueId(),
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                        new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                        60 * 1000L),
+        };
+        for (TransactionState txn : txns) {
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(partitionId, 2L, 100L));
+            txn.putIdToTableCommitInfo(tableId, tableCommitInfo);
+        }
+        TransactionStateBatch stateBatch = new TransactionStateBatch(Lists.newArrayList(txns));
 
-        in.close();
+        // null / empty -> no-op
+        stateBatch.setTabletStats(tableId, partitionId, null);
+        stateBatch.setTabletStats(tableId, partitionId, new HashMap<>());
+        Assertions.assertTrue(txns[0].getTableCommitInfo(tableId).getPartitionCommitInfo(partitionId)
+                .getTabletStats().isEmpty());
+
+        // populated -> fanned onto every batched txn's PartitionCommitInfo
+        Map<Long, TabletStatPB> stats = new HashMap<>();
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 11L;
+        stat.dataSize = 222L;
+        stats.put(5L, stat);
+        stateBatch.setTabletStats(tableId, partitionId, stats);
+        for (TransactionState txn : txns) {
+            Map<Long, TabletStatPB> got =
+                    txn.getTableCommitInfo(tableId).getPartitionCommitInfo(partitionId).getTabletStats();
+            Assertions.assertEquals(1, got.size());
+            Assertions.assertEquals(222L, (long) got.get(5L).dataSize);
+            Assertions.assertEquals(11L, (long) got.get(5L).numRows);
+        }
+
+        // partition absent from the commit info -> filtered out, no NPE
+        stateBatch.setTabletStats(tableId, 999L, stats);
     }
 
 }

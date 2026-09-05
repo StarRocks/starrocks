@@ -14,33 +14,43 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.Id;
-import com.starrocks.common.IdGenerator;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class ConnectorTableId extends Id<ConnectorTableId> {
+/**
+ * In-memory, per-FE-process ID for external connector tables (Hive/Iceberg/Hudi/Paimon/...).
+ * Not persisted and not synchronized across FEs — every FE assigns its own sequence and the
+ * counter resets on restart. Safe to use as a transient handle for the lifetime of an FE process;
+ * never store it on disk or send it to another FE.
+ */
+public class ConnectorTableId {
 
-    public static final IdGenerator<ConnectorTableId> CONNECTOR_ID_GENERATOR = createGenerator();
-    private static int CONNECTOR_TABLE_ID_OFFSET = 100000000;
-    public ConnectorTableId(int id) {
-        super(id + CONNECTOR_TABLE_ID_OFFSET);
+    public static final Generator CONNECTOR_ID_GENERATOR = new Generator();
+    private static final long CONNECTOR_TABLE_ID_OFFSET = 100_000_000L;
+
+    private final long id;
+
+    public ConnectorTableId(long id) {
+        this.id = id + CONNECTOR_TABLE_ID_OFFSET;
     }
 
-    public static IdGenerator<ConnectorTableId> createGenerator() {
-        return new IdGenerator<ConnectorTableId>() {
-            @Override
-            public synchronized ConnectorTableId getNextId() {
-                return new ConnectorTableId(nextId++);
-            }
-
-            @Override
-            public synchronized ConnectorTableId getMaxId() {
-                return new ConnectorTableId(nextId - 1);
-            }
-        };
+    public long asLong() {
+        return id;
     }
 
     @Override
     public String toString() {
         return String.format("F%02d", id);
+    }
+
+    public static final class Generator {
+        private final AtomicLong nextId = new AtomicLong(0);
+
+        public ConnectorTableId getNextId() {
+            return new ConnectorTableId(nextId.getAndIncrement());
+        }
+
+        public ConnectorTableId getMaxId() {
+            return new ConnectorTableId(nextId.get() - 1);
+        }
     }
 }

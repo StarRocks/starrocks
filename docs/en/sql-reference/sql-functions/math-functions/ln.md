@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Computes the natural (base e) logarithm of a number."
 ---
 
 # ln, dlog1, log
 
-## Description
+
 
 Computes the natural (base `e`) logarithm of a number.
 

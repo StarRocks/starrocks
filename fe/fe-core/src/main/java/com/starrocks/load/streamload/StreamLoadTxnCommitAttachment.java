@@ -12,19 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load.streamload;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implements Writable {
     @SerializedName(value = "trackingURL")
@@ -111,22 +105,11 @@ public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implement
         return numLoadBytesTotal;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
 
-    public void readFields(DataInput in) throws IOException {}
+
 
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);
-    }
-
-    public static StreamLoadTxnCommitAttachment loadStreamLoadTxnCommitAttachment(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        StreamLoadTxnCommitAttachment attachment = GsonUtils.GSON.fromJson(json, StreamLoadTxnCommitAttachment.class);
-        return attachment;
     }
 }

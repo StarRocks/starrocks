@@ -17,7 +17,10 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include "util/percentile_value.h"
+#include <vector>
+
+#include "exprs/function_context.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 class PercentileFunctionsTest : public ::testing::Test {
@@ -49,7 +52,7 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
     s->append(1);
     s->append(2);
     s->append(3);
-    columns.push_back(s);
+    columns.push_back(std::move(s));
 
     auto column = PercentileFunctions::percentile_hash(ctx, columns).value();
     ASSERT_TRUE(column->is_object());
@@ -60,17 +63,51 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
     ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
 }
 
+TEST_F(PercentileFunctionsTest, percentileHashUpdateRows) {
+    Columns columns;
+    auto s = DoubleColumn::create();
+    s->append(1);
+    s->append(2);
+    s->append(3);
+    columns.emplace_back(s);
+
+    auto column = PercentileFunctions::percentile_hash(ctx, columns).value();
+    ASSERT_TRUE(column->is_object());
+
+    auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
+    ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
+    ASSERT_EQ(2, percentile->get_object(1)->quantile(1));
+    ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
+
+    columns.clear();
+    auto s1 = DoubleColumn::create();
+    s1->append(4);
+    columns.emplace_back(s1);
+
+    auto column1 = PercentileFunctions::percentile_hash(ctx, columns).value();
+    ASSERT_TRUE(column1->is_object());
+
+    std::vector<uint32_t> idx = {1};
+    auto mutable_column = Column::mutate(std::move(column));
+    mutable_column->update_rows(*column1, idx.data());
+
+    percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(mutable_column);
+    ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
+    ASSERT_EQ(4, percentile->get_object(1)->quantile(1));
+    ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
+}
+
 TEST_F(PercentileFunctionsTest, percentileNullTest) {
     Columns columns;
     auto c1 = PercentileColumn::create();
-    auto c1_null = NullableColumn::create(c1, NullColumn::create());
+    auto c1_null = NullableColumn::create(std::move(c1), NullColumn::create());
     c1_null->append_nulls(1);
-    columns.push_back(c1_null);
+    columns.emplace_back(std::move(c1_null));
 
     auto c2 = DoubleColumn::create();
-    auto c2_null = NullableColumn::create(c2, NullColumn::create());
+    auto c2_null = NullableColumn::create(std::move(c2), NullColumn::create());
     c2_null->append_nulls(1);
-    columns.push_back(c2_null);
+    columns.emplace_back(std::move(c2_null));
 
     ColumnPtr column = PercentileFunctions::percentile_approx_raw(ctx, columns).value();
     ASSERT_TRUE(column->is_nullable());

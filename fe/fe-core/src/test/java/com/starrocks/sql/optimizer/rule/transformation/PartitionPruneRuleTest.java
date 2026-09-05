@@ -17,27 +17,25 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -45,32 +43,36 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class PartitionPruneRuleTest {
     @Test
     public void transform1(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
-        Partition part1 = new Partition(1, "p1", null, null);
-        Partition part2 = new Partition(2, "p2", null, null);
-        Partition part3 = new Partition(3, "p3", null, null);
-        Partition part4 = new Partition(4, "p4", null, null);
-        Partition part5 = new Partition(5, "p5", null, null);
+        Partition part1 = new Partition(1, 11, "p1", new MaterializedIndex(), null);
+        Partition part2 = new Partition(2, 22, "p2", new MaterializedIndex(), null);
+        Partition part3 = new Partition(3, 33, "p3", new MaterializedIndex(), null);
+        Partition part4 = new Partition(4, 44, "p4", new MaterializedIndex(), null);
+        Partition part5 = new Partition(5, 55, "p5", new MaterializedIndex(), null);
 
         List<Column> columns = Lists.newArrayList(
-                new Column("dealDate", Type.DATE, false)
+                new Column("dealDate", DateType.DATE, false)
         );
+
 
         Map<Long, Range<PartitionKey>> keyRange = Maps.newHashMap();
 
@@ -99,11 +101,11 @@ public class PartitionPruneRuleTest {
         keyRange.put(5L, Range.closed(p5, p6));
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", DateType.DATE, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
+        scanColumnMap.put(column1, new Column("dealDate", DateType.DATE, false));
         Map<Column, ColumnRefOperator> scanMetaColMap = Maps.newHashMap();
-        scanMetaColMap.put(new Column("dealDate", Type.DATE, false), column1);
+        scanMetaColMap.put(new Column("dealDate", DateType.DATE, false), column1);
         BinaryPredicateOperator binaryPredicateOperator1 =
                 new BinaryPredicateOperator(BinaryType.GE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 6, 1, 0, 0, 0)));
@@ -126,7 +128,7 @@ public class PartitionPruneRuleTest {
                 partitionInfo.getIdToRange(false);
                 result = keyRange;
 
-                partitionInfo.getPartitionColumns();
+                partitionInfo.getPartitionColumns((Map<ColumnId, Column>) any);
                 result = columns;
 
                 olapTable.getPartitions();
@@ -155,7 +157,7 @@ public class PartitionPruneRuleTest {
 
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
@@ -163,17 +165,16 @@ public class PartitionPruneRuleTest {
     @Test
     public void transform2(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
-        Partition part1 = new Partition(1, "p1", null, null);
-        Partition part2 = new Partition(2, "p2", null, null);
-        Partition part3 = new Partition(3, "p3", null, null);
-        Partition part4 = new Partition(4, "p4", null, null);
-        Partition part5 = new Partition(5, "p5", null, null);
+        Partition part1 = new Partition(1, 11, "p1", new MaterializedIndex(), null);
+        Partition part2 = new Partition(2, 22, "p2", new MaterializedIndex(), null);
+        Partition part3 = new Partition(3, 33, "p3", new MaterializedIndex(), null);
+        Partition part4 = new Partition(4, 44, "p4", new MaterializedIndex(), null);
+        Partition part5 = new Partition(5, 55, "p5", new MaterializedIndex(), null);
 
         List<Column> columns = Lists.newArrayList(
-                new Column("dealDate", Type.DATE, false),
-                new Column("main_brand_id", Type.INT, false)
+                new Column("dealDate", DateType.DATE, false),
+                new Column("main_brand_id", IntegerType.INT, false)
         );
-
         Map<Long, Range<PartitionKey>> keyRange = Maps.newHashMap();
 
         PartitionKey p1 = new PartitionKey();
@@ -207,14 +208,14 @@ public class PartitionPruneRuleTest {
         keyRange.put(5L, Range.closed(p5, p6));
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
-        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", ScalarType.INT, false);
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", DateType.DATE, false);
+        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", IntegerType.INT, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
-        scanColumnMap.put(column2, new Column("main_brand_id", Type.INT, false));
+        scanColumnMap.put(column1, new Column("dealDate", DateType.DATE, false));
+        scanColumnMap.put(column2, new Column("main_brand_id", IntegerType.INT, false));
         Map<Column, ColumnRefOperator> scanMetaColMap = Maps.newHashMap();
-        scanMetaColMap.put(new Column("dealDate", Type.DATE, false), column1);
-        scanMetaColMap.put(new Column("main_brand_id", Type.INT, false), column2);
+        scanMetaColMap.put(new Column("dealDate", DateType.DATE, false), column1);
+        scanMetaColMap.put(new Column("main_brand_id", IntegerType.INT, false), column2);
         BinaryPredicateOperator binaryPredicateOperator1 =
                 new BinaryPredicateOperator(BinaryType.GE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 8, 1, 0, 0, 0)));
@@ -244,7 +245,7 @@ public class PartitionPruneRuleTest {
                 partitionInfo.getIdToRange(false);
                 result = keyRange;
 
-                partitionInfo.getPartitionColumns();
+                partitionInfo.getPartitionColumns((Map<ColumnId, Column>) any);
                 result = columns;
 
                 olapTable.getPartitions();
@@ -277,7 +278,7 @@ public class PartitionPruneRuleTest {
 
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
@@ -288,9 +289,9 @@ public class PartitionPruneRuleTest {
             throws AnalysisException {
         FeConstants.runningUnitTest = true;
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator column = columnRefFactory.create("province", ScalarType.STRING, false);
+        ColumnRefOperator column = columnRefFactory.create("province", StringType.STRING, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column, new Column("province", Type.STRING, false));
+        scanColumnMap.put(column, new Column("province", StringType.STRING, false));
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
         columnMetaToColRefMap.put(new Column(column.getName(), column.getType()),
                 new ColumnRefOperator(1, column.getType(), column.getName(), false));
@@ -303,28 +304,29 @@ public class PartitionPruneRuleTest {
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
 
-        Partition part1 = new Partition(10001L, "p1", null, null);
-        Partition part2 = new Partition(10002L, "p2", null, null);
+        Partition part1 = new Partition(10001L, 10003L, "p1", new MaterializedIndex(), null);
+        Partition part2 = new Partition(10002L, 10004L, "p2", new MaterializedIndex(), null);
 
         List<LiteralExpr> p1 = Lists.newArrayList(
-                new PartitionValue("guangdong").getValue(Type.STRING),
-                new PartitionValue("shanghai").getValue(Type.STRING));
+                new PartitionValue("guangdong").getValue(StringType.STRING),
+                new PartitionValue("shanghai").getValue(StringType.STRING));
 
         List<LiteralExpr> p2 = Lists.newArrayList(
-                new PartitionValue("beijing").getValue(Type.STRING),
-                new PartitionValue("chongqing").getValue(Type.STRING));
+                new PartitionValue("beijing").getValue(StringType.STRING),
+                new PartitionValue("chongqing").getValue(StringType.STRING));
 
         Map<Long, List<LiteralExpr>> literalExprValues = new HashMap<>();
         literalExprValues.put(10001L, p1);
         literalExprValues.put(10002L, p2);
 
-        List<Column> partitionColumns = new ArrayList<>();
-        partitionColumns.add(new Column("province", Type.STRING));
 
         new Expectations() {
             {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
+                
+                partitionInfo.isListPartition();
+                result = true;
 
                 partitionInfo.getType();
                 result = PartitionType.LIST;
@@ -336,8 +338,8 @@ public class PartitionPruneRuleTest {
                 result = Lists.newArrayList(part1, part2);
                 minTimes = 0;
 
-                partitionInfo.getPartitionColumns();
-                result = partitionColumns;
+                partitionInfo.getPartitionColumns((Map<ColumnId, Column>) any);
+                result = Lists.newArrayList(new Column("province", StringType.STRING, false));
                 minTimes = 0;
 
                 partitionInfo.getPartitionIds(false);
@@ -356,7 +358,7 @@ public class PartitionPruneRuleTest {
         PartitionPruneRule rule = new PartitionPruneRule();
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
         assertEquals(1, selectPartitionIds.size());
@@ -370,9 +372,9 @@ public class PartitionPruneRuleTest {
             throws AnalysisException {
         FeConstants.runningUnitTest = true;
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator column = columnRefFactory.create("province", ScalarType.STRING, false);
+        ColumnRefOperator column = columnRefFactory.create("province", StringType.STRING, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column, new Column("province", Type.STRING, false));
+        scanColumnMap.put(column, new Column("province", StringType.STRING, false));
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
         columnMetaToColRefMap.put(new Column(column.getName(), column.getType()),
                 new ColumnRefOperator(1, column.getType(), column.getName(), false));
@@ -380,26 +382,24 @@ public class PartitionPruneRuleTest {
         PartitionNames partitionNames = new PartitionNames(true, Lists.newArrayList("p1", "p2"));
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap,
-                        null, -1, null, olapTable.getBaseIndexId(),
+                        null, -1, null, olapTable.getBaseIndexMetaId(),
                         null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList(), null, false);
 
-        Partition part1 = new Partition(10001L, "p1", null, null);
-        Partition part2 = new Partition(10002L, "p2", null, null);
+        Partition part1 = new Partition(10001L, 10003L, "p1", new MaterializedIndex(), null);
+        Partition part2 = new Partition(10002L, 10004L, "p2", new MaterializedIndex(), null);
 
         List<LiteralExpr> p1 = Lists.newArrayList(
-                new PartitionValue("guangdong").getValue(Type.STRING),
-                new PartitionValue("shanghai").getValue(Type.STRING));
+                new PartitionValue("guangdong").getValue(StringType.STRING),
+                new PartitionValue("shanghai").getValue(StringType.STRING));
 
         List<LiteralExpr> p2 = Lists.newArrayList(
-                new PartitionValue("beijing").getValue(Type.STRING),
-                new PartitionValue("chongqing").getValue(Type.STRING));
+                new PartitionValue("beijing").getValue(StringType.STRING),
+                new PartitionValue("chongqing").getValue(StringType.STRING));
 
         Map<Long, List<LiteralExpr>> literalExprValues = new HashMap<>();
         literalExprValues.put(10001L, p1);
         literalExprValues.put(10002L, p2);
 
-        List<Column> partitionColumns = new ArrayList<>();
-        partitionColumns.add(new Column("province", Type.STRING));
 
         new Expectations() {
             {
@@ -412,12 +412,15 @@ public class PartitionPruneRuleTest {
                 partitionInfo.getLiteralExprValues();
                 result = literalExprValues;
 
+                partitionInfo.isListPartition();
+                result = true;
+
                 olapTable.getPartitions();
                 result = Lists.newArrayList(part1, part2);
                 minTimes = 0;
 
-                partitionInfo.getPartitionColumns();
-                result = partitionColumns;
+                partitionInfo.getPartitionColumns((Map<ColumnId, Column>) any);
+                result = Lists.newArrayList(new Column("province", StringType.STRING, false));
                 minTimes = 0;
 
                 partitionInfo.getPartitionIds(true);
@@ -445,12 +448,11 @@ public class PartitionPruneRuleTest {
         PartitionPruneRule rule = new PartitionPruneRule();
         assertNull(operator.getSelectedPartitionId());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(columnRefFactory)).get(0);
 
         List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
         assertEquals(1, selectPartitionIds.size());
         long actual = selectPartitionIds.get(0);
         assertEquals(10001L, actual);
     }
-
 }

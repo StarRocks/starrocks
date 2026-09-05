@@ -1,11 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "hll_union 返回一组 HLL 值的并集。"
 ---
 
 
 # hll_union
 
-## 功能
+
 
 返回一组 HLL 值的并集。
 

@@ -23,6 +23,8 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 
 import java.util.List;
 
@@ -43,13 +45,14 @@ public class MvRewriteContext {
 
     private final List<ScalarOperator> onPredicates;
     private final Rule rule;
-    private List<ColumnRefOperator> enforcedColumns;
+    private List<ColumnRefOperator> enforcedNonExistedColumns;
 
     private List<JoinDeriveContext> joinDeriveContexts;
 
-    // Whether to compensate partition predicate from the plan's `selectedPartitionIds`,
-    // check `isNeedCompensatePartitionPredicate` to get more information.
-    private final boolean isCompensatePartitionPredicate;
+    private List<TableScanDesc> queryTableScanDescs;
+    private List<TableScanDesc> mvTableScanDescs;
+
+    private AggregatePushDownContext aggregatePushDownContext;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -58,8 +61,7 @@ public class MvRewriteContext {
             ReplaceColumnRefRewriter queryColumnRefRewriter,
             PredicateSplit queryPredicateSplit,
             List<ScalarOperator> onPredicates,
-            Rule rule,
-            boolean isCompensatePartitionPredicate) {
+            Rule rule) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
@@ -68,7 +70,10 @@ public class MvRewriteContext {
         this.onPredicates = onPredicates;
         this.rule = rule;
         this.joinDeriveContexts = Lists.newArrayList();
-        this.isCompensatePartitionPredicate = isCompensatePartitionPredicate;
+    }
+
+    public String getMVName() {
+        return materializationContext.getMv().getName();
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -115,15 +120,43 @@ public class MvRewriteContext {
         return joinDeriveContexts;
     }
 
-    public List<ColumnRefOperator> getEnforcedColumns() {
-        return enforcedColumns;
+    public void clearJoinDeriveContexts() {
+        joinDeriveContexts.clear();
     }
 
-    public void setEnforcedColumns(List<ColumnRefOperator> enforcedColumns) {
-        this.enforcedColumns = enforcedColumns;
+    public List<ColumnRefOperator> getEnforcedNonExistedColumns() {
+        return enforcedNonExistedColumns;
     }
 
-    public boolean isCompensatePartitionPredicate() {
-        return this.isCompensatePartitionPredicate;
+    public void setEnforcedNonExistedColumns(List<ColumnRefOperator> enforcedNonExistedColumns) {
+        this.enforcedNonExistedColumns = enforcedNonExistedColumns;
+    }
+
+    public List<TableScanDesc> getQueryTableScanDescs() {
+        return queryTableScanDescs;
+    }
+
+    public void setQueryTableScanDescs(List<TableScanDesc> queryTableScanDescs) {
+        this.queryTableScanDescs = queryTableScanDescs;
+    }
+
+    public List<TableScanDesc> getMvTableScanDescs() {
+        return mvTableScanDescs;
+    }
+
+    public void setMvTableScanDescs(List<TableScanDesc> mvTableScanDescs) {
+        this.mvTableScanDescs = mvTableScanDescs;
+    }
+
+    public boolean isInAggregatePushDown() {
+        return aggregatePushDownContext != null;
+    }
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
     }
 }

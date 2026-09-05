@@ -15,18 +15,21 @@
 #include "exprs/function_context.h"
 
 #include <iostream>
+#include <sstream>
 
-#include "column/array_column.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
-#include "column/type_traits.h"
-#include "exprs/agg/java_udaf_function.h"
+#include "common/ngram_bloom_filter_state.h"
 #include "runtime/runtime_state.h"
-#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
 static const int MAX_WARNINGS = 1000;
+
+int current_worker_id() {
+    static std::atomic<int> s_next_worker_id{0};
+    // Assigned once per OS thread on first use and stable thereafter.
+    thread_local int tls_worker_id = s_next_worker_id.fetch_add(1, std::memory_order_relaxed);
+    return tls_worker_id;
+}
 
 FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* pool,
                                                  const FunctionContext::TypeDesc& return_type,
@@ -36,7 +39,6 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
     return ctx;
 }
 
@@ -50,7 +52,6 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
     ctx->_is_distinct = is_distinct;
     ctx->_is_asc_order = is_asc_order;
     ctx->_nulls_first = nulls_first;
@@ -73,8 +74,8 @@ FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& ar
 FunctionContext::FunctionContext() = default;
 FunctionContext::~FunctionContext() = default;
 
-FunctionContext* FunctionContext::clone(MemPool* pool) {
-    FunctionContext* new_context = create_context(_state, pool, _return_type, _arg_types);
+FunctionContext* FunctionContext::clone() {
+    FunctionContext* new_context = create_context(_state, nullptr, _return_type, _arg_types);
 
     new_context->_constant_columns = _constant_columns;
     new_context->_fragment_local_fn_state = _fragment_local_fn_state;
@@ -106,7 +107,7 @@ bool FunctionContext::is_notnull_constant_column(int i) const {
     return col && col->is_constant() && !col->is_null(0);
 }
 
-starrocks::ColumnPtr FunctionContext::get_constant_column(int i) const {
+ColumnPtr FunctionContext::get_constant_column(int i) const {
     if (i < 0 || i >= _constant_columns.size()) {
         return nullptr;
     }
@@ -120,8 +121,6 @@ const FunctionContext::TypeDesc& FunctionContext::get_return_type() const {
 
 void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     switch (scope) {
-    case THREAD_LOCAL:
-        return _thread_local_fn_state;
     case FRAGMENT_LOCAL:
         return _fragment_local_fn_state;
     default:
@@ -160,11 +159,12 @@ bool FunctionContext::error_if_overflow() const {
     return _state != nullptr && _state->error_if_overflow();
 }
 
+bool FunctionContext::allow_throw_exception() const {
+    return _state != nullptr && _state->query_options().allow_throw_exception;
+}
+
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     switch (scope) {
-    case THREAD_LOCAL:
-        _thread_local_fn_state = ptr;
-        break;
     case FRAGMENT_LOCAL:
         _fragment_local_fn_state = ptr;
         break;
@@ -183,12 +183,8 @@ bool FunctionContext::add_warning(const char* warning_msg) {
     std::stringstream ss;
     ss << "UDF WARNING: " << warning_msg;
 
-    if (_state != nullptr) {
-        return _state->log_error(ss.str());
-    } else {
-        std::cerr << ss.str() << std::endl;
-        return true;
-    }
+    std::cerr << ss.str() << std::endl;
+    return true;
 }
 
 const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) const {
@@ -196,69 +192,6 @@ const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) cons
         return nullptr;
     }
     return &_arg_types[arg_idx];
-}
-
-struct ColumnBuilder {
-    template <LogicalType Type>
-    ColumnPtr operator()(const FunctionContext::TypeDesc& type_desc) {
-        if constexpr (lt_is_decimal<Type>) {
-            return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
-        } else if constexpr (lt_is_collection<Type>) {
-            throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
-            return nullptr;
-        } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {
-            throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
-            return nullptr;
-        } else {
-            return RunTimeColumnType<Type>::create();
-        }
-    }
-};
-
-ColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_desc, bool nullable) {
-    const auto type = type_desc.type;
-    ColumnPtr p = nullptr;
-
-    if (type == TYPE_STRUCT) {
-        size_t field_size = type_desc.children.size();
-        DCHECK_EQ(field_size, type_desc.field_names.size());
-        Columns columns;
-        for (size_t i = 0; i < field_size; i++) {
-            ColumnPtr field_column = create_column(type_desc.children[i], true);
-            columns.emplace_back(field_column);
-        }
-        p = StructColumn::create(columns, type_desc.field_names);
-    } else if (type == TYPE_ARRAY) {
-        auto offsets = UInt32Column::create();
-        auto data = create_column(type_desc.children[0], true);
-        p = ArrayColumn::create(std::move(data), std::move(offsets));
-    } else if (type == TYPE_MAP) {
-        auto offsets = UInt32Column ::create();
-        ColumnPtr keys = nullptr;
-        ColumnPtr values = nullptr;
-        if (type_desc.children[0].type == TYPE_UNKNOWN) {
-            FunctionContext::TypeDesc desc;
-            desc.type = TYPE_NULL;
-            keys = create_column(desc, true);
-        } else {
-            keys = create_column(type_desc.children[0], true);
-        }
-        if (type_desc.children[1].type == TYPE_UNKNOWN) {
-            FunctionContext::TypeDesc desc;
-            desc.type = TYPE_NULL;
-            values = create_column(desc, true);
-        } else {
-            values = create_column(type_desc.children[1], true);
-        }
-        p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
-    } else {
-        p = type_dispatch_column(type, ColumnBuilder(), type_desc);
-    }
-
-    if (nullable && p != nullptr) {
-        return NullableColumn::create(p, NullColumn::create());
-    }
-    return p;
 }
 
 } // namespace starrocks

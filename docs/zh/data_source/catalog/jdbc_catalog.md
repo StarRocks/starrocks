@@ -1,21 +1,29 @@
 ---
-displayed_sidebar: "Chinese"
+sidebar_position: 70
+displayed_sidebar: docs
+description: "StarRocks 从 v3.0 起支持 JDBC catalog，无导入直接查询 JDBC 数据源及执行转换导入。"
+toc_max_heading_level: 4
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import JoinPushdown from '../../_assets/commonMarkdown/join_pushdown.mdx'
+
 # JDBC catalog
+
+<Beta />
 
 StarRocks 从 3.0 版本开始支持 JDBC Catalog。
 
 JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执行数据导入就可以直接查询 JDBC 数据源里的数据。
 
-此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力对 JDBC 数据源的数据实现转换和导入。
+此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力对 JDBC 数据源的数据实现转换和导入。
 
-目前 JDBC Catalog 支持 MySQL 和 PostgreSQL。
+JDBC Catalog 自 3.0 版本开始支持 MySQL、PostgreSQL，自 3.2.9、3.3.1 版本开始支持 Oracle 和 SQLServer。自 3.3.0 开始支持 ClickHouse（试验性）。
 
 ## 前提条件
 
-- 确保 FE 和 BE 可以通过 `driver_url` 指定的下载路径，下载所需的 JDBC 驱动程序。
-- BE 所在机器的启动脚本 **$BE_HOME/bin/start_be.sh** 中需要配置 `JAVA_HOME`，要配置成 JDK 环境，不能配置成 JRE 环境，比如 `export JAVA_HOME = <JDK 的绝对路径>`。注意需要将该配置添加在 BE 启动脚本最开头，添加完成后需重启 BE。
+- 确保 FE 和 BE（或 CN）可以通过 `driver_url` 指定的下载路径，下载所需的 JDBC 驱动程序。
+- BE（或 CN）所在机器的启动脚本 **$BE_HOME/bin/start_be.sh** 中需要配置 `JAVA_HOME`，要配置成 JDK 环境，不能配置成 JRE 环境，比如 `export JAVA_HOME = <JDK 的绝对路径>`。注意需要将该配置添加在 BE（或 CN）启动脚本最开头，添加完成后需重启 BE（或 CN）。
 
 ## 创建 JDBC Catalog
 
@@ -51,29 +59,51 @@ JDBC Catalog 的属性，包含如下必填配置项：
 | user         | 目标数据库登录用户名。                                       |
 | password     | 目标数据库用户登录密码。                                     |
 | jdbc_uri     | JDBC 驱动程序连接目标数据库的 URI。如果使用 MySQL，格式为：`"jdbc:mysql://ip:port"`。如果使用 PostgreSQL，格式为 `"jdbc:postgresql://ip:port/db_name"`。 |
-| driver_url   | 用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。<br />**说明**<br />您也可以把 JDBC 驱动程序部署在 FE 或 BE 所在节点上任意相同路径下，然后把 `driver_url` 设置为该路径，格式为 `file:///<path>/to/the/driver`。 |
-| driver_class | JDBC 驱动程序的类名称。以下是常见数据库引擎支持的 JDBC 驱动程序类名称：<ul><li>MySQL：`com.mysql.jdbc.Driver`（MySQL 5.x 及之前版本）、`com.mysql.cj.jdbc.Driver`（MySQL 6.x 及之后版本）</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
+| driver_url   | 用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。<br />**说明**<br />您也可以把 JDBC 驱动程序部署在 FE 或 BE（或 CN）所在节点上任意相同路径下，然后把 `driver_url` 设置为该路径，格式为 `file:///<path>/to/the/driver`。 |
+| driver_class | JDBC 驱动程序的类名称。以下是常见数据库引擎支持的 JDBC 驱动程序类名称：<ul><li>MySQL：`com.mysql.jdbc.Driver`（MySQL 5.x 及之前版本）、`com.mysql.cj.jdbc.Driver`（MySQL 6.x 及之后版本）</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li></ul> |
+| schema_resolver | （可选）显式指定要使用的 Schema Resolver。有效值：`postgresql`、`mysql`、`oracle`、`sqlserver`、`clickhouse`。当使用非标准 JDBC 驱动程序且无法通过驱动类名自动检测时，请使用此参数。如果未指定，StarRocks 将根据 `driver_class` 参数自动检测相应的 Resolver。 |
+
+#### 可选 Oracle 属性
+
+当 `driver_class` 设置为 Oracle 时，您可以配置以下可选属性：
+
+| **参数**                        | **默认**    | **描述**                                                                                                       |
+| ------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| oracle.number.default-scale    | 6           | 当 Oracle `NUMBER` 元数据未明确指定精度和规模时，请设置此参数。有效范围：`0` 至 `38`。                                  |
+| oracle.temporal.to-datetime    | false       | 控制 Oracle `DATE`、`TIMESTAMP` 和 `TIMESTAMP WITH LOCAL TIME ZONE` 的映射。如果设置为 `true`，这些数据类型将映射到 StarRocks 的 `DATETIME` 类型；否则，`DATE` 保持为 `DATE`，而 `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` 将映射到 `VARCHAR(64)`。 |
+| oracle.timestamptz.to-datetime | false       | 控制 Oracle `TIMESTAMP WITH TIME ZONE` 的映射。如果设置为 `true`，则映射为 StarRocks 的 `DATETIME` 类型；否则，则映射为 `VARCHAR(64)`。 |
+
+#### 可选行数缓存属性
+
+StarRocks 会缓存 JDBC 数据源的每张表的行数，以避免在查询规划阶段产生阻塞。这些属性允许您按 Catalog 调整缓存行为。若未设置，则使用全局 FE 配置值。
+
+| **参数**                             | **默认** | **描述**                                                                                                               |
+| ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| jdbc_row_count_cache_refresh_sec    | 600      | 后台刷新间隔（秒）。超过此间隔后，立即返回缓存的旧值，同时在后台异步重新加载。                                             |
+| jdbc_row_count_cache_expire_sec     | 1200     | 强制淘汰 TTL（秒）。在此时间窗口内未被访问的缓存条目将被淘汰。必须大于 `jdbc_row_count_cache_refresh_sec`。               |
+| jdbc_row_count_cache_max_size       | 10000    | 该 Catalog 行数缓存的最大表条目数。                                                                                      |
 
 > **说明**
 >
-> FE 会在创建 JDBC Catalog 时去获取 JDBC 驱动程序，BE 会在第一次执行查询时去获取驱动程序。获取驱动程序的耗时跟网络条件相关。
+> FE 会在创建 JDBC Catalog 时去获取 JDBC 驱动程序，BE（或 CN）会在第一次执行查询时去获取驱动程序。获取驱动程序的耗时跟网络条件相关。
 
 ### 创建示例
 
-以下示例创建了两个 JDBC Catalog：`jdbc0` 和 `jdbc1`。
+以下示例创建了五个不同的 JDBC Catalog。
 
 ```SQL
+-- PostgresSQL
 CREATE EXTERNAL CATALOG jdbc0
 PROPERTIES
 (
-    "type"="jdbc",
+    "type"="jdbc", 
     "user"="postgres",
     "password"="changeme",
     "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/jdbc_test",
     "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
     "driver_class"="org.postgresql.Driver"
 );
-
+-- MySQL
 CREATE EXTERNAL CATALOG jdbc1
 PROPERTIES
 (
@@ -84,17 +114,75 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
     "driver_class"="com.mysql.cj.jdbc.Driver"
 );
+-- Oracle
+CREATE EXTERNAL CATALOG jdbc2
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521:ORCL",
+    "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
+    "driver_class"="oracle.jdbc.driver.OracleDriver"
+);
+-- Oracle (with Oracle-specific optional properties)
+CREATE EXTERNAL CATALOG jdbc2_ext
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521/ORCLPDB1",
+    "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
+    "driver_class"="oracle.jdbc.driver.OracleDriver",
+    "oracle.number.default-scale"="6",
+    "oracle.temporal.to-datetime"="true",
+    "oracle.timestamptz.to-datetime"="true"
+);
+-- SQL Server
+CREATE EXTERNAL CATALOG jdbc3
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:sqlserver://127.0.0.1:1433;databaseName=MyDatabase;",
+    "driver_url"="https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.4.2.jre11/mssql-jdbc-12.4.2.jre11.jar",
+    "driver_class"="com.microsoft.sqlserver.jdbc.SQLServerDriver"
+);
+-- ClickHouse
+CREATE EXTERNAL CATALOG jdbc4
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="default",
+    "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
+    "driver_url"="https://repo1.maven.org/maven2/com/clickhouse/clickhouse-jdbc/0.4.6/clickhouse-jdbc-0.4.6.jar",
+    "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
+);
+-- 使用 schema_resolver 处理非标准驱动
+CREATE EXTERNAL CATALOG jdbc5
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="postgres",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/mydb",
+    "driver_url"="file:///path/to/custom-postgresql-driver.jar",
+    "driver_class"="com.custom.PostgresDriver",
+    "schema_resolver"="postgresql"
+);
 ```
 
 ## 查看 JDBC Catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 JDBC Catalog `jdbc0` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 JDBC Catalog `jdbc0` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG jdbc0;
@@ -102,7 +190,7 @@ SHOW CREATE CATALOG jdbc0;
 
 ## 删除 JDBC Catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除一个 JDBC Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除一个 JDBC Catalog。
 
 例如，通过如下命令删除 JDBC Catalog `jdbc0`：
 
@@ -112,35 +200,45 @@ DROP Catalog jdbc0;
 
 ## 查询 JDBC Catalog 中的表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查看指定 Catalog 所属的集群中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查看指定 Catalog 所属的集群中的数据库：
 
    ```SQL
-   SHOW DATABASES from <catalog_name>;
+   SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话生效的 Catalog：
+2. 通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 切换当前会话生效的 Catalog：
 
     ```SQL
     SET CATALOG <catalog_name>;
     ```
 
-    再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+    再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话生效的数据库：
 
     ```SQL
     USE <db_name>;
     ```
 
-    或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+    或者，也可以通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
 
     ```SQL
     USE <catalog_name>.<db_name>;
     ```
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+<JoinPushdown />
+
+## 使用原生 SQL 查询 JDBC 数据
+
+自 v4.1 起，StarRocks 支持通过 [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) 表函数，使用数据库原生 `SELECT` 语句查询 JDBC 数据。
+
+当源数据库需要执行无法通过单张外部表查询表达的 SQL 时，例如源端 Join、预先过滤的子查询或特定数据库方言的 SQL 语法，可以使用 `native_query`。StarRocks 会将透传查询结果作为普通关系暴露出来，您可以继续在 StarRocks 侧执行过滤、Join、聚合和投影。
+
+有关语法、限制和示例，参见 [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md)。
 
 ## 常见问题
 

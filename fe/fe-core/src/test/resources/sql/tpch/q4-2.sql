@@ -27,7 +27,7 @@ TOP-N (order by [[6: O_ORDERPRIORITY ASC NULLS FIRST]])
             EXCHANGE SHUFFLE[6]
                 AGGREGATE ([LOCAL] aggregate [{29: count=count()}] group by [[6: O_ORDERPRIORITY]] having [null]
                     LEFT SEMI JOIN (join-predicate [1: O_ORDERKEY = 11: L_ORDERKEY] post-join-predicate [null])
-                        SCAN (columns[1: O_ORDERKEY, 5: O_ORDERDATE, 6: O_ORDERPRIORITY] predicate[5: O_ORDERDATE >= 1993-07-01 AND 5: O_ORDERDATE <= 1993-09-30])
+                        SCAN (columns[1: O_ORDERKEY, 5: O_ORDERDATE, 6: O_ORDERPRIORITY] predicate[5: O_ORDERDATE >= 1993-07-01 AND 5: O_ORDERDATE < 1993-10-01])
                         EXCHANGE SHUFFLE[11]
                             SCAN (columns[22: L_COMMITDATE, 23: L_RECEIPTDATE, 11: L_ORDERKEY] predicate[22: L_COMMITDATE < 23: L_RECEIPTDATE])
 [end]

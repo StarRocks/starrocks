@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -26,9 +25,15 @@ public class AlterViewClause extends AlterClause {
 
     protected List<Column> columns;
     protected String inlineViewDef;
+    protected String originalViewDefineSql;
+    protected String comment;
+    protected int queryStartIndex = -1;
+    protected int queryStopIndex = -1;
+    // The SQL SECURITY characteristic to apply, or null to leave the view's existing characteristic unchanged.
+    protected Boolean security;
 
     public AlterViewClause(List<ColWithComment> colWithComments, QueryStatement queryStatement, NodePosition nodePosition) {
-        super(AlterOpType.ALTER_VIEW, nodePosition);
+        super(nodePosition);
         this.colWithComments = colWithComments;
         this.queryStatement = queryStatement;
     }
@@ -49,6 +54,14 @@ public class AlterViewClause extends AlterClause {
         this.columns = columns;
     }
 
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
+    }
+
     public String getInlineViewDef() {
         return inlineViewDef;
     }
@@ -57,8 +70,40 @@ public class AlterViewClause extends AlterClause {
         this.inlineViewDef = inlineViewDef;
     }
 
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
+    }
+
+    public void setQueryStartIndex(int queryStartIndex) {
+        this.queryStartIndex = queryStartIndex;
+    }
+
+    public int getQueryStopIndex() {
+        return queryStopIndex;
+    }
+
+    public void setQueryStopIndex(int queryStopIndex) {
+        this.queryStopIndex = queryStopIndex;
+    }
+
+    public Boolean getSecurity() {
+        return security;
+    }
+
+    public void setSecurity(Boolean security) {
+        this.security = security;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterViewClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterViewClause(this, context);
     }
 }

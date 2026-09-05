@@ -14,11 +14,18 @@
 
 #pragma once
 
-#include "exec/pipeline/source_operator.h"
-#include "exec/query_cache/cache_operator.h"
-#include "exec/query_cache/lane_arbiter.h"
-#include "exec/workgroup/work_group_fwd.h"
-#include "util/spinlock.h"
+#include "base/concurrency/race_detect.h"
+#include "base/concurrency/spinlock.h"
+#include "compute_env/pipeline/driver_scan_operator.h"
+#include "compute_env/query_cache/pipeline_cache_context.h"
+#include "compute_env/workgroup/work_group_fwd.h"
+#include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/scan/chunk_source.h"
+#include "exec/pipeline/topn_runtime_filter_back_pressure.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
+#include "exec_primitive/pipeline/source_operator.h"
+#include "exprs/chunk_predicate_evaluator.h"
 
 namespace starrocks {
 
@@ -27,10 +34,10 @@ class ScanNode;
 
 namespace pipeline {
 
+class RFScanWaitTimeout;
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
-class PipelineDriver;
-class ScanOperator : public SourceOperator {
+class ScanOperator : public SourceOperator, public DriverScanOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
 
@@ -38,7 +45,7 @@ public:
 
     static size_t max_buffer_capacity() { return kIOTaskBatchSize; }
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
 
     // The running I/O task committed by ScanOperator holds the reference of query context,
     // so it can prevent the scan operator from deconstructored, but cannot prevent it from closed.
@@ -52,31 +59,36 @@ public:
 
     bool is_finished() const override;
 
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
 
-    void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
+    workgroup::ScanSchedEntityType sched_entity_type() const override { return workgroup::ScanSchedEntityType::OLAP; }
 
-    void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
+    void set_scan_executor(workgroup::ScanExecutor* scan_executor) override { _scan_executor = scan_executor; }
+
+    void set_workgroup(workgroup::WorkGroupPtr wg) override { _workgroup = std::move(wg); }
 
     int64_t global_rf_wait_timeout_ns() const override;
 
     /// interface for different scan node
-    [[nodiscard]] virtual Status do_prepare(RuntimeState* state) = 0;
+    virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
-    int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
-    int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
+    int64_t get_last_scan_rows_num() override { return _last_scan_rows_num.exchange(0); }
+    int64_t get_last_scan_bytes() override { return _last_scan_bytes.exchange(0); }
 
-    void set_lane_arbiter(const query_cache::LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
-    void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
-    void set_ticket_checker(query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
+    void set_cache_context(const query_cache::ScanCacheContextPtr& cache_context) override {
+        _cache_context = cache_context;
+    }
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
+        _ticket_checker = ticket_checker;
+    }
 
-    void set_query_ctx(const QueryContextPtr& query_ctx);
+    void set_query_ctx(const QueryContextPtr& query_ctx) override;
 
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
     bool output_chunk_by_bucket() const { return _output_chunk_by_bucket; }
@@ -85,12 +97,40 @@ public:
         _op_pull_rows += res->num_rows();
     }
     bool is_asc() const { return _is_asc; }
-    void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
-    virtual void begin_driver_process() {}
-    virtual void end_driver_process(PipelineDriver* driver) {}
+    void end_pull_chunk(int64_t time) override { _op_running_time_ns += time; }
+    void begin_driver_process() override {}
+    void end_driver_process(DriverState driver_state) override {}
     virtual bool is_running_all_io_tasks() const;
 
-    virtual int64_t get_scan_table_id() const { return -1; }
+    int64_t get_scan_table_id() const override { return -1; }
+
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override;
+
+    bool has_full_events() { return get_chunk_buffer().limiter()->has_full_events(); }
+    virtual bool need_notify_all() { return true; }
+
+    // Wake the single consumer driver that owns chunk-buffer slot `buffer_index` -- the slot a
+    // just-produced chunk was written to (the return value of BalancedChunkBuffer::put). In
+    // shared scan the round-robin buffer routes a chunk to an arbitrary sibling driver's slot,
+    // so the producer must wake that specific driver; doing it per-slot avoids fanning out to
+    // every sibling on every chunk. For non-shared (kDirect) scan the slot is the producer's
+    // own, so this just wakes itself. `buffer_index < 0` means nothing was produced.
+    void notify_chunk_buffer_consumer(int buffer_index) {
+        if (buffer_index >= 0) {
+            _source_factory()->notify_source_observer(buffer_index);
+        }
+    }
+
+    template <class NotifyAll>
+    auto defer_notify(NotifyAll notify_all) {
+        return DeferOp([this, notify_all]() {
+            if (notify_all()) {
+                _source_factory()->observes().notify_source_observers();
+            } else {
+                _observable.notify_source_observers();
+            }
+        });
+    }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
@@ -100,21 +140,50 @@ protected:
     virtual void attach_chunk_source(int32_t source_index) = 0;
     virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
-    virtual ChunkPtr get_chunk_from_buffer() = 0;
-    virtual size_t num_buffered_chunks() const = 0;
-    virtual size_t buffer_size() const = 0;
-    virtual size_t buffer_capacity() const = 0;
-    virtual size_t buffer_memory_usage() const = 0;
-    virtual size_t default_buffer_capacity() const = 0;
-    virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
-    virtual bool is_buffer_full() const = 0;
-    virtual void set_buffer_finished() = 0;
+    struct ReusableChunkSourceLookup {
+        ChunkSourcePtr reusable_chunk_source = nullptr;
+        ChunkSourcePtr stale_chunk_source = nullptr;
+    };
+    enum class ReusableChunkSourceEvent { CANDIDATE, HIT, MISS, STALE_CLOSE, FAILURE };
+    virtual bool _can_reuse_chunk_source_for(Morsel& morsel) const { return false; }
+    virtual void _record_reusable_chunk_source_event(ReusableChunkSourceEvent /*event*/) {}
+    virtual bool _is_empty_slot_for_new_morsel(int /*chunk_source_index*/) const { return false; }
+    virtual ReusableChunkSourceLookup _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                                                  Morsel& morsel) {
+        return {};
+    }
+    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                              ChunkSourcePtr chunk_source) {
+        if (chunk_source != nullptr) {
+            chunk_source->close(state);
+        }
+    }
+
+    virtual BalancedChunkBuffer& get_chunk_buffer() const = 0;
+
+    ChunkPtr get_chunk_from_buffer() {
+        auto& chunk_buffer = get_chunk_buffer();
+        ChunkPtr chunk = nullptr;
+        if (chunk_buffer.try_get(_driver_sequence, &chunk)) {
+            return chunk;
+        }
+        return nullptr;
+    }
+
+    size_t num_buffered_chunks() const { return get_chunk_buffer().size(_driver_sequence); }
+    size_t buffer_size() const { return get_chunk_buffer().size(_driver_sequence); }
+    size_t buffer_capacity() const { return get_chunk_buffer().limiter()->capacity(); }
+    size_t buffer_memory_usage() const { return get_chunk_buffer().memory_usage(); }
+    size_t default_buffer_capacity() const { return get_chunk_buffer().limiter()->default_capacity(); }
+    ChunkBufferTokenPtr pin_chunk(int num_chunks) { return get_chunk_buffer().limiter()->pin(num_chunks); }
+    bool is_buffer_full() const { return get_chunk_buffer().limiter()->is_full(); }
+    void set_buffer_finished() { get_chunk_buffer().set_finished(_driver_sequence); }
 
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
-    [[nodiscard]] virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
-    [[nodiscard]] Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
-    [[nodiscard]] Status _try_to_trigger_next_scan(RuntimeState* state);
+    virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
+    Status _try_to_trigger_next_scan(RuntimeState* state);
     virtual void _close_chunk_source_unlocked(RuntimeState* state, int index);
     void _close_chunk_source(RuntimeState* state, int index);
     virtual void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
@@ -134,9 +203,60 @@ protected:
         }
     }
 
-    [[nodiscard]] inline Status _get_scan_status() const {
+    inline Status _get_scan_status() const {
         std::lock_guard<SpinLock> l(_scan_status_mutex);
         return _scan_status;
+    }
+
+    void evaluate_topn_runtime_filters(Chunk* chunk) {
+        if (chunk == nullptr || chunk->is_empty() || !_topn_filter_back_pressure) {
+            return;
+        }
+        if (auto* topn_runtime_filters = get_factory()->get_runtime_bloom_filters()) {
+            auto input_num_rows = chunk->num_rows();
+            _init_topn_runtime_filter_counters();
+            topn_runtime_filters->evaluate(chunk, _topn_filter_eval_context);
+            _topn_filter_back_pressure->inc_num_rows(chunk->num_rows());
+            if (_topn_filter_eval_context.selectivity.empty()) {
+                _topn_filter_back_pressure->update_selectivity(1.0);
+            } else {
+                double selectivity = _topn_filter_eval_context.selectivity.begin()->first;
+                if (input_num_rows > 1024) {
+                    _topn_filter_back_pressure->update_selectivity(selectivity);
+                }
+            }
+        }
+    }
+
+    void _init_topn_runtime_filter_counters() {
+        if (_topn_filter_eval_context.join_runtime_filter_timer == nullptr) {
+            _topn_filter_eval_context.mode = RuntimeMembershipFilterEvalContext::Mode::M_ONLY_TOPN;
+            _topn_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "TopnRuntimeFilterTime");
+            _topn_filter_eval_context.join_runtime_filter_hash_timer =
+                    ADD_TIMER(_common_metrics, "TopnRuntimeFilterHashTime");
+            _topn_filter_eval_context.join_runtime_filter_input_counter =
+                    ADD_COUNTER(_common_metrics, "TopnRuntimeFilterInputRows", TUnit::UNIT);
+            _topn_filter_eval_context.join_runtime_filter_output_counter =
+                    ADD_COUNTER(_common_metrics, "TopnRuntimeFilterOutputRows", TUnit::UNIT);
+            _topn_filter_eval_context.join_runtime_filter_eval_counter =
+                    ADD_COUNTER(_common_metrics, "TopnRuntimeFilterEvaluate", TUnit::UNIT);
+            _topn_filter_eval_context.driver_sequence = _runtime_filter_probe_sequence;
+        }
+    }
+
+    void eval_runtime_bloom_filters(Chunk* chunk) override {
+        if (chunk == nullptr || chunk->is_empty()) {
+            return;
+        }
+
+        if (auto* bloom_filters = get_factory()->get_runtime_bloom_filters()) {
+            _init_rf_counters(true);
+            if (_topn_filter_back_pressure) {
+                _bloom_filter_eval_context.mode = RuntimeMembershipFilterEvalContext::Mode::M_WITHOUT_TOPN;
+            }
+            bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
+        }
+        ChunkPredicateEvaluator::eval_filter_null_values(chunk, get_factory()->get_filter_null_value_columns());
     }
 
 protected:
@@ -172,6 +292,9 @@ protected:
     int64_t _op_pull_rows = 0;
     int64_t _op_running_time_ns = 0;
 
+    // ticket_checker is used to count down the EOS generated by SplitMorsels from the identical original ScanMorsel.
+    SplitMorselTicketCheckerPtr _ticket_checker = nullptr;
+
 private:
     int32_t _io_task_retry_cnt = 0;
     workgroup::ScanExecutor* _scan_executor = nullptr;
@@ -184,10 +307,7 @@ private:
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
 
-    query_cache::LaneArbiterPtr _lane_arbiter = nullptr;
-    query_cache::CacheOperatorPtr _cache_operator = nullptr;
-    // ticket_checker is used to count down the EOS generated by SplitMorsels from the identical original ScanMorsel.
-    query_cache::TicketCheckerPtr _ticket_checker = nullptr;
+    query_cache::ScanCacheContextPtr _cache_context = nullptr;
 
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
@@ -200,6 +320,26 @@ private:
 
     RuntimeProfile::Counter* _prepare_chunk_source_timer = nullptr;
     RuntimeProfile::Counter* _submit_io_task_timer = nullptr;
+
+    RuntimeMembershipFilterEvalContext _topn_filter_eval_context;
+    std::unique_ptr<TopnRfBackPressure> _topn_filter_back_pressure = nullptr;
+    // Scans self-enable TopN back-pressure whenever a TopN RF targets them, even when the FE flag is
+    // off (e.g. topn_filter_back_pressure_mode=0). Gated by the enable_topn_filter_back_pressure
+    // session variable (read from TQueryOptions, default true); applies to both shared-nothing olap
+    // and shared-data lake/connector scans.
+    bool _self_enable_topn_back_pressure(RuntimeState* state) const;
+    // Arm/refresh the event-scheduler wakeup timer for the current back-pressure throttle window.
+    void _arm_back_pressure_throttle_timer() const;
+    // True once a TopN (stream-build) runtime filter has been received by this scan probe collector.
+    // Back-pressure releases on this: throttling only exists to wait for the filter to arrive, and the
+    // selectivity-based release goes stale once storage zonemap pruning empties the pulled chunks.
+    bool _topn_runtime_filter_arrived() const;
+    // Wakes this driver when the throttle window ends; without it a throttled driver is only re-checked
+    // by the fallback poller (the throttle was never wired into the event scheduler). Re-armed per window.
+    mutable std::shared_ptr<RFScanWaitTimeout> _bp_throttle_timer;
+    mutable int64_t _bp_throttle_timer_deadline = -1;
+
+    DECLARE_RACE_DETECTOR(race_pull_chunk)
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
@@ -212,23 +352,27 @@ public:
 
     bool with_morsels() const override { return true; }
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     // interface for different scan node
-    [[nodiscard]] virtual Status do_prepare(RuntimeState* state) = 0;
+    virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
     std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
+    ScanNode* scan_node() { return _scan_node; }
 
 protected:
     ScanNode* const _scan_node;
-
     std::shared_ptr<workgroup::ScanTaskGroup> _scan_task_group;
 };
+
+inline auto scan_defer_notify(ScanOperator* scan_op) {
+    return scan_op->defer_notify([scan_op]() -> bool { return scan_op->need_notify_all(); });
+}
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,
                                                       pipeline::PipelineBuilderContext* context);

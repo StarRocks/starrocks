@@ -1,0 +1,69 @@
+-- name: test_dict_mapping_streamload @native
+CREATE DATABASE test_dict_mapping_streamload;
+USE test_dict_mapping_streamload;
+CREATE TABLE `t_dict_mapping_streamload` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `id2` bigint(20) NOT NULL AUTO_INCREMENT COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dict_mapping_streamload VALUES (1, DEFAULT),(2, DEFAULT),(3, DEFAULT);
+
+CREATE TABLE `test_table` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `id2` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_dict_mapping_case_1.csv -XPUT -H partial_update:false -H label:stream_load_dict_mapping_case_1 -H column_separator:, -H columns:"id1, id2=dict_mapping('t_dict_mapping_streamload', id1)" ${url}/api/test_dict_mapping_streamload/test_table/_stream_load
+sync;
+
+SELECT * FROM test_table;
+DROP TABLE t_dict_mapping_streamload;
+DROP DATABASE test_dict_mapping_streamload;
+
+-- name: test_dictmapping_nested_null_key @native
+CREATE DATABASE test_dictmapping_nested_null_key;
+use test_dictmapping_nested_null_key;
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO dict VALUES (1, "abc", default, 0);
+
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO t VALUES (1, NULL);
+
+-- dict_mapping() fails on the NULL key. When that failure was the input of another
+-- expression it used to be unwrapped by the unchecked Expr::evaluate(), which throws
+-- BadStatusOrAccess instead of returning the Status and took the whole BE down.
+SELECT dict_mapping("dict", col_1, dict_mapping("dict", col_1, col_2)) FROM t;
+SELECT bit_shift_left(1, dict_mapping("dict", col_1, col_2)) FROM t;
+
+-- The BE must still be serving queries.
+SELECT count(*) FROM t;
+
+DROP DATABASE test_dictmapping_nested_null_key;

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "如果字符串为NULL或空字符串则返回true，否则返回false。"
 ---
 
 # null_or_empty
 
-## 功能
+
 
 如果字符串为空字符串或者 NULL 则返回 true，否则返回 false。
 
@@ -12,6 +13,7 @@ displayed_sidebar: "Chinese"
 
 ```Haskell
 NULL_OR_EMPTY(str)
+BOOLEAN NULL_OR_EMPTY (any_array)
 ```
 
 ## 参数说明
@@ -40,6 +42,20 @@ MySQL > select null_or_empty("");
 +-------------------+
 
 MySQL > select null_or_empty("a");
++--------------------+
+| null_or_empty('a') |
++--------------------+
+|                  0 |
++--------------------+
+
+MySQL > select null_or_empty([]);
++-------------------+
+| null_or_empty('') |
++-------------------+
+|                 1 |
++-------------------+
+
+MySQL > select null_or_empty([1]);
 +--------------------+
 | null_or_empty('a') |
 +--------------------+

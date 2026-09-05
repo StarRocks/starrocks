@@ -14,17 +14,26 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
+#include <mutex>
+#include <vector>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
-#include "connector/connector.h"
+#include "common/statusor.h"
+#include "connector_primitive/connector.h"
 #include "exec/scan_node.h"
 #include "fs/fs.h"
 
 namespace starrocks {
 
 class ConnectorScanner;
+
+namespace pipeline {
+struct ConnectorScanOperatorMemShareArbitrator;
+}
 
 class ConnectorScanNode final : public starrocks::ScanNode {
 public:
@@ -42,23 +51,32 @@ public:
     bool accept_empty_scan_ranges() const override;
 
     // for pipline APIs
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
     connector::ConnectorType connector_type() { return _connector_type; }
+    const std::string& catalog_type() const { return _catalog_type; }
     bool always_shared_scan() const override;
-    std::atomic<int32_t>* get_lazy_column_coalesce_counter() { return &_lazy_column_coalesce_counter; }
 
 #ifdef BE_TEST
     bool use_stream_load_thread_pool() { return _use_stream_load_thread_pool; };
 #endif
 
-private:
-    RuntimeState* _runtime_state = nullptr;
-    connector::DataSourceProviderPtr _data_source_provider = nullptr;
-    connector::ConnectorType _connector_type;
+    StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges) override;
 
+    size_t estimated_scan_row_bytes() const { return _estimated_scan_row_bytes; }
+
+    void set_filtered_above_iterator(bool value) override;
+
+    int io_tasks_per_scan_operator() const override;
+    bool output_chunk_by_bucket() const override { return _data_source_provider->output_chunk_by_bucket(); }
+    bool is_asc_hint() const override { return _data_source_provider->is_asc_hint(); }
+    std::optional<bool> partition_order_hint() const override { return _data_source_provider->partition_order_hint(); }
+
+private:
     // non-pipeline methods.
     void _init_counter();
     Status _start_scan_thread(RuntimeState* state);
@@ -89,9 +107,6 @@ private:
     std::atomic<int32_t> _scanner_submit_count = 0;
     std::atomic<int32_t> _running_threads = 0;
     std::atomic<int32_t> _closed_scanners = 0;
-    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
-
-private:
     template <typename T>
     class Stack {
     public:
@@ -128,15 +143,22 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
     Profile _profile;
 
+private:
+    // pipeline fields and methods.
+    connector::DataSourceProviderPtr _data_source_provider = nullptr;
+    Status _connector_status = Status::OK();
+    connector::ConnectorType _connector_type = connector::ConnectorType::HIVE;
+    std::string _catalog_type;
     void _estimate_scan_row_bytes();
-    void _estimate_mem_usage_per_chunk_source();
-    int _estimated_max_concurrent_chunks() const;
-    int64_t _mem_limit = 0;
+    void _estimate_data_source_mem_bytes();
+    int _estimate_max_concurrent_chunks() const;
+    int64_t _scan_mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
-    size_t _estimated_mem_usage_per_chunk_source = 0;
+    size_t _estimated_data_source_mem_bytes = 0;
 
 #ifdef BE_TEST
     std::atomic_bool _use_stream_load_thread_pool = false;
 #endif
+    pipeline::ConnectorScanOperatorMemShareArbitrator* _mem_share_arb = nullptr;
 };
 } // namespace starrocks

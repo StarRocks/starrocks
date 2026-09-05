@@ -27,7 +27,7 @@ import java.util.List;
 
 public class CompactionsProcNode implements ProcNodeInterface {
     private static final List<String> TITLES = Collections.unmodifiableList(Arrays.asList(
-            "Partition", "TxnID", "StartTime", "CommitTime", "FinishTime", "Error"));
+            "Partition", "TxnID", "StartTime", "CommitTime", "FinishTime", "Error", "Profile"));
 
     public CompactionsProcNode() {
     }
@@ -46,6 +46,7 @@ public class CompactionsProcNode implements ProcNodeInterface {
             row.add(record.getCommitTs().map(TimeUtils::longToTimeString).orElse(null));
             row.add(record.getFinishTs().map(TimeUtils::longToTimeString).orElse(null));
             row.add(record.getErrorMessage().orElse(null));
+            row.add(record.getExecutionProfile().orElse(null));
             result.addRow(row);
         }
         return result;

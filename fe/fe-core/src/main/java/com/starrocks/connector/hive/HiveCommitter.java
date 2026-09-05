@@ -19,11 +19,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.common.DdlException;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
@@ -49,24 +50,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Verify.verify;
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.HivePartitionStats.ReduceOperator.SUBTRACT;
 import static com.starrocks.connector.hive.HivePartitionStats.fromCommonStats;
-import static com.starrocks.connector.hive.HiveWriteUtils.fileCreatedByQuery;
-import static com.starrocks.connector.hive.HiveWriteUtils.isS3Url;
+import static com.starrocks.connector.hive.HiveUtils.fileCreatedByQuery;
+import static com.starrocks.connector.hive.HiveUtils.isS3Url;
 import static io.airlift.concurrent.MoreFutures.getFutureValue;
 import static java.util.Objects.requireNonNull;
 
 public class HiveCommitter {
     private static final Logger LOG = LogManager.getLogger(HiveCommitter.class);
     private static final int PARTITION_COMMIT_BATCH_SIZE = 20;
-    private static final String BACKGROUND_THREAD_NAME_PREFIX = "background-refresh-others-fe-metadata-";
     private final HiveTable table;
     private final HiveMetastoreOperations hmsOps;
     private final RemoteFileOperations fileOps;
     private final Executor updateStatsExecutor;
-    private final Executor refreshOthersFeExecutor;
     private final AtomicBoolean fsTaskCancelled = new AtomicBoolean(false);
     private final List<CompletableFuture<?>> fsTaskFutures = new ArrayList<>();
     private final Queue<DirectoryCleanUpTask> clearTasksForAbort = new ConcurrentLinkedQueue<>();
@@ -79,13 +79,18 @@ public class HiveCommitter {
     private final Path stagingDir;
 
     public HiveCommitter(HiveMetastoreOperations hmsOps, RemoteFileOperations fileOps, Executor updateStatsExecutor,
-                         Executor refreshOthersFeExecutor, HiveTable table, Path stagingDir) {
+                         HiveTable table, Path stagingDir) {
         this.hmsOps = hmsOps;
         this.fileOps = fileOps;
         this.updateStatsExecutor = updateStatsExecutor;
-        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
         this.table = table;
         this.stagingDir = stagingDir;
+    }
+
+    @Deprecated
+    public HiveCommitter(HiveMetastoreOperations hmsOps, RemoteFileOperations fileOps, Executor updateStatsExecutor,
+                         Executor refreshOthersFeExecutor, HiveTable table, Path stagingDir) {
+        this(hmsOps, fileOps, updateStatsExecutor, table, stagingDir);
     }
 
     public void commit(List<PartitionUpdate> partitionUpdates) {
@@ -117,11 +122,12 @@ public class HiveCommitter {
         List<Pair<PartitionUpdate, HivePartitionStats>> insertExistsPartitions = new ArrayList<>();
         for (PartitionUpdate pu : partitionUpdates) {
             PartitionUpdate.UpdateMode mode = pu.getUpdateMode();
-            HivePartitionStats updateStats = fromCommonStats(pu.getRowCount(), pu.getTotalSizeInBytes());
+            HivePartitionStats updateStats =
+                    fromCommonStats(pu.getRowCount(), pu.getTotalSizeInBytes(), pu.getFileCount());
             if (table.isUnPartitioned()) {
                 if (partitionUpdates.size() != 1) {
                     throw new StarRocksConnectorException("There are multiple updates in the unpartition table: %s.%s",
-                            table.getDbName(), table.getTableName());
+                            table.getCatalogDBName(), table.getCatalogTableName());
                 }
 
                 if (mode == PartitionUpdate.UpdateMode.APPEND) {
@@ -146,15 +152,17 @@ public class HiveCommitter {
     }
 
     public void doCommit() {
-        waitAsyncFsTasks();
-        runAddPartitionsTask();
-        runUpdateStatsTasks();
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.do_commit")) {
+            waitAsyncFsTasks();
+            runAddPartitionsTask();
+            runUpdateStatsTasks();
+        }
     }
 
     public void asyncRefreshOthersFeMetadataCache(List<PartitionUpdate> partitionUpdates) {
         String catalogName = table.getCatalogName();
-        String dbName = table.getDbName();
-        String tableName = table.getTableName();
+        String dbName = table.getCatalogDBName();
+        String tableName = table.getCatalogTableName();
         List<String> partitionNames;
         if (table.isUnPartitioned()) {
             partitionNames = new ArrayList<>();
@@ -164,19 +172,10 @@ public class HiveCommitter {
                     .collect(Collectors.toList());
         }
 
-        refreshOthersFeExecutor.execute(() -> {
-            LOG.info("Start to refresh others fe hive metadata cache on {}.{}.{}.{}",
-                    catalogName, dbName, tableName, partitionNames);
-            try {
-                GlobalStateMgr.getCurrentState().refreshOthersFeTable(
-                        new TableName(catalogName, dbName, tableName), partitionNames, false);
-            } catch (DdlException e) {
-                LOG.error("Failed to refresh others fe hive metdata cache", e);
-                throw new StarRocksConnectorException(e.getMessage());
-            }
-            LOG.info("Finish to refresh others fe hive metadata cache on {}.{}.{}.{}",
-                    catalogName, dbName, tableName, partitionNames);
-        });
+        LOG.info("Submit async refresh others fe hive metadata cache on {}.{}.{}.{}",
+                catalogName, dbName, tableName, partitionNames);
+        GlobalStateMgr.getCurrentState().refreshOthersFeTableAsync(
+                new TableName(catalogName, dbName, tableName), partitionNames);
     }
 
     private void prepareAppendTable(PartitionUpdate pu, HivePartitionStats updateStats) {
@@ -187,8 +186,8 @@ public class HiveCommitter {
             fileOps.asyncRenameFiles(fsTaskFutures, fsTaskCancelled, pu.getWritePath(), pu.getTargetPath(), pu.getFileNames());
         }
         updateStatisticsTasks.add(new UpdateStatisticsTask(
-                table.getDbName(),
-                table.getTableName(),
+                table.getCatalogDBName(),
+                table.getCatalogTableName(),
                 Optional.empty(),
                 updateStats,
                 true));
@@ -197,18 +196,27 @@ public class HiveCommitter {
     private void prepareOverwriteTable(PartitionUpdate pu, HivePartitionStats updateStats) {
         Path writePath = pu.getWritePath();
         Path targetPath = pu.getTargetPath();
+        if (pu.isS3Url()) {
+            String queryId = ConnectContext.get().getQueryId().toString();
+            fileOps.removeNotCurrentQueryFiles(targetPath, queryId);
+        } else {
+            Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
+                    ConnectContext.get().getQueryId().toString());
+            Optional<String> writePathRelativeToTarget = getRelativePathIfDescendant(targetPath, writePath);
+            fileOps.renameDirectory(targetPath, oldTableStagingPath,
+                    () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
+            clearPathsForFinish.add(oldTableStagingPath);
+
+            Path sourcePath = writePathRelativeToTarget
+                    .map(relative -> new Path(oldTableStagingPath, relative))
+                    .orElse(writePath);
+
+            fileOps.renameDirectory(sourcePath, targetPath,
+                    () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
+
+        }
         remoteFilesCacheToRefresh.add(targetPath);
-
-        Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
-                ConnectContext.get().getQueryId().toString());
-        fileOps.renameDirectory(targetPath, oldTableStagingPath,
-                () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
-        clearPathsForFinish.add(oldTableStagingPath);
-
-        fileOps.renameDirectory(writePath, targetPath,
-                () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
-
-        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
+        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
                 Optional.empty(), updateStats, false);
         updateStatisticsTasks.add(updateStatsTask);
     }
@@ -262,8 +270,9 @@ public class HiveCommitter {
                     fileOps.asyncRenameFiles(fsTaskFutures, fsTaskCancelled, writePath, targetPath, pu.getFileNames());
                 }
 
-                UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
-                        Optional.of(pu.getName()), updateStats, true);
+                UpdateStatisticsTask updateStatsTask =
+                        new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
+                                Optional.of(pu.getName()), updateStats, true);
                 updateStatisticsTasks.add(updateStatsTask);
             }
         }
@@ -280,6 +289,12 @@ public class HiveCommitter {
             Path oldPartitionStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName()
                     + "_" + ConnectContext.get().getQueryId().toString());
 
+            if (!fileOps.pathExists(targetPath)) {
+                LOG.warn("Partition location {} does not exist before overwrite; creating empty directory for rename",
+                        targetPath);
+                fileOps.ensureDirectoryExists(targetPath);
+            }
+
             fileOps.renameDirectory(
                     targetPath,
                     oldPartitionStagingPath,
@@ -293,7 +308,7 @@ public class HiveCommitter {
         }
 
         remoteFilesCacheToRefresh.add(targetPath);
-        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
+        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
                 Optional.of(pu.getName()), updateStats, false);
         updateStatisticsTasks.add(updateStatsTask);
     }
@@ -306,35 +321,45 @@ public class HiveCommitter {
 
     private void runAddPartitionsTask() {
         if (!addPartitionsTask.isEmpty()) {
-            addPartitionsTask.run(hmsOps);
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.add_partition_tasks")) {
+                addPartitionsTask.run(hmsOps);
+            }
         }
     }
 
     private void runUpdateStatsTasks() {
-        ImmutableList.Builder<CompletableFuture<?>> updateStatsFutures = ImmutableList.builder();
-        List<String> failedUpdateStatsTaskDescs = new ArrayList<>();
-        List<Throwable> suppressedExceptions = new ArrayList<>();
-        for (UpdateStatisticsTask task : updateStatisticsTasks) {
-            updateStatsFutures.add(CompletableFuture.runAsync(() -> {
-                try {
-                    task.run(hmsOps);
-                } catch (Throwable t) {
-                    addSuppressedExceptions(suppressedExceptions, t, failedUpdateStatsTaskDescs, task.getDescription());
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.update_statistics_tasks")) {
+            ImmutableList.Builder<CompletableFuture<?>> updateStatsFutures = ImmutableList.builder();
+            List<String> failedUpdateStatsTaskDescs = new ArrayList<>();
+            List<Throwable> suppressedExceptions = new ArrayList<>();
+            for (UpdateStatisticsTask task : updateStatisticsTasks) {
+                updateStatsFutures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        task.run(hmsOps);
+                    } catch (Throwable t) {
+                        addSuppressedExceptions(suppressedExceptions, t, failedUpdateStatsTaskDescs, task.getDescription());
+                    }
+                }, updateStatsExecutor));
+            }
+
+            for (CompletableFuture<?> executeUpdateFuture : updateStatsFutures.build()) {
+                getFutureValue(executeUpdateFuture);
+            }
+
+            if (!suppressedExceptions.isEmpty()) {
+                StringBuilder message = new StringBuilder();
+                message.append("Failed to update following tasks: ");
+                Joiner.on("; ").appendTo(message, failedUpdateStatsTaskDescs);
+                StarRocksConnectorException exception = new StarRocksConnectorException(message.toString());
+                suppressedExceptions.forEach(exception::addSuppressed);
+                // Insert into Hive4 table occur failure caused by compatibility issue between Hive3 and Hive4 thrift HMS client.
+                // Check https://github.com/StarRocks/starrocks/issues/38620 and HIVE-27984 for more details.
+                if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
+                    throw exception;
+                } else {
+                    LOG.error(exception);
                 }
-            }, updateStatsExecutor));
-        }
-
-        for (CompletableFuture<?> executeUpdateFuture : updateStatsFutures.build()) {
-            getFutureValue(executeUpdateFuture);
-        }
-
-        if (!suppressedExceptions.isEmpty()) {
-            StringBuilder message = new StringBuilder();
-            message.append("Failed to update following tasks: ");
-            Joiner.on("; ").appendTo(message, failedUpdateStatsTaskDescs);
-            StarRocksConnectorException exception = new StarRocksConnectorException(message.toString());
-            suppressedExceptions.forEach(exception::addSuppressed);
-            throw exception;
+            }
         }
     }
 
@@ -368,8 +393,10 @@ public class HiveCommitter {
         String dbName = firstPartition.getDatabaseName();
         String tableName = firstPartition.getTableName();
         List<List<String>> rollbackFailedPartitions = addPartitionsTask.rollback(hmsOps);
-        LOG.error("Failed to rollback: add_partition for partition values {}.{}.{}",
-                dbName, tableName, rollbackFailedPartitions);
+        if (!rollbackFailedPartitions.isEmpty()) {
+            LOG.error("Failed to rollback: add_partition for partition values {}.{}.{}",
+                    dbName, tableName, rollbackFailedPartitions);
+        }
     }
 
     private void waitAsyncFsTaskSuppressThrowable() {
@@ -394,7 +421,8 @@ public class HiveCommitter {
         for (RenameDirectoryTask directoryRenameTask : renameDirTasksForAbort) {
             try {
                 if (fileOps.pathExists(directoryRenameTask.getRenameFrom())) {
-                    fileOps.renameDirectory(directoryRenameTask.getRenameFrom(), directoryRenameTask.getRenameTo(), () -> {});
+                    fileOps.renameDirectory(directoryRenameTask.getRenameFrom(), directoryRenameTask.getRenameTo(), () -> {
+                    });
                 }
             } catch (Throwable t) {
                 LOG.error("Failed to undo rename dir from {} to {}",
@@ -429,8 +457,8 @@ public class HiveCommitter {
 
     private HivePartition buildHivePartition(PartitionUpdate partitionUpdate) {
         return HivePartition.builder()
-                .setDatabaseName(table.getDbName())
-                .setTableName(table.getTableName())
+                .setDatabaseName(table.getCatalogDBName())
+                .setTableName(table.getCatalogTableName())
                 .setColumns(table.getDataColumnNames().stream()
                         .map(table::getColumn)
                         .collect(Collectors.toList()))
@@ -438,6 +466,9 @@ public class HiveCommitter {
                 .setParameters(ImmutableMap.<String, String>builder()
                         .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
                         .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
+                        .buildOrThrow())
+                .setSerDeParameters(ImmutableMap.<String, String>builder()
+                        .putAll(table.getSerdeProperties())
                         .buildOrThrow())
                 .setStorageFormat(table.getStorageFormat())
                 .setLocation(partitionUpdate.getTargetPath().toString())
@@ -580,7 +611,7 @@ public class HiveCommitter {
         private boolean done;
 
         public UpdateStatisticsTask(String dbName, String tableName, Optional<String> partitionName,
-                                         HivePartitionStats statistics, boolean merge) {
+                                    HivePartitionStats statistics, boolean merge) {
             this.dbName = requireNonNull(dbName, "dbName is null");
             this.tableName = requireNonNull(tableName, "tableName is null");
             this.partitionName = requireNonNull(partitionName, "partitionName is null");
@@ -612,7 +643,7 @@ public class HiveCommitter {
             if (partitionName.isPresent()) {
                 return "alter partition parameters " + tableName + " " + partitionName.get();
             } else {
-                return "alter table parameters " +  tableName;
+                return "alter table parameters " + tableName;
             }
         }
 
@@ -737,9 +768,28 @@ public class HiveCommitter {
         return new DeleteRecursivelyResult(false, notDeletedEligibleItems);
     }
 
+    private Optional<String> getRelativePathIfDescendant(Path parentPath, Path childPath) {
+        Path normalizedParent = Path.getPathWithoutSchemeAndAuthority(parentPath);
+        Path normalizedChild = Path.getPathWithoutSchemeAndAuthority(childPath);
+        String parent = ensureTrailingSlash(normalizedParent.toString());
+        String child = normalizedChild.toString();
+        if (!child.startsWith(parent)) {
+            return Optional.empty();
+        }
+        String relative = child.substring(parent.length());
+        if (relative.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(relative);
+    }
+
+    private String ensureTrailingSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
+    }
+
     private synchronized void addSuppressedExceptions(
             List<Throwable> suppressedExceptions, Throwable t,
-             List<String> descriptions, String description) {
+            List<String> descriptions, String description) {
         descriptions.add(description);
         if (suppressedExceptions.size() < 3) {
             suppressedExceptions.add(t);

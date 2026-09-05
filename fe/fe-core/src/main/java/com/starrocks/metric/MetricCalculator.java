@@ -41,7 +41,9 @@ import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TimerTask;
 
 /*
@@ -53,7 +55,16 @@ public class MetricCalculator extends TimerTask {
     private long lastQueryCounter = -1;
     private long lastRequestCounter = -1;
     private long lastQueryErrCounter = -1;
+    private long lastQueryInternalErrCounter = -1;
+    private long lastQueryAnalysisErrCounter = -1;
+    private long lastQueryTimeOutCounter = -1;
+
     private long lastQueryEventTime = -1;
+
+    private Map<String, Long> lastCatalogQueryErrCounters = new HashMap<>();
+    private Map<String, Long> lastCatalogQueryTimeoutCounters = new HashMap<>();
+    private Map<String, Long> lastCatalogQueryAnalysisErrCounters = new HashMap<>();
+    private Map<String, Long> lastCatalogQueryInternalErrCounters = new HashMap<>();
 
     @Override
     public void run() {
@@ -67,6 +78,9 @@ public class MetricCalculator extends TimerTask {
             lastQueryCounter = MetricRepo.COUNTER_QUERY_ALL.getValue();
             lastRequestCounter = MetricRepo.COUNTER_REQUEST_ALL.getValue();
             lastQueryErrCounter = MetricRepo.COUNTER_QUERY_ERR.getValue();
+            lastQueryInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();
+            lastQueryAnalysisErrCounter = MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.getValue();
+            lastQueryTimeOutCounter = MetricRepo.COUNTER_QUERY_TIMEOUT.getValue();
             lastQueryEventTime = System.currentTimeMillis() * 1000000;
             return;
         }
@@ -91,26 +105,41 @@ public class MetricCalculator extends TimerTask {
         MetricRepo.GAUGE_QUERY_ERR_RATE.setValue(errRate < 0 ? 0.0 : errRate);
         lastQueryErrCounter = currentErrCounter;
 
-        lastTs = currentTs;
+        // internal err rate
+        long currentInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();
+        double internalErrRate = (double) (currentInternalErrCounter - lastQueryInternalErrCounter) / interval;
+        MetricRepo.GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(internalErrRate < 0 ? 0.0 : internalErrRate);
+        lastQueryInternalErrCounter = currentInternalErrCounter;
 
-        // max tablet compaction score of all backends
-        long maxCompactionScore = 0;
-        List<Metric> compactionScoreMetrics = MetricRepo.getMetricsByName(MetricRepo.TABLET_MAX_COMPACTION_SCORE);
-        for (Metric metric : compactionScoreMetrics) {
-            if (((GaugeMetric<Long>) metric).getValue() > maxCompactionScore) {
-                maxCompactionScore = ((GaugeMetric<Long>) metric).getValue();
-            }
-        }
-        MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(maxCompactionScore);
+        // analysis error rate
+        long currentAnalysisErrCounter = MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.getValue();
+        double analysisErrRate = (double) (currentAnalysisErrCounter - lastQueryAnalysisErrCounter) / interval;
+        MetricRepo.GAUGE_QUERY_ANALYSIS_ERR_RATE.setValue(analysisErrRate < 0 ? 0.0 : analysisErrRate);
+        lastQueryAnalysisErrCounter = currentAnalysisErrCounter;
+
+        // query timeout rate
+        long currentTimeoutErrCounter = MetricRepo.COUNTER_QUERY_TIMEOUT.getValue();
+        double timeoutErrRate = (double) (currentTimeoutErrCounter - lastQueryTimeOutCounter) / interval;
+        MetricRepo.GAUGE_QUERY_TIMEOUT_RATE.setValue(timeoutErrRate < 0 ? 0.0 : timeoutErrRate);
+        lastQueryTimeOutCounter = currentTimeoutErrCounter;
+
+        // catalog-type rates
+        updateCatalogRates(interval);
+
+        lastTs = currentTs;
 
         // query latency
         List<QueryDetail> queryList = QueryDetailQueue.getQueryDetailsAfterTime(lastQueryEventTime);
         List<Long> latencyList = new ArrayList<>();
+        List<Float> cacheMissRatioList = new ArrayList<>();
         double latencySum = 0L;
+        float cacheMissRatioSum = 0L;
         for (QueryDetail queryDetail : queryList) {
             if (queryDetail.isQuery() && queryDetail.getState() == QueryDetail.QueryMemState.FINISHED) {
                 latencyList.add(queryDetail.getLatency());
+                cacheMissRatioList.add(queryDetail.getCacheMissRatio());
                 latencySum += queryDetail.getLatency();
+                cacheMissRatioSum += queryDetail.getCacheMissRatio();
             }
         }
         if (queryList.size() > 0) {
@@ -133,6 +162,15 @@ public class MetricCalculator extends TimerTask {
             MetricRepo.GAUGE_QUERY_LATENCY_P99.setValue((double) latencyList.get(index));
             index = (int) Math.round((latencyList.size() - 1) * 0.999);
             MetricRepo.GAUGE_QUERY_LATENCY_P999.setValue((double) latencyList.get(index));
+
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_AVERAGE.setValue(cacheMissRatioSum / cacheMissRatioList.size());
+            cacheMissRatioList.sort(Comparator.naturalOrder());
+            index = (int) Math.round((cacheMissRatioList.size() - 1) * 0.5);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P50.setValue(cacheMissRatioList.get(index));
+            index = (int) Math.round((cacheMissRatioList.size() - 1) * 0.9);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P90.setValue(cacheMissRatioList.get(index));
+            index = (int) Math.round((cacheMissRatioList.size() - 1) * 0.99);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P99.setValue(cacheMissRatioList.get(index));
         } else {
             MetricRepo.GAUGE_QUERY_LATENCY_MEAN.setValue(0.0);
             MetricRepo.GAUGE_QUERY_LATENCY_MEDIAN.setValue(0.0);
@@ -141,12 +179,54 @@ public class MetricCalculator extends TimerTask {
             MetricRepo.GAUGE_QUERY_LATENCY_P95.setValue(0.0);
             MetricRepo.GAUGE_QUERY_LATENCY_P99.setValue(0.0);
             MetricRepo.GAUGE_QUERY_LATENCY_P999.setValue(0.0);
+
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_AVERAGE.setValue(0.0f);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P50.setValue(0.0f);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P90.setValue(0.0f);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P99.setValue(0.0f);
         }
 
         if (Config.enable_routine_load_lag_metrics)  {
             MetricRepo.updateRoutineLoadProcessMetrics();
         }
 
+        if (Config.memory_tracker_enable)  {
+            MetricRepo.updateMemoryUsageMetrics();
+        }
+
+        // Clean up stale routine load lag time metrics
+        RoutineLoadLagTimeMetricMgr.getInstance().cleanupStaleMetrics();
+
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
+    }
+
+    private void updateCatalogRates(long interval) {
+        updateCatalogRate(MetricRepo.COUNTER_CATALOG_QUERY_ERR,
+                MetricRepo.GAUGE_CATALOG_QUERY_ERR_RATE, lastCatalogQueryErrCounters, interval);
+        updateCatalogRate(MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT,
+                MetricRepo.GAUGE_CATALOG_QUERY_TIMEOUT_RATE, lastCatalogQueryTimeoutCounters, interval);
+        updateCatalogRate(MetricRepo.COUNTER_CATALOG_QUERY_ANALYSIS_ERR,
+                MetricRepo.GAUGE_CATALOG_QUERY_ANALYSIS_ERR_RATE, lastCatalogQueryAnalysisErrCounters, interval);
+        updateCatalogRate(MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR,
+                MetricRepo.GAUGE_CATALOG_QUERY_INTERNAL_ERR_RATE, lastCatalogQueryInternalErrCounters, interval);
+    }
+
+    private void updateCatalogRate(MetricWithLabelGroup<LongCounterMetric> counterGroup,
+                                    MetricWithLabelGroup<GaugeMetricImpl<Double>> gaugeGroup,
+                                    Map<String, Long> lastCounters, long interval) {
+        for (Map.Entry<String, LongCounterMetric> entry : counterGroup.getMetrics().entrySet()) {
+            String catalogType = entry.getKey();
+            long currentValue = entry.getValue().getValue();
+            if (!lastCounters.containsKey(catalogType)) {
+                // First time seeing this catalog type — seed baseline to avoid an initial spike.
+                lastCounters.put(catalogType, currentValue);
+                gaugeGroup.getMetric(catalogType).setValue(0.0);
+                continue;
+            }
+            long lastValue = lastCounters.get(catalogType);
+            double rate = (double) (currentValue - lastValue) / interval;
+            gaugeGroup.getMetric(catalogType).setValue(rate < 0 ? 0.0 : rate);
+            lastCounters.put(catalogType, currentValue);
+        }
     }
 }

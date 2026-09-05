@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
@@ -45,6 +46,7 @@ public class MultiCastPlanFragment extends PlanFragment {
         this.children.addAll(planFragment.getChildren());
         this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
         this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
+        this.setQueryGlobalDictExprs(planFragment.queryGlobalDictExprs);
     }
 
     public List<PlanFragment> getDestFragmentList() {
@@ -57,6 +59,11 @@ public class MultiCastPlanFragment extends PlanFragment {
 
     @Override
     public void createDataSink(TResultSinkType resultSinkType) {
+        createDataSink(resultSinkType, null);
+    }
+
+    @Override
+    public void createDataSink(TResultSinkType resultSinkType, ExecPlan execPlan) {
         if (sink != null) {
             return;
         }
@@ -71,6 +78,7 @@ public class MultiCastPlanFragment extends PlanFragment {
             streamSink.setPartition(DataPartition.RANDOM);
             streamSink.setFragment(this);
             streamSink.setOutputColumnIds(f.getReceiveColumns());
+            streamSink.setLimit(f.getLimit());
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());
         }

@@ -15,16 +15,36 @@
 #pragma once
 
 #include <map>
+#include <memory>
+#include <type_traits>
 #include <vector>
 
+#include "base/bit/rle_encoding.h"
+#include "base/coding.h"
+#include "base/simd/expand.h"
+#include "base/simd/rle_simd.h"
+#include "base/simd/simd.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "formats/parquet/encoding.h"
-#include "simd/simd.h"
-#include "util/coding.h"
-#include "util/rle_encoding.h"
-#include "util/slice.h"
+
+namespace {
+// Single-pass min/max bounds check for dictionary indices. Reads the unsigned
+// indices through a signed reinterpret to feed SIMD min/max; any value
+// >= INT32_MAX surfaces as a negative min, which is also "out of bounds" for
+// any realistic dictionary, so the signed view is correct.
+inline bool indices_out_of_bounds(const uint32_t* indices, int32_t count, size_t dict_size) {
+    if (count <= 0) return false;
+    int32_t min_idx, max_idx;
+    starrocks::simd_minmax_int32(reinterpret_cast<const int32_t*>(indices), count, min_idx, max_idx);
+    return min_idx < 0 || static_cast<size_t>(max_idx) >= dict_size;
+}
+} // anonymous namespace
 
 namespace starrocks::parquet {
 
@@ -33,6 +53,8 @@ class DictEncoder final : public Encoder {
 public:
     DictEncoder() = default;
     ~DictEncoder() override = default;
+
+    std::string to_string() const override { return fmt::format("DictEncoder<{}>", typeid(T).name()); }
 
     Status append(const uint8_t* vals, size_t count) override {
         const T* ptr = (const T*)vals;
@@ -74,18 +96,101 @@ public:
 
 private:
     size_t _num_dict{};
-    std::map<T, int> _dict;
+    std::map<T, int> _dict; // not unordered_map: T=Slice has no std::hash specialisation.
     std::vector<T> _dict_vector;
     std::vector<int> _indexes;
     faststring _buffer;
 };
 
+class CacheAwareDictDecoder : public Decoder {
+public:
+    CacheAwareDictDecoder();
+    ~CacheAwareDictDecoder() override = default;
+
+    std::string to_string() const override { return "CacheAwareDictDecoder"; }
+
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override;
+
+    Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
+                                 const FilterData* filter) override;
+
+    template <class DataType>
+    void assign_data_with_nulls(size_t count, size_t num_non_nulls, const uint8_t* nulls, const DataType* src_data,
+                                DataType* dst_data) {
+        // opt branch for process sparse column
+        if (num_non_nulls < count / 10) {
+            size_t cnt = 0;
+            size_t i = 0;
+#ifdef __AVX2__
+            for (i = 0; i + 32 <= count; i += 32) {
+                // Load the next 32 elements of is_nulls into a mask
+                __m256i loaded = _mm256_loadu_si256((__m256i*)&nulls[i]);
+                int mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(loaded, _mm256_setzero_si256()));
+                phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
+                for (auto idx : bitmask) {
+                    dst_data[i + idx] = src_data[cnt++];
+                }
+            }
+#endif
+            // Tail: guard the load so we don't read past the last valid src element
+            // when the trailing batch ends with nulls.
+            for (; i < count; ++i) {
+                if (!nulls[i]) {
+                    dst_data[i] = src_data[cnt++];
+                }
+            }
+            DCHECK_EQ(cnt, num_non_nulls) << "count:" << count << " null_cnt:" << count - num_non_nulls;
+        } else {
+            SIMD::Expand::expand_load(dst_data, src_data, nulls, count);
+        }
+    }
+
+    Status next_dict_code_batch_with_nulls(size_t count, size_t cur_size, const NullInfos& null_infos, Column* dst) {
+        size_t null_cnt = null_infos.num_nulls;
+        auto nullable_column = down_cast<NullableColumn*>(dst);
+
+        size_t read_count = count - null_cnt;
+        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column_raw_ptr());
+        // resize data
+        data_column->resize_uninitialized(cur_size + count);
+        int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
+
+        if (read_count == 0) {
+            return Status::OK();
+        }
+        // Reuse the _indexes member buffer rather than a VLA — large batches blow the stack.
+        _indexes.resize(read_count + 1);
+        auto decoded_num = _rle_batch_reader.GetBatch(_indexes.data(), read_count);
+        if (decoded_num < read_count) {
+            return Status::InternalError("didn't get enough data from dict-decoder");
+        }
+
+        assign_data_with_nulls(count, read_count, null_infos.nulls_data(), reinterpret_cast<int32_t*>(_indexes.data()),
+                               data);
+
+        return Status::OK();
+    }
+
+protected:
+    virtual size_t _get_dict_size() const = 0;
+    virtual Status _next_batch_value(size_t count, Column* dst, const FilterData* filter) = 0;
+    virtual Status _do_next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
+                                             Column* dst, const FilterData* filter) = 0;
+    RleBatchDecoder<uint32_t> _rle_batch_reader;
+    std::vector<uint32_t> _indexes;
+
+private:
+    size_t _dict_size_threshold = 0;
+};
+
 // TODO(zc): support read run later. however should add more interface to Column first
 template <typename T>
-class DictDecoder final : public Decoder {
+class DictDecoder final : public CacheAwareDictDecoder {
 public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("DictDecoder<{}>", typeid(T).name()); }
 
     // initialize dictionary
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
@@ -98,6 +203,11 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
+            // PARQUET-2115: [C++] Parquet dictionary bit widths are limited to 32 bits
+            // https://github.com/apache/arrow/pull/12274/files
+            if (PREDICT_FALSE(bit_width > 32)) {
+                return Status::Corruption("bit width is larger than 32");
+            }
             _rle_batch_reader = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
                                                           static_cast<int>(data.size) - 1, bit_width);
         } else {
@@ -107,18 +217,94 @@ public:
     }
 
     Status skip(size_t values_to_skip) override {
-        //TODO(Smith) still heavy work load
-        _indexes.reserve(values_to_skip);
-        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
+        auto ret = _rle_batch_reader.SkipBatch(values_to_skip);
+        if (UNLIKELY(ret != values_to_skip)) {
+            return Status::InternalError("rle skip error, not enough values");
+        }
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+    Status _do_next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
+                                     Column* dst, const FilterData* filter) override {
+        DCHECK(dst->is_nullable());
+        if (null_infos.num_ranges <= 2) {
+            return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
+        }
+        size_t cur_size = dst->size();
+        _next_null_column(count, null_infos, down_cast<NullableColumn*>(dst));
+
+        switch (content_type) {
+        case DICT_CODE: {
+            return next_dict_code_batch_with_nulls(count, cur_size, null_infos, dst);
+        }
+        case VALUE: {
+            return next_value_batch_with_nulls(count, cur_size, null_infos, dst, filter);
+        }
+        default:
+            return Status::NotSupported("read type not supported");
+        }
+        return Status::OK();
+    }
+
+    Status next_value_batch_with_nulls(size_t count, size_t cur_size, const NullInfos& null_infos, Column* dst,
+                                       const FilterData* filter) {
+        DCHECK(dst->is_nullable());
+        const uint8_t* __restrict is_nulls = null_infos.nulls_data();
+        // assign null infos
+        size_t null_cnt = null_infos.num_nulls;
+        auto nullable_column = down_cast<NullableColumn*>(dst);
+        FixedLengthColumn<T>* data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column_raw_ptr());
+        // resize data
+        data_column->resize_uninitialized(cur_size + count);
+        T* __restrict__ data = data_column->get_data().data() + cur_size;
+
+        size_t read_count = count - null_cnt;
+
+        if (read_count == 0) {
+            return Status::OK();
+        }
+
+        if (filter) {
+            _indexes.resize(read_count);
+            auto decoded_num = _rle_batch_reader.GetBatch(_indexes.data(), read_count);
+            if (decoded_num < read_count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
+            }
+
+            if (UNLIKELY(indices_out_of_bounds(_indexes.data(), read_count, _dict.size()))) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
+
+            size_t cnt = 0;
+            for (int i = 0; i < count; i++) {
+                if (filter[i] & !is_nulls[i]) {
+                    data[i] = _dict[_indexes[cnt]];
+                }
+                cnt += !is_nulls[i];
+            }
+        } else {
+            _temp_read_data.resize(read_count + 1);
+            auto ret =
+                    _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _temp_read_data.data(), read_count);
+            if (UNLIKELY(ret <= 0)) {
+                return Status::InternalError("DictDecoder GetBatchWithDict failed");
+            }
+
+            assign_data_with_nulls(count, read_count, null_infos.nulls_data(), _temp_read_data.data(), data);
+        }
+
+        return Status::OK();
+    }
+
+private:
+    size_t _get_dict_size() const override { return _dict.size() * SIZE_OF_TYPE; }
+
+    Status _next_batch_value(size_t count, Column* dst, const FilterData* filter) override {
         FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
-            nullable_column->null_column()->append_default(count);
-            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+            nullable_column->null_column_raw_ptr()->append_default(count);
+            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column_raw_ptr());
         } else {
             data_column = down_cast<FixedLengthColumn<T>*>(dst);
         }
@@ -127,31 +313,68 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
 
-        auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
-        if (UNLIKELY(ret <= 0)) {
-            return Status::InternalError("DictDecoder GetBatchWithDict failed");
+        if (filter) {
+            _indexes.resize(count);
+            auto decoded_num = _rle_batch_reader.GetBatch(_indexes.data(), count);
+            if (decoded_num < count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
+            }
+
+            if (UNLIKELY(indices_out_of_bounds(_indexes.data(), count, _dict.size()))) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
+
+            for (int i = 0; i < count; i++) {
+                if (filter[i]) {
+                    data[i] = _dict[_indexes[i]];
+                }
+            }
+        } else {
+            auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
+            if (UNLIKELY(ret <= 0)) {
+                return Status::InternalError("DictDecoder<> GetBatchWithDict failed");
+            }
         }
 
         return Status::OK();
     }
 
-private:
     enum { SIZE_OF_TYPE = sizeof(T) };
 
-    RleBatchDecoder<uint32_t> _rle_batch_reader;
     std::vector<T> _dict;
-    std::vector<uint32_t> _indexes;
+    std::vector<T> _temp_read_data;
+};
+
+class FixedSliceArray {
+public:
+    const Slice* data() const { return reinterpret_cast<Slice*>(_data.get()); }
+    Slice* data() { return reinterpret_cast<Slice*>(_data.get()); }
+    size_t size() const { return _size; }
+
+    Slice& operator[](size_t idx) { return data()[idx]; }
+
+    void resize(size_t size) {
+        _data = std::make_unique_for_overwrite<uint8_t[]>(size * sizeof(Slice));
+        _size = size;
+    }
+
+private:
+    std::unique_ptr<uint8_t[]> _data;
+    size_t _size{};
 };
 
 template <>
-class DictDecoder<Slice> final : public Decoder {
+class DictDecoder<Slice> final : public CacheAwareDictDecoder {
 public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
 
+    std::string to_string() const override { return fmt::format("DictDecoder<Slice>"); }
+
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
-        std::vector<Slice> slices(num_values);
-        RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)&slices[0]));
+        auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(num_values * sizeof(Slice));
+        Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
+        RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)slices));
 
         size_t total_length = 0;
         for (int i = 0; i < num_values; ++i) {
@@ -161,7 +384,8 @@ public:
         _dict.resize(num_values);
 
         // reserve enough memory to use append_strings_overflow
-        _dict_data.resize(total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
+        raw::stl_vector_resize_uninitialized(&_dict_data, total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
+
         size_t offset = 0;
         _max_value_length = 0;
         for (int i = 0; i < num_values; ++i) {
@@ -169,26 +393,22 @@ public:
             _dict[i].data = reinterpret_cast<char*>(&_dict_data[offset]);
             _dict[i].size = slices[i].size;
             offset += slices[i].size;
-
-            if (slices[i].size > _max_value_length) {
-                _max_value_length = slices[i].size;
-            }
+            _max_value_length = std::max(_max_value_length, slices[i].size);
         }
 
         return Status::OK();
     }
 
     Status get_dict_values(Column* column) override {
-        auto ret = column->append_strings_overflow(_dict, _max_value_length);
+        auto ret = column->append_strings_overflow(_dict.data(), _dict.size(), _max_value_length);
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
         }
         return Status::OK();
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                           Column* column) override {
-        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
+        const auto null_data = nulls.immutable_null_column_data();
         bool has_null = nulls.has_null();
         bool all_null = false;
 
@@ -196,9 +416,14 @@ public:
             size_t count = SIMD::count_nonzero(null_data);
             all_null = (count == null_data.size());
         }
+        if (all_null) {
+            column->append_default(null_data.size());
+            return Status::OK();
+        }
 
         // dict codes size and column size HAVE TO BE EXACTLY SAME.
-        std::vector<Slice> slices(dict_codes.size());
+        FixedSliceArray slices;
+        slices.resize(dict_codes.size());
         if (!has_null) {
             for (size_t i = 0; i < dict_codes.size(); i++) {
                 slices[i] = _dict[dict_codes[i]];
@@ -216,14 +441,7 @@ public:
             }
         }
 
-        // if all null, then slices[i] is Slice(), and we can not call `append_strings_overflow`
-        // and for other cases, slices[i] is dict value, then we can call `append_strings_overflow`
-        bool ret = false;
-        if (!all_null) {
-            ret = column->append_strings_overflow(slices, _max_value_length);
-        } else {
-            ret = column->append_strings(slices);
-        }
+        bool ret = column->append_strings_overflow(slices.data(), slices.size(), _max_value_length);
 
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
@@ -234,6 +452,11 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
+            // PARQUET-2115: [C++] Parquet dictionary bit widths are limited to 32 bits
+            // https://github.com/apache/arrow/pull/12274/files
+            if (PREDICT_FALSE(bit_width > 32)) {
+                return Status::Corruption("bit width is larger than 32");
+            }
             _rle_batch_reader = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
                                                           static_cast<int>(data.size) - 1, bit_width);
         } else {
@@ -243,58 +466,171 @@ public:
     }
 
     Status skip(size_t values_to_skip) override {
-        //TODO(Smith) still heavy work load
-        _indexes.reserve(values_to_skip);
-        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
-        return Status::OK();
-    }
-
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
-        switch (content_type) {
-        case DICT_CODE: {
-            FixedLengthColumn<int32_t>* data_column;
-            if (dst->is_nullable()) {
-                auto nullable_column = down_cast<NullableColumn*>(dst);
-                nullable_column->null_column()->append_default(count);
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
-            } else {
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
-            }
-            size_t cur_size = data_column->size();
-            data_column->resize_uninitialized(cur_size + count);
-            int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
-            _rle_batch_reader.GetBatch(reinterpret_cast<uint32_t*>(data), count);
-            break;
+        auto ret = _rle_batch_reader.SkipBatch(values_to_skip);
+        if (UNLIKELY(ret != values_to_skip)) {
+            return Status::InternalError("rle skip error, not enough values");
         }
-        case VALUE: {
-            raw::stl_vector_resize_uninitialized(&_slices, count);
-            auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
-            if (UNLIKELY(ret <= 0)) {
-                return Status::InternalError("DictDecoder GetBatchWithDict failed");
-            }
-            ret = dst->append_strings_overflow(_slices, _max_value_length);
-            if (UNLIKELY(!ret)) {
-                return Status::InternalError("DictDecoder append strings to column failed");
-            }
-            break;
-        }
-        default:
-            return Status::NotSupported("read type not supported");
-        }
-
         return Status::OK();
     }
 
 private:
+    size_t _get_dict_size() const override { return _dict_data.size(); }
+
+    Status _do_next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
+                                     Column* dst, const FilterData* filter) override {
+        DCHECK(dst->is_nullable());
+        if (null_infos.num_ranges <= 1) {
+            return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
+        }
+        size_t cur_size = dst->size();
+        _next_null_column(count, null_infos, down_cast<NullableColumn*>(dst));
+
+        switch (content_type) {
+        case DICT_CODE: {
+            return next_dict_code_batch_with_nulls(count, cur_size, null_infos, dst);
+        }
+        case VALUE: {
+            return next_value_batch_with_nulls(count, cur_size, null_infos, dst, filter);
+        }
+        default:
+            return Status::NotSupported("read type not supported");
+        }
+        return Status::OK();
+    }
+
+    Status next_value_batch_with_nulls(size_t count, size_t cur_size, const NullInfos& null_infos, Column* dst,
+                                       const FilterData* filter) {
+        DCHECK(dst->is_nullable());
+        const uint8_t* __restrict is_nulls = null_infos.nulls_data();
+        // assign null infos
+        size_t null_cnt = null_infos.num_nulls;
+        // resize data
+        auto* data_column = ColumnHelper::get_data_column(dst);
+        if (UNLIKELY(!data_column->is_binary())) {
+            return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+        }
+        auto* binary_column = down_cast<BinaryColumn*>(data_column);
+        size_t read_count = count - null_cnt;
+
+        if (read_count == 0) {
+            binary_column->append_default(count);
+            return Status::OK();
+        }
+
+        if (filter) {
+            _indexes.resize(read_count);
+            auto decoded_num = _rle_batch_reader.GetBatch(_indexes.data(), read_count);
+            if (decoded_num < read_count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
+            }
+            if (UNLIKELY(indices_out_of_bounds(_indexes.data(), read_count, _dict.size()))) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
+            size_t cnt = 0;
+            for (int i = 0; i < count; ++i) {
+                if (filter[i] && !is_nulls[i]) {
+                    binary_column->append(_dict[_indexes[cnt]]);
+                } else {
+                    binary_column->append_default();
+                }
+                cnt += !is_nulls[i];
+            }
+
+        } else {
+            auto& bytes = binary_column->get_bytes();
+            size_t offset = bytes.size();
+
+            _slices.resize(read_count);
+            auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), read_count);
+            if (UNLIKELY(ret <= 0)) {
+                return Status::InternalError("DictDecoder<Slice> GetBatchWithDict failed");
+            }
+
+            _temp_lengths.resize(read_count + 1);
+            _temp_datas.resize(read_count + 1);
+            uint32_t* lengths = _temp_lengths.data();
+            char** datas = _temp_datas.data();
+
+            uint64_t total_length = 0;
+            for (size_t i = 0; i < read_count; ++i) {
+                datas[i] = _slices[i].data;
+                lengths[i] = _slices[i].size;
+                total_length += lengths[i];
+            }
+
+            // relocate offsets
+            auto& offsets = binary_column->get_offset();
+            size_t prev_offsets = offsets.size();
+            const uint64_t final_offset = offset + total_length;
+            offsets.resize_uninitialized(count + prev_offsets, final_offset);
+            const uint32_t* lengths_ptr = lengths;
+            offsets.visit_storage([prev_offsets, count, offset, is_nulls, lengths_ptr](auto& offsets_buf) mutable {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* __restrict dst_offsets = offsets_buf.data() + prev_offsets;
+                size_t cnt = 0;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                }
+            });
+
+            if (read_count == 0) {
+                return Status::OK();
+            }
+            binary_column->append_bytes_overflow(datas, lengths, read_count, _max_value_length);
+            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
+        }
+
+        return Status::OK();
+    }
+
+    Status _next_batch_value(size_t count, Column* dst, const FilterData* filter) override {
+        if (filter) {
+            _indexes.resize(count);
+            auto decoded_num = _rle_batch_reader.GetBatch(_indexes.data(), count);
+            if (decoded_num < count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
+            }
+            if (UNLIKELY(indices_out_of_bounds(_indexes.data(), count, _dict.size()))) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
+            if (dst->is_nullable()) {
+                down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
+            }
+            auto* data_column = ColumnHelper::get_data_column(dst);
+            if (UNLIKELY(!data_column->is_binary())) {
+                return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+            }
+            auto* binary_column = down_cast<BinaryColumn*>(data_column);
+            for (int i = 0; i < count; ++i) {
+                if (filter[i]) {
+                    binary_column->append(_dict[_indexes[i]]);
+                } else {
+                    binary_column->append_default();
+                }
+            }
+        } else {
+            _slices.resize(count);
+            auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
+            if (UNLIKELY(ret <= 0)) {
+                return Status::InternalError("DictDecoder<Slice> GetBatchWithDict failed");
+            }
+            ret = dst->append_strings_overflow(_slices.data(), _slices.size(), _max_value_length);
+            if (UNLIKELY(!ret)) {
+                return Status::InternalError("DictDecoder append strings to column failed");
+            }
+        }
+        return Status::OK();
+    }
+
     enum { SIZE_OF_DICT_CODE_TYPE = sizeof(int32_t) };
 
-    RleBatchDecoder<uint32_t> _rle_batch_reader;
     std::vector<uint8_t> _dict_data;
-    std::vector<Slice> _dict;
-    std::vector<uint32_t> _indexes;
-    std::vector<Slice> _slices;
-
+    FixedSliceArray _dict;
+    FixedSliceArray _slices;
     size_t _max_value_length = 0;
+    std::vector<uint32_t> _temp_lengths;
+    std::vector<char*> _temp_datas;
 };
 
 } // namespace starrocks::parquet

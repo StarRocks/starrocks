@@ -1,0 +1,626 @@
+---
+displayed_sidebar: docs
+description: "How to create and use vector indexes (IVFPQ, HNSW) in StarRocks for approximate nearest neighbor search on high-dimensional vector data."
+sidebar_position: 60
+---
+
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# 向量索引
+
+<Beta />
+
+本文介绍了StarRocks的向量索引功能及如何使用它进行近似最近邻搜索（ANNS）。
+
+## 概述
+
+目前，StarRocks支持在Segment文件级别进行向量索引。索引将每个搜索项映射到Segment文件中的行ID，通过直接定位相应的数据行实现快速数据检索，而无需进行暴力的向量距离计算。系统目前提供两种类型的向量索引：倒排文件与乘积量化（IVFPQ）和分层可导航小世界（HNSW），每种都有其独特的组织结构。
+
+### 倒排文件与乘积量化（IVFPQ）
+
+倒排文件与乘积量化（IVFPQ）是一种用于大规模高维向量近似最近邻搜索的方法，常用于深度学习和机器学习中的向量检索任务。IVFPQ由两个主要组件组成：倒排文件和乘积量化。
+
+- **倒排文件**：这是一个索引方法。它将数据集划分为多个簇（或Voronoi单元），每个簇都有一个质心（种子点），并将每个数据点（向量）分配到其最近的簇中心。对于向量搜索，IVFPQ只需搜索最近的簇，大大减少了搜索范围和复杂性。
+- **乘积量化**：这是一种数据压缩技术。它将高维向量分割为子向量，并将每个子向量量化以映射到预定义集合中的最近点，从而在保持高精度的同时降低存储和计算成本。
+
+通过结合倒排文件和乘积量化，IVFPQ能够在大规模高维数据集中实现高效的近似最近邻搜索。
+
+### 分层可导航小世界（HNSW）
+
+分层可导航小世界（HNSW）是一种基于图的高维最近邻搜索算法，也广泛用于向量检索任务。
+
+HNSW构建了一个分层图结构，其中每一层都是一个可导航的小世界（NSW）图。在图中，每个顶点代表一个数据点，边表示顶点之间的相似性。图的高层包含较少的顶点和稀疏的连接用于快速全局搜索，而低层包含所有顶点和密集的连接用于精确的局部搜索。
+
+对于向量搜索，HNSW首先在顶层进行搜索，快速识别一个近似的最近邻区域，然后逐层向下移动，在底层找到精确的最近邻。
+
+HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布。
+
+### IVFPQ与HNSW的比较
+
+- **数据压缩比**：IVFPQ具有较高的压缩比（约为1:0.15）。由于PQ会压缩向量，索引计算仅提供粗略排序后的初步排序结果，需要额外的精细排序以获得最终排序结果，导致更高的计算和延迟。HNSW具有较低的压缩比（约为1:0.8），无需额外处理即可提供精确排序，计算成本和延迟较低，但存储成本较高。
+- **召回率调整**：两种索引都支持通过参数调整召回率，但在相似的召回率下，IVFPQ的计算成本更高。
+- **缓存策略**：IVFPQ允许通过调整索引块的缓存比例来平衡内存成本和计算延迟，而HNSW目前仅支持全文件缓存。
+
+## 使用方法
+
+### 先决条件
+
+- 每个表仅支持一个向量索引。
+- 被索引的列必须为 `ARRAY<FLOAT> NOT NULL`。
+- 仅原生 DUPLICATE KEY 和 PRIMARY KEY 表支持向量索引。
+
+### 创建向量索引
+
+本教程在创建表时创建向量索引。您也可以将向量索引附加到现有表中。有关详细说明，请参见[附加向量索引](#附加向量索引)。
+
+- 以下示例在表`hnsw`的列`vector`上创建一个HNSW向量索引`hnsw_vector`。
+
+    ```SQL
+    CREATE TABLE hnsw (
+        id     BIGINT(20)   NOT NULL COMMENT "",
+        vector ARRAY<FLOAT> NOT NULL COMMENT "",
+        INDEX hnsw_vector (vector) USING VECTOR (
+            "index_type" = "hnsw", 
+            "dim"="5", 
+            "metric_type" = "l2_distance", 
+            "is_vector_normed" = "false", 
+            "M" = "16", 
+            "efconstruction" = "40"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id) BUCKETS 1;
+    ```
+- 以下示例在表`ivfpq`的列`vector`上创建一个IVFPQ向量索引`ivfpq_vector`。
+
+    ```SQL
+    CREATE TABLE ivfpq (
+        id     BIGINT(20)   NOT NULL COMMENT "",
+        vector ARRAY<FLOAT> NOT NULL COMMENT "",
+        INDEX ivfpq_vector (vector) USING VECTOR (
+            "index_type" = "ivfpq", 
+            "dim"="5", 
+            "metric_type" = "l2_distance", 
+            "is_vector_normed" = "false", 
+            "nbits" = "8",
+            "nlist" = "40",
+            "M_IVFPQ" = "1"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id) BUCKETS 1;
+    ```
+
+- 以下示例使用 `async` 构建模式，在存算分离集群中的云原生表上创建一个 HNSW 向量索引。
+
+    ```SQL
+    CREATE TABLE hnsw_async (
+        id BIGINT NOT NULL,
+        vector ARRAY<FLOAT> NOT NULL,
+        INDEX hnsw_vector (vector) USING VECTOR (
+            "index_type" = "hnsw",
+            "dim" = "768",
+            "metric_type" = "cosine_similarity",
+            "is_vector_normed" = "true",
+            "index_build_mode" = "async"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id);
+    ```
+
+    您可以通过查询 `information_schema.partitions_meta` 来查看异步构建的进度。
+
+    ```SQL
+    SELECT
+        TABLE_NAME,
+        PARTITION_NAME,
+        VISIBLE_VERSION,
+        MIN_VI_BUILT_VERSION,
+        MAX_VI_BUILT_VERSION
+    FROM information_schema.partitions_meta
+    WHERE TABLE_NAME = 'hnsw_async';
+    ```
+
+    - 当 `MIN_VI_BUILT_VERSION` 等于 `VISIBLE_VERSION` 时，表明该分区中所有 Tablet 的索引均已达到可见版本。
+    - 当 `MIN_VI_BUILT_VERSION` 小于 `VISIBLE_VERSION` 时，表明至少有一个索引正在构建中。涉及此类 Segment 的查询将回退到暴力扫描。
+    - 当 `MIN_VI_BUILT_VERSION` 小于 `MAX_VI_BUILT_VERSION` 时，表明不同 Tablet 在索引构建进度上存在差异。
+
+#### 索引构建参数
+
+##### USING VECTOR
+
+- **默认值**: N/A
+- **必需**: 是
+- **描述**: 创建一个向量索引。
+
+##### index_type
+
+- **默认值**: N/A
+- **必需**: 是
+- **描述**: 向量索引类型。有效值：`hnsw` 和 `ivfpq`。
+
+##### dim
+
+- **默认值**: N/A
+- **必需**: 是
+- **描述**: 索引的维度。索引构建完成后，不符合维度要求的向量将被拒绝加载到基础列中。必须是大于或等于`1`的整数。
+
+##### metric_type
+
+- **默认值**: N/A
+- **必需**: 是
+- **描述**: 向量索引的度量类型（测量函数）。有效值：
+  - `l2_distance`: 欧氏距离。值越小，相似度越高。
+  - `cosine_similarity`: 余弦相似度。值越大，相似度越高。
+  - `inner_product`: 内积。值越大，相似度越高。与余弦相似度不同，内积保留向量模长。精确计算使用 `inner_product`，向量索引 top-k 或范围查询使用 `approx_inner_product`。
+
+##### is_vector_normed
+
+- **默认值**: false
+- **必需**: 否
+- **描述**: 向量是否已归一化。有效值为`true`和`false`。仅当`metric_type`为`cosine_similarity`时生效。如果向量已归一化，计算出的距离值将在[-1, 1]之间。向量必须满足平方和为`1`，否则返回错误。
+
+##### index_build_threshold
+
+- **默认值**: 10000（由 BE 配置项 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) 决定）
+- **必需**: 否
+- **描述**: 触发向量索引构建的行数阈值。写入的数据行数低于该阈值时不构建索引，查询回退到暴力检索。取值必须为大于等于 `1` 的整数。对于 IVFPQ 索引，该值还必须大于等于 `nlist`，因为 IVFPQ 的 k-means 训练至少需要 `nlist` 条向量。违反该约束的 DDL 语句会被拒绝。
+
+##### index_build_mode
+
+- **默认值**: `sync`
+- **必需**: 否
+- **描述**: 存算分离集群中的索引构建方式。有效值：
+  - `sync`：在数据写入时同步构建索引。查询可立即使用索引，但导入延迟较高。
+  - `async`：数据写入完成后由后台任务构建索引。在构建完成前，涉及相应 Segment 的查询自动回退到暴力检索。可以通过 [`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) 选择构建 Warehouse，并通过 [`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) 控制 Load Tail 的调度延迟。
+
+##### M
+
+- **默认值**: 16
+- **必需**: 否
+- **描述**: HNSW特定参数。图构建过程中为每个新元素创建的双向连接数。必须是大于或等于`2`的整数。`M`的值直接影响图构建和搜索的效率和准确性。在图构建过程中，每个顶点将尝试与其最近的`M`个顶点建立连接。如果一个顶点已经有`M`个连接，但发现了一个更近的顶点，最远的连接将被删除，并与更近的顶点建立新连接。向量搜索将从一个入口点开始，并沿着与其连接的顶点找到最近的邻居。因此，`M`的值越大，每个顶点的搜索范围越大，搜索效率越高，但图构建和存储的成本也越高。
+
+##### efconstruction
+
+- **默认值**: 40
+- **必需**: 否
+- **描述**: HNSW特定参数。包含最近邻居的候选列表的大小。必须是大于或等于`1`的整数。用于控制图构建过程中的搜索深度。具体来说，`efconstruction`定义了图构建过程中每个顶点的搜索列表（也称为候选列表）的大小。这个候选列表用于存储当前顶点的邻居候选者，列表的大小为`efconstruction`。`efconstruction`的值越大，在图构建过程中被视为顶点邻居的候选者越多，因此图的质量（如更好的连通性）越好，但图构建的时间消耗和计算复杂度也越高。
+
+##### efsearch
+
+- **默认值**: 40
+- **必需**: 否
+- **描述**: HNSW 专有参数。控制精度-速度权衡的参数。在分层图结构搜索中，此参数控制搜索期间候选列表的大小。`efsearch`的值越大，准确性越高，但速度越慢。该参数可在创建索引时指定。如果查询中的 `ann_params` 不包含此参数，系统将根据该值执行自适应缩放。在查询中显式指定该值具有优先级，并将绕过自适应缩放。
+
+##### quantizer
+
+- **默认值**: `flat`（不量化）
+- **必需**: 否
+- **描述**: HNSW 特定参数。在内层 HNSW 存储前加一个标量或乘积量化器，用更小的索引体积换取一定的召回率下降。可选值：
+  - `flat` — 不量化（默认）。等价于不设此属性；与未引入 quantizer 之前构建的索引保持向后兼容。
+  - `sq4` — 4-bit 标量量化。体积最小，召回率下降比 `sq8` 大。
+  - `sq8` — 8-bit 标量量化。体积压缩的推荐起点；在较高 `ef_search` 下召回率下降通常很小。
+  - `pq` — 乘积量化。必须配合 `m_pq`；每条向量字节数为 `m_pq * nbits_pq` 比特。
+
+##### m_pq
+
+- **必需**: 当 `quantizer = pq` 时必需；其他场景下不允许设置。
+- **描述**: HNSW 特定参数（仅 PQ 量化器）。乘积量化子量化器数量。原始向量被切成 `m_pq` 份等长的子向量，因此 `m_pq` 必须能整除 `dim`。`m_pq` 越大，召回率越高，但每条向量字节数也越多。根据 `dim` 大小，典型取值在 4–32 之间。
+
+##### nbits_pq
+
+- **默认值**: 8
+- **必需**: 否（仅在 `quantizer = pq` 时允许；其他场景下不允许设置）。
+- **描述**: HNSW 特定参数（仅 PQ 量化器）。每个 PQ 子量化器的位数。必须在 4–16 之间。
+
+##### nbits
+
+- **默认值**: 8
+- **必需**: 否
+- **描述**: IVFPQ 特定参数。乘积量化（PQ）使用的位数，当前仅支持 `8`。
+
+##### nlist
+
+- **默认值**: 16
+- **必需**: 否
+- **描述**: IVFPQ特定参数。簇的数量或倒排列表。必须是大于或等于`1`的整数。在IVFPQ中，数据集被划分为簇，每个簇的质心对应一个倒排列表。向量搜索将首先找到与数据点最近的簇质心，然后在相应的倒排列表中检索最近邻居。因此，`nlist`的值将影响搜索的准确性和效率。`nlist`的值越大，聚类的粒度越细，因此搜索的准确性越高，但搜索的复杂性也越高。
+
+##### M_IVFPQ
+
+- **默认值**: N/A
+- **必需**: 是
+- **描述**: IVFPQ 特定参数。原始向量将被分割成的子向量数量。IVFPQ 索引将一个 `dim` 维向量分割成 `M_IVFPQ` 个等长的子向量，因此 `M_IVFPQ` 必须能整除 `dim`。SQL 属性名是 `M_IVFPQ`；`M` 是另一个仅适用于 HNSW 的属性。
+
+#### 附加向量索引
+
+您还可以使用[CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md)或[ALTER TABLE ADD INDEX](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md)将向量索引添加到现有表中。
+
+:::note
+对于存算分离集群中的云原生表，ALTER TABLE ADD INDEX 语句会重写现有数据，并在其上构建索引。即使将 `index_build_mode` 设置为 `async`，系统也会在模式更改完成之前先完成索引构建。
+:::
+
+示例：
+
+```SQL
+CREATE INDEX ivfpq_vector 
+ON ivfpq (vector) 
+USING VECTOR (
+    "index_type" = "ivfpq",
+    "metric_type" = "l2_distance", 
+    "is_vector_normed" = "false",  
+    "dim"="5", 
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
+);
+
+ALTER TABLE ivfpq 
+ADD INDEX ivfpq_vector (vector) 
+USING VECTOR (
+    "index_type" = "ivfpq",
+    "metric_type" = "l2_distance", 
+    "is_vector_normed" = "false", 
+    "dim"="5", 
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
+);
+```
+
+### 管理向量索引
+
+#### 查看向量索引
+
+您可以使用[SHOW CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md)语句查看向量索引的定义：
+
+示例：
+
+```SQL
+mysql> SHOW CREATE TABLE hnsw \G
+*************************** 1. row ***************************
+       Table: hnsw
+Create Table: CREATE TABLE hnsw (
+  id bigint(20) NOT NULL COMMENT "",
+  vector array<float> NOT NULL COMMENT "",
+  INDEX index_vector (vector) USING VECTOR("dim" = "5", "efconstruction" = "40", "index_type" = "hnsw", "is_vector_normed" = "false", "M" = "512", "metric_type" = "l2_distance") COMMENT ''
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "3"
+);
+1 row in set (0.00 sec)
+```
+
+#### 删除向量索引
+
+您可以使用[DROP INDEX](../../sql-reference/sql-statements/table_bucket_part_index/DROP_INDEX.md)或[ALTER TABLE DROP INDEX](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md)删除向量索引。
+
+```SQL
+DROP INDEX ivfpq_vector ON ivfpq;
+ALTER TABLE ivfpq DROP INDEX ivfpq_vector;
+```
+
+### 使用向量索引执行ANNS
+
+#### 基于向量索引的查询要求
+
+```SQL
+SELECT *, <vector_index_distance_func>(v1, [1,2,3]) as dis
+FROM table_name
+WHERE <vector_index_distance_func>(v1, [1,2,3]) <= 10
+ORDER BY <vector_index_distance_func>(v1, [1,2,3]) 
+LIMIT 10
+```
+
+要在查询中使用向量索引，必须满足以下所有要求：
+
+- **ORDER BY要求：**
+  - ORDER BY子句格式：`ORDER BY`子句必须遵循格式`ORDER BY <vector_index_distance_func>(vector_column, constant_array)`，且不包括其他ORDER BY列。
+    - `<vector_index_distance_func>`的函数名要求：
+      - 如果`metric_type`是`l2_distance`，函数名必须是`approx_l2_distance`。
+      - 如果`metric_type`是`cosine_similarity`，函数名必须是`approx_cosine_similarity`。
+      - 如果`metric_type`是`inner_product`，函数名必须是`approx_inner_product`。
+    - `<vector_index_distance_func>`的参数要求：
+      - `constant_array`必须是一个与向量索引`dim`匹配的常量`ARRAY<FLOAT>`。
+      - `vector_column`必须是与向量索引对应的列。
+  - ORDER方向要求：
+    - 如果`metric_type`是`l2_distance`，顺序必须是`ASC`。
+    - 如果`metric_type`是`cosine_similarity`，顺序必须是`DESC`。
+    - 如果`metric_type`是`inner_product`，顺序必须是`DESC`。
+  - 必须有`LIMIT N`子句。
+- **谓词要求：**
+  - 所有谓词必须是`<vector_index_distance_func>`表达式，通过`AND`和比较运算符（`>`或`<`）组合。比较运算符的方向必须与`ASC`/`DESC`顺序一致。具体来说：
+  - 要求1：
+    - 如果`metric_type`是`l2_distance`：`col_ref <= constant`。
+    - 如果`metric_type`是`cosine_similarity`：`col_ref >= constant`。
+    - 如果`metric_type`是`inner_product`：`col_ref >= constant`，其中常量可以为负数。
+    - 这里，`col_ref`指的是`<vector_index_distance_func>(vector_column, constant_array)`的结果，可以转换为`FLOAT`或`DOUBLE`类型，例如：
+      - `approx_l2_distance(v1, [1,2,3])`
+      - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`
+      - `CAST(approx_l2_distance(v1, [1,2,3]) AS DOUBLE)`
+  - 要求2：
+    - 谓词必须使用`AND`，每个子谓词满足要求1。
+
+#### 准备
+
+创建带有向量索引的表并插入向量数据：
+
+```SQL
+CREATE TABLE test_hnsw (
+    id     BIGINT(20)   NOT NULL COMMENT "",
+    vector ARRAY<FLOAT> NOT NULL COMMENT "",
+    INDEX index_vector (vector) USING VECTOR (
+        "index_type" = "hnsw",
+        "metric_type" = "l2_distance", 
+        "is_vector_normed" = "false", 
+        "M" = "512",
+        "dim" = "5",
+        "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+
+INSERT INTO test_hnsw VALUES
+    (1, [1,2,3,4,5]),
+    (2, [4,5,6,7,8]);
+    
+CREATE TABLE test_ivfpq (
+    id     BIGINT(20)   NOT NULL COMMENT "",
+    vector ARRAY<FLOAT> NOT NULL COMMENT "",
+    INDEX index_vector (vector) USING VECTOR (
+        "index_type" = "ivfpq",
+        "metric_type" = "l2_distance", 
+        "is_vector_normed" = "false", 
+        "nlist" = "1",
+        "nbits" = "8",
+        "dim" = "5",
+        "M_IVFPQ" = "1",
+        "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+
+INSERT INTO test_ivfpq VALUES
+    (1, [1,2,3,4,5]),
+    (2, [4,5,6,7,8]);
+```
+
+#### 执行向量搜索
+
+##### 近似搜索
+
+近似搜索将命中向量索引，从而加速搜索过程。
+
+以下示例搜索向量`[1,1,1,1,1]`的前1个近似最近邻。
+
+```SQL
+SELECT id, approx_l2_distance([1,1,1,1,1], vector) 
+FROM test_hnsw 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+##### 标量-向量联合搜索
+
+您可以将标量搜索与向量搜索结合。
+
+```SQL
+SELECT id, approx_l2_distance([1,1,1,1,1], vector) 
+FROM test_hnsw 
+WHERE id = 1 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+##### 范围搜索
+
+您可以对向量数据执行范围搜索。
+
+以下示例将`score < 40`条件下推到索引中，并通过`score`范围过滤向量。
+
+```SQL
+SELECT * FROM (
+    SELECT id, approx_l2_distance([1,1,1,1,1], vector) score 
+    FROM test_hnsw
+) a 
+WHERE score < 40 
+ORDER BY score 
+LIMIT 1;
+```
+
+##### 精确计算
+
+精确计算将忽略向量索引，直接计算向量之间的距离以获得精确结果。
+
+```SQL
+SELECT id, l2_distance([1,1,1,1,1], vector) 
+FROM test_hnsw WHERE id = 1 
+ORDER BY l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+> **注意**
+>
+> 不同的距离度量函数对“相似性”的定义不同。对于`l2_distance`，值越小表示相似性越高；对于`cosine_similarity`，值越大表示相似性越高。因此，在计算`topN`时，排序（ORDER BY）方向应与度量的相似性方向一致。对于`l2_distance`使用`ORDER BY ASC LIMIT x`，对于`cosine_similarity`使用`ORDER BY DESC LIMIT x`。
+
+#### 为搜索微调索引参数
+
+参数调优在向量搜索中至关重要，因为它影响性能和准确性。建议在小数据集上调优搜索参数，并在达到预期的召回率和延迟后再转向大数据集。
+
+搜索参数可以通过 [`ann_params`](../../sql-reference/System_variable.md#ann_params) 会话变量或 SQL 语句中的 Hint 传递。
+
+##### 对于HNSW索引
+
+在继续之前，请确保向量列已使用HNSW索引构建。
+
+```SQL
+SELECT 
+    /*+ SET_VAR (ann_params='{"efsearch":"256"}') */
+    id, approx_l2_distance([1,1,1,1,1], vector) 
+FROM test_hnsw 
+WHERE id = 1 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+**参数**：
+
+###### efsearch
+
+- **默认值**: 40
+- **必需**: 否
+- **描述**: 控制精度-速度权衡的参数。在分层图结构搜索中，此参数控制搜索期间候选列表的大小。`efsearch`的值越大，准确性越高，但速度越慢。
+
+##### 对于IVFPQ索引
+
+在继续之前，请确保向量列已使用IVFPQ索引构建。
+
+```SQL
+SELECT 
+    /*+ SET_VAR (ann_params='{"nprobe":"256","max_codes":"0","scan_table_threshold":"0","polysemous_ht":"0","range_search_confidence":"0.1"}') */
+    id, approx_l2_distance([1,1,1,1,1], vector) 
+FROM test_ivfpq 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
+LIMIT 1;
+```
+
+**参数**：
+
+###### nprobe
+
+- **默认值**: 1
+- **必需**: 否
+- **描述**: 搜索期间检查的倒排列表数量。`nprobe`的值越大，准确性越高，但速度越慢。
+
+###### max_codes
+
+- **默认值**: 0
+- **必需**: 否
+- **描述**: 每个倒排列表检查的最大代码数。此参数也会影响准确性和速度。
+
+###### scan_table_threshold
+
+- **默认值**: 0
+- **必需**: 否
+- **描述**: 控制多义哈希的参数。当元素的哈希与要搜索的向量的哈希之间的汉明距离低于此阈值时，该元素将被添加到候选列表中。
+
+###### polysemous_ht
+
+- **默认值**: 0
+- **必需**: 否
+- **描述**: 控制多义哈希的参数。当元素的哈希与要搜索的向量的哈希之间的汉明距离低于此阈值时，该元素将直接添加到结果中。
+
+###### range_search_confidence
+
+- **默认值**: 0.1
+- **必需**: 否
+- **描述**: 近似范围搜索的置信度。值范围：[0, 1]。将其设置为`1`可产生最准确的结果。
+
+#### 调整候选数量和结果精排
+
+以下会话变量控制索引返回的候选数量，以及 StarRocks 是否重新计算候选项的精确距离：
+
+- [`k_factor`](../../sql-reference/System_variable.md#k_factor)，默认值为 `1`：将 `LIMIT` 乘以该值，得到每个 Segment 请求的候选数量。增大该值可以提高多个 Segment 合并结果后的召回率，但会增加 CPU、内存和下游处理开销。
+- [`enable_vector_index_refine`](../../sql-reference/System_variable.md#enable_vector_index_refine)，默认值为 `false`：对于 IVFPQ 以及使用 `sq4`、`sq8` 或 `pq` 量化器的 HNSW 索引，基于原始向量重新计算精确距离并对候选项重排。该变量对未量化的 HNSW 索引（`quantizer = flat`）无效。
+- [`pq_refine_factor`](../../sql-reference/System_variable.md#pq_refine_factor)，默认值为 `1`：在启用精确距离精排的范围查询中，在 `k_factor` 的基础上进一步放大候选数量。
+
+例如：
+
+```SQL
+SET enable_vector_index_refine = true;
+SET k_factor = 2;
+SET pq_refine_factor = 2;
+```
+
+候选倍率越大，通常召回率越高，但索引检索、I/O 和距离计算开销也越大。可以通过 `EXPLAIN` 中的 `Refine: ON/OFF` 确认是否启用了精确距离精排。
+
+#### 计算近似召回率
+
+您可以通过将暴力检索的`topK`元素与近似检索的元素相交来计算近似召回率：`Recall = TP / (TP + FN)`。
+
+```SQL
+-- 近似检索
+SELECT id 
+FROM test_hnsw 
+ORDER BY approx_l2_distance([1,1,1,1,1], vector)
+LIMIT 5;
+8
+9
+7
+5
+1
+
+-- 暴力检索
+SELECT id 
+FROM test_hnsw
+ORDER BY l2_distance([1,1,1,1,1], vector)
+LIMIT 5;
+8
+9
+5
+7
+10
+```
+
+在上述示例中，近似检索返回8, 9, 7, 和5。然而，正确的结果是8, 9, 5, 7, 和10。在这种情况下，召回率为4/5=80%。
+
+#### 检查向量索引是否生效
+
+对查询语句执行[EXPLAIN](../../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md)。如果`OlapScanNode`属性显示`VECTORINDEX: ON`，则表示向量索引已应用于近似向量搜索。
+
+示例：
+
+```SQL
+> EXPLAIN SELECT id FROM t_test_vector_table ORDER BY approx_l2_distance([1,1,1,1,1], vector) LIMIT 5;
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Explain String                                                                                                                                      |
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| PLAN FRAGMENT 0                                                                                                                                     |
+|  OUTPUT EXPRS:1: id                                                                                                                                 |
+|   PARTITION: UNPARTITIONED                                                                                                                          |
+|                                                                                                                                                     |
+|   RESULT SINK                                                                                                                                       |
+|                                                                                                                                                     |
+|   4:Project                                                                                                                                         |
+|   |  <slot 1> : 1: id                                                                                                                               |
+|   |  limit: 5                                                                                                                                       |
+|   |                                                                                                                                                 |
+|   3:MERGING-EXCHANGE                                                                                                                                |
+|      limit: 5                                                                                                                                       |
+|                                                                                                                                                     |
+| PLAN FRAGMENT 1                                                                                                                                     |
+|  OUTPUT EXPRS:                                                                                                                                      |
+|   PARTITION: RANDOM                                                                                                                                 |
+|                                                                                                                                                     |
+|   STREAM DATA SINK                                                                                                                                  |
+|     EXCHANGE ID: 03                                                                                                                                 |
+|     UNPARTITIONED                                                                                                                                   |
+|                                                                                                                                                     |
+|   2:TOP-N                                                                                                                                           |
+|   |  order by: <slot 3> 3: approx_l2_distance ASC                                                                                                   |
+|   |  offset: 0                                                                                                                                      |
+|   |  limit: 5                                                                                                                                       |
+|   |                                                                                                                                                 |
+|   1:Project                                                                                                                                         |
+|   |  <slot 1> : 1: id                                                                                                                               |
+|   |  <slot 3> : 4: __vector_approx_l2_distance                                                                                                      |
+|   |                                                                                                                                                 |
+|   0:OlapScanNode                                                                                                                                    |
+|      TABLE: t_test_vector_table                                                                                                                     |
+|      VECTORINDEX: ON                                                                                                                                |
+|           IVFPQ: OFF, Distance Column: <4:__vector_approx_l2_distance>, LimitK: 5, Order: ASC, Query Vector: [1, 1, 1, 1, 1], Predicate Range: -1.0 |
+|      PREAGGREGATION: ON                                                                                                                             |
+|      partitions=1/1                                                                                                                                 |
+|      rollup: t_test_vector_table                                                                                                                    |
+|      tabletRatio=1/1                                                                                                                                |
+|      tabletList=11302                                                                                                                               |
+|      cardinality=2                                                                                                                                  |
+|      avgRowSize=4.0                                                                                                                                 |
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+```

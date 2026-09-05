@@ -37,23 +37,19 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.common.io.Text;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TScalarFunction;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**
  * Internal representation of a scalar function.
@@ -67,6 +63,15 @@ public class ScalarFunction extends Function {
     private String prepareFnSymbol;
     @SerializedName(value = "closeFnSymbol")
     private String closeFnSymbol;
+    // isolated/shared
+    @SerializedName(value = "isolated")
+    private boolean isolationType = true;
+    @SerializedName(value = "content")
+    private String content;
+    // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects to
+    // this external worker instead of spawning a local one. The user owns its lifecycle/isolation.
+    @SerializedName(value = "serviceUrl")
+    private String serviceUrl;
 
     // Only used for serialization
     protected ScalarFunction() {
@@ -101,6 +106,9 @@ public class ScalarFunction extends Function {
         symbolName = other.symbolName;
         prepareFnSymbol = other.prepareFnSymbol;
         closeFnSymbol = other.closeFnSymbol;
+        isolationType = other.isolationType;
+        content = other.content;
+        serviceUrl = other.serviceUrl;
     }
 
     public static ScalarFunction createVectorizedBuiltin(long fid,
@@ -143,15 +151,47 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
-            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType,
+            CloudConfiguration cloudConfiguration) {
         ScalarFunction fn = new ScalarFunction(name, args, returnType, isVariadic);
         fn.setBinaryType(binaryType);
         fn.setUserVisible(true);
         fn.symbolName = symbol;
         fn.prepareFnSymbol = prepareFnSymbol;
         fn.closeFnSymbol = closeFnSymbol;
+        fn.setIsolationType(isolationType);
         fn.setLocation(new HdfsURI(objectFile));
+        fn.setCloudConfiguration(cloudConfiguration);
         return fn;
+    }
+
+    public static ScalarFunction createUdf(
+            FunctionName name, Type[] args,
+            Type returnType, boolean isVariadic,
+            TFunctionBinaryType binaryType,
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol,
+            CloudConfiguration cloudConfiguration) {
+        return createUdf(name, args, returnType, isVariadic, binaryType, objectFile,
+                symbol, prepareFnSymbol, closeFnSymbol, true, cloudConfiguration);
+    }
+
+    /**
+     * Returns a new instance of this aggregate function with new argument types and return type which is used for
+     * original function's argument types are psedo types.
+     */
+    public ScalarFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
+        ScalarFunction newFn = new ScalarFunction(this.getFunctionName(), newArgTypes, newRetType,
+                this.getLocation(), this.getSymbolName(), this.getPrepareFnSymbol(),
+                this.getCloseFnSymbol());
+        newFn.setFunctionId(this.getFunctionId());
+        newFn.setChecksum(this.getChecksum());
+        newFn.setBinaryType(this.getBinaryType());
+        newFn.setAiModelSource(this.getAiModelSource());
+        newFn.setHasVarArgs(this.hasVarArgs());
+        newFn.setId(this.getId());
+        newFn.setUserVisible(this.isUserVisible());
+        newFn.setAggStateDesc(this.getAggStateDesc());
+        return newFn;
     }
 
     public void setSymbolName(String s) {
@@ -178,17 +218,67 @@ public class ScalarFunction extends Function {
         return closeFnSymbol;
     }
 
+    public boolean getIsolationType() {
+        return isolationType;
+    }
+
+    public void setIsolationType(boolean isolationType) {
+        this.isolationType = isolationType;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+    public void setServiceUrl(String serviceUrl) {
+        this.serviceUrl = serviceUrl;
+    }
+
+    public String getServiceUrl() {
+        return serviceUrl;
+    }
+
     @Override
     public String toSql(boolean ifNotExists) {
-        StringBuilder sb = new StringBuilder("CREATE FUNCTION ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
+        StringBuilder sb = new StringBuilder();
+        appendCreateHeader(sb, "", ifNotExists);
+        sb.append(signatureString()).append("\n")
+                .append("RETURNS ").append(getReturnType()).append("\n");
+
+        Map<String, String> props = synthesizePropertiesFromFields();
+        appendPropertiesBlock(sb, props);
+
+        if (content != null) {
+            // $$ ... $$ matches the inlineFunction grammar (ATTACHMENT token)
+            // so the emitted statement round-trips through CREATE FUNCTION.
+            sb.append("AS $$\n").append(content).append("\n$$\n");
         }
-        sb.append(dbName() + "." + signatureString() + "\n")
-                .append(" RETURNS " + getReturnType() + "\n")
-                .append(" LOCATION '" + getLocation() + "'\n")
-                .append(" SYMBOL='" + getSymbolName() + "'\n");
         return sb.toString();
+    }
+
+    private Map<String, String> synthesizePropertiesFromFields() {
+        Map<String, String> props = new LinkedHashMap<>();
+        String typeStr = binaryTypeToPropertyValue(getBinaryType());
+        if (typeStr != null) {
+            props.put(CreateFunctionStmt.TYPE_KEY, typeStr);
+        }
+        if (getLocation() != null) {
+            props.put(CreateFunctionStmt.FILE_KEY, getLocation().toString());
+        }
+        if (!Strings.isEmpty(getSymbolName())) {
+            props.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
+        }
+        if (!Strings.isEmpty(getInputType())) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, getInputType());
+        }
+        if (!Strings.isEmpty(getServiceUrl())) {
+            props.put(CreateFunctionStmt.SERVICE_URL_KEY, getServiceUrl());
+        }
+        // Default isolation is isolated (true); only emit the property when explicitly shared.
+        if (!isolationType) {
+            props.put(CreateFunctionStmt.ISOLATION_KEY, CreateFunctionStmt.ISOLATION_SHARED);
+        }
+        return props;
     }
 
     @Override
@@ -203,31 +293,18 @@ public class ScalarFunction extends Function {
             scalarFunction.setClose_fn_symbol(closeFnSymbol);
         }
         fn.setScalar_fn(scalarFunction);
+        fn.setIsolated(isolationType);
+        if (content != null) {
+            fn.setContent(content);
+        }
+        if (serviceUrl != null) {
+            fn.setService_url(serviceUrl);
+        }
         return fn;
     }
 
-    @Override
-    public void write(DataOutput output) throws IOException {
-        // 1. type
-        FunctionType.SCALAR.write(output);
-        // 2. parent
-        super.writeFields(output);
-        // 3.symbols
-        Text.writeString(output, symbolName);
-        writeOptionString(output, prepareFnSymbol);
-        writeOptionString(output, closeFnSymbol);
-    }
 
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        symbolName = Text.readString(input);
-        if (input.readBoolean()) {
-            prepareFnSymbol = Text.readString(input);
-        }
-        if (input.readBoolean()) {
-            closeFnSymbol = Text.readString(input);
-        }
-    }
+
 
     @Override
     public String getProperties() {
@@ -237,11 +314,101 @@ public class ScalarFunction extends Function {
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         properties.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
+        // isolationType defaults to true (isolated); surface it so users can tell whether the
+        // function was created with isolation = "shared".
+        properties.put(CreateFunctionStmt.ISOLATION_KEY,
+                isolationType ? CreateFunctionStmt.ISOLATION_ISOLATED : CreateFunctionStmt.ISOLATION_SHARED);
         return new Gson().toJson(properties);
     }
 
     @Override
     public Function copy() {
         return new ScalarFunction(this);
+    }
+
+    public static class ScalarFunctionBuilder {
+        TFunctionBinaryType binaryType;
+        FunctionName name;
+        Type[] argTypes;
+        Type retType;
+        boolean hasVarArgs;
+        String objectFile;
+        String symbolName;
+        boolean isolation;
+        String inputType;
+        String content;
+        String serviceUrl;
+
+        private ScalarFunctionBuilder(TFunctionBinaryType binaryType) {
+            this.binaryType = binaryType;
+        }
+
+        public static ScalarFunction.ScalarFunctionBuilder createUdfBuilder(TFunctionBinaryType binaryType) {
+            return new ScalarFunction.ScalarFunctionBuilder(binaryType);
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder name(FunctionName name) {
+            this.name = name;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder argsType(Type[] argTypes) {
+            this.argTypes = argTypes;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder retType(Type type) {
+            this.retType = type;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder hasVarArgs(boolean hasVarArgs) {
+            this.hasVarArgs = hasVarArgs;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder objectFile(String objectFile) {
+            this.objectFile = objectFile;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder symbolName(String symbolName) {
+            this.symbolName = symbolName;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder isolation(boolean isolation) {
+            this.isolation = isolation;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder inputType(String inputType) {
+            this.inputType = inputType;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder content(String content) {
+            this.content = content;
+            return this;
+        }
+
+        public ScalarFunction.ScalarFunctionBuilder serviceUrl(String serviceUrl) {
+            this.serviceUrl = serviceUrl;
+            return this;
+        }
+
+        public ScalarFunction build() {
+            ScalarFunction scalarFunction = new ScalarFunction(name, argTypes, retType, hasVarArgs);
+            scalarFunction.setBinaryType(binaryType);
+            scalarFunction.setSymbolName(symbolName);
+            scalarFunction.setIsolationType(isolation);
+            scalarFunction.setInputType(inputType);
+            scalarFunction.setContent(content);
+            scalarFunction.setServiceUrl(serviceUrl);
+            if (objectFile != null) {
+                scalarFunction.setLocation(new HdfsURI(objectFile));
+            }
+            return scalarFunction;
+        }
     }
 }

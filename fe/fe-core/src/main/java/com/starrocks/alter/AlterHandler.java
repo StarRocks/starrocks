@@ -34,18 +34,20 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.task.AlterReplicaTask;
@@ -53,15 +55,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
-public abstract class AlterHandler extends FrontendDaemon {
+public abstract class AlterHandler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(AlterHandler.class);
     protected ConcurrentMap<Long, AlterJobV2> alterJobsV2 = Maps.newConcurrentMap();
 
@@ -74,7 +78,9 @@ public abstract class AlterHandler extends FrontendDaemon {
      */
     protected ReentrantLock lock = new ReentrantLock();
 
-    protected ThreadPoolExecutor executor;
+    // Not final: shutdownNow() in onStopped() interrupts in-flight AlterReplicaTask
+    // submissions; start() rebuilds the pool when the next leader takes over.
+    protected volatile ThreadPoolExecutor executor;
 
     protected void lock() {
         lock.lock();
@@ -86,15 +92,28 @@ public abstract class AlterHandler extends FrontendDaemon {
 
     public AlterHandler(String name) {
         super(name, Config.alter_scheduler_interval_millisecond);
-        executor = ThreadPoolManager
-                .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
-                        name + "_pool", true);
+        executor = newExecutor();
+    }
+
+    private ThreadPoolExecutor newExecutor() {
+        return ThreadPoolManager.newDaemonCacheThreadPool(
+                Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
+                getName() + "_pool", true);
     }
 
 
     public void addAlterJobV2(AlterJobV2 alterJob) {
         this.alterJobsV2.put(alterJob.getJobId(), alterJob);
         LOG.info("add {} job {}", alterJob.getType(), alterJob.getJobId());
+    }
+
+    protected final void runAlterJobV2Safely(AlterJobV2 alterJob) {
+        try {
+            alterJob.run();
+        } catch (Exception e) {
+            LOG.warn("alter job {} type {} state {} failed in scheduler; will retry without blocking sibling jobs",
+                    alterJob.getJobId(), alterJob.getType(), alterJob.getJobState(), e);
+        }
     }
 
     public List<AlterJobV2> getUnfinishedAlterJobV2ByTableId(long tblId) {
@@ -122,15 +141,17 @@ public abstract class AlterHandler extends FrontendDaemon {
         return this.alterJobsV2;
     }
 
-    private void clearExpireFinishedOrCancelledAlterJobsV2() {
+    protected void clearExpireFinishedOrCancelledAlterJobsV2() {
         Iterator<Map.Entry<Long, AlterJobV2>> iterator = alterJobsV2.entrySet().iterator();
         while (iterator.hasNext()) {
             AlterJobV2 alterJobV2 = iterator.next().getValue();
-            if (alterJobV2.isExpire()) {
-                iterator.remove();
+            if (alterJobV2.isExpire() && (RunMode.isSharedNothingMode() || GlobalStateMgr.getCurrentState()
+                    .getClusterSnapshotMgr().isDeletionSafeToExecute(alterJobV2.getFinishedTimeMs()))) {
                 RemoveAlterJobV2OperationLog log =
                         new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log, wal -> {
+                    iterator.remove();
+                });
                 LOG.info("remove expired {} job {}. finish at {}", alterJobV2.getType(),
                         alterJobV2.getJobId(), TimeUtils.longToTimeString(alterJobV2.getFinishedTimeMs()));
             }
@@ -154,20 +175,91 @@ public abstract class AlterHandler extends FrontendDaemon {
         return alterJobsV2.values().stream().filter(e -> e.getJobState() == state).count();
     }
 
+    /**
+     * Returns the minimum active transaction ID across all active alter jobs for the given table.
+     * This is important because multiple concurrent alter jobs (e.g., rollup jobs when
+     * Config.max_running_rollup_job_num_per_table > 1) can exist for the same table.
+     * Since alterJobsV2 is a ConcurrentMap with nondeterministic iteration order,
+     * we must find the minimum to ensure vacuum operations don't delete data still
+     * needed by any active job.
+     */
+    public Optional<Long> getActiveTxnIdOfTable(long tableId) {
+        Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
+        Long minTxnId = null;
+        for (AlterJobV2 job : alterJobV2Map.values()) {
+            AlterJobV2.JobState state = job.getJobState();
+            if (job.getTableId() == tableId && state != AlterJobV2.JobState.FINISHED && state != AlterJobV2.JobState.CANCELLED) {
+                Optional<Long> txnId = job.getTransactionId();
+                if (txnId.isPresent()) {
+                    if (minTxnId == null || txnId.get() < minTxnId) {
+                        minTxnId = txnId.get();
+                    }
+                }
+            }
+        }
+        return Optional.ofNullable(minTxnId);
+    }
+
     // For UT
     public void clearJobs() {
         this.alterJobsV2.clear();
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         clearExpireFinishedOrCancelledAlterJobsV2();
         setInterval(Config.alter_scheduler_interval_millisecond);
     }
 
     @Override
     public synchronized void start() {
+        // The re-activation cleanliness gate verifies the previous executor terminated before start()
+        // runs (onStopped awaits its termination and only then clears isRunning), so there is no restart
+        // guard here, and no reset either - onStopped() already reset the jobs on the worker's exit.
+        // Just rebuild the executor if a previous demotion shut it down (or on first start).
+        if (executor == null || executor.isShutdown()) {
+            executor = newExecutor();
+        }
         super.start();
+    }
+
+    @VisibleForTesting
+    public void rebuildExecutorForTest() {
+        // UT helpers stop the background loop via setStop() so they can drive alter jobs manually.
+        // setStop() runs the LeaderDaemon worker through onStopped(), which shuts the executor down
+        // (demotion cleanup); rebuild it so a manually driven alterJob.run() can still submit tasks.
+        if (executor == null || executor.isShutdown()) {
+            executor = newExecutor();
+        }
+    }
+
+    @Override
+    protected void onStopped() {
+        // alterJobsV2 is persistent (saved/loaded via image and replayed on followers via
+        // editlog), so it must NOT be cleared on demotion - the next leader resumes those
+        // jobs from the same map. Subclasses can override onStopped() to drop derived caches
+        // (e.g. tableNotFinalStateJobMap) that are recomputable from alterJobsV2; just
+        // remember to call super.onStopped() so the executor shutdown still runs.
+        // shutdownNow() interrupts in-flight AlterReplicaTask submissions; wait until the executor
+        // actually terminates so this worker does not clear isRunning while a finish-report task is
+        // still running (the re-activation gate reads isRunning as the single quiescence signal), and
+        // so the reset below cannot race an in-flight task's job-state mutation.
+        shutdownNowAndAwaitTermination("AlterHandler." + getName() + ".executor", executor);
+        // The jobs themselves survive in memory across an in-place demote / re-elect cycle,
+        // unlike a restart which reloads them from the image/journal. Reset each non-final
+        // job to its last durable state (drop unlogged in-memory transitions and leader-
+        // session transients) so a re-elected leader resumes exactly like a restarted FE.
+        resetJobsToLastDurableState();
+    }
+
+    private void resetJobsToLastDurableState() {
+        for (AlterJobV2 job : alterJobsV2.values()) {
+            try {
+                job.resetToLastDurableState();
+            } catch (Throwable t) {
+                LOG.warn("reset alter job {} on leader handoff failed", job.getJobId(), t);
+            }
+        }
     }
 
     /*
@@ -182,7 +274,7 @@ public abstract class AlterHandler extends FrontendDaemon {
      * entry function. handle alter ops
      */
     public abstract ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
-            throws UserException;
+            throws StarRocksException;
 
     /*
      * cancel alter ops
@@ -203,5 +295,15 @@ public abstract class AlterHandler extends FrontendDaemon {
         } else {
             existingJob.replay(alterJob);
         }
+    }
+
+    public Map<Long, Long> getRunningAlterJobCount() {
+        Map<Long, Long> result = new HashMap<>();
+        for (AlterJobV2 alterJobV2 : alterJobsV2.values()) {
+            if (!alterJobV2.isDone()) {
+                result.compute(alterJobV2.getWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+            }
+        }
+        return result;
     }
 }

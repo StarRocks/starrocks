@@ -22,19 +22,26 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public class InputDependenciesChecker implements PlanValidator.Checker {
 
@@ -71,6 +78,39 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                     visit(input, context);
                 }
             }
+
+            // If projection of Operator is present, ensure that projection's required input columns can be obtained
+            // from Operator's original output columns.
+            Optional<Map<ColumnRefOperator, ScalarOperator>> optColumnRefMap =
+                    Optional.ofNullable(operator.getProjection()).map(Projection::getColumnRefMap);
+            Optional<Map<ColumnRefOperator, ScalarOperator>> optCseColumnRefMap =
+                    Optional.ofNullable(operator.getProjection()).map(Projection::getCommonSubOperatorMap);
+            if (optColumnRefMap.isEmpty()) {
+                return context;
+            }
+
+            ColumnRefSet projectUsedColumns = new ColumnRefSet();
+            optColumnRefMap.ifPresent(columnRefMap -> {
+                columnRefMap.values().forEach(expr -> projectUsedColumns.union(expr.getUsedColumns()));
+                projectUsedColumns.except(columnRefMap.keySet());
+            });
+
+            optCseColumnRefMap.ifPresent(cseColumnRefMap -> {
+                cseColumnRefMap.values().forEach(expr -> projectUsedColumns.union(expr.getUsedColumns()));
+                projectUsedColumns.except(cseColumnRefMap.keySet());
+            });
+
+            ColumnRefSet originalOutputColRefSets =
+                    ColumnRefSet.createByIds(optExpression.getRowOutputInfo().getOriginalColOutputInfo().keySet());
+            ColumnRefSet missedCols = projectUsedColumns.clone();
+            missedCols.except(originalOutputColRefSets);
+            if (!missedCols.isEmpty()) {
+                String message = String.format("Invalid plan:%s%s\n%s \nThe projection required cols %s cannot" +
+                                " obtain from original input cols %s.",
+                        System.lineSeparator(), optExpression.debugString(), PREFIX, missedCols,
+                        originalOutputColRefSets);
+                throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
+            }
             return context;
         }
 
@@ -91,6 +131,21 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
                     usedCols.except(col.getColumnRef().getUsedColumns());
                 }
+
+                if (operator.getPredicate() != null) {
+                    usedCols.union(operator.getPredicate().getUsedColumns());
+                }
+
+                if (operator instanceof LogicalOlapScanOperator) {
+                    LogicalOlapScanOperator olapScanOperator = operator.cast();
+                    fillPrunedPredicateCols(usedCols, olapScanOperator.getPrunedPartitionPredicates());
+                }
+
+                if (operator instanceof PhysicalOlapScanOperator) {
+                    PhysicalOlapScanOperator olapScanOperator = operator.cast();
+                    fillPrunedPredicateCols(usedCols, olapScanOperator.getPrunedPartitionPredicates());
+                }
+
                 checkInputCols(inputCols, usedCols, optExpression);
             }
         }
@@ -104,6 +159,18 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             }
             ColumnRefSet inputCols = optExpression.inputAt(0).getRowOutputInfo().getOutputColumnRefSet();
             ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
+            if (optExpression.getOp().getPredicate() != null) {
+                ColumnRefSet predicateCols = optExpression.getOp().getPredicate().getUsedColumns();
+                // The predicate cols should be from the input cols or the output cols of this operator
+                // So we need except the used columns from the output of this operator
+                predicateCols.except(ColumnRefSet.createByIds(optExpression.getRowOutputInfo()
+                        .getOriginalColOutputInfo().keySet()));
+                usedCols.union(predicateCols);
+                if (optExpression.getOp().getPredicateCommonOperators() != null) {
+                    // predicate cols may be also from common exprs
+                    inputCols.union(optExpression.getOp().getPredicateCommonOperators().keySet());
+                }
+            }
             checkInputCols(inputCols, usedCols, optExpression);
         }
 
@@ -131,6 +198,9 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 }
                 if (joinOperator.getPredicate() != null) {
                     usedCols.union(joinOperator.getPredicate().getUsedColumns());
+                    if (joinOperator.getPredicateCommonOperators() != null) {
+                        inputCols.union(joinOperator.getPredicateCommonOperators().keySet());
+                    }
                 }
             }
             checkInputCols(inputCols, usedCols, optExpression);
@@ -168,7 +238,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             ColumnRefSet missedCols = usedCols.clone();
             missedCols.except(inputCols);
             if (!missedCols.isEmpty()) {
-                String message = String.format("Invalid plan:%s%s%s The required cols %s cannot obtain from input cols %s.",
+                String message = String.format("Invalid plan:%s%s\n%s \nThe required cols %s cannot obtain from input cols %s.",
                         System.lineSeparator(), optExpr.debugString(), PREFIX, missedCols, inputCols);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
@@ -176,7 +246,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
 
         private void checkInputType(ColumnRefOperator inputCol, ColumnRefOperator outputCol, OptExpression optExpression) {
             if (!outputCol.getType().isFullyCompatible(inputCol.getType())) {
-                String message = String.format("Invalid plan:%s%s%s Type of output col %s is not fully compatible with " +
+                String message = String.format("Invalid plan:%s%s\n%s \nType of output col %s is not fully compatible with " +
                                 "type of input col %s.",
                         System.lineSeparator(), optExpression.debugString(), PREFIX, outputCol, inputCol);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
@@ -185,9 +255,19 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
 
         private void checkChildNumberOfSet(int inputSize, int requiredSize, OptExpression optExpression) {
             if (inputSize != requiredSize) {
-                String message = String.format("Invalid plan:%s%s%s. The required number of children is %d but found %d.",
+                String message = String.format("Invalid plan:%s%s\n%s. \nThe required number of children is %d but found %d.",
                         System.lineSeparator(), optExpression.debugString(), PREFIX, requiredSize, inputSize);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
+            }
+        }
+
+        private void fillPrunedPredicateCols(ColumnRefSet usedCols, List<ScalarOperator> prunedPredicates) {
+            if (CollectionUtils.isEmpty(prunedPredicates)) {
+                return;
+            }
+
+            for (ScalarOperator predicate : prunedPredicates) {
+                usedCols.union(predicate.getUsedColumns());
             }
         }
     }

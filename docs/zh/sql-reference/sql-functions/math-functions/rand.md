@@ -1,10 +1,9 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回0（含）到1（不含）之间的随机浮点数。"
 ---
 
-# RAND, RANDOM
-
-## 功能
+# rand, random
 
 返回一个 0 (包含) 到 1（不包含）之间的随机浮点数。
 
@@ -16,7 +15,7 @@ RAND(x);
 
 ## 参数说明
 
-`x`: 可选。支持的数据类型为 BIGINT。如果指定了 `x`，则返回一个可重复的随机数。如果没有指定 `x`，则返回一个完全随机数。
+`x`: 可选。支持的数据类型为 BIGINT。无论是否指定 `x`，则都会返回一个完全随机数。
 
 ## 返回值说明
 

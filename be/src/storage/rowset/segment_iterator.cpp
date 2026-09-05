@@ -15,52 +15,94 @@
 #include "segment_iterator.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <memory>
-#include <stack>
+#include <optional>
+#include <queue>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
-#include "column/binary_column.h"
+#include "base/failpoint/fail_point.h"
+#include "base/format.h"
+#include "base/simd/simd.h"
+#include "base/utility/defer_op.h"
+#include "cache/scan/shared_buffered_input_stream.h"
+#include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/config_starlet_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
+#include "compute_env/runtime_range_pruner.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
+#include "runtime/chunk_helper.h"
 #include "segment_options.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
-#include "storage/column_expr_predicate.h"
-#include "storage/column_or_predicate.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/extends_column_utils.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
+#include "storage/index/vector/tenann/del_id_filter.h"
+#include "storage/index/vector/vector_index_reader.h"
+#include "storage/index/vector/vector_index_reader_factory.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/update_manager.h"
-#include "storage/olap_runtime_range_pruner.hpp"
-#include "storage/projection_iterator.h"
-#include "storage/range.h"
-#include "storage/roaring2range.h"
+#include "storage/non_closing_chunk_iterator.h"
+#include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
-#include "storage/rowset/common.h"
+#include "storage/rowset/data_sample.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
+#include "storage/rowset/or_match_fallback_visitor.h"
 #include "storage/rowset/rowid_column_iterator.h"
-#include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
-#include "storage/storage_engine.h"
+#include "storage/runtime_filter_predicate.h"
+#include "storage/storage_env.h"
+#include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
-#include "util/starrocks_metrics.h"
+#include "storage/virtual_column_utils.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/column_or_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/roaring2range.h"
+#include "storage_primitive/rowid_types.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/vector_search_option.h"
+#include "types/logical_type.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
+
+enum class VectorMetricType {
+    kL2Distance,
+    kCosineSimilarity,
+    kInnerProduct,
+};
 
 // compare |tuple| with the first row of |chunk|.
 // NULL will be treated as a minimal value.
@@ -85,74 +127,168 @@ static int compare(const SeekTuple& tuple, const Chunk& chunk) {
     return 0;
 }
 
-static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema) {
+// |is_full_sort_key| selects the row re-encode codec: true for a full-key segment
+// (|short_key_schema| is then the segment's full, untruncated sort-key schema), false
+// for the legacy truncated short-key prefix.
+static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema,
+                   bool is_full_sort_key) {
     DCHECK_GE(rhs_chunk.num_rows(), 1u);
 
     SeekTuple tuple(short_key_schema, rhs_chunk.get(0).datums());
-    std::string rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
+    std::string rhs_index_key;
+    if (is_full_sort_key) {
+        // |lhs_index_key| is a short-key-index boundary, written with the physical
+        // full_sort_key_encode overload (segment_writer), which NUL-truncates CHAR to its
+        // visible prefix. Re-encode the stored row with the same physical overload so CHAR
+        // bytes match the index exactly regardless of any NUL the page read carries.
+        // |short_key_schema| is already in sort-key order, so the physical column indexes
+        // are 0..num_fields-1.
+        std::vector<uint32_t> sort_key_idxes(short_key_schema.num_fields());
+        for (uint32_t i = 0; i < sort_key_idxes.size(); i++) {
+            sort_key_idxes[i] = i;
+        }
+        rhs_index_key = tuple.full_sort_key_encode(sort_key_idxes, 0);
+    } else {
+        rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
+    }
     auto rhs = Slice(rhs_index_key);
 
     return lhs_index_key.compare(rhs);
 }
 
+// Returns true iff, for the first |n| columns, |query_schema|'s field logical types are
+// byte-compatible with |segment_schema|'s (same type at the same position, so the same
+// composite codec produces order-preserving, comparable bytes). A drifted sort-key type
+// cannot be safely bracketed by the segment's own full sort key index.
+// Note: this only compares LogicalType, not DECIMAL precision/scale, so a same-logical-type
+// scale drift would pass this check; that is acceptable because a sort-key type change forces
+// a full rewrite (uniform segments), and the non-bypass path encodes under the segment's own
+// field anyway.
+static bool full_sort_key_types_compatible(const Schema& query_schema, const Schema& segment_schema, size_t n) {
+    if (n > query_schema.num_fields() || n > segment_schema.num_fields()) {
+        return false;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (query_schema.field(i)->type()->type() != segment_schema.field(i)->type()->type()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Builds the coarse short-key-index search key bytes for |key| against a full-key
+// |segment|, encoded with the segment's OWN sort-key schema (so the bytes match the
+// segment's index even if the query's schema drifted). Returns std::nullopt if the
+// query's sort-key column types are not byte-compatible with the segment's own schema;
+// the caller must then bypass the coarse prune (use the full candidate range and let
+// the typed fine search, if any, decide).
+static std::optional<std::string> encode_full_sort_key_search_key(Segment* segment, const SeekTuple& key, bool lower) {
+    Schema segment_schema = ChunkHelper::get_full_sort_key_schema(segment->tablet_schema_share_ptr());
+    const size_t n = std::min<size_t>(key.columns(), segment->num_sort_key_columns());
+    if (!full_sort_key_types_compatible(key.schema(), segment_schema, n)) {
+        return std::nullopt;
+    }
+    std::vector<Datum> values;
+    values.reserve(key.columns());
+    for (size_t i = 0; i < key.columns(); i++) {
+        values.push_back(key.get(i));
+    }
+    SeekTuple segment_key(std::move(segment_schema), std::move(values));
+    return segment_key.full_sort_key_encode(segment->num_sort_key_columns(),
+                                            lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+}
+
 class SegmentIterator final : public ChunkIterator {
 public:
-    SegmentIterator(std::shared_ptr<Segment> segment, Schema _schema, SegmentReadOptions options);
+    SegmentIterator(std::shared_ptr<Segment> segment, Schema _schema, const SegmentReadOptions& options);
 
-    ~SegmentIterator() override {
-        _get_del_vec_st.permit_unchecked_error();
-        _get_dcg_st.permit_unchecked_error();
-    }
+    ~SegmentIterator() override = default;
 
     void close() override;
+    Status reset_for_reuse(const SegmentReadOptions& options);
+
+    // Public entry point used by the segment_seek_range_to_rowid_range() /
+    // segment_seek_ranges_to_rowid_ranges() free functions. The caller
+    // must ensure the segment's short-key index has already been loaded; this
+    // does not touch any other iterator state, so it is safe to invoke before
+    // do_init() / do_get_next().
+    StatusOr<std::optional<Range<>>> resolve_range_to_rowid_range(const SeekRange& range) {
+        return _seek_range_to_rowid_range(range);
+    }
+
+    StatusOr<SparseRange<>> prepared_pruned_row_ranges() { return _get_prepared_pruned_row_ranges(); }
 
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
+    Status do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) override;
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                       std::vector<uint64_t>* rssid_rowids) override {
+        return do_get_next(chunk, rssid_rowids);
+    }
 
 private:
     struct ScanContext {
-        ScanContext() = default;
+        class ScanStrategy {
+        public:
+            virtual ~ScanStrategy() = default;
+            virtual Status seek_columns(ordinal_t pos) = 0;
+            virtual Status read_columns(Chunk* chunk, const SparseRange<>& range, Buffer<uint8_t>* selection,
+                                        Buffer<uint16_t>* selected_idx) = 0;
+        };
 
+        class NormalScanStrategy final : public ScanStrategy {
+        public:
+            explicit NormalScanStrategy(ScanContext* ctx) : _ctx(ctx) {}
+
+            Status seek_columns(ordinal_t pos) override;
+
+            Status read_columns(Chunk* chunk, const SparseRange<>& range, Buffer<uint8_t>* selection,
+                                Buffer<uint16_t>* selected_idx) override;
+
+        private:
+            ScanContext* _ctx;
+        };
+
+        class PredicateLateMaterializationScanStrategy final : public ScanStrategy {
+        public:
+            explicit PredicateLateMaterializationScanStrategy(ScanContext* ctx) : _ctx(ctx) {}
+
+            Status seek_columns(ordinal_t pos) override;
+
+            Status read_columns(Chunk* chunk, const SparseRange<>& range, Buffer<uint8_t>* selection,
+                                Buffer<uint16_t>* selected_idx) override;
+
+        private:
+            ScanContext* _ctx;
+        };
+
+        ScanContext() : _normal_scan_strategy(this), _predicate_late_materialization_scan_strategy(this) {}
         ~ScanContext() = default;
 
-        void close() {
-            _read_chunk.reset();
-            _dict_chunk.reset();
-            _final_chunk.reset();
-            _adapt_global_dict_chunk.reset();
-        }
+        // Release all chunk resources to free memory
+        void close();
+        // Clear per-scan context while keeping the embedded scan strategies bound
+        // to this ScanContext instance.
+        void reset();
+        // Seek all column iterators to the specified ordinal position
+        Status seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read);
+        // Read column data from the specified range into the chunk
+        // Handles column pruning and delete state tracking
+        Status read_columns(Chunk* chunk, const SparseRange<>& range, bool predicate_col_late_materialize_read,
+                            Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx);
+        // Calculate total memory usage of all chunks in this context
+        int64_t memory_usage() const;
+        // Get the number of column iterators in this context
+        size_t column_size();
+        // Generate a JSON string representation of the context state for debugging
+        std::string to_string() const;
 
-        Status seek_columns(ordinal_t pos) {
-            for (auto iter : _column_iterators) {
-                RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
-            }
-            return Status::OK();
-        }
-
-        Status read_columns(Chunk* chunk, const SparseRange<>& range) {
-            bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
-            for (size_t i = 0; i < _column_iterators.size(); i++) {
-                const ColumnPtr& col = chunk->get_column_by_index(i);
-                RETURN_IF_ERROR(_column_iterators[i]->next_batch(range, col.get()));
-                may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
-            }
-            chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
-            return Status::OK();
-        }
-
-        int64_t memory_usage() const {
-            int64_t usage = 0;
-            usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
-            usage += (_dict_chunk.get() != _read_chunk.get()) ? _dict_chunk->memory_usage() : 0;
-            usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
-            usage += (_adapt_global_dict_chunk.get() != _final_chunk.get()) ? _adapt_global_dict_chunk->memory_usage()
-                                                                            : 0;
-            return usage;
-        }
-
-        size_t column_size() { return _column_iterators.size(); }
+        OlapReaderStatistics* stats = nullptr;
+        // Non-null when runtime filter pushdown is enabled. Points to SegmentIterator::_column_to_runtime_filters_map.
+        // Used by predicate-column late materialization to include runtime filters in page-level predicate pushdown.
+        std::unordered_map<ColumnId, RuntimeFilterPredicates>* runtime_filters_by_column = nullptr;
 
         Schema _read_schema;
         Schema _dict_decode_schema;
@@ -160,6 +296,12 @@ private:
         std::vector<ColumnIterator*> _column_iterators;
         std::vector<ColumnId> _subfield_columns;
         std::vector<ColumnIterator*> _subfield_iterators;
+        std::vector<ColumnIterator*> _column_iterators_for_predicate_late_materialize;
+        std::vector<ColumnId> _column_id_for_predicate_late_materialize;
+        std::map<ColumnId, ColumnIterator*> _column_ids_to_column_iterators;
+        std::map<ColumnId, size_t> _column_ids_to_index;
+        ColumnId _row_id_column_id;
+
         ScanContext* _next{nullptr};
 
         // index the column which only be used for filter
@@ -168,10 +310,10 @@ private:
         // index: output schema index, values: read schema index
         std::vector<size_t> _read_index_map;
 
-        std::shared_ptr<Chunk> _read_chunk;
-        std::shared_ptr<Chunk> _dict_chunk;
-        std::shared_ptr<Chunk> _final_chunk;
-        std::shared_ptr<Chunk> _adapt_global_dict_chunk;
+        ChunkPtr _read_chunk;
+        ChunkPtr _dict_chunk;
+        ChunkPtr _final_chunk;
+        ChunkPtr _adapt_global_dict_chunk;
 
         // true iff |_is_dict_column| contains at least one `true`, i.e,
         // |_column_iterators| contains at least one `DictCodeColumnIterator`.
@@ -183,9 +325,112 @@ private:
 
         // not all dict encode
         bool _has_force_dict_encode{false};
+
+        // If the column is pruneable, it means that we can skip the page read for it.
+        // Currently, it only can be happend if the column is a pure pushdown predicate
+        // for inverted index. Store ColumnId instead of column index so checks remain
+        // valid even when iterator ordering changes.
+        std::unordered_set<ColumnId> _prune_cols;
+        bool _prune_column_after_index_filter = false;
+        bool _enable_predicate_col_late_materialize = false;
+        bool _only_output_one_predicate_col_with_filter_push_down = false;
+        bool _support_push_down_predicate = false;
+        std::vector<ColumnId> _predicate_order;
+        ColumnPredicateMap _column_predicate_map;
+        bool _is_filtered = false; // true if push down predicate into page level
+
+        // Selectivity tracking for predicate column late materialization
+        // Maps (score) to column_id, where score = read_time_ns * selectivity
+        // Lower score = better (fast to read, high filtering rate)
+        // Using multimap to allow multiple columns with same selectivity
+        std::multimap<double, ColumnId> _predicate_selectivity_map;
+        // Track evaluated chunk count for periodic selectivity updates (every 32 chunks)
+        size_t _evaluated_chunk_nums = 0;
+
+        // Continuous tracking of first column selectivity for sampling trigger
+        // Accumulated since last reset (either initialization or predicate order change)
+        size_t _first_column_total_rows_read = 0;   // Total rows read for first column
+        size_t _first_column_total_rows_passed = 0; // Total rows passed first column filter
+
+    private:
+        ScanStrategy& _scan_strategy(bool predicate_col_late_materialize_read) {
+            if (predicate_col_late_materialize_read) {
+                return static_cast<ScanStrategy&>(_predicate_late_materialization_scan_strategy);
+            }
+            return static_cast<ScanStrategy&>(_normal_scan_strategy);
+        }
+
+        NormalScanStrategy _normal_scan_strategy;
+        PredicateLateMaterializationScanStrategy _predicate_late_materialization_scan_strategy;
+    };
+
+    // Vector index related context, only created when needed
+    struct VectorIndexContext {
+        VectorIndexContext() = default;
+        ~VectorIndexContext() = default;
+
+        // Vector index parameters
+        int64_t k = 0;
+        bool use_vector_index = false;
+        std::string vector_distance_column_name;
+        int vector_column_id = -1;
+        SlotId vector_slot_id = -1;
+        std::unordered_map<rowid_t, float> id2distance_map;
+        std::map<std::string, std::string> query_params;
+        double vector_range = -1.0;
+        bool has_vector_range = false;
+        int result_order = 0;
+        bool refine_distance = false;
+
+        // Brute-force fallback fields (when .vi file is missing)
+        bool use_brute_force = false;
+        VectorMetricType metric_type = VectorMetricType::kL2Distance;
+        ColumnId vector_data_column_id = 0;
+        int32_t vector_data_column_uid = -1;
+        bool added_vector_data_column = false; // true if we appended vector column to _schema
+
+#ifdef WITH_TENANN
+        tenann::PrimitiveSeqView query_view;
+#endif
+
+        std::shared_ptr<VectorIndexReader> ann_reader;
+
+        bool always_build_rowid() const { return use_vector_index && !refine_distance; }
+    };
+
+    // Inverted index related context, only created when needed
+    struct InvertedIndexContext {
+        InvertedIndexContext() = default;
+        ~InvertedIndexContext() = default;
+
+        // Inverted index state
+        bool has_inverted_index = false;
+        bool has_fallback_predicates = false;
+        std::vector<InvertedIndexIterator*> inverted_index_iterators;
+        std::unordered_set<ColumnId> prune_cols_candidate_by_inverted_index;
+
+        // Reusable buffer of segment-level rowids captured during scan. Owned
+        // here because `InvertedIndexFallbackPredicate` holds a stable pointer
+        // to it and reads rowids[i] for chunk row i during evaluate().
+        std::vector<rowid_t> rowid_buffer;
+
+        // Cleanup method to properly delete iterators
+        void cleanup() {
+            for (auto* iter : inverted_index_iterators) {
+                if (iter != nullptr) {
+                    delete iter;
+                }
+            }
+            inverted_index_iterators.clear();
+            has_fallback_predicates = false;
+            has_inverted_index = false;
+        }
     };
 
     Status _init();
+    Status _init_internal();
+    Status _init_reused_scan();
+    Status _init_scan_range_and_context();
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
@@ -195,22 +440,57 @@ private:
     StatusOr<SparseRange<>> _get_row_ranges_by_key_ranges();
     StatusOr<SparseRange<>> _get_row_ranges_by_short_key_ranges();
     Status _get_row_ranges_by_zone_map();
+    Status _get_row_ranges_by_vector_index();
+    // Fold the residual scalar predicates (those on columns without an exact index, so still present in
+    // the predicate tree at vector-index time) into a row bitmap by reading their columns and evaluating
+    // them. Returns the subset of `candidate` matching all such predicates, enabling a true pre-filter of
+    // the ANN search. Mirrors _apply_inverted_index() but reads + evaluates instead of using an index.
+    StatusOr<roaring::Roaring> _evaluate_residual_to_bitmap(const roaring::Roaring& candidate);
+    StatusOr<roaring::Roaring> _narrow_scan_range_by_residual();
     Status _get_row_ranges_by_bloom_filter();
     Status _get_row_ranges_by_rowid_range();
+    Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
+    StatusOr<SparseRange<>> _get_prepared_pruned_row_ranges();
+
+    Status _apply_tablet_range();
+    Status _apply_precomputed_scan_range();
+    StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
     uint32_t segment_id() const { return _segment->id(); }
     uint32_t num_rows() const { return _segment->num_rows(); }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
-                           rowid_t* rowid);
+                           rowid_t* rowid, bool is_full_sort_key);
     Status _seek_columns(const Schema& schema, rowid_t pos);
     Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
-    StatusOr<uint16_t> _filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
+    StatusOr<uint16_t> _filter_by_non_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
     StatusOr<uint16_t> _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
 
+    StatusOr<uint16_t> _filter_by_compound_and_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from,
+                                                          uint16_t to, ColumnId column_id,
+                                                          const std::vector<const ColumnPredicate*>& and_predicates,
+                                                          std::vector<Column*>& current_cols,
+                                                          bool apply_runtime_filter = true);
+
+    Status _evaluate_col_runtime_filters(ColumnId column_id, Column* col, uint8_t* selection, uint16_t from,
+                                         uint16_t to);
+
+    uint16_t _filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
+
+    uint16_t _filter_columns_by_selection(std::vector<Column*>& columns, vector<rowid_t>* rowid, uint16_t from,
+                                          uint16_t to);
+
     void _init_column_predicates();
+
+    StatusOr<size_t> trigger_sample_if_necessary(vector<rowid_t>* rowid);
+
+    // Sample and measure all predicate columns to update selectivity and read time
+    // Reads all predicate columns (like _predicate_evaluate_without_late_materialize)
+    // and measures actual read time and filtering effectiveness for each column
+    // Returns the sampled chunk size if successful
+    StatusOr<size_t> _sample_predicate_columns(vector<rowid_t>* rowid);
 
     Status _init_context();
 
@@ -231,6 +511,8 @@ private:
 
     Status _encode_to_global_id(ScanContext* ctx);
 
+    FieldPtr _make_field(size_t i);
+
     Status _switch_context(ScanContext* to);
 
     // `_check_low_cardinality_optimization` and `_init_column_iterators` must have been called
@@ -240,46 +522,104 @@ private:
     // check field use low_cardinality global dict optimization
     bool _can_using_global_dict(const FieldPtr& field) const;
 
-    Status _init_bitmap_index_iterators();
-
     Status _apply_bitmap_index();
 
+    // Data sampling
+    Status _apply_data_sampling();
+    StatusOr<RowIdSparseRange> _sample_by_block();
+    StatusOr<RowIdSparseRange> _sample_by_page();
+
     Status _apply_del_vector();
+    // Fold the non-PK delete survivors into _scan_range BEFORE _rewrite_predicates, so a rank-truncating
+    // ANN search ranks live rows only. Evaluates the original (un-rewritten) predicates over decoded values
+    // -- no global-dict-code wrapping, no dict/raw mismatch. Vector queries only (_del_predicate_preapplied).
+    Status _apply_del_predicate();
 
-    Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
+    Status _init_inverted_index_iterators();
 
-    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
+    Status _apply_inverted_index();
+    // Wrap MATCH predicates living inside OR subtrees of the predicate tree
+    // with `InvertedIndexFallbackPredicate`, so OR evaluation can fall back to
+    // a per-row bitmap lookup using the rowid captured during scan.
+    Status _wrap_or_match_predicates_for_fallback();
+
+    Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n, bool predicate_col_late_materialize_read);
 
     void _init_column_access_paths();
 
     // search delta column group by column uniqueid, if this column exist in delta column group,
     // then return column iterator and delta column's fillname.
     // Or just return null
-    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(uint32_t ucid, std::string* filename,
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(const TabletColumn& column,
+                                                                       std::string* filename,
+                                                                       FileEncryptionInfo* encryption_info,
                                                                        ColumnAccessPath* path);
 
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
     Status _init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc);
 
-    void _update_stats(RandomAccessFile* rfile);
+    // init column iterator for virtual column like '_tablet_id_', '_rowid_'
+    Status _init_virtual_column_iterator(const ColumnId cid, const std::string_view col_name);
+
+    ColumnAccessPath* _lookup_access_path(ColumnId cid, const TabletColumn& col);
+
+    void _update_stats(io::SeekableInputStream* rfile);
 
     //  This function will search and build the segment from delta column group.
     StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid);
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
+    Status _init_ann_reader();
+    Status _setup_brute_force_fallback(const TabletIndex& index);
+    void _compute_brute_force_distances(const Column* vector_column, Chunk* chunk);
+    // Pure distance computation shared by the brute-force fallback and the selectivity-gate rescan:
+    // maps an ARRAY<FLOAT> vector column to a per-row distance column (sentinel for null/dim-mismatch).
+    FloatColumn::MutablePtr _brute_force_distance_column(const Column* vector_column);
+    // Exact distance rescan over a candidate bitmap, used when the HNSW filtered search under-returns
+    // (selective + scattered residual). Fills _vector_index_ctx->id2distance_map and sets _scan_range.
+    Status _exact_search_over_candidates(const roaring::Roaring& candidates);
+
+    IndexReadOptions _index_read_options(ColumnId cid) const;
+
+    Status _init_reader_from_file(FileInfo* vi_file, const std::shared_ptr<TabletIndex>& tablet_index_meta,
+                                  const std::map<std::string, std::string>& query_params);
+    StatusOr<size_t> _predicate_evaluate(vector<rowid_t>* rowid);
+
+    StatusOr<size_t> _predicate_evaluate_without_late_materialize(vector<rowid_t>* rowid);
+
+    StatusOr<size_t> _predicate_evaluate_late_materialize(vector<rowid_t>* rowid);
+
+    StatusOr<size_t> _predicate_evaluate_late_materialize_read_first_column(vector<rowid_t>* rowid,
+                                                                            std::vector<Column*>& current_columns);
+    Status _evaluate_late_materialize_read_other_columns(vector<rowid_t>* rowid, std::vector<Column*>& current_columns,
+                                                         size_t& chunk_size);
+
+    void _build_context_for_predicate(ScanContext* ctx);
+
+    // Build column-specific RuntimeFilterPredicates for late materialization
+    // Group runtime filter predicates by ColumnId
+    void _build_column_oriented_rf(ScanContext* ctx);
+
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
+
     std::shared_ptr<Segment> _segment;
     std::unordered_map<std::string, std::shared_ptr<Segment>> _dcg_segments;
     SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
+    std::vector<int> _io_coalesce_column_index;
     ColumnDecoders _column_decoders;
-    std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
+    BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
     std::map<ColumnId, ColumnOrPredicate> _del_predicates;
+    // True for a vector (ANN) query on a table carrying non-PK delete predicates: the delete survivors are
+    // folded into _scan_range up front by _apply_del_predicate, so the ANN search, the PRE gates and the
+    // exact rescan see live rows only. It also tells the read loop to skip its (now redundant) per-chunk
+    // delete evaluation. False for non-vector scans (they rely on the read loop's per-chunk filter).
+    bool _del_predicate_preapplied = false;
 
     Status _get_del_vec_st;
     Status _get_dcg_st;
@@ -287,14 +627,17 @@ private:
     DeltaColumnGroupList _dcgs;
     roaring::api::roaring_uint32_iterator_t _roaring_iter;
 
-    std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
+    std::unordered_map<ColumnId, std::unique_ptr<io::SeekableInputStream>> _column_files;
 
     SparseRange<> _scan_range;
     SparseRangeIterator<> _range_iter;
 
-    std::vector<const ColumnPredicate*> _vectorized_preds;
-    std::vector<const ColumnPredicate*> _branchless_preds;
-    std::vector<const ColumnPredicate*> _expr_ctx_preds; // predicates using ExprContext*
+    PredicateTree _non_expr_pred_tree;
+    PredicateTree _expr_pred_tree;
+    RuntimeFilterPredicates _runtime_filter_preds;
+    // Runtime filter predicates organized by column id for late materialization
+    std::unordered_map<ColumnId, RuntimeFilterPredicates> _column_to_runtime_filters_map;
+
     // _selection is used to accelerate
     Buffer<uint8_t> _selection;
 
@@ -312,7 +655,7 @@ private:
 
     ObjectPool _obj_pool;
 
-    // initial size of |_opts.predicates|.
+    // initial number of columns of |_opts.pred_tree|.
     int _predicate_columns = 0;
 
     // the next rowid to read
@@ -323,17 +666,321 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
-    bool _has_bitmap_index = false;
+    bool _one_time_setup_done = false;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
+
+    // Vector index context - only created when needed
+    std::unique_ptr<VectorIndexContext> _vector_index_ctx;
+
+    // Inverted index context - only created when needed
+    std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
+
+    bool _enable_predicate_col_late_materialize;
 };
 
-SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
+// ScanContext method implementations
+
+void SegmentIterator::ScanContext::close() {
+    _read_chunk.reset();
+    _dict_chunk.reset();
+    _final_chunk.reset();
+    _adapt_global_dict_chunk.reset();
+}
+
+void SegmentIterator::ScanContext::reset() {
+    close();
+    stats = nullptr;
+    runtime_filters_by_column = nullptr;
+    _read_schema = Schema();
+    _dict_decode_schema = Schema();
+    _is_dict_column.clear();
+    _column_iterators.clear();
+    _subfield_columns.clear();
+    _subfield_iterators.clear();
+    _column_iterators_for_predicate_late_materialize.clear();
+    _column_id_for_predicate_late_materialize.clear();
+    _column_ids_to_column_iterators.clear();
+    _column_ids_to_index.clear();
+    _row_id_column_id = 0;
+    _next = nullptr;
+    _skip_dict_decode_indexes.clear();
+    _read_index_map.clear();
+    _has_dict_column = false;
+    _late_materialize = false;
+    _has_force_dict_encode = false;
+    _prune_cols.clear();
+    _prune_column_after_index_filter = false;
+    _enable_predicate_col_late_materialize = false;
+    _only_output_one_predicate_col_with_filter_push_down = false;
+    _support_push_down_predicate = false;
+    _predicate_order.clear();
+    _column_predicate_map.clear();
+    _is_filtered = false;
+    _predicate_selectivity_map.clear();
+    _evaluated_chunk_nums = 0;
+    _first_column_total_rows_read = 0;
+    _first_column_total_rows_passed = 0;
+}
+
+Status SegmentIterator::ScanContext::seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read) {
+    return _scan_strategy(predicate_col_late_materialize_read).seek_columns(pos);
+}
+
+Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRange<>& range,
+                                                  bool predicate_col_late_materialize_read, Buffer<uint8_t>* selection,
+                                                  Buffer<uint16_t>* selected_idx) {
+    return _scan_strategy(predicate_col_late_materialize_read).read_columns(chunk, range, selection, selected_idx);
+}
+
+Status SegmentIterator::ScanContext::NormalScanStrategy::seek_columns(ordinal_t pos) {
+    for (auto* iter : _ctx->_column_iterators) {
+        RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::ScanContext::NormalScanStrategy::read_columns(Chunk* chunk, const SparseRange<>& range,
+                                                                      Buffer<uint8_t>* selection,
+                                                                      Buffer<uint16_t>* selected_idx) {
+    (void)selection;
+    (void)selected_idx;
+
+    // reset _is_filtered every time
+    _ctx->_is_filtered = false;
+
+    bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+    std::vector<ColumnId> pruned_cols;
+    size_t pruned_col_size = 0;
+    for (size_t i = 0; i < _ctx->_column_iterators.size(); i++) {
+        ColumnId column_id = _ctx->_read_schema.field(i)->id();
+        if (_ctx->_prune_column_after_index_filter && _ctx->_prune_cols.count(column_id)) {
+            pruned_cols.push_back(column_id);
+            continue;
+        }
+        auto* col = chunk->get_column_raw_ptr_by_id(column_id);
+
+        // for binary column, we must reserve enough memory to avoid extra memcpy
+        // but if segment is small and there are lots of segments, we can't reserve too much unnecessary memory
+        if (col->capacity() == 0) {
+            _ctx->_column_iterators[i]->reserve_col(range.span_size(), col);
+        }
+
+        RETURN_IF_ERROR(_ctx->_column_iterators[i]->next_batch(range, col));
+
+        if (pruned_col_size == 0) {
+            pruned_col_size = col->size();
+        }
+        if (pruned_col_size != col->size()) {
+            return Status::InternalError(
+                    fmt::format("pruned_col_size {} != column size:{}", pruned_col_size, col->size()));
+        }
+        DCHECK_EQ(pruned_col_size, col->size());
+        may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+    }
+    for (ColumnId cid : pruned_cols) {
+        auto* col = chunk->get_column_raw_ptr_by_id(cid);
+        // make sure each pruned column has the same size as the unpruneable one.
+        col->resize(pruned_col_size);
+    }
+    chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    return Status::OK();
+}
+
+Status SegmentIterator::ScanContext::PredicateLateMaterializationScanStrategy::seek_columns(ordinal_t pos) {
+    for (auto* iter : _ctx->_column_iterators_for_predicate_late_materialize) {
+        RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::ScanContext::PredicateLateMaterializationScanStrategy::read_columns(
+        Chunk* chunk, const SparseRange<>& range, Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx) {
+    DCHECK(selection != nullptr);
+    DCHECK(selected_idx != nullptr);
+    DCHECK(!_ctx->_column_iterators_for_predicate_late_materialize.empty());
+    DCHECK(!_ctx->_predicate_order.empty());
+
+    auto& column_iterators = _ctx->_column_iterators_for_predicate_late_materialize;
+    const ColumnId first_column_id = _ctx->_predicate_order[0];
+    const bool first_col_has_runtime_filter =
+            _ctx->runtime_filters_by_column != nullptr && _ctx->runtime_filters_by_column->contains(first_column_id);
+    // TODO:support runtime bloom filter push down to page level
+    bool first_col_supports_pushdown =
+            !first_col_has_runtime_filter &&
+            column_iterators[0]->support_push_down_predicate(_ctx->_column_predicate_map[first_column_id]);
+
+    // reset _is_filtered every time
+    _ctx->_is_filtered = false;
+
+    bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+    std::vector<ColumnId> pruned_cols;
+    size_t pruned_col_size = 0;
+    for (size_t i = 0; i < column_iterators.size(); i++) {
+        ColumnId column_id = _ctx->_column_id_for_predicate_late_materialize[i];
+        if (_ctx->_prune_column_after_index_filter && _ctx->_prune_cols.count(column_id)) {
+            pruned_cols.push_back(column_id);
+            continue;
+        }
+        auto* col = chunk->get_column_raw_ptr_by_id(column_id);
+
+        // for binary column, we must reserve enough memory to avoid extra memcpy
+        // but if segment is small and there are lots of segments, we can't reserve too much unnecessary memory
+        if (col->capacity() == 0) {
+            column_iterators[i]->reserve_col(range.span_size(), col);
+        }
+
+        if (!first_col_supports_pushdown) {
+            RETURN_IF_ERROR(column_iterators[i]->next_batch(range, col));
+        } else {
+            size_t processed_rows = 0;
+            if (i == 0) {
+                size_t original_row_num = col->size();
+
+                // for first predicate column, if can filter data in page level
+                // _is_filtered is set to true
+                // and selection is record for filter rowId column
+                // and only append filtered data in col
+                RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(
+                        range, col, _ctx->_column_predicate_map[first_column_id], selection, selected_idx,
+                        &processed_rows));
+                size_t appended_rows = col->size() - original_row_num;
+                if (processed_rows >= appended_rows && _ctx->stats != nullptr) {
+                    _ctx->stats->rows_vec_cond_filtered += (processed_rows - appended_rows);
+                }
+                _ctx->_first_column_total_rows_read += processed_rows;
+                _ctx->_first_column_total_rows_passed += appended_rows;
+                _ctx->_is_filtered = true;
+            } else {
+                // for rowId column iterator, apply selection if _is_filtered is true
+                DCHECK(i == 1);
+                RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(range, col, ColumnPredicates(), selection,
+                                                                            selected_idx, &processed_rows));
+            }
+        }
+
+        if (pruned_col_size == 0) {
+            pruned_col_size = col->size();
+        }
+        if (pruned_col_size != col->size()) {
+            return Status::InternalError(
+                    fmt::format("pruned_col_size {} != column size:{}", pruned_col_size, col->size()));
+        }
+        DCHECK_EQ(pruned_col_size, col->size());
+        may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+    }
+    for (ColumnId cid : pruned_cols) {
+        auto* col = chunk->get_column_raw_ptr_by_id(cid);
+        // make sure each pruned column has the same size as the unpruneable one.
+        col->resize(pruned_col_size);
+    }
+    chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    return Status::OK();
+}
+
+int64_t SegmentIterator::ScanContext::memory_usage() const {
+    int64_t usage = 0;
+    usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
+    usage += (_dict_chunk.get() != _read_chunk.get()) ? _dict_chunk->memory_usage() : 0;
+    usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
+    usage += (_adapt_global_dict_chunk.get() != _final_chunk.get()) ? _adapt_global_dict_chunk->memory_usage() : 0;
+    return usage;
+}
+
+size_t SegmentIterator::ScanContext::column_size() {
+    return _column_iterators.size();
+}
+
+std::string SegmentIterator::ScanContext::to_string() const {
+    std::ostringstream oss;
+    oss << "{";
+    oss << "\"_read_schema\": " << _read_schema.to_string() << ",";
+    oss << "\"_dict_decode_schema\": " << _dict_decode_schema.to_string() << ",";
+    oss << "\"_is_dict_column\": [";
+    for (size_t i = 0; i < _is_dict_column.size(); ++i) {
+        oss << (_is_dict_column[i] ? "true" : "false");
+        if (i + 1 < _is_dict_column.size()) oss << ", ";
+    }
+    oss << "],";
+    oss << "\"_column_iterators\": " << _column_iterators.size() << ",";
+    oss << "\"_subfield_columns\": [";
+    for (size_t i = 0; i < _subfield_columns.size(); ++i) {
+        oss << _subfield_columns[i];
+        if (i + 1 < _subfield_columns.size()) oss << ", ";
+    }
+    oss << "],";
+    oss << "\"_subfield_iterators\": " << _subfield_iterators.size() << ",";
+    oss << "\"_skip_dict_decode_indexes\": [";
+    for (size_t i = 0; i < _skip_dict_decode_indexes.size(); ++i) {
+        oss << (_skip_dict_decode_indexes[i] ? "true" : "false");
+        if (i + 1 < _skip_dict_decode_indexes.size()) oss << ", ";
+    }
+    oss << "],";
+    oss << "\"_read_index_map\": [";
+    for (size_t i = 0; i < _read_index_map.size(); ++i) {
+        oss << _read_index_map[i];
+        if (i + 1 < _read_index_map.size()) oss << ", ";
+    }
+    oss << "],";
+    oss << "\"_has_dict_column\": " << (_has_dict_column ? "true" : "false") << ",";
+    oss << "\"_late_materialize\": " << (_late_materialize ? "true" : "false") << ",";
+    oss << "\"_has_force_dict_encode\": " << (_has_force_dict_encode ? "true" : "false") << ",";
+    oss << "\"_prune_cols\": [";
+    size_t prune_count = 0;
+    for (auto cid : _prune_cols) {
+        if (prune_count++ > 0) oss << ", ";
+        oss << cid;
+    }
+    oss << "],";
+    oss << "\"_prune_column_after_index_filter\": " << (_prune_column_after_index_filter ? "true" : "false");
+    oss << "}";
+    return oss.str();
+}
+
+SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, const SegmentReadOptions& options)
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
-          _opts(std::move(options)),
-          _predicate_columns(_opts.predicates.size()) {
+          _opts(options),
+          _bitmap_index_evaluator(_schema, _opts.pred_tree),
+          _predicate_columns(_opts.pred_tree.num_columns()),
+          _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
+    // Only a vector (ANN) query truncates the candidate set by rank, so only it needs deletes folded in
+    // before the search. For the lake split-child path (precomputed scan range) this stays true because
+    // the seed already applied it to the range the child inherits.
+    _del_predicate_preapplied = _opts.use_vector_index && !_opts.delete_predicates.empty();
+    // Initialize vector index context only when needed
+    if (_opts.use_vector_index) {
+        _vector_index_ctx = std::make_unique<VectorIndexContext>();
+        _vector_index_ctx->use_vector_index = true;
+        _vector_index_ctx->vector_distance_column_name = _opts.vector_search_option->vector_distance_column_name;
+        _vector_index_ctx->vector_column_id = _opts.vector_search_option->vector_column_id;
+        _vector_index_ctx->vector_slot_id = _opts.vector_search_option->vector_slot_id;
+        _vector_index_ctx->vector_range = _opts.vector_search_option->vector_range;
+        // The explicit bit supports negative similarity thresholds. The fallback keeps manually
+        // constructed/legacy options that use the old non-negative sentinel convention working.
+        _vector_index_ctx->has_vector_range =
+                _opts.vector_search_option->has_vector_range || _opts.vector_search_option->vector_range >= 0;
+        _vector_index_ctx->result_order = _opts.vector_search_option->result_order;
+        _vector_index_ctx->refine_distance = _opts.vector_search_option->refine_distance;
+        _vector_index_ctx->query_params = _opts.vector_search_option->query_params;
+
+        if (_vector_index_ctx->has_vector_range && _vector_index_ctx->refine_distance) {
+            _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->pq_refine_factor *
+                                   _opts.vector_search_option->k_factor;
+        } else {
+            _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->k_factor;
+        }
+        // Clamp to >= 1: k * a fractional k_factor/pq_refine_factor can truncate to 0, and the top-k
+        // heap in _exact_search_over_candidates would then admit no row and return an empty result set.
+        _vector_index_ctx->k = std::max<int64_t>(1, _vector_index_ctx->k);
+#ifdef WITH_TENANN
+        _vector_index_ctx->query_view = tenann::PrimitiveSeqView{
+                .data = reinterpret_cast<uint8_t*>(_opts.vector_search_option->query_vector.data()),
+                .size = static_cast<uint32_t>(_opts.vector_search_option->query_vector.size()),
+                .elem_type = tenann::PrimitiveType::kFloatType};
+#endif
+    }
     // For small segment file (the number of rows is less than chunk_size),
     // the segment iterator will reserve a large amount of memory,
     // especially when there are many columns, many small files, many versions,
@@ -360,6 +1007,9 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
     }
     if (_opts.dcg_loader != nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->get_delta_column_group_ns);
+        // Load delta column groups based on table type
+        // For PK tables: use tablet segment id and version
+        // For other table types: use tablet id, rowset id, and segment id
         if (_opts.is_primary_keys) {
             TabletSegmentId tsid;
             tsid.tablet_id = _opts.tablet_id;
@@ -374,6 +1024,47 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 }
 
 Status SegmentIterator::_init() {
+    auto st = _init_internal();
+    if (st.is_not_found()) {
+        // NOTE: this may cause the metric increasing twice the call path is from segment::open.
+        // It is fine for now since the metric is only used for alerting.
+        StorageMetrics::instance()->segment_file_not_found_total.increment(1);
+    }
+    return st;
+}
+
+Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
+    _opts.pred_tree = options.pred_tree;
+    _opts.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
+    _opts.runtime_filter_preds = options.runtime_filter_preds;
+    _opts.delete_predicates = options.delete_predicates;
+    _opts.rowid_range_option = options.rowid_range_option;
+    _opts.read_state_cache = options.read_state_cache;
+    _opts.is_first_split_of_segment = options.is_first_split_of_segment;
+    _opts.ranges = options.ranges;
+    _opts.tablet_range = options.tablet_range;
+    _opts.runtime_range_pruner = options.runtime_range_pruner;
+    _opts.short_key_ranges = options.short_key_ranges;
+    _opts.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    _opts.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    _opts.global_dictmaps = options.global_dictmaps;
+    _opts.unused_output_column_ids = options.unused_output_column_ids;
+    _opts.is_cancelled = options.is_cancelled;
+    _opts.chunk_size = options.chunk_size;
+    _chunk_size = options.chunk_size;
+    _predicate_columns = _opts.pred_tree.num_columns();
+    _enable_predicate_col_late_materialize = _opts.enable_predicate_col_late_materialize;
+    // Recompute from the reuse-time options: this flag licenses skipping the read loop's per-chunk delete
+    // filter, so it must track the current delete_predicates, not the ctor-time ones (a reuse with a
+    // different delete-predicate set would otherwise skip filtering on a non-delete-narrowed range).
+    _del_predicate_preapplied = _opts.use_vector_index && !_opts.delete_predicates.empty();
+    _reserve_chunk_size =
+            static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
+    _inited = false;
+    return Status::OK();
+}
+
+Status SegmentIterator::_init_internal() {
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");
@@ -389,46 +1080,803 @@ Status SegmentIterator::_init() {
             if (_segment->num_rows() == _del_vec->cardinality()) {
                 return Status::EndOfFile("all rows deleted");
             }
-            VLOG(1) << "seg_iter init delvec tablet:" << _opts.tablet_id << " rowset:" << _opts.rowset_id
+            VLOG(2) << "seg_iter init delvec tablet:" << _opts.tablet_id << " rowset:" << _opts.rowset_id
                     << " seg:" << segment_id() << " version req:" << _opts.version << " actual:" << _del_vec->version()
                     << " " << _del_vec->cardinality() << "/" << _segment->num_rows();
-            roaring_init_iterator(&_del_vec->roaring()->roaring, &_roaring_iter);
+            roaring_iterator_init(&_del_vec->roaring()->roaring, &_roaring_iter);
         }
     }
 
     _selection.resize(_reserve_chunk_size);
     _selected_idx.resize(_reserve_chunk_size);
 
-    StarRocksMetrics::instance()->segment_read_total.increment(1);
+    StorageMetrics::instance()->segment_read_total.increment(1);
+
+    if (_one_time_setup_done) {
+        return _init_reused_scan();
+    }
 
     /// the calling order matters, do not change unless you know why.
 
+    _segment->turn_on_batch_update_cache_size();
+    DeferOp op([&] { _segment->turn_off_batch_update_cache_size(); });
     // init stage
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
     _init_column_access_paths();
+    RETURN_IF_ERROR(_init_ann_reader());
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
-    // filter by index stage
-    // Use indexes and predicates to filter some data page
+    RETURN_IF_ERROR(_init_scan_range_and_context());
+
+    _one_time_setup_done = true;
+    return Status::OK();
+}
+
+Status SegmentIterator::_init_scan_range_and_context() {
+    // Use indexes and predicates to filter some data page.
+    RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
+    if (_opts.read_state_cache.scan_range != nullptr) {
+        // The seed already folded every page filter into the prepared range; just apply it.
+        RETURN_IF_ERROR(_apply_precomputed_scan_range());
+    } else {
+        RETURN_IF_ERROR(_get_row_ranges_by_keys());
+        RETURN_IF_ERROR(_apply_tablet_range());
+        bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
+        if (!apply_del_vec_after_all_index_filter) {
+            RETURN_IF_ERROR(_apply_del_vector());
+        }
+        // Support prefilter for now.
+        RETURN_IF_ERROR(_apply_bitmap_index());
+        RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+        RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+        RETURN_IF_ERROR(_apply_inverted_index());
+        if (apply_del_vec_after_all_index_filter) {
+            RETURN_IF_ERROR(_apply_del_vector());
+        }
+        // After the index filters (smallest candidate) and before _rewrite_predicates (predicates still
+        // original-typed). ANN queries only.
+        if (_del_predicate_preapplied) {
+            RETURN_IF_ERROR(_apply_del_predicate());
+        }
+    }
+
+    // rewrite stage
+    // Rewriting predicates using segment dictionary codes. Runs before the vector stage so the
+    // residual bitmap there evaluates the rewritten (dict-code) predicates and inherits the
+    // ALWAYS_TRUE / ALWAYS_FALSE collapses; must stay after the index filters above (the inverted
+    // index consumes predicates from the tree) and before _init_column_predicates (which splits
+    // the tree into the read-loop copies); the vector stage's pruning must precede that split.
+    RETURN_IF_ERROR(_rewrite_predicates());
+    // Data sampling must NOT re-run on a reused (precomputed) scan range: it is non-idempotent --
+    // re-sampling an already-sampled range shrinks it again -- so it is only run when the range is
+    // computed from scratch. Vector-index narrowing, in contrast, is always run: it is idempotent on a
+    // reused range (the ANN search is filtered by the current scan_range via DelIdFilter and the result
+    // is intersected, not overwritten), and it MUST run so each split child repopulates its per-iterator
+    // id2distance_map -- otherwise the distance lookup during read fails ("not found row id in distance
+    // map"). For non-vector scans it is a cheap no-op early-return.
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    if (_opts.read_state_cache.scan_range == nullptr) {
+        RETURN_IF_ERROR(_apply_data_sampling());
+    }
+    _init_column_predicates();
+    RETURN_IF_ERROR(_init_context());
+
+    // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
+    if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
+        _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
+    }
+    _range_iter = _scan_range.new_iterator();
+
+    for (auto column_index : _io_coalesce_column_index) {
+        RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_init_reused_scan() {
+    _scan_range.clear();
+    _range_iter = SparseRangeIterator<>();
+    _non_expr_pred_tree = PredicateTree{};
+    _expr_pred_tree = PredicateTree{};
+    _runtime_filter_preds = RuntimeFilterPredicates{};
+    _column_to_runtime_filters_map.clear();
+    _context_list[0].reset();
+    _context_list[1].reset();
+    _context = nullptr;
+    _context_switch_count = 0;
+    _cur_rowid = 0;
+    if (_vector_index_ctx) {
+        _vector_index_ctx->id2distance_map.clear();
+    }
+    if (_inverted_index_ctx) {
+        _inverted_index_ctx->cleanup();
+    }
+    // Rebuilt from the reuse-time delete predicates by _get_row_ranges_by_zone_map; that population uses
+    // map::insert (no overwrite), so a stale entry would make _apply_del_predicate's prune use the old
+    // predicate values. Clear it so the reused scan re-groups against the current predicates.
+    _del_predicates.clear();
+    _bitmap_index_evaluator.close();
+    // Release per-scan objects appended via _obj_pool.add() during _init_scan_range_and_context (rewritten
+    // predicate iterators, dict-decode column iterators, ...). They are otherwise only freed by close(),
+    // which reuse skips (the returned NonClosingChunkIterator makes close() a no-op). Clear the pool here,
+    // after the predicate trees / scan contexts that reference these objects have been reset above, so it
+    // does not accumulate unboundedly across reuse cycles (e.g. the lake prepared-split fan-out).
+    _obj_pool.clear();
+
+    _segment->turn_on_batch_update_cache_size();
+    DeferOp op([&] { _segment->turn_off_batch_update_cache_size(); });
+
+    return _init_scan_range_and_context();
+}
+
+StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
+    if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
+        return Status::Cancelled("Cancelled");
+    }
+    if (!_get_del_vec_st.ok()) {
+        return _get_del_vec_st;
+    }
+    if (!_get_dcg_st.ok()) {
+        return _get_dcg_st;
+    }
+    if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && _segment->num_rows() == _del_vec->cardinality()) {
+        return SparseRange<>();
+    }
+
+    _segment->turn_on_batch_update_cache_size();
+    DeferOp op([&] { _segment->turn_off_batch_update_cache_size(); });
+
+    _init_column_access_paths();
+    RETURN_IF_ERROR(_init_ann_reader());
+    RETURN_IF_ERROR(_check_low_cardinality_optimization());
+    RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
+
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
-    RETURN_IF_ERROR(_apply_del_vector());
+    RETURN_IF_ERROR(_apply_tablet_range());
+
+    const bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
+    if (!apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
-    // rewrite stage
-    // Rewriting predicates using segment dictionary codes
-    RETURN_IF_ERROR(_rewrite_predicates());
-    RETURN_IF_ERROR(_init_context());
-    _init_column_predicates();
+    RETURN_IF_ERROR(_apply_inverted_index());
+    if (apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+    // Fold non-PK delete survivors into the prepared range so split children inherit a delete-free range
+    // (ANN only). No _rewrite_predicates runs on this path, so the predicates are already original-typed.
+    if (_del_predicate_preapplied) {
+        RETURN_IF_ERROR(_apply_del_predicate());
+    }
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_apply_data_sampling());
+    return _scan_range;
+}
 
-    // reverse scan_range
-    if (!_opts.asc_hint) {
-        _scan_range.split_and_revese(config::desc_hint_split_range, config::vector_chunk_size);
+inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
+                                                      const std::shared_ptr<TabletIndex>& tablet_index_meta,
+                                                      const std::map<std::string, std::string>& query_params) {
+#ifdef WITH_TENANN
+    if (!_vector_index_ctx) {
+        return Status::OK();
+    }
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache == nullptr) {
+        return Status::InternalError("StorageEnv vector index cache is not initialized");
+    }
+    DCHECK(_opts.stats != nullptr);
+
+    VectorIndexReaderFactory factory(*vector_index_cache);
+    VectorIndexReaderInitOptions options{
+            .segment_num_rows = static_cast<size_t>(_segment->num_rows()),
+            .query_k = static_cast<int>(_vector_index_ctx->k),
+            .refine_distance = _vector_index_ctx->refine_distance,
+            .stats = *_opts.stats,
+    };
+    ASSIGN_OR_RETURN(auto result, factory.create_and_init(*vi_file, tablet_index_meta, query_params, options));
+    if (result.state == VectorIndexReaderInitResult::kFallback) {
+        _vector_index_ctx->use_vector_index = false;
+        return Status::OK();
+    }
+    DCHECK(result.reader != nullptr);
+    _vector_index_ctx->ann_reader = std::move(result.reader);
+    return Status::OK();
+#else
+    return Status::OK();
+#endif
+}
+
+// Single home of the vector_range orientation: result_order 0 (ascending, l2) keeps distance <=
+// range; descending (cosine/IP) keeps similarity >= range. Bounds are inclusive, matching the FE's
+// `<=` / `>=` conjunct forms.
+static inline bool within_vector_range(float d, float range, bool ascending) {
+    return ascending ? d <= range : d >= range;
+}
+
+static StatusOr<VectorMetricType> get_vector_metric_type(const TabletIndex& index) {
+    auto it = index.common_properties().find("metric_type");
+    if (it == index.common_properties().end()) {
+        return Status::InvalidArgument("metric_type is missing from vector index metadata");
+    }
+    if (boost::iequals(it->second, "l2_distance")) {
+        return VectorMetricType::kL2Distance;
+    }
+    if (boost::iequals(it->second, "cosine_similarity")) {
+        return VectorMetricType::kCosineSimilarity;
+    }
+    if (boost::iequals(it->second, "inner_product")) {
+        return VectorMetricType::kInnerProduct;
+    }
+    return Status::InvalidArgument(fmt::format("unsupported vector metric_type: {}", it->second));
+}
+
+// Sets up brute-force fallback state and ensures the vector data column is in _schema.
+// Called from _init_ann_reader, before _init_column_iterators.
+Status SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
+    int32_t vector_col_uid = index.col_unique_ids()[0];
+    _vector_index_ctx->use_vector_index = false;
+    _vector_index_ctx->use_brute_force = true;
+    _vector_index_ctx->vector_data_column_uid = vector_col_uid;
+    ASSIGN_OR_RETURN(_vector_index_ctx->metric_type, get_vector_metric_type(index));
+
+    // Check if the vector column is already in _schema
+    for (const auto& field : _schema.fields()) {
+        if (field->uid() == vector_col_uid) {
+            _vector_index_ctx->vector_data_column_id = field->id();
+            return Status::OK();
+        }
     }
 
-    _range_iter = _scan_range.new_iterator();
+    // Not in schema (pruned by FE) — add it
+    int32_t col_idx = _segment->tablet_schema().field_index(vector_col_uid);
+    if (col_idx < 0) {
+        // Schema/index metadata mismatch: the index references a column the segment does not have.
+        // There is no embedding to score against, so fail loudly rather than emitting a chunk whose
+        // distance slot is never populated (a silent wrong/empty result downstream).
+        return Status::InternalError(
+                fmt::format("vector index references column uid {} absent from tablet schema (segment {})",
+                            vector_col_uid, _segment->file_name()));
+    }
+
+    const auto& col = _segment->tablet_schema().column(col_idx);
+    ColumnId cid = static_cast<ColumnId>(col_idx);
+    auto field = std::make_shared<Field>(StorageSchemaHelper::convert_field(cid, col));
+    _vector_index_ctx->vector_data_column_id = cid;
+    _schema.append(field);
+    _vector_index_ctx->added_vector_data_column = true;
+    return Status::OK();
+}
+
+// Opens the .vi and inits the ANN reader. If the index is unusable (footer marks no .vi, or the .vi
+// is missing at runtime), turns it off and -- only for the trust path -- sets up the brute-force
+// fallback (refine recomputes above the scan). Runs before _init_column_iterators so any column the
+// fallback adds to _schema is read in the same pass.
+Status SegmentIterator::_init_ann_reader() {
+    if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
+        return Status::OK();
+    }
+
+    // Locate the vector index (needed to open the .vi or to build a brute-force fallback).
+    std::shared_ptr<TabletIndex> tablet_index_meta;
+    for (const auto& index : *_segment->tablet_schema().indexes()) {
+        if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
+            tablet_index_meta = std::make_shared<TabletIndex>(index);
+            break;
+        }
+    }
+    if (!tablet_index_meta) {
+        // Vector query but no VECTOR index in this segment's schema -- fail rather than deref a null reader.
+        return Status::InternalError(
+                fmt::format("vector index is missing from the schema of segment {}", _segment->file_name()));
+    }
+
+    if (_segment->skip_vector_index()) {
+        // Footer marks no .vi for this segment.
+        _vector_index_ctx->use_vector_index = false;
+    } else {
+#ifdef WITH_TENANN
+        std::string index_path;
+        if (_opts.belonged_to_cloud_native) {
+            // Owner tablet id for the .vi name, filled from SegmentMetadataPB by lake Rowset::read()
+            // (the only producer of belonged_to_cloud_native) for every vector-indexed segment.
+            DCHECK_GE(_opts.segment_vector_index_uid, 0)
+                    << "cloud-native ANN read without a resolved .vi owner tablet id";
+            index_path = lake::gen_vector_index_path_from_segment_path(
+                    _segment->file_name(), _opts.segment_vector_index_uid, tablet_index_meta->index_id());
+        } else {
+            index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
+                                                                 segment_id(), tablet_index_meta->index_id());
+        }
+        // Hold the FileSystem by shared_ptr: the .vi reader built from it lands in the tenann
+        // index cache and outlives this iterator, so a raw Segment::file_system() would dangle.
+        FileInfo vi_file{.path = index_path};
+        if (_opts.belonged_to_cloud_native) {
+            vi_file.fs = _segment->shared_file_system();
+        }
+        // Turns off use_vector_index on a runtime NotFound / not-supported.
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->vector_index_load_ns);
+            RETURN_IF_ERROR(_init_reader_from_file(&vi_file, tablet_index_meta, _vector_index_ctx->query_params));
+        }
+#else
+        _vector_index_ctx->use_vector_index = false; // no TenANN
+#endif
+    }
+
+    if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
+        // No usable index: trust needs brute-force to produce the distance column; refine recomputes above.
+        RETURN_IF_ERROR(_setup_brute_force_fallback(*tablet_index_meta));
+    }
+
+    if (_vector_index_ctx->use_vector_index) {
+        // Exact rescans reached from the ANN route still need the logical metric from tablet metadata.
+        ASSIGN_OR_RETURN(_vector_index_ctx->metric_type, get_vector_metric_type(*tablet_index_meta));
+    }
+
+    // Decide PRE vs brute now: routing to brute must add the embedding column to _schema before
+    // _init_column_iterators runs (refine re-ranks above the scan, stays out).
+    if (_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
+        // PRE picks the top-k inside the segment, so anything that drops rows above the iterator --
+        // an above-iterator predicate, or a runtime filter evaluated after the per-segment ANN -- can
+        // make it under-return. When the underfill fallback is enabled, route those queries to exact
+        // brute-force (the upper TopN cuts its k after the filter). When it is disabled, keep the ANN
+        // physical plan and accept that evaluating those predicates later may return fewer than k
+        // rows. A residual additionally needs index filtered-search support; no residual is a plain
+        // top-k.
+        const bool has_runtime_filter =
+                _opts.enable_join_runtime_filter_pushdown &&
+                (!_opts.runtime_filter_preds.empty() || _opts.runtime_range_pruner.has_runtime_filters());
+        const bool must_fallback_for_post_ann_filter = config::enable_vector_index_topk_underfill_fallback &&
+                                                       (_opts.has_predicate_above_iterator || has_runtime_filter);
+        if (must_fallback_for_post_ann_filter ||
+            (!_opts.pred_tree.empty() && !_vector_index_ctx->ann_reader->supports_efficient_filtered_search())) {
+            RETURN_IF_ERROR(_setup_brute_force_fallback(*tablet_index_meta));
+        }
+    }
+
+    return Status::OK();
+}
+
+Status SegmentIterator::_get_row_ranges_by_vector_index() {
+    // Brute pre-narrowing: resolve the residual into an exact bitmap first, so the read loop only
+    // touches surviving rows (the embedding column is wide). Outside the TenANN guard: the brute
+    // fallback exists in non-TenANN builds too.
+    if (_vector_index_ctx != nullptr && _vector_index_ctx->use_brute_force && !_opts.pred_tree.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->get_row_ranges_by_vector_index_timer);
+        return _narrow_scan_range_by_residual().status();
+    }
+#ifdef WITH_TENANN
+    if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
+        return Status::OK();
+    }
+    RETURN_IF(_scan_range.empty(), Status::OK());
+
+    SCOPED_RAW_TIMER(&_opts.stats->get_row_ranges_by_vector_index_timer);
+
+    // PRE: evaluate the whole predicate tree into an exact bitmap and narrow _scan_range before the
+    // search (k unchanged).
+    roaring::Roaring matched;
+    uint64_t matched_cardinality = 0;
+    bool pre_narrowed = false;
+    if (!_opts.pred_tree.empty()) {
+        ASSIGN_OR_RETURN(auto matched_tmp, _narrow_scan_range_by_residual());
+        matched = std::move(matched_tmp);
+        matched_cardinality = matched.cardinality();
+        RETURN_IF(_scan_range.empty(), Status::OK());
+        pre_narrowed = true;
+    } else if (_del_predicate_preapplied) {
+        // Deletes already folded into _scan_range by _apply_del_predicate. Treat the live set as
+        // pre-narrowed so the short-circuit / count gates still guard a filtered-HNSW under-return on a
+        // small or sparse live set. (With a residual, the branch above already ran over the live range.)
+        matched = range2roaring(_scan_range);
+        matched_cardinality = matched.cardinality();
+        pre_narrowed = true;
+    }
+
+    // Short-circuit (PRE only): score candidates exactly when the search cannot pay for itself --
+    // cardinality <= k, or sparse vs the whole graph (a filtered HNSW walk would be slow and likely
+    // under-return). Both paths are exact, top-k and range search alike.
+    if (pre_narrowed && !_vector_index_ctx->refine_distance) {
+        const double ratio = config::vector_index_brute_selectivity_threshold;
+        if (matched_cardinality <= static_cast<uint64_t>(_vector_index_ctx->k) ||
+            (ratio > 0 && matched_cardinality <= static_cast<uint64_t>(ratio * _segment->num_rows()))) {
+            return _exact_search_over_candidates(matched);
+        }
+    }
+
+    int search_k = _vector_index_ctx->k;
+
+    Status st;
+    std::map<rowid_t, float> id2distance_map;
+    std::vector<int64_t> result_ids;
+    std::vector<float> result_distances;
+    std::vector<int64_t> filtered_result_ids;
+    DelIdFilter del_id_filter(_scan_range);
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
+        if (_vector_index_ctx->has_vector_range) {
+            st = _vector_index_ctx->ann_reader->range_search(
+                    _vector_index_ctx->query_view, search_k, &result_ids, &result_distances, &del_id_filter,
+                    static_cast<float>(_vector_index_ctx->vector_range), _vector_index_ctx->result_order);
+        } else {
+            result_ids.resize(search_k);
+            result_distances.resize(search_k);
+            st = _vector_index_ctx->ann_reader->search(_vector_index_ctx->query_view, search_k, (result_ids.data()),
+                                                       reinterpret_cast<uint8_t*>(result_distances.data()),
+                                                       &del_id_filter);
+        }
+    }
+
+    if (!st.ok()) {
+        LOG(WARNING) << "Vector index search failed: " << st.to_string();
+        return Status::InternalError(st.to_string());
+    }
+    SCOPED_RAW_TIMER(&_opts.stats->process_vector_distance_and_id_timer);
+
+    for (size_t i = 0; i < result_ids.size() && result_ids[i] != -1; i++) {
+        id2distance_map[result_ids[i]] = result_distances[i];
+    }
+
+    // Count gate: a filtered HNSW search can under-return on scattered survivors (graph reachability).
+    // If it returned fewer than the bitmap could supply, rescan the candidates exactly. Top-k only --
+    // under a radius, returning fewer rows is legitimate.
+    if (pre_narrowed && !_vector_index_ctx->has_vector_range && config::enable_vector_index_topk_underfill_fallback) {
+        const size_t found = id2distance_map.size();
+        const size_t want = std::min(static_cast<size_t>(search_k), static_cast<size_t>(matched_cardinality));
+        if (found < want) {
+            return _exact_search_over_candidates(matched);
+        }
+    }
+
+    SparseRange r;
+    RETURN_IF_ERROR(_get_row_ranges_by_row_ids(&result_ids, &r));
+
+    size_t prev_size = _scan_range.span_size();
+    _scan_range = _scan_range.intersection(r);
+    _opts.stats->rows_vector_index_filtered += (prev_size - _scan_range.span_size());
+
+    SparseRangeIterator range_iter = _scan_range.new_iterator();
+    size_t to_read = _scan_range.span_size();
+    while (range_iter.has_more()) {
+        Range r = range_iter.next(to_read);
+        for (uint32_t i = r.begin(); i < r.end(); i++) {
+            filtered_result_ids.emplace_back(i);
+        }
+    }
+
+    _vector_index_ctx->id2distance_map.reserve(filtered_result_ids.size());
+    for (size_t i = 0; i < filtered_result_ids.size(); i++) {
+        _vector_index_ctx->id2distance_map[static_cast<rowid_t>(filtered_result_ids[i])] =
+                id2distance_map[filtered_result_ids[i]];
+    }
+    return Status::OK();
+#else
+    return Status::OK();
+#endif
+}
+
+// If this predicate is generated by join runtime filter,
+// We only use it to compute segment row range.
+struct IndexOnlyPredicateChecker {
+    bool operator()(const PredicateColumnNode& node) const {
+        const auto* col_pred = node.col_pred();
+        return col_pred != nullptr && col_pred->is_index_filter_only();
+    }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::all_of(node.children().begin(), node.children().end(),
+                           [&](const auto& child) { return child.visit(*this); });
+    }
+};
+
+StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
+        const PredicateTree& pred_tree, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate,
+        const std::vector<uint8_t>* dict_code_candidates_by_cid) {
+    if (candidate.isEmpty() || pred_tree.empty()) {
+        return candidate;
+    }
+
+    // Drop index-only predicates before reading/evaluating. Their filtering is already applied by the
+    // index-filter stage (its effect is in `candidate`), and the read loop drops them the same way
+    // (_init_column_predicates / IndexOnlyPredicateChecker). In particular the rewriter leaves an
+    // index-only expr predicate -- e.g. the `ngram_search(...) >= 0` AddIndexOnlyPredicateRule injects --
+    // in its original (string-typed) form, so evaluating it against a column read as dict codes would be
+    // a type mismatch. What survives is the exact set of real residual predicates, i.e. the precise
+    // bitmap an ANN filtered-search needs.
+    PredicateAndNode index_only_root;
+    PredicateAndNode used_root;
+    pred_tree.root().partition_copy([](const auto& node) { return node.visit(IndexOnlyPredicateChecker()); },
+                                    &index_only_root, &used_root);
+    const PredicateTree used_tree = PredicateTree::create(std::move(used_root));
+    if (used_tree.empty()) {
+        return candidate;
+    }
+
+    // cid -> field index in `schema`.
+    std::unordered_map<ColumnId, size_t> cid_2_fid;
+    for (size_t i = 0; i < schema.num_fields(); i++) {
+        cid_2_fid.emplace(schema.field(i)->id(), i);
+    }
+
+    // Collect every column referenced by the predicate tree, with its field and reader, once. A
+    // missing iterator/field is a hard error rather than a silent skip -- silently skipping would
+    // make the bitmap incomplete (too wide) and let a downstream k-limit under-return.
+    struct PredColumn {
+        ColumnId cid;
+        FieldPtr field;
+        ColumnIterator* iter;
+    };
+    std::vector<PredColumn> pred_columns;
+    std::vector<std::unique_ptr<ColumnIterator>> dict_code_wrappers;
+    auto pred_schema = std::make_shared<Schema>();
+    for (ColumnId cid : used_tree.column_ids()) {
+        auto it = cid_2_fid.find(cid);
+        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() || column_iterators_by_cid[cid] == nullptr) {
+            return Status::InternalError(
+                    strings::Substitute("pred-tree bitmap: predicate column $0 is not readable", cid));
+        }
+        FieldPtr field = schema.field(it->second);
+        ColumnIterator* iter = column_iterators_by_cid[cid].get();
+        // A dict-code candidate carries predicates the ColumnPredicateRewriter rewrote into dict
+        // codes -- it rewrites exactly when the column is all-page dict-encoded -- so the column
+        // must be read as codes: code-typed field + DictCodeColumnIterator, mirroring the read
+        // context (_build_context).
+        if (dict_code_candidates_by_cid != nullptr && cid < dict_code_candidates_by_cid->size() &&
+            (*dict_code_candidates_by_cid)[cid] && iter->all_page_dict_encoded()) {
+            field = std::make_shared<Field>(cid, field->name(), kDictCodeType, -1, -1, field->is_nullable());
+            dict_code_wrappers.emplace_back(std::make_unique<DictCodeColumnIterator>(cid, iter));
+            iter = dict_code_wrappers.back().get();
+        }
+        pred_columns.emplace_back(PredColumn{cid, field, iter});
+        pred_schema->append(field);
+    }
+
+    // PredicateTree::evaluate uses uint16_t [from, to), so read + evaluate in <= kEvalBatch slices.
+    constexpr uint32_t kEvalBatch = 4096;
+    SparseRange<> rows = roaring2range(candidate);
+    roaring::Roaring result;
+    std::vector<uint8_t> selection;
+    for (auto iter = rows.new_iterator(); iter.has_more();) {
+        Range<> r = iter.next(kEvalBatch);
+        const uint32_t bn = r.end() - r.begin();
+
+        // Build a chunk keyed by column id so PredicateTree::evaluate (chunk->get_column_by_id(cid))
+        // can evaluate the WHOLE tree -- AND / OR / compound / single-column expr -- not just a
+        // per-column immediate map (which silently drops OR/expr nodes and widens the result).
+        Columns cols;
+        cols.reserve(pred_columns.size());
+        for (const auto& [cid, field, iter] : pred_columns) {
+            MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+            // next_batch reads from the current page and does not seek internally; position first.
+            RETURN_IF_ERROR(iter->seek_to_ordinal(r.begin()));
+            SparseRange<> sub;
+            sub.add(r);
+            RETURN_IF_ERROR(iter->next_batch(sub, col.get()));
+            cols.emplace_back(std::move(col));
+        }
+        // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in
+        // evaluate().
+        Chunk chunk(std::move(cols), pred_schema);
+
+        // Publish this batch's contiguous segment rowids for predicates that resolve chunk rows back
+        // to segment rowids (e.g. the inverted-index fallback for a MATCH inside an OR). Without
+        // this, such a predicate dereferences an empty/stale buffer.
+        if (fallback_rowids != nullptr) {
+            fallback_rowids->resize(bn);
+            for (uint32_t i = 0; i < bn; i++) {
+                (*fallback_rowids)[i] = r.begin() + i;
+            }
+        }
+
+        selection.assign(bn, 1);
+        RETURN_IF_ERROR(used_tree.evaluate(&chunk, selection.data(), 0, static_cast<uint16_t>(bn)));
+        for (uint32_t i = 0; i < bn; i++) {
+            if (selection[i]) {
+                result.add(r.begin() + i);
+            }
+        }
+    }
+    return result;
+}
+
+// Evaluate the tablet's delete predicates over `candidate`, returning the SURVIVORS (rows NOT deleted).
+// Called from _apply_del_predicate BEFORE _rewrite_predicates, so the predicates are still original-typed
+// and columns read as decoded values -- no global-dict-code wrapping, no raw/dict mismatch. An unreadable
+// delete column is a hard error, not a silent skip (an over-wide survivor set would under-return the top-k).
+StatusOr<roaring::Roaring> evaluate_delete_survivors_to_bitmap(
+        const DisjunctivePredicates& delete_predicates, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        const roaring::Roaring& candidate) {
+    if (candidate.isEmpty() || delete_predicates.empty()) {
+        return candidate;
+    }
+
+    std::set<ColumnId> del_cids;
+    delete_predicates.get_column_ids(&del_cids);
+    if (del_cids.empty()) {
+        return candidate;
+    }
+
+    // cid -> field index in `schema`.
+    std::unordered_map<ColumnId, size_t> cid_2_fid;
+    for (size_t i = 0; i < schema.num_fields(); i++) {
+        cid_2_fid.emplace(schema.field(i)->id(), i);
+    }
+
+    struct PredColumn {
+        FieldPtr field;
+        ColumnIterator* iter;
+    };
+    std::vector<PredColumn> pred_columns;
+    auto pred_schema = std::make_shared<Schema>();
+    for (ColumnId cid : del_cids) {
+        auto it = cid_2_fid.find(cid);
+        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() || column_iterators_by_cid[cid] == nullptr) {
+            return Status::InternalError(
+                    strings::Substitute("delete-survivor bitmap: delete predicate column $0 is not readable", cid));
+        }
+        FieldPtr field = schema.field(it->second);
+        pred_columns.emplace_back(PredColumn{field, column_iterators_by_cid[cid].get()});
+        pred_schema->append(field);
+    }
+
+    // DisjunctivePredicates::evaluate uses uint16_t [from, to), so read + evaluate in <= kEvalBatch slices.
+    constexpr uint32_t kEvalBatch = 4096;
+    SparseRange<> rows = roaring2range(candidate);
+    roaring::Roaring survivors;
+    std::vector<uint8_t> selection;
+    for (auto iter = rows.new_iterator(); iter.has_more();) {
+        Range<> r = iter.next(kEvalBatch);
+        const uint32_t bn = r.end() - r.begin();
+
+        Columns cols;
+        cols.reserve(pred_columns.size());
+        for (const auto& [field, cit] : pred_columns) {
+            MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+            // next_batch reads from the current page and does not seek internally; position first.
+            RETURN_IF_ERROR(cit->seek_to_ordinal(r.begin()));
+            SparseRange<> sub;
+            sub.add(r);
+            RETURN_IF_ERROR(cit->next_batch(sub, col.get()));
+            cols.emplace_back(std::move(col));
+        }
+        // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in evaluate().
+        Chunk chunk(std::move(cols), pred_schema);
+
+        // Seed 0 = not deleted; evaluate sets 1 for deleted rows, so a survivor stays 0.
+        selection.assign(bn, 0);
+        RETURN_IF_ERROR(delete_predicates.evaluate(&chunk, selection.data(), 0, static_cast<uint16_t>(bn)));
+        for (uint32_t i = 0; i < bn; i++) {
+            if (selection[i] == 0) {
+                survivors.add(r.begin() + i);
+            }
+        }
+    }
+    return survivors;
+}
+
+// Adapter over evaluate_pred_tree_to_bitmap: supplies the cid-indexed iterators and, when
+// inverted-index fallback predicates are present (a MATCH inside an OR), the rowid buffer they
+// resolve chunk rows through (their bitmaps are ready -- _apply_inverted_index ran earlier).
+StatusOr<roaring::Roaring> SegmentIterator::_evaluate_residual_to_bitmap(const roaring::Roaring& candidate) {
+    std::vector<rowid_t>* fallback_rowids =
+            _inverted_index_ctx != nullptr && _inverted_index_ctx->has_fallback_predicates
+                    ? &_inverted_index_ctx->rowid_buffer
+                    : nullptr;
+    return evaluate_pred_tree_to_bitmap(_opts.pred_tree, _schema, _column_iterators, fallback_rowids, candidate,
+                                        &_predicate_need_rewrite);
+}
+
+// Narrows _scan_range to the residual survivors and drops the fully evaluated tree, so the read
+// loop neither reads nor re-evaluates rows the residual already rejected. Returns the survivor
+// bitmap for the PRE gates.
+StatusOr<roaring::Roaring> SegmentIterator::_narrow_scan_range_by_residual() {
+    ASSIGN_OR_RETURN(auto matched, _evaluate_residual_to_bitmap(range2roaring(_scan_range)));
+    const size_t prev_span = _scan_range.span_size();
+    _scan_range = roaring2range(matched);
+    _opts.stats->rows_vector_index_filtered += (prev_span - _scan_range.span_size());
+    // Every surviving row already passed the whole tree. (Predicates are owned at the reader level.)
+    _opts.pred_tree = PredicateTree();
+    return matched;
+}
+
+Status SegmentIterator::_apply_del_predicate() {
+    // Evaluate the still-original-typed delete predicates over the (index-narrowed) _scan_range and keep
+    // the survivors. Runs before _rewrite_predicates; precondition _del_predicate_preapplied. Timed into
+    // del_filter_ns / rows_del_filtered so this work shows in the DeleteFilter profile section, since the
+    // read loop's per-chunk delete filter is skipped on this path.
+    if (_opts.delete_predicates.empty() || _scan_range.empty()) {
+        return Status::OK();
+    }
+    SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
+
+    // Zone-map page prune: only pages whose zone map overlaps a delete column's predicate can hold a
+    // deleted row, so rows elsewhere survive without a read. The per-column OR groups (_del_predicates,
+    // built earlier by _get_row_ranges_by_zone_map) are a conservative superset -- safe for any delete
+    // shape (a deleted row's page always overlaps; multi-column conjuncts just prune less). Empty when
+    // page-level zone-map filtering is off or no delete column has a zone map -> evaluate everything.
+    // Runs before materializing the candidate bitmap: it needs only the range bound, so a segment whose
+    // deletes touch nothing here (the common case on a multi-segment table) returns without any bitmap
+    // work or a byte-identical _scan_range rebuild.
+    roaring::Roaring maybe_deleted;
+    bool pruned = !_del_predicates.empty();
+    if (pruned) {
+        const Range<> bound{_scan_range.begin(), _scan_range.end()};
+        for (const auto& [cid, or_pred] : _del_predicates) {
+            if (cid >= _column_iterators.size() || _column_iterators[cid] == nullptr) {
+                pruned = false; // unreadable delete column -> no pruning, evaluate the whole candidate
+                break;
+            }
+            SparseRange<> col_pages; // must be empty: get_row_ranges_by_zone_map DCHECKs it
+            std::vector<const ColumnPredicate*> preds{&or_pred};
+            RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(
+                    preds, /*del_predicate=*/nullptr, &col_pages, CompoundNodeType::OR, &bound));
+            maybe_deleted |= range2roaring(col_pages);
+        }
+    }
+    if (pruned && maybe_deleted.isEmpty()) {
+        // No page can hold a deleted row: every candidate survives and _scan_range is already correct.
+        _opts.stats->rows_del_predicate_zone_map_pruned += static_cast<int64_t>(_scan_range.span_size());
+        return Status::OK();
+    }
+
+    const roaring::Roaring candidate = range2roaring(_scan_range);
+    // Rows in delete-clean pages survive without a read; only the maybe-deleted rows are evaluated exactly.
+    const roaring::Roaring to_eval = pruned ? (candidate & maybe_deleted) : candidate;
+    roaring::Roaring survivors = pruned ? (candidate - maybe_deleted) : roaring::Roaring();
+    _opts.stats->rows_del_predicate_zone_map_pruned += static_cast<int64_t>(survivors.cardinality());
+    if (!to_eval.isEmpty()) {
+        ASSIGN_OR_RETURN(auto live, evaluate_delete_survivors_to_bitmap(_opts.delete_predicates, _schema,
+                                                                        _column_iterators, to_eval));
+        survivors |= live;
+    }
+    const size_t deleted = candidate.cardinality() - survivors.cardinality();
+    if (deleted == 0) {
+        // Zone-map false positive (value within a page's min/max but no row matches) or predicate matched
+        // nothing: _scan_range is already correct, skip the O(cardinality) roaring2range rebuild.
+        return Status::OK();
+    }
+    _opts.stats->rows_del_filtered += static_cast<int64_t>(deleted);
+    _scan_range = roaring2range(survivors);
+    return Status::OK();
+}
+
+Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r) {
+    if (result_ids->empty()) {
+        return Status::OK();
+    }
+
+    std::sort(result_ids->begin(), result_ids->end());
+
+    // filter -1 above
+    auto first_valid_id_iter = std::upper_bound(result_ids->begin(), result_ids->end(), -1);
+    if (first_valid_id_iter == result_ids->end()) {
+        // All elements are less than 0
+        return Status::OK();
+    }
+
+    int64_t range_start = *first_valid_id_iter;
+    int64_t range_end = range_start + 1;
+
+    for (auto it = first_valid_id_iter + 1; it != result_ids->end(); ++it) {
+        if (*it == range_end) {
+            ++range_end;
+        } else {
+            r->add(Range<>(range_start, range_end));
+            range_start = *it;
+            range_end = range_start + 1;
+        }
+    }
+
+    r->add(Range<>(range_start, range_end));
 
     return Status::OK();
 }
@@ -441,17 +1889,19 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 auto iter = _del_predicates.find(cid);
                 del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
                 SparseRange<> r;
-                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
-                size_t prev_size = _scan_range.span_size();
+
+                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r,
+                                                                                   CompoundNodeType::AND));
+                size_t prev_size = _range_iter.remaining_rows();
                 SparseRange<> res;
                 res.set_sorted(_scan_range.is_sorted());
                 _range_iter = _range_iter.intersection(r, &res);
                 std::swap(res, _scan_range);
                 _range_iter.set_range(&_scan_range);
-                _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
+                _opts.stats->runtime_stats_filtered += (prev_size - _range_iter.remaining_rows());
                 return Status::OK();
             },
-            _opts.stats->raw_rows_read);
+            false, _opts.stats->raw_rows_read);
 }
 
 StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
@@ -460,7 +1910,7 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
         // cols file index -> column index in corresponding file
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first >= 0) {
-            auto column_file = dcg->column_files(parent_name(_segment->file_name()))[idx.first];
+            ASSIGN_OR_RETURN(auto column_file, dcg->column_file_by_idx(parent_name(_segment->file_name()), idx.first));
             if (_dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
                 _dcg_segments[column_file] = dcg_segment;
@@ -472,16 +1922,27 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
     return nullptr;
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(uint32_t ucid,
+StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(const TabletColumn& column,
                                                                                     std::string* filename,
+                                                                                    FileEncryptionInfo* encryption_info,
                                                                                     ColumnAccessPath* path) {
     // build column iter from delta column group
-    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(ucid));
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(storage_column_uid(column)));
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
         }
-        return dcg_segment->new_column_iterator(ucid, path);
+        if (encryption_info != nullptr && dcg_segment->encryption_info()) {
+            *encryption_info = *dcg_segment->encryption_info();
+        }
+        if (column.is_extended()) {
+            // The .cols segment holds the root JSON column, never the synthetic subfield column, so go
+            // through the `_or_default` entry point: it dispatches on is_extended() and rebuilds the
+            // subfield from the root column this segment does hold. new_column_iterator() would look
+            // the synthetic id up directly and fail with NotFound.
+            return dcg_segment->new_column_iterator_or_default(column, path);
+        }
+        return dcg_segment->new_column_iterator(column, path);
     }
     return nullptr;
 }
@@ -494,7 +1955,8 @@ void SegmentIterator::_init_column_access_paths() {
     for (auto& column_access_path : *_opts.column_access_paths) {
         auto* path = column_access_path.get();
 
-        if (path->is_from_predicate()) {
+        // FIXME(murphy)
+        if (path->is_from_predicate() || path->is_extended()) {
             _predicate_column_access_paths[path->index()] = path;
         } else {
             _column_access_paths[path->index()] = path;
@@ -502,38 +1964,135 @@ void SegmentIterator::_init_column_access_paths() {
     }
 }
 
+// Attach the ColumnAccessPath
+ColumnAccessPath* SegmentIterator::_lookup_access_path(ColumnId cid, const TabletColumn& col) {
+    ColumnAccessPath* access_path = nullptr;
+    if (col.is_extended()) {
+        auto extended_info = col.extended_info();
+        if (extended_info != nullptr && extended_info->source_column_uid >= 0) {
+            ColumnId source_id = extended_info->source_column_uid;
+            auto it = _column_access_paths.find(source_id);
+            if (it != _column_access_paths.end() && it->second->is_extended()) {
+                access_path = it->second;
+            }
+        }
+    } else {
+        auto it = _column_access_paths.find(cid);
+        if (it != _column_access_paths.end()) {
+            access_path = it->second;
+        }
+    }
+    if (access_path) {
+        VLOG(2) << fmt::format("attach column access path for column={} path={}", cid, access_path->to_string());
+    }
+    return access_path;
+}
+
+Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const std::string_view col_name) {
+    ColumnIteratorOptions iter_opts;
+    iter_opts.stats = _opts.stats;
+    iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
+    iter_opts.check_dict_encoding = false;
+    iter_opts.reader_type = _opts.reader_type;
+    iter_opts.lake_io_opts = _opts.lake_io_opts;
+    iter_opts.has_preaggregation = _opts.has_preaggregation;
+
+    VirtualColumnFactory::Options factory_option;
+    factory_option.tablet_id = _opts.tablet_id;
+    factory_option.segment_id = segment_id();
+    factory_option.num_rows = _segment->num_rows();
+    factory_option.rss_id = _opts.rowset_id + segment_id();
+    factory_option.dynamic_rss_id = _opts.dynamic_rss_id_base + segment_id();
+    auto rowsetid = _opts.rowsetid.to_string();
+    factory_option.rowset_id = rowsetid;
+
+    ASSIGN_OR_RETURN(auto iterator, VirtualColumnFactory::create_virtual_column_iterator(factory_option, col_name));
+    _column_iterators[cid].reset(iterator);
+    RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
+
+    return Status::OK();
+}
+
 Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
-    iter_opts.fill_data_cache = _opts.fill_data_cache;
+    iter_opts.lake_io_opts = _opts.lake_io_opts;
+    iter_opts.has_preaggregation = _opts.has_preaggregation;
 
-    RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_data_cache()};
+    // IDG read-side context (lake only; nullptr loader keeps the iterator on
+    // the legacy footer-only path). Thread through so ScalarColumnIterator
+    // can probe whether a standalone .idx file covers this (segment, col)
+    // and surface it via has_bitmap_index() / has_ngram_bloom_filter_index()
+    // to upper pruning gates.
+    iter_opts.idg_loader = _opts.idg_loader;
+    iter_opts.tablet_id = _opts.tablet_id;
+    iter_opts.segment_id = _opts.rowset_id + segment_id();
+    iter_opts.query_version = _opts.version;
+    iter_opts.col_unique_id = ucid;
 
-    ColumnAccessPath* access_path = nullptr;
-    if (_column_access_paths.find(cid) != _column_access_paths.end()) {
-        access_path = _column_access_paths[cid];
-    }
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
+                                 .buffer_size = _opts.lake_io_opts.buffer_size,
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
 
     std::string dcg_filename;
+    FileEncryptionInfo dcg_encryption_info;
     if (ucid < 0) {
         LOG(ERROR) << "invalid unique columnid in segment iterator, ucid: " << ucid
                    << ", segment: " << _segment->file_name();
     }
-    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename, access_path));
+    auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
+    const auto& col = tablet_schema->column(cid);
+    ColumnAccessPath* access_path = _lookup_access_path(cid, col);
+
+    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
-        auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
-        const auto& col = tablet_schema->column(cid);
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
-        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
-        iter_opts.read_file = rfile.get();
-        _column_files[cid] = std::move(rfile);
+        const auto encryption_info = _segment->encryption_info();
+        if (encryption_info) {
+            opts.encryption_info = *encryption_info;
+        }
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
+        if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
+            _segment->lake_tablet_manager() != nullptr) {
+            ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
+            auto shared_buffered_input_stream =
+                    std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
+            auto options = SharedBufferedInputStream::CoalesceOptions{
+                    .max_dist_size = config::io_coalesce_read_max_distance_size,
+                    .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+            shared_buffered_input_stream->set_coalesce_options(options);
+            iter_opts.read_file = shared_buffered_input_stream.get();
+            iter_opts.is_io_coalesce = true;
+            _column_files[cid] = std::move(shared_buffered_input_stream);
+            _io_coalesce_column_index.emplace_back(cid);
+        } else {
+            iter_opts.read_file = rfile.get();
+            _column_files[cid] = std::move(rfile);
+        }
     } else {
         // create delta column iterator
+        // TODO io_coalesce
         _column_iterators[cid] = std::move(col_iter);
+        // The column is served from a Delta Column Group (.cols) for this query
+        // version (column-mode partial update overlay). A fast-path IDG index
+        // (.idx sidecar) is keyed by the BASE segment id and was built over the
+        // BASE column values; it does NOT describe the overlaid DCG values and
+        // is not rebuilt on a column-mode update. Probing it here would let the
+        // DCG column iterator surface the STALE base index via
+        // has_{original,ngram}_bloom_filter_index(), and the pruning gate would
+        // filter rows against values the column no longer holds -> silently
+        // wrong results. Drop the IDG context so the DCG column falls back to an
+        // unindexed (correct) scan, matching footer-index behavior (a footer
+        // index lives on the base ColumnReader, which the DCG reader does not
+        // inherit, so it is never consulted for DCG-overlaid columns).
+        iter_opts.idg_loader = nullptr;
+        opts.encryption_info = dcg_encryption_info;
         ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
         iter_opts.read_file = dcg_file.get();
         _column_files[cid] = std::move(dcg_file);
@@ -542,18 +2101,22 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     return Status::OK();
 }
 
+// Fakes the "a global dictionary exists for the column, but this segment has no usable local
+// dictionary" state, which is otherwise reachable only through a real dictionary inconsistency
+// (a rewritten/compacted segment whose pages are not all dict-encoded). That state is what puts
+// `_switch_context` on its force-encode path.
+DEFINE_FAIL_POINT(segment_iterator_force_global_dict_encode);
+
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
-    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
-
-    const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
+    const size_t n = std::max<size_t>(1 + ChunkSchemaHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n);
     if constexpr (check_global_dict) {
         _column_decoders.resize(n);
     }
 
-    bool has_predicate = !_opts.predicates.empty();
+    bool has_predicate = !_opts.pred_tree.empty();
     _predicate_need_rewrite.resize(n, false);
     for (const FieldPtr& f : schema.fields()) {
         const ColumnId cid = f->id();
@@ -563,7 +2126,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
                 // if cid has global dict encode
                 // we will force the use of dictionary codes
                 check_dict_enc = true;
-            } else if (_opts.predicates.count(cid)) {
+            } else if (_opts.pred_tree.contains_column(cid)) {
                 // If there is an expression condition on the column
                 // that can be optimized using low cardinality,
                 // we will try to load the dictionary code
@@ -571,12 +2134,18 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             } else {
                 check_dict_enc = has_predicate;
             }
+            if (f->is_virtual()) {
+                RETURN_IF_ERROR(_init_virtual_column_iterator(cid, f->name()));
+            } else {
+                RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
+            }
 
-            RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
+            bool all_page_dict_encoded = _column_iterators[cid]->all_page_dict_encoded();
+            FAIL_POINT_TRIGGER_EXECUTE(segment_iterator_force_global_dict_encode, { all_page_dict_encoded = false; });
 
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid].get());
-                _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
+                _column_decoders[cid].set_all_page_dict_encoded(all_page_dict_encoded);
                 if (_opts.global_dictmaps->count(cid)) {
                     _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
                     _column_decoders[cid].check_global_dict();
@@ -584,9 +2153,11 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             }
 
             // turn off low cardinality if not all data pages are dict-encoded.
-            _predicate_need_rewrite[cid] &= _column_iterators[cid]->all_page_dict_encoded();
+            _predicate_need_rewrite[cid] &= all_page_dict_encoded;
         }
     }
+    VLOG(2) << fmt::format("init_column_iterators schema={}", schema.to_string());
+    VLOG(2) << fmt::format("init_column_iterators predicate_need_rewrite: {}", fmt::join(_predicate_need_rewrite, ","));
     return Status::OK();
 }
 
@@ -603,32 +2174,192 @@ bool SegmentIterator::need_early_materialize_subfield(const FieldPtr& field) {
     return false;
 }
 
+struct ExprPredicateChecker {
+    bool operator()(const PredicateColumnNode& node) const { return node.col_pred()->is_expr_predicate(); }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::any_of(node.children().begin(), node.children().end(),
+                           [&](const auto& child) { return child.visit(*this); });
+    }
+};
+
 void SegmentIterator::_init_column_predicates() {
-    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
-    for (const auto& pair : _opts.predicates) {
-        for (const ColumnPredicate* pred : pair.second) {
-            // If this predicate is generated by join runtime filter,
-            // We only use it to compute segment row range.
-            if (pred->is_index_filter_only()) {
-                continue;
+    PredicateAndNode useless_pred_root;
+    PredicateAndNode used_pred_root;
+    _opts.pred_tree.root().partition_copy([](const auto& node) { return node.visit(IndexOnlyPredicateChecker()); },
+                                          &useless_pred_root, &used_pred_root);
+    PredicateAndNode expr_pred_root;
+    PredicateAndNode non_expr_pred_root;
+    used_pred_root.partition_move([](auto& node) { return node.visit(ExprPredicateChecker()); }, &expr_pred_root,
+                                  &non_expr_pred_root);
+    _expr_pred_tree = PredicateTree::create(std::move(expr_pred_root));
+    _non_expr_pred_tree = PredicateTree::create(std::move(non_expr_pred_root));
+    _runtime_filter_preds = _opts.runtime_filter_preds;
+}
+
+StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
+    // Check every 16 chunks if we should trigger sampling based on selectivity
+    // if only have one predicate column, do not sample
+    const bool should_check_selectivity = (_context->_evaluated_chunk_nums++ % 16) == 0 &&
+                                          (!_context->_only_output_one_predicate_col_with_filter_push_down);
+    if (should_check_selectivity && _context->_enable_predicate_col_late_materialize) {
+        // Calculate accumulated selectivity.
+        // If selectivity > tigger_sample_selectivity or this is the first time, trigger sampling
+        // to potentially find an even better predicate order
+        double first_column_selectivity = _context->_first_column_total_rows_read == 0
+                                                  ? 1
+                                                  : static_cast<double>(_context->_first_column_total_rows_passed) /
+                                                            _context->_first_column_total_rows_read;
+        if (first_column_selectivity > config::predicate_sampling_trigger_selectivity_threshold) {
+            ColumnId old_first_column_id = _context->_predicate_order[0];
+
+            // Sample and update predicate selectivity
+            ASSIGN_OR_RETURN(size_t sampled_chunk_size, _sample_predicate_columns(rowid));
+
+            // Check if the first column changed after sampling
+            ColumnId new_first_column_id = _context->_predicate_order.front();
+            if (new_first_column_id != old_first_column_id) {
+                // First column changed, reset selectivity statistics
+                _context->_first_column_total_rows_read = 0;
+                _context->_first_column_total_rows_passed = 0;
             }
-            if (pred->is_expr_predicate()) {
-                _expr_ctx_preds.emplace_back(pred);
-            } else if (pred->can_vectorized()) {
-                _vectorized_preds.emplace_back(pred);
-            } else {
-                _branchless_preds.emplace_back(pred);
+            return sampled_chunk_size;
+        }
+    }
+    return 0;
+}
+
+StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* rowid) {
+    // Clear previous measurements
+    _context->_predicate_selectivity_map.clear();
+
+    // Read a sample chunk with predicate_col_late_materialize_read = false
+    // This reads ALL predicate columns at once (not using late materialization)
+    const uint32_t sample_size = _reserve_chunk_size;
+
+    Chunk* chunk = _context->_read_chunk.get();
+
+    if (!_range_iter.has_more()) {
+        return 0;
+    }
+
+    // Call _read with predicate_col_late_materialize_read = false to read all columns
+    RETURN_IF_ERROR(_read(chunk, rowid, sample_size, false));
+
+    const size_t chunk_size = chunk->num_rows();
+    if (chunk_size == 0) {
+        return 0;
+    }
+
+    SCOPED_RAW_TIMER(&_opts.stats->vec_cond_ns);
+    // Similar to RuntimeFilterProbeCollector::update_selectivity
+    // Use two selections:
+    // 1. _selection: for merged result of all predicates (merged_selection)
+    // 2. current_selection: for current predicate result
+    Buffer<uint8_t> current_selection;
+    current_selection.resize(chunk_size);
+
+    bool use_merged_selection = true; // Similar to RuntimeFilter's use_merged_selection flag
+
+    // Evaluate each predicate column and measure its selectivity
+    for (const auto& column_id : _context->_predicate_order) {
+        auto* col = chunk->get_column_raw_ptr_by_id(column_id);
+
+        const auto& predicates = _context->_column_predicate_map.at(column_id);
+        bool has_compound_predicates = !predicates.empty();
+        bool has_runtime_filters =
+                _opts.enable_join_runtime_filter_pushdown && _column_to_runtime_filters_map.contains(column_id);
+
+        if (!has_compound_predicates && !has_runtime_filters) {
+            // Column may have been added for read-only; no predicates or runtime filters to evaluate.
+            _context->_predicate_selectivity_map.emplace(1.0, column_id);
+            continue;
+        }
+
+        // First predicate uses _selection (merged), subsequent use current_selection
+        auto& selection = use_merged_selection ? _selection : current_selection;
+
+        if (has_compound_predicates) {
+            SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
+            // Use compound_and_predicates_evaluate to evaluate predicates
+            // Similar to RuntimeFilter::evaluate
+            RETURN_IF_ERROR(compound_and_predicates_evaluate(predicates, col, selection.data(), _selected_idx.data(), 0,
+                                                             chunk_size));
+        } else {
+            DCHECK(has_runtime_filters);
+            // No predicates but runtime filters exist, start with all rows selected.
+            std::fill(selection.data(), selection.data() + chunk_size, 1);
+        }
+
+        if (has_runtime_filters) {
+            RETURN_IF_ERROR(_evaluate_col_runtime_filters(column_id, col, selection.data(), 0, chunk_size));
+        }
+
+        // Count rows that passed predicates
+        size_t true_count = SIMD::count_nonzero(selection.data(), chunk_size);
+        double selectivity = static_cast<double>(true_count) / chunk_size;
+
+        // Store selectivity directly as the sorting key (like RuntimeFilter)
+        _context->_predicate_selectivity_map.emplace(selectivity, column_id);
+
+        // Merge selections (similar to RuntimeFilter's logic)
+        if (use_merged_selection) {
+            // First predicate: result is already in _selection (merged_selection)
+            use_merged_selection = false;
+        } else {
+            // Subsequent predicates: AND current selection with merged selection
+            uint8_t* dest = _selection.data();             // merged_selection
+            const uint8_t* src = current_selection.data(); // current result
+            for (size_t j = 0; j < chunk_size; ++j) {
+                dest[j] = src[j] & dest[j];
             }
         }
     }
-    if (_vectorized_preds.empty() && _branchless_preds.empty()) {
-        _opts.predicates.clear();
+
+    // Filter the entire chunk (including all columns and rowid) based on merged selection
+    // _selection already contains the merged result, use it directly
+    // This removes rows that don't pass all predicates
+    size_t filtered_chunk_size = 0;
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
+        filtered_chunk_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
     }
+    _opts.stats->rows_vec_cond_filtered += (chunk_size - filtered_chunk_size);
+
+    // Update predicate order based on selectivity (lower selectivity = higher filtering = better)
+    std::vector<ColumnId> new_order;
+    new_order.reserve(_context->_predicate_order.size());
+
+    for (const auto& kv : _context->_predicate_selectivity_map) {
+        new_order.push_back(kv.second);
+    }
+
+    DCHECK(new_order.size() == _context->_predicate_order.size());
+    if (new_order.size() != _context->_predicate_order.size()) {
+        return Status::InternalError("scan predicate late materializationo error!");
+    }
+
+    const ColumnId old_first_column_id = _context->_predicate_order.front();
+
+    // Update the predicate order
+    _context->_predicate_order = std::move(new_order);
+
+    // Update the first column iterator if it changed
+    const ColumnId new_first_column_id = _context->_predicate_order.front();
+    if (new_first_column_id != old_first_column_id) {
+        _context->_column_iterators_for_predicate_late_materialize[0] =
+                _context->_column_ids_to_column_iterators[new_first_column_id];
+        _context->_column_id_for_predicate_late_materialize[0] = new_first_column_id;
+    }
+
+    // Return the filtered chunk size (after applying all predicates)
+    return filtered_chunk_size;
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
     if (_opts.is_first_split_of_segment) {
-        StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
+        StorageMetrics::instance()->segment_row_total.increment(num_rows());
     }
     SCOPED_RAW_TIMER(&_opts.stats->rows_key_range_filter_ns);
 
@@ -662,8 +2393,63 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         }
     }
     _opts.stats->rows_after_key_range += _scan_range.span_size();
-    StarRocksMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
+    StorageMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
 
+    return Status::OK();
+}
+
+Status SegmentIterator::_apply_tablet_range() {
+    if (!_opts.tablet_range.has_value() || _opts.tablet_range.value().all_range()) {
+        return Status::OK();
+    }
+
+    // A primary-key tablet routes rows by its range in primary-key space, while its segments are laid
+    // out in sort-key order. When the two differ the tablet's rows are scattered across the whole
+    // segment and NO rowid interval is the right answer -- the conversion is undefined, not merely
+    // imprecise. Attempting it compares a primary-key datum against a sort-key column type, which
+    // throws bad_variant_access out of the scan; on the publish path (primary index rebuild ->
+    // scan_one_rebuild_unit) nothing catches it and the BE aborts, so every restart re-runs the same
+    // publish and dies again.
+    //
+    // Leave the scan range untouched instead. Lake tablets already withhold the range for this shape in
+    // Rowset::set_segment_tablet_range, which is where the reasoning for why nothing depends on it lives;
+    // this is the backstop for every other producer.
+    //
+    // Only primary-key tablets are affected. Every other key model encodes its range over the sort key
+    // itself, so there the narrowing is both well-defined and load-bearing.
+    if (_segment->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
+        _segment->tablet_schema().has_separate_sort_key()) {
+        LOG(WARNING) << "skip tablet range narrowing: primary-key tablet orders its segments by a separate sort "
+                        "key, so the range has no rowid interval. segment="
+                     << _segment->file_name();
+        return Status::OK();
+    }
+
+    std::optional<Range<>> rowid_range_opt;
+    if (_opts.read_state_cache.tablet_rowid_range != nullptr) {
+        rowid_range_opt = *_opts.read_state_cache.tablet_rowid_range;
+    } else {
+        // _lookup_ordinal() relies on short key index.
+        RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+        ASSIGN_OR_RETURN(rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value()));
+    }
+    if (rowid_range_opt.has_value()) {
+        _scan_range &= SparseRange<>(rowid_range_opt.value());
+    } else {
+        // no valid rowid range, clear the scan range
+        _scan_range.clear();
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_apply_precomputed_scan_range() {
+    if (_opts.read_state_cache.scan_range == nullptr) {
+        return Status::OK();
+    }
+
+    const size_t prev_size = _scan_range.span_size();
+    _scan_range &= *_opts.read_state_cache.scan_range;
+    _opts.stats->rows_stats_filtered += prev_size - _scan_range.span_size();
     return Status::OK();
 }
 
@@ -677,25 +2463,43 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
         return res;
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
-    for (const SeekRange& range : _opts.ranges) {
-        rowid_t lower_rowid = 0;
-        rowid_t upper_rowid = num_rows();
-
-        if (!range.upper().empty()) {
-            RETURN_IF_ERROR(_init_column_iterators<false>(range.upper().schema()));
-            RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
+    if (_opts.read_state_cache.seek_range_rowid_ranges != nullptr &&
+        _opts.read_state_cache.seek_range_rowid_ranges->size() == _opts.ranges.size()) {
+        for (const auto& rowid_range_opt : *_opts.read_state_cache.seek_range_rowid_ranges) {
+            if (rowid_range_opt.has_value()) {
+                res.add(rowid_range_opt.value());
+            }
         }
-        if (!range.lower().empty() && upper_rowid > 0) {
-            RETURN_IF_ERROR(_init_column_iterators<false>(range.lower().schema()));
-            RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
-        }
-        if (lower_rowid <= upper_rowid) {
-            res.add(Range{lower_rowid, upper_rowid});
-        }
+        return res;
     }
 
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    for (const SeekRange& range : _opts.ranges) {
+        ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(range));
+        if (rowid_range_opt.has_value()) {
+            res.add(rowid_range_opt.value());
+        }
+    }
     return res;
+}
+
+StatusOr<std::optional<Range<>>> SegmentIterator::_seek_range_to_rowid_range(const SeekRange& range) {
+    rowid_t lower_rowid = 0;
+    rowid_t upper_rowid = num_rows();
+
+    if (!range.upper().empty()) {
+        RETURN_IF_ERROR(_init_column_iterators<false>(range.upper().schema()));
+        RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
+    }
+    if (!range.lower().empty() && upper_rowid > 0) {
+        RETURN_IF_ERROR(_init_column_iterators<false>(range.lower().schema()));
+        RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
+    }
+
+    if (lower_rowid <= upper_rowid) {
+        return std::optional<Range<>>{Range{lower_rowid, upper_rowid}};
+    }
+    return std::nullopt;
 }
 
 StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
@@ -709,7 +2513,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         return res;
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     for (const auto& short_key_range : _opts.short_key_ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -721,7 +2525,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         } else if (!upper->short_key.empty()) {
             RETURN_IF_ERROR(_init_column_iterators<false>(*(upper->short_key_schema)));
             RETURN_IF_ERROR(_lookup_ordinal(upper->short_key, *(upper->short_key_schema), !upper->inclusive, num_rows(),
-                                            &upper_rowid));
+                                            &upper_rowid, upper->use_full_sort_key));
         }
 
         if (upper_rowid > 0) {
@@ -732,7 +2536,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
             } else if (!lower->short_key.empty()) {
                 RETURN_IF_ERROR(_init_column_iterators<false>(*(lower->short_key_schema)));
                 RETURN_IF_ERROR(_lookup_ordinal(lower->short_key, *(lower->short_key_schema), lower->inclusive,
-                                                upper_rowid, &lower_rowid));
+                                                upper_rowid, &lower_rowid, lower->use_full_sort_key));
             }
         }
 
@@ -744,7 +2548,81 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
     return res;
 }
 
+struct ZoneMapFilterEvaluator {
+    template <CompoundNodeType Type>
+    StatusOr<std::optional<SparseRange<>>> operator()(const PredicateCompoundNode<Type>& node) {
+        std::optional<SparseRange<>> row_ranges = std::nullopt;
+
+        const auto& ctx = pred_tree.compound_node_context(node.id());
+        const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
+
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            const auto iter = del_preds.find(cid);
+            const ColumnPredicate* del_pred = iter != del_preds.end() ? &(iter->second) : nullptr;
+
+            SparseRange<> cur_row_ranges;
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map(col_preds, del_pred, &cur_row_ranges,
+                                                                              Type, &src_range));
+            _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
+        }
+
+        if constexpr (Type == CompoundNodeType::AND) {
+            if (!has_apply_only_del_columns) {
+                has_apply_only_del_columns = true;
+
+                for (const auto& cid : del_columns) {
+                    if (cid_to_col_preds.contains(cid)) {
+                        continue;
+                    }
+
+                    const auto iter = del_preds.find(cid);
+                    if (iter == del_preds.end()) {
+                        continue;
+                    }
+                    const ColumnPredicate* del_pred = &(iter->second);
+
+                    SparseRange<> cur_row_ranges;
+                    RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map({}, del_pred, &cur_row_ranges,
+                                                                                      Type, &src_range));
+                    _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
+                }
+            }
+        }
+
+        for (const auto& child : node.compound_children()) {
+            ASSIGN_OR_RETURN(auto cur_row_ranges_opt, child.visit(*this));
+            if (cur_row_ranges_opt.has_value()) {
+                _merge_row_ranges<Type>(row_ranges, cur_row_ranges_opt.value());
+            }
+        }
+
+        return row_ranges;
+    }
+
+    template <CompoundNodeType Type>
+    void _merge_row_ranges(std::optional<SparseRange<>>& dest, SparseRange<>& source) {
+        if (!dest.has_value()) {
+            dest = std::move(source);
+        } else {
+            if constexpr (Type == CompoundNodeType::AND) {
+                dest.value() &= source;
+            } else {
+                dest.value() |= source;
+            }
+        }
+    }
+
+    const PredicateTree& pred_tree;
+    std::vector<std::unique_ptr<ColumnIterator>>& column_iterators;
+
+    const std::map<ColumnId, ColumnOrPredicate>& del_preds;
+    const std::set<ColumnId>& del_columns;
+    const Range<> src_range;
+    bool has_apply_only_del_columns = false;
+};
+
 Status SegmentIterator::_get_row_ranges_by_zone_map() {
+    RETURN_IF(!config::enable_index_page_level_zonemap_filter, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
 
     SCOPED_RAW_TIMER(&_opts.stats->zone_map_filter_ns);
@@ -757,9 +2635,9 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // `c1=1 and c2=100` and `c1=100 and c2=200`, the group result
     // will be a mapping of `c1` to predicate `c1=1 or c1=100` and a
     // mapping of `c2` to predicate `c2=100 or c2=200`.
-    std::set<ColumnId> columns;
-    _opts.delete_predicates.get_column_ids(&columns);
-    for (ColumnId cid : columns) {
+    std::set<ColumnId> del_columns;
+    _opts.delete_predicates.get_column_ids(&del_columns);
+    for (ColumnId cid : del_columns) {
         std::vector<const ColumnPredicate*> preds;
         for (size_t i = 0; i < _opts.delete_predicates.size(); i++) {
             _opts.delete_predicates[i].predicates_of_column(cid, &preds);
@@ -771,27 +2649,15 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // -------------------------------------------------------------
     // prune data pages by zone map index.
     // -------------------------------------------------------------
-    for (const auto& pair : _opts.predicates) {
-        columns.insert(pair.first);
+
+    ASSIGN_OR_RETURN(auto hit_row_ranges, _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
+                                                  _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates,
+                                                  del_columns, Range<>{_scan_range.begin(), _scan_range.end()}}));
+    if (hit_row_ranges.has_value()) {
+        zm_range &= hit_row_ranges.value();
     }
 
-    std::vector<const ColumnPredicate*> query_preds;
-    for (ColumnId cid : columns) {
-        auto iter1 = _opts.predicates_for_zone_map.find(cid);
-        if (iter1 != _opts.predicates_for_zone_map.end()) {
-            query_preds = iter1->second;
-        } else {
-            query_preds.clear();
-        }
-
-        const ColumnPredicate* del_pred;
-        auto iter = _del_predicates.find(cid);
-        del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
-        SparseRange<> r;
-        RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(query_preds, del_pred, &r));
-        zm_range = zm_range.intersection(r);
-    }
-    StarRocksMetrics::instance()->segment_rows_read_by_zone_map.increment(zm_range.span_size());
+    StorageMetrics::instance()->segment_rows_read_by_zone_map.increment(zm_range.span_size());
     size_t prev_size = _scan_range.span_size();
     _scan_range = _scan_range.intersection(zm_range);
     _opts.stats->rows_stats_filtered += (prev_size - _scan_range.span_size());
@@ -804,34 +2670,60 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
 // or end if no such row is found.
 // |rowid| will be assigned to the id of found row or |end| if no such row is found.
 Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid) {
+    // Coarse prune via the short key index. For a full-key segment, encode the search
+    // key with the segment's OWN sort-key schema so the bytes match its index even if
+    // the query's schema drifted; if the query's sort-key types are not byte-compatible
+    // with the segment's, bypass the coarse prune entirely (start=0, keep the given
+    // |end|) rather than emit a mismatched bracket -- the typed binary search below
+    // (unchanged) still finds the exact answer over the full candidate range.
+    // Live read gate: this seek's producer and consumer are the same query with no time gap, so it is
+    // safe to read use_full_sort_key_index() directly (go-forward rollback: a newly-started query
+    // seeks off the legacy page whenever the read config is off or the full page is unusable). A true
+    // return guarantees the full decoder is published, so lower_bound_full/upper_bound_full are valid.
+    const bool use_full_sort_key = _segment->use_full_sort_key_index();
+    bool use_index = true;
     std::string index_key;
-    index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
-                      : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
-
-    uint32_t start_block_id;
-    auto start_iter = _segment->lower_bound(index_key);
-    if (start_iter.valid()) {
-        // Because previous block may contain this key, so we should set rowid to
-        // last block's first row.
-        start_block_id = start_iter.ordinal();
-        if (start_block_id > 0) {
-            start_block_id--;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(_segment.get(), key, lower);
+        if (encoded.has_value()) {
+            index_key = std::move(encoded.value());
+        } else {
+            use_index = false;
         }
     } else {
-        // When we don't find a valid index item, which means all short key is
-        // smaller than input key, this means that this key may exist in the last
-        // row block. so we set the rowid to first row of last row block.
-        start_block_id = _segment->last_block();
+        index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
+                          : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
     }
-    rowid_t start = start_block_id * _segment->num_rows_per_block();
 
-    auto end_iter = _segment->upper_bound(index_key);
-    if (end_iter.valid()) {
-        end = end_iter.ordinal() * _segment->num_rows_per_block();
+    rowid_t start = 0;
+    if (use_index) {
+        uint32_t start_block_id;
+        auto start_iter = use_full_sort_key ? _segment->lower_bound_full(index_key) : _segment->lower_bound(index_key);
+        if (start_iter.valid()) {
+            // Because previous block may contain this key, so we should set rowid to
+            // last block's first row.
+            start_block_id = start_iter.ordinal();
+            if (start_block_id > 0) {
+                start_block_id--;
+            }
+        } else {
+            // When we don't find a valid index item, which means all short key is
+            // smaller than input key, this means that this key may exist in the last
+            // row block. so we set the rowid to first row of last row block.
+            start_block_id = _segment->last_block();
+        }
+        // Both pages share one block geometry (num_rows_per_block/num_items), so the block count and
+        // rows-per-block always come from the legacy decoder regardless of which page was seeked.
+        start = start_block_id * _segment->num_rows_per_block();
+
+        auto end_iter = use_full_sort_key ? _segment->upper_bound_full(index_key) : _segment->upper_bound(index_key);
+        if (end_iter.valid()) {
+            end = end_iter.ordinal() * _segment->num_rows_per_block();
+        }
     }
 
     // binary search to find the exact key
-    ChunkPtr chunk = ChunkHelper::new_chunk(key.schema(), 1);
+    ChunkPtr chunk = ChunkFactory::new_chunk(key.schema(), 1);
     if (lower) {
         while (start < end) {
             chunk->reset();
@@ -862,9 +2754,19 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
 }
 
 Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
-                                        rowid_t* rowid) {
+                                        rowid_t* rowid, bool is_full_sort_key) {
+    // |index_key| was already encoded upstream with the codec the logical-split producer pinned into
+    // ShortKeyOption::use_full_sort_key (short_key_encode vs. full_sort_key_encode); |is_full_sort_key|
+    // is that pin. It selects BOTH the short key decoder and the row re-encode below -- never a fresh
+    // read-config read -- so a mid-flight config flip cannot desync the producer from this consumer.
+    if (is_full_sort_key && !_segment->ensure_full_sort_key_index_usable()) {
+        // The producer only pins FULL after a usability request succeeded; if the full page is
+        // unexpectedly unusable now, never reinterpret full-key bytes with the legacy decoder.
+        return Status::InternalError("full sort key index page is not usable for a full-key pinned boundary");
+    }
+
     uint32_t start_block_id;
-    auto start_iter = _segment->lower_bound(index_key);
+    auto start_iter = is_full_sort_key ? _segment->lower_bound_full(index_key) : _segment->lower_bound(index_key);
     if (start_iter.valid()) {
         // Because previous block may contain this key, so we should set rowid to
         // last block's first row.
@@ -878,22 +2780,23 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
         // row block. so we set the rowid to first row of last row block.
         start_block_id = _segment->last_block();
     }
+    // Both pages share one block geometry, so rows-per-block always comes from the legacy decoder.
     rowid_t start = start_block_id * _segment->num_rows_per_block();
 
-    auto end_iter = _segment->upper_bound(index_key);
+    auto end_iter = is_full_sort_key ? _segment->upper_bound_full(index_key) : _segment->upper_bound(index_key);
     if (end_iter.valid()) {
         end = end_iter.ordinal() * _segment->num_rows_per_block();
     }
 
     // binary search to find the exact key
-    ChunkPtr chunk = ChunkHelper::new_chunk(short_key_schema, 1);
+    ChunkPtr chunk = ChunkFactory::new_chunk(short_key_schema, 1);
     if (lower) {
         while (start < end) {
             chunk->reset();
             rowid_t mid = start + (end - start) / 2;
             RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
             RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
-            if (compare(index_key, *chunk, short_key_schema) > 0) {
+            if (compare(index_key, *chunk, short_key_schema, is_full_sort_key) > 0) {
                 start = mid + 1;
             } else {
                 end = mid;
@@ -905,7 +2808,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
             rowid_t mid = start + (end - start) / 2;
             RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
             RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
-            if (compare(index_key, *chunk, short_key_schema) < 0) {
+            if (compare(index_key, *chunk, short_key_schema, is_full_sort_key) < 0) {
                 end = mid;
             } else {
                 start = mid + 1;
@@ -930,9 +2833,9 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     for (size_t i = 0; i < n; i++) {
         ColumnId cid = schema.field(i)->id();
-        ColumnPtr& column = chunk->get_column_by_index(i);
+        auto* column = chunk->get_column_raw_ptr_by_index(i);
         size_t nread = nrows;
-        RETURN_IF_ERROR(_column_iterators[cid]->next_batch(&nread, column.get()));
+        RETURN_IF_ERROR(_column_iterators[cid]->next_batch(&nread, column));
         may_has_del_row = may_has_del_row | (column->delete_state() != DEL_NOT_SATISFIED);
         DCHECK_EQ(nrows, nread);
     }
@@ -940,24 +2843,32 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
     return Status::OK();
 }
 
-inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n) {
+inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n,
+                                     bool predicate_col_late_materialize_read) {
     size_t read_num = 0;
     SparseRange<> range;
 
-    if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0) {
+    // Always seek columns if switching between late materialization modes or position changed
+    // This ensures all column iterators (_column_iterators vs _column_iterators_for_predicate_late_materialize)
+    // are synchronized at the same position
+    if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0 ||
+        (_context->_enable_predicate_col_late_materialize && !predicate_col_late_materialize_read)) {
         _cur_rowid = _range_iter.begin();
         _opts.stats->block_seek_num += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
-        RETURN_IF_ERROR(_context->seek_columns(_cur_rowid));
+        RETURN_IF_ERROR(_context->seek_columns(_cur_rowid, predicate_col_late_materialize_read));
     }
 
     _range_iter.next_range(n, &range);
     read_num += range.span_size();
-
     {
         _opts.stats->blocks_load += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_fetch_ns);
-        RETURN_IF_ERROR(_context->read_columns(chunk, range));
+        RETURN_IF_ERROR(
+                _context->read_columns(chunk, range, predicate_col_late_materialize_read, &_selection, &_selected_idx));
+        if (!predicate_col_late_materialize_read) {
+            chunk->check_or_die();
+        }
     }
 
     if (rowids != nullptr) {
@@ -973,7 +2884,6 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 
     _cur_rowid = range.end();
     _opts.stats->raw_rows_read += read_num;
-    chunk->check_or_die();
     return Status::OK();
 }
 
@@ -988,8 +2898,19 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
+    std::vector<rowid_t> local_rowids;
+    std::vector<rowid_t>* p_rowids = nullptr;
+    // The OR-MATCH fallback path requires capturing into the buffer that the
+    // InvertedIndexFallbackPredicate already holds a pointer to. The vector
+    // index path just needs rowids; a per-call local is fine.
+    if (_inverted_index_ctx && _inverted_index_ctx->has_fallback_predicates) {
+        _inverted_index_ctx->rowid_buffer.clear();
+        p_rowids = &_inverted_index_ctx->rowid_buffer;
+    } else if (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) {
+        p_rowids = &local_rowids;
+    }
     do {
-        st = _do_get_next(chunk, nullptr);
+        st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
 }
@@ -1011,14 +2932,121 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
     return st;
 }
 
+Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) {
+    if (!_inited) {
+        RETURN_IF_ERROR(_init());
+        _inited = true;
+    }
+
+    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+
+    DCHECK_EQ(0, chunk->num_rows());
+
+    Status st;
+    std::vector<rowid_t> local_rowids;
+    // When OR-MATCH fallback predicates are active, capture into the context
+    // buffer so the predicate's stored pointer stays valid.
+    std::vector<rowid_t>* p_rowids = &local_rowids;
+    if (_inverted_index_ctx && _inverted_index_ctx->has_fallback_predicates) {
+        _inverted_index_ctx->rowid_buffer.clear();
+        p_rowids = &_inverted_index_ctx->rowid_buffer;
+    }
+    do {
+        st = _do_get_next(chunk, p_rowids);
+    } while (st.ok() && chunk->num_rows() == 0);
+    if (st.ok()) {
+        // encode rssid with rowid: | rssid (32bit) | rowid (32bit) |
+        uint64_t rssid_shift = (uint64_t)(_opts.rowset_id + segment_id()) << 32;
+        for (uint32_t rowid : *p_rowids) {
+            rssid_rowids->push_back(rssid_shift | rowid);
+        }
+    }
+    return st;
+}
+
+StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk,
+                                                      ColumnId vec_col_id) {
+    if (chunk != nullptr && chunk->is_cid_exist(vec_col_id)) {
+        return chunk->get_column_by_id(vec_col_id);
+    }
+    if (dict_chunk != nullptr && dict_chunk->is_cid_exist(vec_col_id)) {
+        return dict_chunk->get_column_by_id(vec_col_id);
+    }
+    // Chunk::get_column_by_id with a missing cid default-inserts into the internal index map
+    // and returns _columns[0]. Downcasting that arbitrary column to ArrayColumn in
+    // _compute_brute_force_distances would corrupt memory and crash in a release build. Fail
+    // loudly instead — this indicates that the planner's late-materialization pruning let
+    // through a query without keeping the embedding column eager, despite VectorIndexReadiness
+    // reporting the index as ready.
+    return Status::InternalError(
+            strings::Substitute("brute-force vector fallback: vector column $0 missing in both output chunk "
+                                "and _dict_chunk; late-materialization pruned a column that the BE still needs",
+                                vec_col_id));
+}
+
 Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
 
-    const uint32_t chunk_capacity = _reserve_chunk_size;
-    const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
-    const bool has_predicate = !_opts.predicates.empty();
-    const bool scan_range_normalized = _scan_range.is_sorted();
+#ifdef USE_STAROS
+    // only used for CACHE SELECT, do not form any chunk to save CPU time,
+    // just read file content in `_scan_range`
+    if (_opts.lake_io_opts.cache_file_only) {
+        // read every column in this segment at once, maybe optimize this later
+        size_t buf_size = config::starlet_fs_stream_buffer_size_bytes;
+        if (buf_size <= 0) {
+            buf_size = 1048576; // 1MB
+        }
+        _context->_read_chunk->reset();
+        Chunk* chunk = _context->_read_chunk.get();
+        for (size_t cid = 0; cid < _column_iterators.size(); ++cid) {
+            if (_column_iterators[cid] == nullptr) {
+                continue;
+            }
+            // The read chunk is built from `_context->_read_schema`, which may be reordered
+            // (predicate columns moved to the front by `reorder_schema` for late-materialization
+            // / low-cardinality handling). Its positional order therefore does NOT match the
+            // ascending-cid order of `_column_iterators`. Look up the scratch destination column
+            // by column id so the iterator and its `dst` stay type-aligned; pairing a complex-type
+            // iterator (array/map/struct/json) with a scalar column otherwise reinterprets the
+            // column and crashes inside `get_io_range_vec` (e.g. ArrayColumnIterator reading
+            // `offsets->get_data().back()` on a mistyped column).
+            if (!chunk->is_cid_exist(cid)) {
+                continue;
+            }
+            auto* col = chunk->get_column_raw_ptr_by_id(cid);
+            if (!_scan_range.empty()) {
+                RETURN_IF_ERROR(_column_iterators[cid]->seek_to_ordinal(_scan_range.begin()));
+            }
+            ASSIGN_OR_RETURN(auto vec, _column_iterators[cid]->get_io_range_vec(_scan_range, col));
+            for (auto e : vec) {
+                // if buf_size is 1MB, offset is 123, and size is 2MB
+                // after calculation, offset will be 0, and size will be 2MB+123
+                size_t offset = (e.first / buf_size) * buf_size;
+                size_t size = e.second + (e.first % buf_size);
+                while (size > 0 && _column_files[cid] != nullptr) {
+                    size_t cur_size = std::min(buf_size, size);
+                    RETURN_IF_ERROR(_column_files[cid]->touch_cache(offset, cur_size));
+                    offset += cur_size;
+                    size -= cur_size;
+                }
+            }
+        }
+
+        // Warmup SST files for cloud-native PK index, executed once per tablet
+        if (_opts.lake_io_opts.sst_warmup_fn && _opts.lake_io_opts.sst_warmup_done) {
+            bool expected = false;
+            if (_opts.lake_io_opts.sst_warmup_done->compare_exchange_strong(expected, true)) {
+                RETURN_IF_ERROR(_opts.lake_io_opts.sst_warmup_fn());
+            }
+        }
+
+        _opts.stats->block_load_ns += sw.elapsed_time();
+
+        return Status::EndOfFile("no more data in segment");
+    }
+#endif // USE_STAROS
+
     const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
     _context->_read_chunk->reset();
@@ -1027,43 +3055,21 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_adapt_global_dict_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
-    uint16_t chunk_start = chunk->num_rows();
 
-    while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
-        RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
-        chunk->check_or_die();
-        size_t next_start = chunk->num_rows();
-
-        if (has_predicate) {
-            ASSIGN_OR_RETURN(next_start, _filter(chunk, rowid, chunk_start, next_start));
-            chunk->check_or_die();
-        }
-        chunk_start = next_start;
-        DCHECK_EQ(chunk_start, chunk->num_rows());
-
-        if (chunk_start && !scan_range_normalized) {
-            break;
-        }
-    }
-
-    size_t raw_chunk_size = chunk->num_rows();
-
-    ASSIGN_OR_RETURN(size_t chunk_size, _filter_by_expr_predicates(chunk, rowid));
+    StatusOr<size_t> predicte_result = _predicate_evaluate(rowid);
 
     _opts.stats->block_load_ns += sw.elapsed_time();
 
     int64_t total_read = _opts.stats->raw_rows_read - prev_raw_rows_read;
 
-    if (UNLIKELY(raw_chunk_size == 0)) {
-        // Return directly if chunk_start is zero, i.e, chunk is empty.
-        // Otherwise, chunk will be swapped with result, which is incorrect
-        // because the chunk is a pointer to _read_chunk instead of _final_chunk.
-        return Status::EndOfFile("no more data in segment");
+    if (UNLIKELY(predicte_result.status().is_end_of_file() || !predicte_result.status().ok())) {
+        return predicte_result.status();
     }
+
+    size_t chunk_size = predicte_result.value();
 
     if (_context->_has_dict_column) {
         chunk = _context->_dict_chunk.get();
-        SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
 
@@ -1073,6 +3079,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     bool need_switch_context = false;
     if (_context->_late_materialize) {
         chunk = _context->_final_chunk.get();
+        _opts.stats->late_materialize_rows += chunk_size;
         SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
         RETURN_IF_ERROR(_finish_late_materialization(_context));
         if (_context->_next != nullptr && (chunk_size * 1000 > total_read * _late_materialization_ratio)) {
@@ -1084,16 +3091,41 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         _context_switch_count++;
     }
 
-    // remove (logical) deleted rows.
-    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
+    // remove (logical) deleted rows. Skipped when _apply_del_predicate already folded the delete
+    // survivors into _scan_range (ANN path): the rows reaching here are live by construction, so
+    // re-evaluating the delete predicates would read the delete columns again only to delete nothing.
+    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty() &&
+        !_del_predicate_preapplied) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
+        // NOTE: risk of using _selection.data() without initialization
+        // if the delete_predicates do nothing to the selection.
         RETURN_IF_ERROR(_opts.delete_predicates.evaluate(chunk, _selection.data()));
         size_t deletes = SIMD::count_nonzero(_selection.data(), old_sz);
+        // When brute-force vector fallback is active and FE pruned the vector
+        // column from output_schema, the vector data column lives in
+        // _dict_chunk (un-swapped by _build_final_chunk). It must stay
+        // row-aligned with `chunk` for the later distance compute, so apply
+        // the same selection here. (filter_range is non-const, columns are
+        // held as Cow ImmutPtr — same as Chunk::filter_range, use
+        // as_mutable_raw_ptr to mutate in place.)
+        Column* brute_force_vec_col = nullptr;
+        if (_vector_index_ctx != nullptr && _vector_index_ctx->use_brute_force) {
+            auto vec_cid = _vector_index_ctx->vector_data_column_id;
+            if (!chunk->is_cid_exist(vec_cid)) {
+                const auto& col = _context->_dict_chunk->get_column_by_id(vec_cid);
+                if (col != nullptr && col->size() == old_sz) {
+                    brute_force_vec_col = col->as_mutable_raw_ptr();
+                }
+            }
+        }
         if (deletes == old_sz) {
             chunk->set_num_rows(0);
             if (rowid != nullptr) {
                 rowid->resize(0);
+            }
+            if (brute_force_vec_col != nullptr) {
+                brute_force_vec_col->resize(0);
             }
             _opts.stats->rows_del_filtered += old_sz;
         } else if (deletes > 0) {
@@ -1106,6 +3138,9 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), 0, old_sz);
                 rowid->resize(size);
             }
+            if (brute_force_vec_col != nullptr) {
+                brute_force_vec_col->filter_range(_selection, 0, old_sz);
+            }
             _opts.stats->rows_del_filtered += old_sz - new_sz;
         }
     }
@@ -1113,6 +3148,70 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     if (_context->_has_force_dict_encode) {
         RETURN_IF_ERROR(_encode_to_global_id(_context));
         chunk = _context->_adapt_global_dict_chunk.get();
+    }
+
+    if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
+        DCHECK(rowid != nullptr);
+        FloatColumn::MutablePtr distance_column = FloatColumn::create();
+        vector<rowid_t> rowids;
+        for (const auto& rid : *rowid) {
+            auto it = _vector_index_ctx->id2distance_map.find(rid);
+            if (LIKELY(it != _vector_index_ctx->id2distance_map.end())) {
+                rowids.emplace_back(it->first);
+            } else {
+                DCHECK(false) << "not found row id:" << rid << " in distance map";
+                return Status::InternalError(fmt::format("not found row id:{} in distance map", rid));
+            }
+        }
+        for (const auto& vrid : rowids) {
+            distance_column->append(_vector_index_ctx->id2distance_map[vrid]);
+        }
+
+        // TODO: plan vector column in FE Planner
+        chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
+                                    _vector_index_ctx->vector_slot_id);
+    } else if (_vector_index_ctx && _vector_index_ctx->use_brute_force) {
+        // Brute-force fallback: compute distances from the raw vector column. It lives in `chunk` when
+        // FE kept it (swapped in by _build_final_chunk), or in _dict_chunk when FE pruned it and
+        // _setup_brute_force_fallback re-added it to the read schema (the delete-pred filter above keeps
+        // it row-aligned). resolve_brute_force_vector_column picks the right one; the distance is
+        // appended to `chunk`, which always holds the planner-allocated slot.
+        auto vec_col_id = _vector_index_ctx->vector_data_column_id;
+        ASSIGN_OR_RETURN(ColumnPtr vector_column,
+                         resolve_brute_force_vector_column(chunk, _context->_dict_chunk.get(), vec_col_id));
+        DCHECK_EQ(vector_column->size(), chunk->num_rows())
+                << "brute-force vector column row count must match chunk; row alignment was lost";
+        if (UNLIKELY(vector_column->size() != chunk->num_rows())) {
+            return Status::InternalError("brute-force vector column row count does not match chunk row count");
+        }
+        _compute_brute_force_distances(vector_column.get(), chunk);
+
+        // Apply vector_range filter before removing columns, so slot_id mapping is intact
+        double vr = _vector_index_ctx->vector_range;
+        if (_vector_index_ctx->has_vector_range && chunk->num_rows() > 0) {
+            auto dist_col = chunk->get_column_by_slot_id(_vector_index_ctx->vector_slot_id);
+            const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
+            const float* dist_data = distances->get_data().data();
+            size_t num = chunk->num_rows();
+            // result_order: 0 = ASC, 1 = DESC (matches FE VectorSearchOptions
+            // and tenann::AnnSearcher::ResultOrder convention).
+            bool ascending = (_vector_index_ctx->result_order == 0);
+            Buffer<uint8_t> selection(num);
+            for (size_t i = 0; i < num; i++) {
+                selection[i] = within_vector_range(dist_data[i], static_cast<float>(vr), ascending);
+            }
+            chunk->filter_range(selection, 0, num);
+            if (rowid != nullptr) {
+                auto new_sz = ColumnHelper::filter_range<uint32_t>(selection, rowid->data(), 0, num);
+                rowid->resize(new_sz);
+            }
+        }
+
+        // Remove the vector data column if we added it (it was pruned by FE)
+        if (_vector_index_ctx->added_vector_data_column && chunk->is_cid_exist(vec_col_id)) {
+            auto idx = chunk->get_column_id_to_index_map().at(vec_col_id);
+            chunk->remove_column_by_index(idx);
+        }
     }
 
     result->swap_chunk(*chunk);
@@ -1124,9 +3223,424 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     return Status::OK();
 }
 
+StatusOr<size_t> SegmentIterator::_predicate_evaluate(vector<rowid_t>* rowid) {
+    if (_context->_enable_predicate_col_late_materialize ||
+        _context->_only_output_one_predicate_col_with_filter_push_down) {
+        return _predicate_evaluate_late_materialize(rowid);
+    } else {
+        return _predicate_evaluate_without_late_materialize(rowid);
+    }
+}
+
+StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_first_column(
+        vector<rowid_t>* rowid, std::vector<Column*>& current_columns) {
+    const uint32_t chunk_capacity = _reserve_chunk_size;
+    const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
+    const bool has_non_expr_predicate = !_non_expr_pred_tree.empty();
+    const bool scan_range_normalized = _scan_range.is_sorted();
+    Chunk* chunk = _context->_read_chunk.get();
+    current_columns.reserve(_context->_column_id_for_predicate_late_materialize.size());
+
+    const ColumnId first_column_id = _context->_predicate_order.front();
+    auto* first_col = chunk->get_column_raw_ptr_by_id(first_column_id);
+
+    const ColumnPredicateMap& non_expr_column_predicate_map = _non_expr_pred_tree.get_immediate_column_predicate_map();
+    const ColumnPredicateMap& expr_column_predicate_map = _expr_pred_tree.get_immediate_column_predicate_map();
+
+    current_columns.emplace_back(first_col);
+    if (_context->_enable_predicate_col_late_materialize) {
+        DCHECK(!_context->_only_output_one_predicate_col_with_filter_push_down);
+        auto* rowid_column = chunk->get_column_raw_ptr_by_id(_context->_row_id_column_id);
+        current_columns.emplace_back(rowid_column);
+    }
+    uint16_t chunk_start = first_col->size();
+
+    size_t original_chunk_size = chunk_start;
+    while ((chunk_start < return_chunk_threshold) && _range_iter.has_more()) {
+        RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, true));
+        // chunk->check_or_die();
+        size_t next_start = first_col->size();
+
+        // Count how many rowids were read by this _read() call
+        if (!_context->_is_filtered) {
+            size_t rows_read_this_iter = next_start - chunk_start;
+            _context->_first_column_total_rows_read += rows_read_this_iter;
+        }
+
+        if (has_non_expr_predicate && !_context->_is_filtered &&
+            non_expr_column_predicate_map.contains(first_column_id)) {
+            // use first column's non-expr predicate to filter data
+            // This will filter rowid_column, removing rows that don't match the predicate
+            // column-expr-predicate doesn't support [begin, end] interface
+            ASSIGN_OR_RETURN(next_start, _filter_by_compound_and_predicates(
+                                                 chunk, rowid, chunk_start, next_start, first_column_id,
+                                                 non_expr_column_predicate_map.at(first_column_id), current_columns));
+        }
+
+        chunk_start = next_start;
+
+        if (chunk_start && !scan_range_normalized) {
+            break;
+        }
+    }
+
+    size_t chunk_size = first_col->size();
+
+    if (expr_column_predicate_map.contains(first_column_id) && !_context->_is_filtered) {
+        // column-expr-predicate doesn't support [begin, end] interface
+        ASSIGN_OR_RETURN(chunk_size, _filter_by_compound_and_predicates(chunk, rowid, 0, chunk_size, first_column_id,
+                                                                        expr_column_predicate_map.at(first_column_id),
+                                                                        current_columns, false));
+    }
+
+    if (!_context->_is_filtered) {
+        _context->_first_column_total_rows_passed += (chunk_size - original_chunk_size);
+    }
+    return chunk_size;
+}
+
+Status SegmentIterator::_evaluate_late_materialize_read_other_columns(vector<rowid_t>* rowid,
+                                                                      std::vector<Column*>& current_columns,
+                                                                      size_t& chunk_size) {
+    Chunk* chunk = _context->_read_chunk.get();
+    bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+    for (int i = 1; i < _context->_predicate_order.size(); i++) {
+        const ColumnId current_column_id = _context->_predicate_order[i];
+        auto rowid_column = chunk->get_column_raw_ptr_by_id(_context->_row_id_column_id);
+        // read column by row id if not read yet
+        const auto* ordinals = down_cast<const FixedLengthColumn<rowid_t>*>(rowid_column);
+        auto* col = chunk->get_column_raw_ptr_by_id(current_column_id);
+        current_columns.emplace_back(col);
+
+        col->resize(0);
+        ColumnIterator* cur_iter = _context->_column_ids_to_column_iterators[current_column_id];
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
+            // for dict column, no matter it's global or local
+            // we should get its local dict values in predicate evaluation which is same as next_batch
+            // because the corresponding predicates are already rewritten by local dictionary
+            cur_iter->reserve_col(chunk_size, col);
+            RETURN_IF_ERROR(cur_iter->fetch_values_by_rowid_for_predicate_evaluate(*ordinals, col));
+        }
+        if (ordinals->size() != col->size()) {
+            // Name the column and the iterator: which iterator short-read is the whole diagnosis here,
+            // and the message is all a production incident leaves behind.
+            return Status::Corruption(
+                    strings::Substitute("_predicate_evaluate_late_materialize col size not equal to ordinal col size: "
+                                        "column_id=$0 iterator=$1 ordinals=$2 col=$3",
+                                        current_column_id, cur_iter->name(), ordinals->size(), col->size()));
+        }
+        may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+
+        // evaluate predicate on this column, including expr and non-expr predicates
+        ASSIGN_OR_RETURN(chunk_size, _filter_by_compound_and_predicates(
+                                             chunk, rowid, 0, chunk_size, current_column_id,
+                                             _context->_column_predicate_map.at(current_column_id), current_columns));
+    }
+
+    DCHECK(current_columns.size() == chunk->num_columns())
+            << "current column size:" << current_columns.size() << ", chunk column size:" << chunk->num_columns();
+
+    // check chunk until every predicate column is read
+    chunk->check_or_die();
+
+    chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    return Status::OK();
+}
+
+StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<rowid_t>* rowid) {
+    ASSIGN_OR_RETURN(size_t sampled_chunk_size, trigger_sample_if_necessary(rowid));
+    if (sampled_chunk_size > 0) {
+        // Sampling was triggered, return the sampled chunk size without further processing
+        return sampled_chunk_size;
+    }
+
+    std::vector<Column*> current_columns;
+    ASSIGN_OR_RETURN(size_t chunk_size, _predicate_evaluate_late_materialize_read_first_column(rowid, current_columns));
+
+    RETURN_IF_ERROR(_evaluate_late_materialize_read_other_columns(rowid, current_columns, chunk_size));
+
+    if (UNLIKELY(chunk_size == 0 && !_range_iter.has_more())) {
+        // Return directly if chunk_start is zero, i.e, chunk is empty.
+        // Otherwise, chunk will be swapped with result, which is incorrect
+        // because the chunk is a pointer to _read_chunk instead of _final_chunk.
+        return Status::EndOfFile("no more data in segment");
+    }
+    return chunk_size;
+}
+
+StatusOr<size_t> SegmentIterator::_predicate_evaluate_without_late_materialize(vector<rowid_t>* rowid) {
+    const uint32_t chunk_capacity = _reserve_chunk_size;
+    const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
+    const bool has_non_expr_predicate = !_non_expr_pred_tree.empty();
+    const bool scan_range_normalized = _scan_range.is_sorted();
+
+    Chunk* chunk = _context->_read_chunk.get();
+    uint16_t chunk_start = chunk->num_rows();
+    while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
+        RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, false));
+        chunk->check_or_die();
+        size_t next_start = chunk->num_rows();
+
+        if (has_non_expr_predicate) {
+            ASSIGN_OR_RETURN(next_start, _filter_by_non_expr_predicates(chunk, rowid, chunk_start, next_start));
+            chunk->check_or_die();
+        }
+        chunk_start = next_start;
+        DCHECK_EQ(chunk_start, chunk->num_rows());
+
+        if (chunk_start && !scan_range_normalized) {
+            break;
+        }
+    }
+
+    size_t raw_chunk_size = chunk->num_rows();
+    if (UNLIKELY(raw_chunk_size == 0)) {
+        // Return directly if chunk_start is zero, i.e, chunk is empty.
+        // Otherwise, chunk will be swapped with result, which is incorrect
+        // because the chunk is a pointer to _read_chunk instead of _final_chunk.
+        return Status::EndOfFile("no more data in segment");
+    }
+
+    ASSIGN_OR_RETURN(size_t chunk_size, _filter_by_expr_predicates(chunk, rowid));
+
+    return chunk_size;
+}
+
+FieldPtr SegmentIterator::_make_field(size_t i) {
+    DCHECK(_vector_index_ctx != nullptr);
+    return std::make_shared<Field>(i, _vector_index_ctx->vector_distance_column_name, get_type_info(TYPE_FLOAT), false);
+}
+
+FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Column* vector_column) {
+    DCHECK(_vector_index_ctx != nullptr);
+    const auto& query_vec = _opts.vector_search_option->query_vector;
+    const size_t dim = query_vec.size();
+    const size_t num_rows = vector_column->size();
+
+    const VectorMetricType metric_type = _vector_index_ctx->metric_type;
+    const bool is_cosine_similarity = metric_type == VectorMetricType::kCosineSimilarity;
+    const bool is_inner_product = metric_type == VectorMetricType::kInnerProduct;
+
+    // Unwrap NullableColumn if needed
+    const Column* data_col = vector_column;
+    const uint8_t* null_data = nullptr;
+    if (vector_column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(vector_column);
+        data_col = nullable->data_column().get();
+        if (nullable->has_null()) {
+            null_data = nullable->null_column()->raw_data();
+        }
+    }
+    const auto* array_col = down_cast<const ArrayColumn*>(data_col);
+    const auto& offsets = array_col->offsets().get_data();
+    // elements() may be NullableColumn wrapping FloatColumn. Vector index columns are
+    // ARRAY<FLOAT> with a nullable element column at the schema level, but tenann's
+    // builder rejects a row with any null element at write time. Defensively, if the
+    // elements column actually carries nulls at read time we treat the entire row as
+    // null (sentinel distance) rather than reading whatever undefined float lives in
+    // the slot.
+    const Column* elem_col = &array_col->elements();
+    const uint8_t* elem_null_data = nullptr;
+    if (elem_col->is_nullable()) {
+        const auto* nullable_elem = down_cast<const NullableColumn*>(elem_col);
+        if (nullable_elem->has_null()) {
+            elem_null_data = nullable_elem->null_column()->raw_data();
+        }
+        elem_col = nullable_elem->data_column().get();
+    }
+    const auto* float_col = down_cast<const FloatColumn*>(elem_col);
+    const float* elements_data = float_col->get_data().data();
+
+    FloatColumn::MutablePtr distance_column = FloatColumn::create();
+    distance_column->reserve(num_rows);
+
+    // Pre-compute the query-vector norm once: it is constant across all rows and
+    // brute-force scans can sweep many rows. (cosine path only.)
+    float query_norm = 0.0f;
+    if (is_cosine_similarity) {
+        for (size_t j = 0; j < dim; j++) {
+            query_norm += query_vec[j] * query_vec[j];
+        }
+        query_norm = std::sqrt(query_norm);
+    }
+
+    const float sentinel = is_cosine_similarity ? -1.0f
+                                                : (is_inner_product ? std::numeric_limits<float>::lowest()
+                                                                    : std::numeric_limits<float>::max());
+    for (size_t i = 0; i < num_rows; i++) {
+        if (null_data && null_data[i]) {
+            // Null vector: use max distance / min similarity as sentinel
+            distance_column->append(sentinel);
+            continue;
+        }
+        const size_t row_offset = offsets[i];
+        size_t vec_dim = offsets[i + 1] - row_offset;
+        // If any element of this row's array is null, treat the whole vector as null.
+        if (elem_null_data != nullptr) {
+            bool has_null_elem = false;
+            for (size_t j = 0; j < vec_dim; j++) {
+                if (elem_null_data[row_offset + j]) {
+                    has_null_elem = true;
+                    break;
+                }
+            }
+            if (has_null_elem) {
+                distance_column->append(sentinel);
+                continue;
+            }
+        }
+        const float* vec = elements_data + row_offset;
+        // tenann's index build validates dim equality at write time, so a row
+        // here with a different dim would point to corruption or a schema/index
+        // mismatch. Truncate to the shorter side and warn rather than crash.
+        if (vec_dim != dim) {
+            LOG_EVERY_N(WARNING, 1024) << "brute-force vector fallback: row " << i << " dim=" << vec_dim
+                                       << " differs from query dim " << dim << " in segment " << _segment->file_name();
+        }
+        size_t calc_dim = std::min(dim, vec_dim);
+
+        if (is_cosine_similarity) {
+            // cosine_similarity = dot(q, v) / (|q| * |v|)
+            float dot = 0, norm_v = 0;
+            for (size_t j = 0; j < calc_dim; j++) {
+                dot += query_vec[j] * vec[j];
+                norm_v += vec[j] * vec[j];
+            }
+            float denom = query_norm * std::sqrt(norm_v);
+            float sim = denom > 0 ? dot / denom : 0.0f;
+            // Non-finite (NaN/Inf from Inf inputs) would break the top-k heap's ordering (NaN compares
+            // false both ways), so map it to the sentinel -- ranked worst, like a null vector.
+            distance_column->append(std::isfinite(sim) ? sim : sentinel);
+        } else if (is_inner_product) {
+            float score = 0;
+            for (size_t j = 0; j < calc_dim; j++) {
+                score += query_vec[j] * vec[j];
+            }
+            distance_column->append(std::isfinite(score) ? score : sentinel);
+        } else {
+            // l2_distance = sum((q[j] - v[j])^2)
+            float dist = 0;
+            for (size_t j = 0; j < calc_dim; j++) {
+                float diff = query_vec[j] - vec[j];
+                dist += diff * diff;
+            }
+            distance_column->append(std::isfinite(dist) ? dist : sentinel);
+        }
+    }
+
+    return distance_column;
+}
+
+void SegmentIterator::_compute_brute_force_distances(const Column* vector_column, Chunk* chunk) {
+    chunk->append_vector_column(_brute_force_distance_column(vector_column),
+                                _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
+}
+
+// Exact distance rescan over a candidate bitmap. Reached only when the HNSW filtered search returned
+// fewer survivors than the exact pre-filter bitmap could supply (selective + scattered residual, where
+// graph reachability misses candidates). The candidate set is small here, so reading the embedding
+// column for just those rows and computing exact distances is cheap and restores completeness.
+Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& candidates) {
+    // Locate the embedding column from the segment's vector index metadata.
+    int32_t vec_ucid = -1;
+    for (const auto& index : *_segment->tablet_schema().indexes()) {
+        if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
+            vec_ucid = index.col_unique_ids()[0];
+            break;
+        }
+    }
+    if (vec_ucid < 0) {
+        return Status::InternalError("exact vector rescan: no vector index column in segment metadata");
+    }
+    int32_t col_idx = _segment->tablet_schema().field_index(vec_ucid);
+    if (col_idx < 0) {
+        return Status::InternalError("exact vector rescan: vector column not found in tablet schema");
+    }
+    const ColumnId vec_cid = static_cast<ColumnId>(col_idx);
+
+    // PRE does not add the embedding column to _schema, so create its iterator on demand.
+    if (vec_cid >= _column_iterators.size()) {
+        _column_iterators.resize(vec_cid + 1);
+    }
+    if (_column_iterators[vec_cid] == nullptr) {
+        RETURN_IF_ERROR(_init_column_iterator_by_cid(vec_cid, vec_ucid, false));
+    }
+
+    const auto& tcol = _segment->tablet_schema().column(vec_cid);
+    auto field = std::make_shared<Field>(StorageSchemaHelper::convert_field(vec_cid, tcol));
+
+    _vector_index_ctx->id2distance_map.clear();
+    // Enforce the range-query radius here: the FE folded the distance conjunct out of the scan
+    // predicate, so nothing downstream re-checks it. Same convention as the brute read path
+    // (ascending keeps d <= range, descending keeps d >= range).
+    const bool has_range = _vector_index_ctx->has_vector_range;
+    const auto range = static_cast<float>(_vector_index_ctx->vector_range);
+    const bool ascending = _vector_index_ctx->result_order == 0;
+
+    // Top-k mode keeps only the k best rows (bounded heap), matching the HNSW path's per-segment contract
+    // -- the upper TopN merges into the global top-k. Keeping every candidate would size id2distance_map
+    // and _scan_range to the whole live set (a memory cliff on a large delete-narrowed rescan). Range
+    // search cannot bound to k: it returns every row within the radius.
+    struct Cand {
+        float dist;
+        rowid_t rid;
+    };
+    // Heap top is the WORST kept row (evicted first): the largest distance when ascending (smaller is
+    // nearer), the smallest when descending (larger is nearer).
+    auto worse_on_top = [ascending](const Cand& a, const Cand& b) {
+        return ascending ? (a.dist < b.dist) : (a.dist > b.dist);
+    };
+    std::priority_queue<Cand, std::vector<Cand>, decltype(worse_on_top)> topk(worse_on_top);
+    const size_t k = static_cast<size_t>(_vector_index_ctx->k);
+
+    roaring::Roaring survivors;
+    SparseRange<> rows = roaring2range(candidates);
+    for (auto it = rows.new_iterator(); it.has_more();) {
+        Range<> r = it.next(4096);
+        MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(r.begin()));
+        // Array row ordinals are rowid_t, but their flattened element ordinals are 64-bit and can
+        // exceed UINT32_MAX. Do not wrap this contiguous row range in SparseRange<rowid_t>: the Array
+        // iterator would truncate the element range before passing it to the element iterator.
+        size_t rows_to_read = r.span_size();
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(&rows_to_read, col.get()));
+        DCHECK_EQ(rows_to_read, r.span_size());
+        auto dist = _brute_force_distance_column(col.get());
+        const auto& dvals = dist->get_data();
+        const uint32_t bn = r.end() - r.begin();
+        for (uint32_t i = 0; i < bn; i++) {
+            const float d = dvals[i];
+            const rowid_t rid = r.begin() + i;
+            if (has_range) {
+                if (!within_vector_range(d, range, ascending)) {
+                    continue;
+                }
+                _vector_index_ctx->id2distance_map[rid] = d;
+                survivors.add(rid);
+            } else if (k > 0) {
+                topk.push(Cand{d, rid});
+                if (topk.size() > k) {
+                    topk.pop();
+                }
+            }
+        }
+    }
+    if (!has_range) {
+        while (!topk.empty()) {
+            const Cand& c = topk.top();
+            _vector_index_ctx->id2distance_map[c.rid] = c.dist;
+            survivors.add(c.rid);
+            topk.pop();
+        }
+    }
+    _scan_range = roaring2range(survivors);
+    return Status::OK();
+}
+
 Status SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
-        const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
+        const ordinal_t ordinal = _cur_rowid;
         for (ColumnIterator* iter : to->_column_iterators) {
             RETURN_IF_ERROR(iter->seek_to_ordinal(ordinal));
         }
@@ -1134,12 +3648,13 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     if (to->_read_chunk == nullptr) {
-        to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_read_chunk, RuntimeChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
-            to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _reserve_chunk_size);
+            ASSIGN_OR_RETURN(to->_dict_chunk,
+                             RuntimeChunkHelper::new_chunk_checked(to->_dict_decode_schema, _reserve_chunk_size));
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -1167,80 +3682,152 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
         // Rebuilding final_chunk schema. filter_unused_columns will prune out useless columns in encode_schema
         Schema final_chunk_schema;
         DCHECK_GE(_encoded_schema.num_fields(), output_schema().num_fields());
+        // `output_schema()` is a subsequence of `_encoded_schema`, so the cursor into it must stop as
+        // soon as the last output field has been matched: any encoded field left over is a column
+        // pruned by filter_unused_columns, and continuing would index the output schema one past its
+        // end. `Schema::field()` only DCHECKs the index, so a RELEASE binary would dereference the
+        // out-of-bounds slot -- a null one faults at address 0.
+        const size_t num_output_fields = output_schema().num_fields();
         size_t output_schema_idx = 0;
-        for (size_t i = 0; i < _encoded_schema.num_fields(); ++i) {
+        for (size_t i = 0; i < _encoded_schema.num_fields() && output_schema_idx < num_output_fields; ++i) {
             if (_encoded_schema.field(i)->id() == output_schema().field(output_schema_idx)->id()) {
                 final_chunk_schema.append(_encoded_schema.field(i));
                 output_schema_idx++;
             }
         }
-
-        to->_final_chunk = ChunkHelper::new_chunk(final_chunk_schema, _reserve_chunk_size);
+        DCHECK_EQ(num_output_fields, final_chunk_schema.num_fields());
+        ASSIGN_OR_RETURN(to->_final_chunk,
+                         RuntimeChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
     } else {
-        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_final_chunk,
+                         RuntimeChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
     }
-
-    to->_adapt_global_dict_chunk = to->_has_force_dict_encode
-                                           ? ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size)
-                                           : to->_final_chunk;
+    if (to->_has_force_dict_encode) {
+        ASSIGN_OR_RETURN(to->_adapt_global_dict_chunk,
+                         RuntimeChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
+    } else {
+        to->_adapt_global_dict_chunk = to->_final_chunk;
+    }
 
     _context = to;
     return Status::OK();
 }
 
-StatusOr<uint16_t> SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to) {
+Status SegmentIterator::_evaluate_col_runtime_filters(ColumnId column_id, Column* col, uint8_t* selection,
+                                                      uint16_t from, uint16_t to) {
+    if (!_opts.enable_join_runtime_filter_pushdown) {
+        return Status::OK();
+    }
+
+    auto iter = _column_to_runtime_filters_map.find(column_id);
+    if (iter == _column_to_runtime_filters_map.end()) {
+        return Status::OK();
+    }
+
+    SCOPED_RAW_TIMER(&_opts.stats->rf_cond_evaluate_ns);
+    size_t input_count = SIMD::count_nonzero(&selection[from], to - from);
+
+    Chunk chunk;
+    // `column` is owned by storage layer, we don't have ownership
+    ColumnPtr bits = col->as_mutable_ptr();
+    chunk.append_column(bits, column_id, true);
+
+    RETURN_IF_ERROR(iter->second.evaluate(&chunk, selection, from, to));
+
+    size_t output_count = SIMD::count_nonzero(&selection[from], to - from);
+    _opts.stats->rf_cond_input_rows += input_count;
+    _opts.stats->rf_cond_output_rows += output_count;
+    return Status::OK();
+}
+
+StatusOr<uint16_t> SegmentIterator::_filter_by_compound_and_predicates(
+        Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to, ColumnId column_id,
+        const std::vector<const ColumnPredicate*>& and_predicates, std::vector<Column*>& current_cols,
+        bool apply_runtime_filter) {
+    if (from == to) {
+        return to;
+    }
+
+    // Check if we need to process this column at all
+    bool has_compound_predicates = and_predicates.size() > 0;
+    bool has_runtime_filters = apply_runtime_filter && _opts.enable_join_runtime_filter_pushdown &&
+                               _column_to_runtime_filters_map.contains(column_id);
+
+    if (!has_compound_predicates && !has_runtime_filters) {
+        return to;
+    }
+
+    SCOPED_RAW_TIMER(&_opts.stats->vec_cond_ns);
+    Column* col = chunk->get_column_raw_ptr_by_id(column_id);
+    // Evaluate compound predicates
+    if (has_compound_predicates) {
+        SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
+        if (col->empty()) {
+            DCHECK(from == to);
+            return to;
+        }
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(and_predicates, col, _selection.data(), _selected_idx.data(),
+                                                         from, to));
+    } else {
+        // If no compound predicates but have runtime filters, initialize selection to all true
+        std::fill(&_selection[from], &_selection[to], 1);
+    }
+
+    // Evaluate runtime filters for this column
+    if (has_runtime_filters) {
+        RETURN_IF_ERROR(_evaluate_col_runtime_filters(column_id, col, _selection.data(), from, to));
+    }
+
+    SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
+    uint16_t chunk_size = _filter_columns_by_selection(current_cols, rowid, from, to);
+    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
+    return chunk_size;
+}
+
+StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from,
+                                                                   uint16_t to) {
     // There must be one predicate, either vectorized or branchless.
-    DCHECK(_vectorized_preds.size() + _branchless_preds.size() > 0 || _del_vec);
+    DCHECK(!_non_expr_pred_tree.empty() || _del_vec);
 
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_ns);
 
-    // first evaluate
-    if (!_vectorized_preds.empty()) {
+    {
         SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
-        const ColumnPredicate* pred = _vectorized_preds[0];
-        Column* c = chunk->get_column_by_id(pred->column_id()).get();
-        RETURN_IF_ERROR(pred->evaluate(c, _selection.data(), from, to));
-        for (int i = 1; i < _vectorized_preds.size(); ++i) {
-            pred = _vectorized_preds[i];
-            c = chunk->get_column_by_id(pred->column_id()).get();
-            RETURN_IF_ERROR(pred->evaluate_and(c, _selection.data(), from, to));
-        }
-    }
-
-    // evaluate brachless
-    if (!_branchless_preds.empty()) {
-        SCOPED_RAW_TIMER(&_opts.stats->branchless_cond_evaluate_ns);
-
-        uint16_t selected_size = 0;
-        if (!_vectorized_preds.empty()) {
-            for (uint16_t i = from; i < to; ++i) {
-                _selected_idx[selected_size] = i;
-                selected_size += _selection[i];
-            }
-        } else {
-            // when there is no vectorized predicates, should initialize _selected_idx
-            // in a vectorized way
-            selected_size = to - from;
-            for (uint16_t i = from, j = 0; i < to; ++i, ++j) {
-                _selected_idx[j] = i;
-            }
-        }
-
-        for (size_t i = 0; selected_size > 0 && i < _branchless_preds.size(); ++i) {
-            const ColumnPredicate* pred = _branchless_preds[i];
-            ColumnPtr& c = chunk->get_column_by_id(pred->column_id());
-            ASSIGN_OR_RETURN(selected_size, pred->evaluate_branchless(c.get(), _selected_idx.data(), selected_size));
-        }
-
-        memset(&_selection[from], 0, to - from);
-        for (uint16_t i = 0; i < selected_size; ++i) {
-            _selection[_selected_idx[i]] = 1;
-        }
+        RETURN_IF_ERROR(_non_expr_pred_tree.evaluate(chunk, _selection.data(), from, to));
     }
 
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
-    uint16_t chunk_size = to;
+    if (_opts.enable_join_runtime_filter_pushdown && !_runtime_filter_preds.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->rf_cond_evaluate_ns);
+        size_t input_count = hit_count;
+        RETURN_IF_ERROR(_runtime_filter_preds.evaluate(chunk, _selection.data(), from, to));
+        hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+        _opts.stats->rf_cond_input_rows += input_count;
+        _opts.stats->rf_cond_output_rows += hit_count;
+    }
+
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
+    uint16_t chunk_size = _filter_chunk_by_selection(chunk, rowid, from, to);
+    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
+    return chunk_size;
+}
+
+StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
+    size_t chunk_size = chunk->num_rows();
+    if (chunk_size > 0 && !_expr_pred_tree.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
+        RETURN_IF_ERROR(_expr_pred_tree.evaluate(chunk, _selection.data(), 0, chunk_size));
+
+        size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
+        _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
+        chunk_size = new_size;
+    }
+    return chunk_size;
+}
+
+uint16_t SegmentIterator::_filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to) {
+    auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+    uint16_t chunk_size = to;
     if (hit_count == 0) {
         chunk_size = from;
         chunk->set_num_rows(chunk_size);
@@ -1254,50 +3841,43 @@ StatusOr<uint16_t> SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid
             rowid->resize(size);
         }
     }
-    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
     return chunk_size;
 }
 
-StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
-    size_t chunk_size = chunk->num_rows();
-    if (_expr_ctx_preds.size() != 0 && chunk_size > 0) {
-        SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
-        const auto* pred = _expr_ctx_preds[0];
-        Column* c = chunk->get_column_by_id(pred->column_id()).get();
-        RETURN_IF_ERROR(pred->evaluate(c, _selection.data(), 0, chunk_size));
-
-        for (int i = 1; i < _expr_ctx_preds.size(); ++i) {
-            pred = _expr_ctx_preds[i];
-            c = chunk->get_column_by_id(pred->column_id()).get();
-            RETURN_IF_ERROR(pred->evaluate_and(c, _selection.data(), 0, chunk_size));
+uint16_t SegmentIterator::_filter_columns_by_selection(std::vector<Column*>& columns, vector<rowid_t>* rowid,
+                                                       uint16_t from, uint16_t to) {
+    auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+    uint16_t chunk_size = to;
+    if (hit_count == 0) {
+        chunk_size = from;
+        for (auto& column : columns) {
+            column->resize(chunk_size);
         }
-
-        size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);
-        size_t new_size = chunk_size;
-        if (hit_count == 0) {
-            chunk->set_num_rows(0);
-            new_size = 0;
-            if (rowid != nullptr) {
-                rowid->resize(0);
-            }
-        } else if (hit_count != chunk_size) {
-            new_size = chunk->filter_range(_selection, 0, chunk_size);
-            if (rowid != nullptr) {
-                auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), 0, chunk_size);
-                rowid->resize(size);
-            }
+        if (rowid != nullptr) {
+            rowid->resize(chunk_size);
         }
-        _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
-        chunk_size = new_size;
+    } else if (hit_count != to - from) {
+        for (auto& column : columns) {
+            column->filter_range(_selection, from, to);
+        }
+        chunk_size = columns[0]->size();
+        if (rowid != nullptr) {
+            auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), from, to);
+            rowid->resize(size);
+        }
     }
+
     return chunk_size;
 }
 
 inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
-    if (_opts.predicates.find(field->id()) != _opts.predicates.end()) {
+    if (field->type()->type() == TYPE_ARRAY) {
+        return false;
+    }
+    if (_opts.pred_tree.contains_column(field->id())) {
         return _predicate_need_rewrite[field->id()];
     } else {
-        return (_has_bitmap_index || !_opts.predicates.empty()) &&
+        return (_bitmap_index_evaluator.has_bitmap_index() || !_opts.pred_tree.empty()) &&
                _column_iterators[field->id()]->all_page_dict_encoded();
     }
 }
@@ -1316,12 +3896,15 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     const size_t ctx_fields = late_materialization ? predicate_count + 1 : num_fields;
     const size_t early_materialize_fields = late_materialization ? predicate_count : num_fields;
 
+    ctx->stats = _opts.stats;
     ctx->_read_schema.reserve(ctx_fields);
     ctx->_dict_decode_schema.reserve(ctx_fields);
     ctx->_subfield_columns.reserve(ctx_fields);
     ctx->_is_dict_column.reserve(ctx_fields);
     ctx->_column_iterators.reserve(ctx_fields);
     ctx->_skip_dict_decode_indexes.reserve(ctx_fields);
+
+    ctx->_prune_column_after_index_filter = _opts.prune_column_after_index_filter;
 
     // init skip dict_decode_code column indexes
     std::set<ColumnId> delete_pred_columns;
@@ -1341,16 +3924,33 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ctx->_skip_dict_decode_indexes.push_back(false);
         } else {
             ctx->_skip_dict_decode_indexes.push_back(true);
+            if (_inverted_index_ctx && _inverted_index_ctx->prune_cols_candidate_by_inverted_index.count(f->id())) {
+                // The column is pruneable if and only if:
+                // 1. column in _prune_cols_candidate_by_inverted_index
+                // 2. column not in output schema
+                // 3. column is not one of the delete predicate columns
+                // 4. column must not be dict decoded when the read is finished
+                ctx->_prune_cols.insert(cid);
+            }
         }
 
         if (use_dict_code || use_global_dict_code) {
             // create FixedLengthColumn<int64_t> for saving dict codewords.
-            auto f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
+            FieldPtr f2;
+            if (f->type()->type() == TYPE_ARRAY && f->sub_field(0).type()->type() == TYPE_VARCHAR) {
+                auto child = f->sub_field(0);
+                TypeInfoPtr typeInfo = get_array_type_info(get_type_info(kDictCodeType, -1, -1));
+                f2 = std::make_shared<Field>(cid, f->name(), typeInfo, STORAGE_AGGREGATE_NONE, 0, false,
+                                             f->is_nullable());
+                f2->add_sub_field(Field(child.id(), child.name(), kDictCodeType, -1, -1, child.is_nullable()));
+            } else {
+                f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
+            }
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
                 iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
                                                         _column_decoders[cid].code_convert_data(),
-                                                        _opts.global_dictmaps->at(cid));
+                                                        _column_decoders[cid].dict_convert_size());
             } else {
                 iter = new DictCodeColumnIterator(cid, _column_iterators[cid].get());
             }
@@ -1363,6 +3963,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
             if (ctx->_skip_dict_decode_indexes[i]) {
                 ctx->_dict_decode_schema.append(f2);
+                ctx->_column_ids_to_column_iterators.emplace(cid, ctx->_column_iterators.back());
+                ctx->_column_ids_to_index.emplace(cid, i);
                 continue;
             }
 
@@ -1381,14 +3983,18 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ctx->_column_iterators.emplace_back(iter);
             ctx->_is_dict_column.emplace_back(false);
             ctx->_dict_decode_schema.append(f);
-            ctx->_subfield_columns.emplace_back(i);
-            ctx->_subfield_iterators.emplace_back(iter);
+            if (output_columns.count(f->id()) != 0) {
+                ctx->_subfield_columns.emplace_back(i);
+                ctx->_subfield_iterators.emplace_back(iter);
+            }
         } else {
             ctx->_read_schema.append(f);
             ctx->_column_iterators.emplace_back(_column_iterators[cid].get());
             ctx->_is_dict_column.emplace_back(false);
             ctx->_dict_decode_schema.append(f);
         }
+        ctx->_column_ids_to_column_iterators.emplace(cid, ctx->_column_iterators.back());
+        ctx->_column_ids_to_index.emplace(cid, i);
     }
 
     size_t build_read_index_size = ctx->_read_schema.num_fields();
@@ -1399,7 +4005,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             cid = _schema.field(predicate_count)->id();
         }
 
-        static_assert(std::is_same_v<rowid_t, TypeTraits<TYPE_UNSIGNED_INT>::CppType>);
+        static_assert(std::is_same_v<rowid_t, StorageCppType<TYPE_UNSIGNED_INT>>);
         auto f = std::make_shared<Field>(cid, "ordinal", TYPE_UNSIGNED_INT, -1, -1, false);
         auto* iter = new RowIdColumnIterator();
         _obj_pool.add(iter);
@@ -1409,6 +4015,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_is_dict_column.emplace_back(false);
         ctx->_late_materialize = true;
         ctx->_skip_dict_decode_indexes.push_back(false);
+        ctx->_row_id_column_id = cid;
     }
 
     for (size_t i = 0; i < num_fields; ++i) {
@@ -1417,10 +4024,15 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_has_force_dict_encode |= _column_decoders[cid].need_force_encode_to_global_id();
     }
 
+    // The chunk source keeps delete-predicate columns out of the unused set, so they must reach the output.
+    for (ColumnId cid : delete_pred_columns) {
+        RETURN_IF(output_columns.count(cid) == 0,
+                  Status::InternalError(
+                          strings::Substitute("delete predicate column $0 is missing from the output schema", cid)));
+    }
+
     // build index map
     DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
-    DCHECK(!(output_schema().num_fields() < _schema.num_fields()) || _opts.delete_predicates.empty())
-            << "delete condition couldn't work with filter_unused_columns";
 
     // skip dict_decode column in _read_schema would not be mapping
     std::unordered_map<ColumnId, size_t> read_indexes;   // fid -> read schema index
@@ -1431,12 +4043,25 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         }
     }
 
-    // map output_schema[cid, index] to read_schema[cid index]
-    ctx->_read_index_map.resize(read_indexes.size());
-    for (size_t i = 0; i < read_indexes.size(); i++) {
-        ctx->_read_index_map[i] = read_indexes[output_schema().field(i)->id()];
-        output_indexes[output_schema().field(i)->id()] = i;
+    // |_read_index_map| is indexed by output schema position, so size and walk it by the output schema.
+    const size_t num_output_fields = output_schema().num_fields();
+    ctx->_read_index_map.reserve(num_output_fields);
+    for (size_t i = 0; i < num_output_fields; i++) {
+        const ColumnId ocid = output_schema().field(i)->id();
+        auto read_it = read_indexes.find(ocid);
+        if (read_it == read_indexes.end()) {
+            // Late-materialized output columns start here; _finish_late_materialization fills them.
+            break;
+        }
+        ctx->_read_index_map.emplace_back(read_it->second);
+        output_indexes[ocid] = i;
     }
+    // _finish_late_materialization resumes at |_read_index_map.size()|, so the walk must stop at the late tail.
+    RETURN_IF(ctx->_read_index_map.size() + num_fields - early_materialize_fields != num_output_fields,
+              Status::InternalError(strings::Substitute(
+                      "output schema is not an early-materialized prefix plus the late tail: mapped=$0 late=$1 "
+                      "output=$2",
+                      ctx->_read_index_map.size(), num_fields - early_materialize_fields, num_output_fields)));
 
     // convert the read schema index to output scheam index for subfield
     for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {
@@ -1445,18 +4070,29 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_subfield_columns[i] = output_indexes[fid];
     }
 
+    VLOG(2) << "SegmentIterator::_build_context late_materialization=" << late_materialization << " "
+            << ctx->to_string();
+
+    _build_context_for_predicate(ctx);
+
     return Status::OK();
 }
 
 Status SegmentIterator::_init_context() {
-    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _late_materialization_ratio = config::late_materialization_ratio;
-
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
-    if (_predicate_columns == 0 ||
-        (_predicate_columns >= _schema.num_fields() && _predicate_column_access_paths.empty())) {
-        // non or all field has predicate, disable late materialization.
+    // Vector reads carry columns the late-materialization bookkeeping cannot account for (the
+    // post-read distance column; brute's internally added embedding column), so force the eager
+    // context. Refine has no such columns (distance is computed above the scan) and keeps late
+    // materialization.
+    const bool vector_read_active = _vector_index_ctx != nullptr &&
+                                    ((_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) ||
+                                     _vector_index_ctx->use_brute_force);
+    if (_predicate_columns == 0 || _opts.pred_tree.empty() || vector_read_active ||
+        (_predicate_columns >= _schema.num_fields() && _predicate_column_access_paths.empty() &&
+         !_enable_predicate_col_late_materialize)) {
+        // none or all fields have a predicate (or a vector-index read is active), disable late materialization.
         RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
     } else {
         // metric column default enable late materialization
@@ -1467,6 +4103,10 @@ Status SegmentIterator::_init_context() {
             }
         }
 
+        if (_opts.lake_io_opts.cache_file_only) {
+            // CACHE SELECT disable late materialization
+            _late_materialization_ratio = 0;
+        }
         if (_late_materialization_ratio <= 0) {
             // late materialization been disabled.
             RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
@@ -1484,6 +4124,123 @@ Status SegmentIterator::_init_context() {
     return _switch_context(&_context_list[0]);
 }
 
+void SegmentIterator::_build_context_for_predicate(ScanContext* ctx) {
+    bool has_or_predicates = _non_expr_pred_tree.has_or_predicate() || _expr_pred_tree.has_or_predicate();
+    // `_context` is not initialized while building ScanContext instances (e.g. during `_init_context`).
+    // Using the argument `ctx` ensures the enablement decision is evaluated for the context under construction
+    // instead of dereferencing the yet-to-be-initialized `_context`, which caused crashes on empty tablets.
+    ctx->_enable_predicate_col_late_materialize =
+            !has_or_predicates && ctx->_late_materialize && _opts.enable_predicate_col_late_materialize;
+
+    const ColumnPredicateMap& column_predicate_map = _opts.pred_tree.get_immediate_column_predicate_map();
+    if (column_predicate_map.empty()) {
+        ctx->_only_output_one_predicate_col_with_filter_push_down = false;
+        ctx->_enable_predicate_col_late_materialize = false;
+        return;
+    }
+
+    // For case like : select col from table where col like "%jerry%"
+    // we only need output one predicate column, so context's _late_materialize is always false
+    // but we still can push down predicate into page level
+    ctx->_only_output_one_predicate_col_with_filter_push_down =
+            !has_or_predicates && (_predicate_columns == 1 && _schema.num_fields() == 1) &&
+            ctx->_column_iterators[0]->support_push_down_predicate(column_predicate_map.begin()->second) &&
+            _opts.enable_predicate_col_late_materialize;
+
+    if (!ctx->_enable_predicate_col_late_materialize && !ctx->_only_output_one_predicate_col_with_filter_push_down) {
+        return;
+    }
+
+    ctx->_column_predicate_map.reserve(column_predicate_map.size());
+    ctx->_predicate_order.reserve(column_predicate_map.size());
+
+    for (const auto& pair : column_predicate_map) {
+        ctx->_predicate_order.emplace_back(pair.first);
+        ctx->_column_predicate_map.emplace(pair.first, pair.second);
+    }
+
+    // if column predicate is always true for string column or already used by bitmap index
+    // it will be removed from predicate tree
+    // but we still need to read it
+    // so we add the columnId into column_predicate_map with empty ColumnPredicates, so it will only read without filter
+    if (ctx->_predicate_order.size() + 1 < ctx->_column_iterators.size()) {
+        DCHECK(ctx->_column_ids_to_column_iterators.size() + 1 == ctx->_column_iterators.size());
+        for (auto pair : ctx->_column_ids_to_column_iterators) {
+            if (!ctx->_column_predicate_map.contains(pair.first)) {
+                ctx->_predicate_order.emplace_back(pair.first);
+                ctx->_column_predicate_map.emplace(pair.first, std::vector<const ColumnPredicate*>());
+            }
+        }
+    }
+
+    _build_column_oriented_rf(ctx);
+
+    // all predicate columns + rowId column == _column_iterators size
+    DCHECK(ctx->_predicate_order.size() + 1 == ctx->_column_iterators.size() ||
+           ctx->_only_output_one_predicate_col_with_filter_push_down);
+
+    DCHECK(!ctx->_predicate_order.empty());
+
+    const ColumnId first_column_id = ctx->_predicate_order.front();
+    ctx->_column_iterators_for_predicate_late_materialize.clear();
+
+    ctx->_column_iterators_for_predicate_late_materialize.emplace_back(
+            ctx->_column_ids_to_column_iterators[first_column_id]);
+    ctx->_column_id_for_predicate_late_materialize.emplace_back(first_column_id);
+
+    // if only one predicate, and only need read this column, we do not need to use rowid Column
+    if (ctx->_only_output_one_predicate_col_with_filter_push_down) {
+        return;
+    }
+    // add row id iterator
+    ctx->_column_iterators_for_predicate_late_materialize.emplace_back(ctx->_column_iterators.back());
+    ctx->_column_id_for_predicate_late_materialize.emplace_back(ctx->_row_id_column_id);
+}
+
+void SegmentIterator::_build_column_oriented_rf(ScanContext* ctx) {
+    if (!_runtime_filter_preds.empty() && _opts.enable_join_runtime_filter_pushdown &&
+        _column_to_runtime_filters_map.empty()) {
+        // First, collect predicates by column id
+        std::unordered_map<ColumnId, std::vector<RuntimeFilterPredicate*>> column_rf_map;
+        for (auto* rf_pred : _runtime_filter_preds.rf_predicates()) {
+            ColumnId cid = rf_pred->get_column_id();
+            column_rf_map[cid].push_back(rf_pred);
+        }
+
+        // Create a RuntimeFilterPredicates object for each column
+        for (const auto& [cid, rf_pred_list] : column_rf_map) {
+            RuntimeFilterPredicates rf_preds(_runtime_filter_preds.driver_sequence());
+            for (auto* rf_pred : rf_pred_list) {
+                rf_preds.add_predicate(rf_pred);
+            }
+            _column_to_runtime_filters_map.emplace(cid, std::move(rf_preds));
+        }
+    }
+
+    // Ensure columns with only runtime filters are also added to predicate_order and _column_predicate_map
+    // These columns may not have regular predicates but have runtime filters
+    if (_opts.enable_join_runtime_filter_pushdown) {
+        for (const auto& [cid, rf_preds] : _column_to_runtime_filters_map) {
+            // If this column is not in column_predicate_map, add it with empty predicates
+            if (!ctx->_column_predicate_map.contains(cid)) {
+                // Check if the column has a column iterator
+                DCHECK(ctx->_column_ids_to_column_iterators.contains(cid));
+                if (ctx->_column_ids_to_column_iterators.contains(cid)) {
+                    ctx->_predicate_order.emplace_back(cid);
+                    ctx->_column_predicate_map.emplace(cid, std::vector<const ColumnPredicate*>());
+                }
+            }
+        }
+    }
+
+    // Expose runtime filter presence to ScanContext so PredicateLateMaterializationScanStrategy can decide
+    // whether it's safe to push down predicates to the page level for the first predicate column.
+    ctx->runtime_filters_by_column =
+            (_opts.enable_join_runtime_filter_pushdown && !_column_to_runtime_filters_map.empty())
+                    ? &_column_to_runtime_filters_map
+                    : nullptr;
+}
+
 Status SegmentIterator::_init_global_dict_decoder() {
     // init decoder for all columns
     // in some case _build_context<false> won't be called
@@ -1493,7 +4250,7 @@ Status SegmentIterator::_init_global_dict_decoder() {
         if (_can_using_global_dict(f)) {
             auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
                                                          _column_decoders[cid].code_convert_data(),
-                                                         _opts.global_dictmaps->at(cid));
+                                                         _column_decoders[cid].dict_convert_size());
             _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
         }
@@ -1502,10 +4259,26 @@ Status SegmentIterator::_init_global_dict_decoder() {
 }
 
 Status SegmentIterator::_rewrite_predicates() {
-    //
-    ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
-                                     _predicate_columns, _scan_range);
-    RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool));
+    RETURN_IF(_scan_range.empty(), Status::OK());
+
+    {
+        // in normal case it can always rewrite the predicate,
+        // but for JSON extended column, it might be a JsonExtractColumnIterator, so we need to fallback to the orignal predicate
+        ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
+                                         _scan_range);
+        auto st = (rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
+        if (st.is_not_supported()) {
+            VLOG(2) << "not supported predicate rewrite: " << _opts.pred_tree.root().debug_string() << " " << st;
+        } else if (!st.ok()) {
+            return st;
+        } else {
+            VLOG(2) << "rewrite_predicates: " << _opts.pred_tree.root().debug_string();
+        }
+    }
+    if (_opts.enable_join_runtime_filter_pushdown) {
+        RETURN_IF_ERROR(RuntimeFilterPredicatesRewriter::rewrite(&_obj_pool, _opts.runtime_filter_preds,
+                                                                 _column_iterators, _schema));
+    }
 
     // for each delete predicate,
     // If the global dictionary optimization is enabled for the column,
@@ -1519,14 +4292,15 @@ Status SegmentIterator::_rewrite_predicates() {
     }
 
     for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
-        GlobalDictPredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_dict_rewrites);
-        RETURN_IF_ERROR(crewriter.rewrite_predicate(&_obj_pool));
+        GlobalDictPredicatesRewriter crewriter(*_opts.global_dictmaps, &disable_dict_rewrites);
+        RETURN_IF_ERROR(crewriter.rewrite_predicate(&_obj_pool, conjunct_predicate));
     }
 
     return Status::OK();
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
+    SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
     DCHECK_NE(ctx->_read_chunk, ctx->_dict_chunk);
     if (ctx->_read_chunk->num_rows() == 0) {
         ctx->_dict_chunk->set_num_rows(0);
@@ -1536,23 +4310,25 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
     const Schema& decode_schema = ctx->_dict_decode_schema;
     const size_t n = decode_schema.num_fields();
     bool may_has_del_row = ctx->_read_chunk->delete_state() != DEL_NOT_SATISFIED;
+    size_t decode_count = 0;
     for (size_t i = 0; i < n; i++) {
         const FieldPtr& f = decode_schema.field(i);
         const ColumnId cid = f->id();
         if (!ctx->_is_dict_column[i] || ctx->_skip_dict_decode_indexes[i]) {
-            ctx->_dict_chunk->get_column_by_index(i)->swap_column(*ctx->_read_chunk->get_column_by_index(i));
+            ctx->_dict_chunk->get_column_by_index(i).swap(ctx->_read_chunk->get_column_by_index(i));
         } else {
-            ColumnPtr& dict_codes = ctx->_read_chunk->get_column_by_index(i);
-            ColumnPtr& dict_values = ctx->_dict_chunk->get_column_by_index(i);
+            auto dict_codes = ctx->_read_chunk->get_column_by_index(i);
+            auto* dict_values = ctx->_dict_chunk->get_column_raw_ptr_by_index(i);
             dict_values->resize(0);
 
-            RETURN_IF_ERROR(_column_decoders[cid].decode_dict_codes(*dict_codes, dict_values.get()));
+            RETURN_IF_ERROR(_column_decoders[cid].decode_dict_codes(*dict_codes, dict_values));
+            decode_count += dict_codes->size();
 
             DCHECK_EQ(dict_codes->size(), dict_values->size());
             may_has_del_row |= (dict_values->delete_state() != DEL_NOT_SATISFIED);
             if (f->is_nullable()) {
-                auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
-                auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
+                auto* nullable_codes = down_cast<NullableColumn*>(dict_codes->as_mutable_raw_ptr());
+                auto* nullable_values = down_cast<NullableColumn*>(dict_values->as_mutable_raw_ptr());
                 nullable_values->null_column_data().swap(nullable_codes->null_column_data());
                 nullable_values->set_has_null(nullable_codes->has_null());
             }
@@ -1560,13 +4336,13 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
     }
     ctx->_dict_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     ctx->_dict_chunk->check_or_die();
+    _opts.stats->decode_dict_count += decode_count;
     return Status::OK();
 }
 
 Status SegmentIterator::_check_low_cardinality_optimization() {
-    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
-    _predicate_need_rewrite.resize(1 + ChunkHelper::max_column_id(_schema), false);
-    const size_t n = _opts.predicates.size();
+    _predicate_need_rewrite.resize(1 + ChunkSchemaHelper::max_column_id(_schema), false);
+    const size_t n = _opts.pred_tree.num_columns();
     for (size_t i = 0; i < n; i++) {
         const FieldPtr& field = _schema.field(i);
         const LogicalType type = field->type()->type();
@@ -1574,10 +4350,7 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
             continue;
         }
         ColumnId cid = field->id();
-        auto iter = _opts.predicates.find(cid);
-        DCHECK(iter != _opts.predicates.end());
-        const PredicateList& preds = iter->second;
-        if (preds.size() > 0) {
+        if (_opts.pred_tree.contains_column(cid)) {
             // for string column of low cardinality, we can always rewrite predicates.
             _predicate_need_rewrite[cid] = true;
         }
@@ -1592,7 +4365,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
 
     // last column of |_dict_chunk| is a fake column: it's filled by `RowIdColumnIterator`.
     ColumnPtr rowid_column = ctx->_dict_chunk->get_column_by_index(m - 1);
-    const auto* ordinals = down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
+    const auto* ordinals = down_cast<const FixedLengthColumn<rowid_t>*>(rowid_column.get());
 
     if (_predicate_columns < _schema.num_fields()) {
         const size_t n = _schema.num_fields();
@@ -1600,11 +4373,11 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
         for (size_t i = m - 1, j = start_pos; i < n; i++, j++) {
             const FieldPtr& f = _schema.field(i);
             const ColumnId cid = f->id();
-            ColumnPtr& col = ctx->_final_chunk->get_column_by_index(j);
+            auto* col = ctx->_final_chunk->get_column_raw_ptr_by_index(j);
             col->reserve(ordinals->size());
             col->resize(0);
 
-            RETURN_IF_ERROR(_column_decoders[cid].decode_values_by_rowid(*ordinals, col.get()));
+            RETURN_IF_ERROR(_column_decoders[cid].decode_values_by_rowid(*ordinals, col));
             DCHECK_EQ(ordinals->size(), col->size());
             may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
         }
@@ -1613,9 +4386,9 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     // fill subfield of early materialization columns
     for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {
         auto output_index = ctx->_subfield_columns[i];
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(output_index);
+        auto* col = ctx->_final_chunk->get_column_raw_ptr_by_index(output_index);
         // FillSubfieldIterator
-        RETURN_IF_ERROR(ctx->_subfield_iterators[i]->fetch_values_by_rowid(*ordinals, col.get()));
+        RETURN_IF_ERROR(ctx->_subfield_iterators[i]->fetch_values_by_rowid(*ordinals, col));
         DCHECK_EQ(ordinals->size(), col->size());
     }
 
@@ -1642,10 +4415,10 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
     for (size_t i = 0; i < num_columns; i++) {
         const FieldPtr& f = output_schema().field(i);
         const ColumnId cid = f->id();
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
-        ColumnPtr& dst = ctx->_adapt_global_dict_chunk->get_column_by_index(i);
+        auto* col = ctx->_final_chunk->get_column_raw_ptr_by_index(i);
+        auto* dst = ctx->_adapt_global_dict_chunk->get_column_raw_ptr_by_index(i);
         if (_column_decoders[cid].need_force_encode_to_global_id()) {
-            RETURN_IF_ERROR(_column_decoders[cid].encode_to_global_id(col.get(), dst.get()));
+            RETURN_IF_ERROR(_column_decoders[cid].encode_to_global_id(col, dst));
         } else {
             col->swap_column(*dst);
         }
@@ -1653,135 +4426,196 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
     return Status::OK();
 }
 
-Status SegmentIterator::_init_bitmap_index_iterators() {
-    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
-    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
-    _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
-    std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
-    for (auto& field : _schema.fields()) {
-        cid_2_ucid[field->id()] = field->uid();
+static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
+                                             const std::unordered_set<const ColumnPredicate*>& erased_preds) {
+    PredicateAndNode new_root;
+    PredicateAndNode useless_root;
+    pred_tree.release_root().partition_move(
+            [&](const auto& node_var) {
+                return node_var.visit(overloaded{
+                        [&](const PredicateColumnNode& node) { return !erased_preds.contains(node.col_pred()); },
+                        [&](const auto&) { return true; },
+                });
+            },
+            &new_root, &useless_root);
+    pred_tree = PredicateTree::create(std::move(new_root));
+}
+
+// Prefer the new double field (which can carry sub-1% values such as 0.5); fall back to the legacy
+// integer field for backward compatibility with an old FE that does not set probability_percent_v2.
+static double sample_probability_percent(const TTableSampleOptions& opts) {
+    if (opts.__isset.probability_percent_v2) {
+        return opts.probability_percent_v2;
     }
-    for (const auto& pair : _opts.predicates) {
-        ColumnId cid = pair.first;
-        if (_bitmap_index_iterators[cid] == nullptr) {
-            ColumnUID ucid = cid_2_ucid[cid];
+    return static_cast<double>(opts.probability_percent);
+}
+
+StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
+    size_t rows_per_block = _segment->num_rows_per_block();
+    size_t total_rows = _segment->num_rows();
+    double probability_percent = sample_probability_percent(_opts.sample_options);
+    int64_t random_seed = _opts.sample_options.random_seed;
+
+    auto sampler = DataSample::make_block_sample(probability_percent, random_seed, rows_per_block, total_rows);
+    return sampler->sample(_opts.stats);
+}
+
+StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
+    RETURN_IF(_schema.num_fields() > 1, Status::InvalidArgument("page sample can only support at most 1 column"));
+
+    ColumnId cid = _schema.field(0)->id();
+    auto& column_iterator = _column_iterators[cid];
+    ColumnReader* column_reader = column_iterator->get_column_reader();
+    RETURN_IF(column_reader == nullptr, Status::InvalidArgument("Not support page sample: no column_reader"));
+    int32_t num_data_pages = column_reader->num_data_pages();
+    PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
+
+    double probability_percent = sample_probability_percent(_opts.sample_options);
+    int64_t random_seed = _opts.sample_options.random_seed;
+    auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
+
+    if (column_reader->has_zone_map() && SortableZoneMap::is_support_data_type(column_reader->column_type())) {
+        IndexReadOptions opts = _index_read_options(cid);
+        ASSIGN_OR_RETURN(auto zonemap, column_reader->get_raw_zone_map(opts));
+        auto sorted = std::make_shared<SortableZoneMap>(column_reader->column_type(), std::move(zonemap));
+        sampler->with_zonemap(sorted);
+    }
+
+    return sampler->sample(_opts.stats);
+}
+
+Status SegmentIterator::_apply_data_sampling() {
+    RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    RETURN_IF(sample_probability_percent(_opts.sample_options) <= 0,
+              Status::InvalidArgument("probability_percent must > 0"));
+
+    DCHECK(_opts.sample_options.__isset.probability_percent || _opts.sample_options.__isset.probability_percent_v2);
+    DCHECK(_opts.sample_options.__isset.random_seed);
+    DCHECK(_opts.sample_options.__isset.sample_method);
+
+    SCOPED_RAW_TIMER(&_opts.stats->sample_time_ns);
+
+    SampleMethod::type sample_method = _opts.sample_options.sample_method;
+    RowIdSparseRange sampled_ranges;
+    switch (sample_method) {
+    case SampleMethod::type::BY_BLOCK: {
+        ASSIGN_OR_RETURN(sampled_ranges, _sample_by_block());
+        break;
+    }
+    case SampleMethod::type::BY_PAGE: {
+        ASSIGN_OR_RETURN(sampled_ranges, _sample_by_page());
+        break;
+    }
+    default:
+        return Status::InvalidArgument(fmt::format("unsupported sample_method: {}", sample_method));
+    }
+    _scan_range = _scan_range.intersection(sampled_ranges);
+
+    return {};
+}
+
+IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
+    IndexReadOptions opts;
+    opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
+    opts.lake_io_opts = _opts.lake_io_opts;
+    opts.read_file = _column_files.at(cid).get();
+    opts.stats = _opts.stats;
+
+    // IDG context (lake only; nullptr loader keeps readers on the footer path).
+    opts.idg_loader = _opts.idg_loader;
+    opts.tablet_id = _opts.tablet_id;
+    opts.segment_id = _opts.rowset_id + segment_id();
+    opts.query_version = _opts.version;
+    // Column unique id needed by the IDG loader to match per-column entries;
+    // -1 when column is virtual / synthesized.
+    if (cid < static_cast<ColumnId>(_schema.num_fields()) && _schema.field(cid) != nullptr) {
+        opts.col_unique_id = _schema.field(cid)->uid();
+    }
+    return opts;
+}
+
+// filter rows by evaluating column predicates using bitmap indexes.
+// upon return, predicates that have been evaluated by bitmap indexes will be removed.
+Status SegmentIterator::_apply_bitmap_index() {
+    RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    DCHECK_EQ(_predicate_columns, _opts.pred_tree.num_columns());
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
+
+        std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+        for (const auto& field : _schema.fields()) {
+            if (field->is_virtual()) {
+                continue;
+            }
+            cid_2_ucid[field->id()] = field->uid();
+        }
+
+        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
+                                                      this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            // NOTE: deliberately the column's OWN unique id, not storage_column_uid(). An extended
+            // column (JSON subfield) owns no bitmap index, so this misses every delta column group and
+            // then finds no reader in the base segment either -- the column ends up unindexed, which is
+            // what we want. Substituting the root column's id here would apply the JSON column's index
+            // to a subfield predicate. Only the value-read path resolves through the root id.
+            const ColumnUID ucid = cid_2_ucid[cid];
             // the column's index in this segment file
             ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            // Non-null => the column is served from a Delta Column Group (.cols)
+            // for this query version (column-mode partial update overlay).
+            const bool served_from_dcg = (segment_ptr != nullptr);
             if (segment_ptr == nullptr) {
                 // find segment from delta column group failed, using main segment
                 segment_ptr = _segment;
             }
 
             IndexReadOptions opts;
-            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
-            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
-            opts.skip_fill_data_cache = _skip_fill_data_cache();
+            opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
+                                  !config::disable_storage_page_cache && config::enable_bitmap_index_memory_page_cache;
+            opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
-
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &_bitmap_index_iterators[cid]));
-            _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
-        }
-    }
-    return Status::OK();
-}
-
-// filter rows by evaluating column predicates using bitmap indexes.
-// upon return, predicates that have been evaluated by bitmap indexes will be removed.
-Status SegmentIterator::_apply_bitmap_index() {
-    RETURN_IF(_scan_range.empty(), Status::OK());
-
-    RETURN_IF_ERROR(_init_bitmap_index_iterators());
-
-    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
-    RETURN_IF(!_has_bitmap_index, Status::OK());
-    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
-
-    // ---------------------------------------------------------
-    // Seek bitmap index.
-    //  - Seek to the position of predicate's operand within
-    //    bitmap index dictionary.
-    // ---------------------------------------------------------
-    std::vector<ColumnId> bitmap_columns;
-    std::vector<SparseRange<>> bitmap_ranges;
-    std::vector<bool> has_is_null_predicate;
-    std::vector<const ColumnPredicate*> erased_preds;
-
-    size_t mul_selected = 1;
-    size_t mul_cardinality = 1;
-    for (auto& [cid, pred_list] : _opts.predicates) {
-        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[cid];
-        if (bitmap_iter == nullptr) {
-            continue;
-        }
-        size_t cardinality = bitmap_iter->bitmap_nums();
-        SparseRange<> selected(0, cardinality);
-        bool has_is_null = false;
-        for (const ColumnPredicate* pred : pred_list) {
-            SparseRange<> r;
-            Status st = pred->seek_bitmap_dictionary(bitmap_iter, &r);
-            if (st.ok()) {
-                selected &= r;
-                erased_preds.emplace_back(pred);
-                has_is_null |= (pred->type() == PredicateType::kIsNull);
-            } else if (!st.is_cancelled()) {
-                return st;
+            // IDG context — without this, the IDG branch in
+            // ColumnReader::new_bitmap_index_iterator is unreachable and
+            // fast-path built bitmap indexes stored in .idx sidecar files
+            // would be invisible to the pruning gate.
+            //
+            // But the fast-path IDG .idx is keyed by the BASE segment id and was
+            // built over the BASE column values. A column-mode partial update
+            // overlays new values into a DCG (.cols) WITHOUT rebuilding the
+            // index. Attaching the base .idx to a DCG-overlaid column would
+            // prune rows against values the column no longer holds -> silently
+            // wrong results. So only wire the IDG loader when the column is
+            // served from the base segment; for a DCG-overlaid column leave it
+            // unset so new_bitmap_index_iterator falls back to the (absent)
+            // footer bitmap index -> correct unindexed scan, matching the footer
+            // index behavior.
+            if (!served_from_dcg) {
+                opts.idg_loader = _opts.idg_loader;
             }
-        }
-        if (selected.empty()) {
-            _opts.stats->rows_bitmap_index_filtered += _scan_range.span_size();
-            _scan_range.clear();
-            return Status::OK();
-        }
-        if (selected.span_size() < cardinality) {
-            bitmap_columns.emplace_back(cid);
-            bitmap_ranges.emplace_back(selected);
-            has_is_null_predicate.emplace_back(has_is_null);
-            mul_selected *= selected.span_size();
-            mul_cardinality *= cardinality;
-        }
+            opts.tablet_id = _opts.tablet_id;
+            opts.segment_id = _opts.rowset_id + segment_id();
+            opts.query_version = _opts.version;
+            opts.col_unique_id = ucid;
+
+            BitmapIndexIterator* bitmap_iter = nullptr;
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+            return bitmap_iter;
+        }));
+
+        RETURN_IF(!_bitmap_index_evaluator.has_bitmap_index(), Status::OK());
     }
 
-    // ---------------------------------------------------------
-    // Estimate the selectivity of the bitmap index.
-    // ---------------------------------------------------------
-    if (bitmap_columns.empty() || (mul_selected * 1000 > mul_cardinality * config::bitmap_max_filter_ratio)) {
-        return Status::OK();
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
+        const auto input_rows = _scan_range.span_size();
+        RETURN_IF_ERROR(_bitmap_index_evaluator.evaluate(_scan_range, _opts.pred_tree));
+        _opts.stats->rows_bitmap_index_filtered += input_rows - _scan_range.span_size();
     }
 
-    // ---------------------------------------------------------
-    // Retrieve the bitmap of each field.
-    // ---------------------------------------------------------
-    Roaring row_bitmap = range2roaring(_scan_range);
-    size_t input_rows = row_bitmap.cardinality();
-    DCHECK_EQ(input_rows, _scan_range.span_size());
-
-    for (size_t i = 0; i < bitmap_columns.size(); i++) {
-        Roaring roaring;
-        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[bitmap_columns[i]];
-        if (bitmap_iter->has_null_bitmap() && !has_is_null_predicate[i]) {
-            Roaring null_bitmap;
-            RETURN_IF_ERROR(bitmap_iter->read_null_bitmap(&null_bitmap));
-            row_bitmap -= null_bitmap;
-        }
-        RETURN_IF_ERROR(bitmap_iter->read_union_bitmap(bitmap_ranges[i], &roaring));
-        row_bitmap &= roaring;
-    }
-
-    DCHECK_LE(row_bitmap.cardinality(), _scan_range.span_size());
-    if (row_bitmap.cardinality() < _scan_range.span_size()) {
-        _scan_range = roaring2range(row_bitmap);
-    }
-
-    // ---------------------------------------------------------
-    // Erase predicates that hit bitmap index.
-    // ---------------------------------------------------------
-    for (const ColumnPredicate* pred : erased_preds) {
-        PredicateList& pred_list = _opts.predicates[pred->column_id()];
-        pred_list.erase(std::find(pred_list.begin(), pred_list.end(), pred));
-    }
-
-    _opts.stats->rows_bitmap_index_filtered += (input_rows - _scan_range.span_size());
     return Status::OK();
 }
 
@@ -1798,16 +4632,269 @@ Status SegmentIterator::_apply_del_vector() {
     return Status::OK();
 }
 
-Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
-    RETURN_IF(_scan_range.empty(), Status::OK());
-    RETURN_IF(_opts.predicates.empty(), Status::OK());
-    SCOPED_RAW_TIMER(&_opts.stats->bf_filter_ns);
-    size_t prev_size = _scan_range.span_size();
-    for (const auto& [cid, preds] : _opts.predicates) {
-        ColumnIterator* column_iter = _column_iterators[cid].get();
-        RETURN_IF_ERROR(column_iter->get_row_ranges_by_bloom_filter(preds, &_scan_range));
+Status SegmentIterator::_init_inverted_index_iterators() {
+    if (!_inverted_index_ctx) {
+        _inverted_index_ctx = std::make_unique<InvertedIndexContext>();
     }
+
+    _inverted_index_ctx->inverted_index_iterators.resize(ChunkSchemaHelper::max_column_id(_schema) + 1, nullptr);
+    std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+
+    for (const auto& field : _schema.fields()) {
+        if (field->is_virtual()) {
+            continue;
+        }
+        cid_2_ucid[field->id()] = field->uid();
+    }
+    for (const auto& pair : _opts.pred_tree.get_all_column_predicate_map()) {
+        if (cid_2_ucid.find(pair.first) == cid_2_ucid.end()) {
+            continue;
+        }
+
+        ColumnId cid = pair.first;
+        // Same as _apply_bitmap_index: deliberately the column's OWN unique id. An extended column
+        // (JSON subfield) owns no inverted index, so this resolves to no index rather than to the root
+        // JSON column's one. Only the value-read path uses storage_column_uid().
+        ColumnUID ucid = cid_2_ucid[cid];
+
+        IndexReadOptions index_opts;
+        index_opts.use_page_cache =
+                !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
+        index_opts.lake_io_opts = _opts.lake_io_opts;
+        index_opts.read_file = _column_files[cid].get();
+        index_opts.stats = _opts.stats;
+        index_opts.segment_rows = num_rows();
+
+        if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
+            // Column-mode partial update rewrites a column into a delta column group
+            // (.cols) file and leaves the base segment untouched, so the base segment's
+            // inverted index still reflects pre-update values. Mirror _apply_bitmap_index:
+            // take the index from the DCG segment when the column has been rewritten, so
+            // the index stays consistent with the data actually returned.
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
+            } else {
+                std::shared_ptr<TabletIndex> index_meta;
+                RETURN_IF_ERROR(segment_ptr->tablet_schema().get_indexes_for_column(ucid, GIN, index_meta));
+                if (index_meta != nullptr) {
+                    ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
+                    if (imp_type != InvertedImplementType::BUILTIN) {
+                        // Standalone (CLucene) inverted indexes are not produced by the DCG
+                        // writer, and the base segment's copy is stale for this column, so no
+                        // index is served. Ordinary predicates (e.g. equality) then evaluate
+                        // on the fresh column data. MATCH predicates cannot be evaluated
+                        // without an index and fail with an explicit error -- preferable to
+                        // silently filtering on pre-update values. Compaction rewrites the
+                        // base segment and restores index acceleration.
+                        continue;
+                    }
+                }
+            }
+            RETURN_IF_ERROR(segment_ptr->new_inverted_index_iterator(
+                    ucid, &_inverted_index_ctx->inverted_index_iterators[cid], _opts, index_opts));
+            _inverted_index_ctx->has_inverted_index |= (_inverted_index_ctx->inverted_index_iterators[cid] != nullptr);
+        }
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_wrap_or_match_predicates_for_fallback() {
+    // Only OR subtrees need the per-row fallback. Immediate AND-children of the
+    // root keep the normal inverted-index filtering path.
+    if (!_opts.pred_tree.has_or_predicate()) {
+        return Status::OK();
+    }
+
+    OrMatchFallbackVisitor visitor{_inverted_index_ctx->inverted_index_iterators, _obj_pool,
+                                   &_inverted_index_ctx->rowid_buffer, &_inverted_index_ctx->has_fallback_predicates,
+                                   num_rows()};
+    auto root = _opts.pred_tree.release_root();
+    for (auto& or_child : root.compound_children()) {
+        RETURN_IF_ERROR(or_child.visit(visitor));
+    }
+    _opts.pred_tree = PredicateTree::create(std::move(root));
+    return Status::OK();
+}
+
+Status SegmentIterator::_apply_inverted_index() {
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF(!_opts.enable_gin_filter, Status::OK());
+
+    RETURN_IF_ERROR(_init_inverted_index_iterators());
+    if (!_inverted_index_ctx || !_inverted_index_ctx->has_inverted_index) {
+        return Status::OK();
+    }
+    SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
+
+    RETURN_IF_ERROR(_wrap_or_match_predicates_for_fallback());
+
+    roaring::Roaring row_bitmap = range2roaring(_scan_range);
+    size_t input_rows = row_bitmap.cardinality();
+    std::unordered_set<const ColumnPredicate*> erased_preds;
+    std::unordered_set<ColumnId> erased_pred_col_ids;
+
+    std::unordered_map<ColumnId, ColumnId> cid_2_fid;
+    for (int i = 0; i < _schema.num_fields(); i++) {
+        cid_2_fid.emplace(_schema.field(i)->id(), i);
+    }
+
+    for (const auto& [cid, pred_list] : _opts.pred_tree.get_immediate_column_predicate_map()) {
+        InvertedIndexIterator* inverted_iter = _inverted_index_ctx->inverted_index_iterators[cid];
+        if (inverted_iter == nullptr) {
+            continue;
+        }
+        const auto& it = cid_2_fid.find(cid);
+        RETURN_IF(it == cid_2_fid.end(),
+                  Status::InternalError(strings::Substitute("No fid can be mapped by cid $0", cid)));
+        std::string column_name(_schema.field(it->second)->name());
+        for (const ColumnPredicate* pred : pred_list) {
+            if (_inverted_index_ctx->inverted_index_iterators[cid]->is_untokenized() ||
+                pred->type() == PredicateType::kExpr) {
+                Status res = pred->seek_inverted_index(column_name, _inverted_index_ctx->inverted_index_iterators[cid],
+                                                       &row_bitmap);
+                if (res.ok()) {
+                    erased_preds.emplace(pred);
+                    erased_pred_col_ids.emplace(cid);
+                } else {
+                    LOG(WARNING) << "Failed to seek inverted index for column " << column_name
+                                 << ", reason: " << res.detailed_message();
+                }
+            }
+        }
+    }
+    DCHECK_LE(row_bitmap.cardinality(), _scan_range.span_size());
+    _scan_range = roaring2range(row_bitmap);
+
+    // ---------------------------------------------------------
+    // Erase predicates that hit inverted index.
+    // ---------------------------------------------------------
+    if (!erased_preds.empty()) {
+        erase_column_pred_from_pred_tree(_opts.pred_tree, erased_preds);
+
+        for (const auto& cid : erased_pred_col_ids) {
+            if (!remaining_predicates_require_column(_opts.pred_tree, cid)) {
+                // predicate for pred->column_id() has been total erased by
+                // inverted index filtering.These columns may can be pruned.
+                _inverted_index_ctx->prune_cols_candidate_by_inverted_index.insert(cid);
+            }
+        }
+    }
+
+    for (auto* iter : _inverted_index_ctx->inverted_index_iterators) {
+        if (iter != nullptr) {
+            RETURN_IF_ERROR(iter->close());
+        }
+    }
+
+    _opts.stats->rows_gin_filtered += input_rows - _scan_range.span_size();
+    return Status::OK();
+}
+
+struct BloomFilterSupportChecker {
+    bool operator()(const PredicateColumnNode& node) const {
+        const auto* col_pred = node.col_pred();
+        const auto cid = col_pred->column_id();
+        const bool support =
+                (column_iterators[cid]->has_original_bloom_filter_index() &&
+                 col_pred->support_original_bloom_filter()) ||
+                (column_iterators[cid]->has_ngram_bloom_filter_index() && col_pred->support_ngram_bloom_filter());
+        if (support) {
+            used_nodes.emplace(&node);
+        }
+        return support;
+    }
+
+    bool operator()(const PredicateAndNode& node) {
+        bool support = false;
+        for (const auto& child : node.children()) {
+            // Use | not || to add all the used nodes to `used_nodes`.
+            support |= child.visit(*this);
+        }
+        if (support) {
+            used_nodes.emplace(&node);
+        }
+        return support;
+    }
+
+    bool operator()(const PredicateOrNode& node) {
+        const bool support = std::all_of(node.children().begin(), node.children().end(),
+                                         [&](const auto& child) { return child.visit(*this); });
+        if (support) {
+            used_nodes.emplace(&node);
+        }
+        return support;
+    }
+
+    std::vector<std::unique_ptr<ColumnIterator>>& column_iterators;
+    std::unordered_set<const PredicateBaseNode*>& used_nodes;
+};
+
+struct BloomFilterEvaluator {
+    Status operator()(const PredicateAndNode& node, SparseRange<>& dest_ranges) {
+        if (!used_nodes.contains(&node)) {
+            return Status::OK();
+        }
+
+        const auto& ctx = pred_tree.compound_node_context(node.id());
+        const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_bloom_filter(col_preds, &dest_ranges));
+        }
+
+        for (const auto& child : node.compound_children()) {
+            RETURN_IF_ERROR(child.visit(*this, dest_ranges));
+        }
+        return Status::OK();
+    }
+
+    Status operator()(const PredicateOrNode& node, SparseRange<>& dest_ranges) {
+        if (node.empty() || !used_nodes.contains(&node)) {
+            return Status::OK();
+        }
+
+        SparseRange<> cur_dest_ranges;
+        const auto& ctx = pred_tree.compound_node_context(node.id());
+        const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            auto child_ranges = dest_ranges;
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_bloom_filter(col_preds, &child_ranges));
+            cur_dest_ranges |= child_ranges;
+        }
+
+        for (const auto& child : node.compound_children()) {
+            auto child_ranges = dest_ranges;
+            RETURN_IF_ERROR(child.visit(*this, child_ranges));
+            cur_dest_ranges |= child_ranges;
+        }
+
+        dest_ranges &= cur_dest_ranges;
+
+        return Status::OK();
+    }
+
+    const PredicateTree& pred_tree;
+    std::vector<std::unique_ptr<ColumnIterator>>& column_iterators;
+    std::unordered_set<const PredicateBaseNode*>& used_nodes;
+};
+
+Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
+    RETURN_IF(!config::enable_index_bloom_filter, Status::OK());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF(_opts.pred_tree.empty(), Status::OK());
+
+    SCOPED_RAW_TIMER(&_opts.stats->bf_filter_ns);
+
+    std::unordered_set<const PredicateBaseNode*> used_nodes;
+    const bool support = _opts.pred_tree.visit(BloomFilterSupportChecker{_column_iterators, used_nodes});
+    RETURN_IF(!support, Status::OK());
+
+    const size_t prev_size = _scan_range.span_size();
+    RETURN_IF_ERROR(
+            _opts.pred_tree.visit(BloomFilterEvaluator{_opts.pred_tree, _column_iterators, used_nodes}, _scan_range));
     _opts.stats->rows_bf_filtered += prev_size - _scan_range.span_size();
+
     return Status::OK();
 }
 
@@ -1854,7 +4941,7 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
 }
 
 // Currently, update stats is only used for lake tablet, and numeric statistics is nullptr for local tablet.
-void SegmentIterator::_update_stats(RandomAccessFile* rfile) {
+void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
     auto stats_or = rfile->get_numeric_statistics();
     if (!stats_or.ok()) {
         LOG(WARNING) << "failed to get statistics: " << stats_or.status();
@@ -1872,6 +4959,8 @@ void SegmentIterator::_update_stats(RandomAccessFile* rfile) {
         if (name == kBytesReadLocalDisk) {
             _opts.stats->compressed_bytes_read_local_disk += value;
             _opts.stats->compressed_bytes_read += value;
+        } else if (name == kBytesWriteLocalDisk) {
+            _opts.stats->compressed_bytes_write_local_disk += value;
         } else if (name == kBytesReadRemote) {
             _opts.stats->compressed_bytes_read_remote += value;
             _opts.stats->compressed_bytes_read += value;
@@ -1881,9 +4970,11 @@ void SegmentIterator::_update_stats(RandomAccessFile* rfile) {
         } else if (name == kIOCountRemote) {
             _opts.stats->io_count_remote += value;
             _opts.stats->io_count += value;
-        } else if (name == kIONsLocalDisk) {
-            _opts.stats->io_ns_local_disk += value;
-        } else if (name == kIONsRemote) {
+        } else if (name == kIONsReadLocalDisk) {
+            _opts.stats->io_ns_read_local_disk += value;
+        } else if (name == kIONsWriteLocalDisk) {
+            _opts.stats->io_ns_write_local_disk += value;
+        } else if (name == kIONsReadRemote) {
             _opts.stats->io_ns_remote += value;
         } else if (name == kPrefetchHitCount) {
             _opts.stats->prefetch_hit_count += value;
@@ -1910,47 +5001,287 @@ void SegmentIterator::close() {
 
     for (auto& [cid, rfile] : _column_files) {
         // update statistics before reset column file
-        _update_stats(rfile.get());
-        rfile.reset();
+        if (rfile != nullptr) {
+            _update_stats(rfile.get());
+            rfile.reset();
+        }
     }
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
 
-    for (auto* iter : _bitmap_index_iterators) {
-        delete iter;
+    _bitmap_index_evaluator.close();
+
+    if (_inverted_index_ctx) {
+        _inverted_index_ctx->cleanup();
     }
+    _one_time_setup_done = false;
+    _inited = false;
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late
 // materialization easier.
-inline Schema reorder_schema(const Schema& input, const std::unordered_map<ColumnId, PredicateList>& predicates) {
+inline Schema reorder_schema(const Schema& input, const PredicateTree& pred_tree) {
     const std::vector<FieldPtr>& fields = input.fields();
-
     Schema output;
     output.reserve(fields.size());
     for (const auto& field : fields) {
-        if (predicates.count(field->id())) {
+        if (pred_tree.contains_column(field->id())) {
             output.append(field);
         }
     }
     for (const auto& field : fields) {
-        if (!predicates.count(field->id())) {
+        if (!pred_tree.contains_column(field->id())) {
             output.append(field);
         }
     }
     return output;
 }
 
+static ChunkIteratorPtr maybe_project_iterator(const Schema& output_schema, const ChunkIteratorPtr& iter) {
+    if (iter->schema().num_fields() == output_schema.num_fields()) {
+        bool same_schema = true;
+        for (int i = 0; i < output_schema.num_fields(); ++i) {
+            if (iter->schema().field(i)->id() != output_schema.field(i)->id()) {
+                same_schema = false;
+                break;
+            }
+        }
+        if (same_schema) {
+            return iter;
+        }
+    }
+    return new_projection_iterator(output_schema, iter);
+}
+
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options) {
-    if (options.predicates.empty() || options.predicates.size() >= schema.num_fields()) {
+    if (options.pred_tree.empty() || options.pred_tree.num_columns() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
-    } else {
-        Schema ordered_schema = reorder_schema(schema, options.predicates);
-        auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
-        return new_projection_iterator(schema, seg_iter);
     }
+
+    // _check_low_cardinality_optimization() implementation counts on this schema reorder.
+    Schema ordered_schema = reorder_schema(schema, options.pred_tree);
+    return new_projection_iterator(schema, std::make_shared<SegmentIterator>(segment, ordered_schema, options));
+}
+
+StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<Segment>& segment,
+                                                         const Schema& iterator_schema, const Schema& output_schema,
+                                                         const SegmentReadOptions& options,
+                                                         ChunkIteratorPtr* reusable_slot) {
+    if (reusable_slot == nullptr) {
+        return Status::InvalidArgument("reusable segment iterator slot is null");
+    }
+    if (*reusable_slot == nullptr) {
+        if (options.pred_tree.empty() || options.pred_tree.num_columns() >= iterator_schema.num_fields()) {
+            *reusable_slot = std::make_shared<SegmentIterator>(segment, iterator_schema, options);
+        } else {
+            // Keep the reusable slot bound to the same internal schema choice as new_segment_iterator().
+            Schema ordered_schema = reorder_schema(iterator_schema, options.pred_tree);
+            *reusable_slot = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
+        }
+    } else {
+        auto* seg_iter = dynamic_cast<SegmentIterator*>(reusable_slot->get());
+        if (seg_iter == nullptr) {
+            return Status::NotSupported("iterator is not a reusable segment iterator");
+        }
+        // The stored iterator's schema field-order was fixed at creation from the first scan's predicate
+        // layout: reorder_schema() moves predicate columns to the front and _build_context() treats the
+        // leading _predicate_columns fields as the predicate columns. If the new scan's predicate layout
+        // would pick a different field order, reusing the stale schema mis-maps the predicate columns
+        // (wrong results, or a null predicate-column iterator). Rebuild the slot in that case; otherwise
+        // reset and reuse the existing iterator.
+        Schema expected_schema =
+                (options.pred_tree.empty() || options.pred_tree.num_columns() >= iterator_schema.num_fields())
+                        ? iterator_schema
+                        : reorder_schema(iterator_schema, options.pred_tree);
+        const Schema& current_schema = seg_iter->schema();
+        bool same_layout = expected_schema.num_fields() == current_schema.num_fields();
+        for (int i = 0; same_layout && i < expected_schema.num_fields(); ++i) {
+            same_layout = expected_schema.field(i)->id() == current_schema.field(i)->id();
+        }
+        if (same_layout) {
+            RETURN_IF_ERROR(seg_iter->reset_for_reuse(options));
+        } else {
+            *reusable_slot = std::make_shared<SegmentIterator>(segment, std::move(expected_schema), options);
+        }
+    }
+    return maybe_project_iterator(output_schema, new_non_closing_chunk_iterator(*reusable_slot));
+}
+
+StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Segment>& segment, const Schema& schema,
+                                                       const SegmentReadOptions& options) {
+    Schema iterator_schema = schema;
+    if (!options.pred_tree.empty() && options.pred_tree.num_columns() < schema.num_fields()) {
+        iterator_schema = reorder_schema(schema, options.pred_tree);
+    }
+    SegmentIterator iter(segment, std::move(iterator_schema), options);
+    return iter.prepared_pruned_row_ranges();
+}
+
+static rowid_t lower_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower) {
+    // Live read gate (physical split producer==consumer, no time gap): a true return guarantees the
+    // full decoder is published, so lower_bound_full is valid; read off => legacy page (rollback).
+    const bool use_full_sort_key = segment->use_full_sort_key_index();
+    std::string index_key;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(segment, key, lower);
+        if (!encoded.has_value()) {
+            // Bypass: the query's sort-key types drifted from this segment's own
+            // schema and cannot be safely bracketed. Never emit a mismatched coarse
+            // bracket -- return the start of the full candidate range.
+            return 0;
+        }
+        index_key = std::move(encoded.value());
+    } else {
+        index_key = key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    }
+    auto start_iter = use_full_sort_key ? segment->lower_bound_full(index_key) : segment->lower_bound(index_key);
+    uint32_t start_block_id = 0;
+    if (start_iter.valid()) {
+        // Previous block may contain this key, so start from its first row.
+        start_block_id = start_iter.ordinal();
+        if (start_block_id > 0) {
+            --start_block_id;
+        }
+    } else {
+        // If all short keys are smaller, the key may exist in the last block.
+        start_block_id = segment->last_block();
+    }
+    return start_block_id * segment->num_rows_per_block();
+}
+
+static rowid_t upper_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) {
+    // Live read gate (physical split producer==consumer, no time gap); read off => legacy page.
+    const bool use_full_sort_key = segment->use_full_sort_key_index();
+    std::string index_key;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(segment, key, lower);
+        if (!encoded.has_value()) {
+            // Bypass: never emit a mismatched coarse bracket -- return the full
+            // candidate range unmodified.
+            return end;
+        }
+        index_key = std::move(encoded.value());
+    } else {
+        index_key = key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    }
+    auto end_iter = use_full_sort_key ? segment->upper_bound_full(index_key) : segment->upper_bound(index_key);
+    if (end_iter.valid()) {
+        end = end_iter.ordinal() * segment->num_rows_per_block();
+    }
+    return end;
+}
+
+StatusOr<SparseRange<>> block_aligned_rowid_range_from_seek_ranges(Segment* segment,
+                                                                   const std::vector<SeekRange>& ranges) {
+    if (segment == nullptr) {
+        return Status::InvalidArgument("segment is null");
+    }
+
+    SparseRange<> scan_range;
+    if (ranges.empty()) {
+        scan_range.add(Range<>(0, segment->num_rows()));
+        return scan_range;
+    }
+
+    for (const auto& range : ranges) {
+        rowid_t lower_rowid = 0;
+        rowid_t upper_rowid = segment->num_rows();
+        if (!range.upper().empty()) {
+            upper_rowid = upper_bound_block_aligned_rowid(segment, range.upper(), !range.inclusive_upper(),
+                                                          segment->num_rows());
+        }
+        if (!range.lower().empty() && upper_rowid > 0) {
+            lower_rowid = lower_bound_block_aligned_rowid(segment, range.lower(), range.inclusive_lower());
+        }
+        if (lower_rowid <= upper_rowid) {
+            scan_range.add(Range<>(lower_rowid, upper_rowid));
+        }
+    }
+    return scan_range;
+}
+
+static bool init_seek_range_iterator_schema(const SeekRange& range, Schema* iterator_schema) {
+    if (!range.upper().empty()) {
+        *iterator_schema = range.upper().schema();
+        return true;
+    }
+    if (!range.lower().empty()) {
+        *iterator_schema = range.lower().schema();
+        return true;
+    }
+    return false;
+}
+
+template <typename ResolveFn>
+static auto with_segment_seek_range_iterator(const std::shared_ptr<Segment>& segment, const Schema& iterator_schema,
+                                             const LakeIOOptions& lake_io_opts, ResolveFn&& resolve_fn)
+        -> decltype(std::declval<ResolveFn>()(std::declval<SegmentIterator&>())) {
+    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
+
+    OlapReaderStatistics local_stats;
+    ASSIGN_OR_RETURN(auto file_system, FileSystemFactory::CreateSharedFromString(segment->file_info().path));
+    SegmentReadOptions read_options;
+    read_options.lake_io_opts = lake_io_opts;
+    read_options.stats = &local_stats;
+    read_options.fs = std::move(file_system);
+    SegmentIterator iterator(segment, iterator_schema, read_options);
+    return resolve_fn(iterator);
+}
+
+StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
+        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
+        const LakeIOOptions& lake_io_opts) {
+    std::vector<std::optional<Range<rowid_t>>> rowid_ranges;
+    rowid_ranges.reserve(ranges.size());
+    if (ranges.empty()) {
+        return rowid_ranges;
+    }
+    if (segment == nullptr) {
+        return Status::InvalidArgument("segment is null");
+    }
+
+    Schema iterator_schema;
+    bool need_index_lookup = false;
+    for (const auto& range : ranges) {
+        if (init_seek_range_iterator_schema(range, &iterator_schema)) {
+            need_index_lookup = true;
+            break;
+        }
+    }
+    if (!need_index_lookup) {
+        for (size_t i = 0; i < ranges.size(); ++i) {
+            rowid_ranges.emplace_back(Range<rowid_t>{0, segment->num_rows()});
+        }
+        return rowid_ranges;
+    }
+    return with_segment_seek_range_iterator(
+            segment, iterator_schema, lake_io_opts,
+            [&](SegmentIterator& iterator) -> StatusOr<std::vector<std::optional<Range<rowid_t>>>> {
+                for (const auto& range : ranges) {
+                    ASSIGN_OR_RETURN(auto rowid_range, iterator.resolve_range_to_rowid_range(range));
+                    rowid_ranges.emplace_back(rowid_range);
+                }
+                return rowid_ranges;
+            });
+}
+
+StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
+                                                                          const SeekRange& range,
+                                                                          const LakeIOOptions& lake_io_opts) {
+    if (segment == nullptr) {
+        return Status::InvalidArgument("segment is null");
+    }
+
+    Schema iterator_schema;
+    if (!init_seek_range_iterator_schema(range, &iterator_schema)) {
+        return std::optional<Range<rowid_t>>{Range<rowid_t>{0, segment->num_rows()}};
+    }
+    return with_segment_seek_range_iterator(segment, iterator_schema, lake_io_opts,
+                                            [&](SegmentIterator& iterator) -> StatusOr<std::optional<Range<rowid_t>>> {
+                                                return iterator.resolve_range_to_rowid_range(range);
+                                            });
 }
 
 } // namespace starrocks

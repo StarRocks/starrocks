@@ -1,0 +1,28 @@
+-- name: testOrcPredicates
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_predicates/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_external_file/files/string-dict-column.orc oss://${oss_bucket}/test_orc_predicates/${uuid0}/string-dict-column.orc | grep -Pv "(average|elapsed)"
+
+
+CREATE EXTERNAL TABLE split_orc_error
+(
+    col1 string
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_orc_predicates/${uuid0}/",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+set sql_dialect='StarRocks';
+select count(*) from split_orc_error where split(col1, 'a')[2]='x';
+set sql_dialect='trino';
+select count(*) from split_orc_error where split(col1, 'a')[2]='x';
+
+drop table split_orc_error;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_orc_predicates/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

@@ -1,278 +1,3 @@
--- name: test_string_functions
-select lpad('test', 8, '');
--- result:
-test
--- !result
-select lpad('test', 8, ' ');
--- result:
-    test
--- !result
-select lpad('test', 8, '中文，');
--- result:
-中文，中test
--- !result
-select lpad('test', 8);
--- result:
-    test
--- !result
-select lpad('test', 2, '');
--- result:
-te
--- !result
-select lpad('test', 2, ' ');
--- result:
-te
--- !result
-select lpad('test', 2, '中文，');
--- result:
-te
--- !result
-select lpad('test', 2);
--- result:
-te
--- !result
-select lpad('test', 0, '');
--- result:
--- !result
-select lpad('test', 0, ' ');
--- result:
--- !result
-select lpad('test', 0, '中文，');
--- result:
--- !result
-select lpad('test', 0);
--- result:
--- !result
-select rpad('test', 8, '');
--- result:
-test
--- !result
-select rpad('test', 8, ' ');
--- result:
-test    
--- !result
-select rpad('test', 8, '中文，');
--- result:
-test中文，中
--- !result
-select rpad('test', 8);
--- result:
-test    
--- !result
-select rpad('test', 2, '');
--- result:
-te
--- !result
-select rpad('test', 2, ' ');
--- result:
-te
--- !result
-select rpad('test', 2, '中文，');
--- result:
-te
--- !result
-select rpad('test', 2);
--- result:
-te
--- !result
-select rpad('test', 0, '');
--- result:
--- !result
-select rpad('test', 0, ' ');
--- result:
--- !result
-select rpad('test', 0, '中文，');
--- result:
--- !result
-select rpad('test', 0);
--- result:
--- !result
-create table t0(c0 varchar(16), c1 INT(16))
-        DUPLICATE KEY(c0)
-        DISTRIBUTED BY HASH(c0)
-        BUCKETS 1
-        PROPERTIES('replication_num'='1');
--- result:
--- !result
-insert into t0 values ('test', 8), ('test', 2), ('test', 0);
--- result:
--- !result
-select lpad(c0, c1, ' ') from t0;
--- result:
-    test
-te
-
--- !result
-select lpad(c0, c1, '中文，') from t0;
--- result:
-中文，中test
-te
-
--- !result
-select lpad(c0, c1, '') from t0;
--- result:
-test
-te
-
--- !result
-select lpad(c0, c1) from t0;
--- result:
-    test
-te
-
--- !result
-select rpad(c0, c1, ' ') from t0;
--- result:
-test    
-te
-
--- !result
-select rpad(c0, c1, '中文，') from t0;
--- result:
-test中文，中
-te
-
--- !result
-select rpad(c0, c1, '') from t0;
--- result:
-test
-te
-
--- !result
-select rpad(c0, c1) from t0;
--- result:
-test    
-te
-
--- !result
-select split_part("hello world", " ", 1);
--- result:
-hello
--- !result
-select split_part("hello world", " ", 2);
--- result:
-world
--- !result
-select split_part("hello world", " ", -1);
--- result:
-world
--- !result
-select split_part("hello world", " ", -2);
--- result:
-hello
--- !result
-select split_part("2023年5月23号", "月", 1);
--- result:
-2023年5
--- !result
-select split_part("2023年5月23号", "月", -1);
--- result:
-23号
--- !result
-select split_part("abc##567###234", "##", 1);
--- result:
-abc
--- !result
-select split_part("abc##567###234", "##", 2);
--- result:
-567
--- !result
-select split_part("abc##567###234", "##", -1);
--- result:
-234
--- !result
-select split_part("abc##567###234", "##", -2);
--- result:
-567#
--- !result
-create table t1(c0 varchar(20), c1 varchar(20))
-        DUPLICATE KEY(c0)
-        DISTRIBUTED BY HASH(c0)
-        BUCKETS 1
-        PROPERTIES('replication_num'='1');
--- result:
--- !result
-insert into t1 values ('hello world', 'abc##567###234');
--- result:
--- !result
-select split_part(c0, " ", 1) from t1;
--- result:
-hello
--- !result
-select split_part(c0, " ", 2) from t1;
--- result:
-world
--- !result
-select split_part(c0, " ", -1) from t1;
--- result:
-world
--- !result
-select split_part(c0, " ", -2) from t1;
--- result:
-hello
--- !result
-select split_part(c1, "##", 1) from t1;
--- result:
-abc
--- !result
-select split_part(c1, "##", 2) from t1;
--- result:
-567
--- !result
-select split_part(c1, "##", 3) from t1;
--- result:
-#234
--- !result
-select split_part(c1, "##", -1) from t1;
--- result:
-234
--- !result
-select split_part(c1, "##", -2) from t1;
--- result:
-567#
--- !result
-select split_part(c1, "##", -3) from t1;
--- result:
-abc
--- !result
-
--- name: test_url_extract_host
-select url_extract_host('https://starrocks.com/test/api/v1');
--- result:
-starrocks.com
--- !result
-select url_extract_host('https://starrocks.快速.com/test/api/v1');
--- result:
-starrocks.快速.com
--- !result
-select url_extract_host(NULL);
--- result:
-None
--- !result
-select url_extract_host('https://starrocks.com/doc?k1=10&k2=3&k1=100');
--- result:
-starrocks.com
--- !result
-CREATE TABLE IF NOT EXISTS `test_url_extract_host` (
-  `id` varchar(10),
-  `url` varchar(100)
-)
-PROPERTIES(
-  "replication_num" = "1"
-);
--- result:
--- !result
-insert into test_url_extract_host(id,url)
-values ('1', 'https://starrocks.com/doc?k1=10&k2=3&k1=100'),
-       ('2', 'https://starrocks.快速.com/doc?k1=10&k2=3&k1=100');
--- result:
--- !result
-select url_extract_host(url) from test_url_extract_host;
--- result:
-starrocks.com
-starrocks.快速.com
--- !result
-
 -- name: test_url_encode
 select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
 -- result:
@@ -286,8 +11,6 @@ select url_encode(NULL);
 -- result:
 None
 -- !result
-
---name: test_url_decode
 select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy');
 -- result:
 https://docs.starrocks.io/en-us/latest/quick_start/Deploy
@@ -299,8 +22,6 @@ https://docs.starrocks数据库.io/en-us/latest/quick_start/Deploy?name=快速
 select url_decode(NULL);
 -- result:
 None
--- !result
-
 -- !result
 select substring_index("hello world", " ", 1);
 -- result:
@@ -391,4 +112,415 @@ mysql.com
 select substring_index(c1, ".", -3) from t2;
 -- result:
 com.mysql.com
+-- !result
+select crc32("starrocks");
+-- result:
+2312449062
+-- !result
+select crc32("STARROCKS");
+-- result:
+3440849609
+-- !result
+select crc32("中文");
+-- result:
+1510599991
+-- !result
+create table crc01(c0 varchar(20), c1 varchar(20), c2 varchar(20))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into crc01 values ('hello world', 'com.mysql.com', "镜舟科技");
+-- result:
+-- !result
+select crc32(c0) from crc01;
+-- result:
+222957957
+-- !result
+select crc32(c1) from crc01;
+-- result:
+2823441944
+-- !result
+select crc32(c2) from crc01;
+-- result:
+2291122336
+-- !result
+
+
+-- name: test_ngram_search
+select ngram_search("chinese","china",4);
+-- result:
+0.5
+-- !result
+select ngram_search("chinese","CHINESE",4);
+-- result:
+0.0
+-- !result
+select ngram_search_case_insensitive("chinese","CHINESE",4);
+-- result:
+1.0
+-- !result
+select ngram_search_case_insensitive("CHINESE","chinese",4);
+-- result:
+1.0
+-- !result
+select ngram_search("chinese","",4);
+-- result:
+0.0
+-- !result
+select ngram_search("","chinese",4);
+-- result:
+0.0
+-- !result
+select ngram_search("","",4);
+-- result:
+0.0
+-- !result
+select ngram_search("chi","chi",4);
+-- result:
+0.0
+-- !result
+CREATE TABLE `string_table` (
+  `rowkey` varchar(300) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`rowkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`rowkey`) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_volume" = "builtin_storage_volume",
+    "enable_persistent_index" = "true",
+    "compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into string_table values
+("000073a7-274f-46bf-bfaf-678868cc26cd"),
+("e6249ba1-5b54-46bf-bfaf-89d69094b757"),
+("93da4b36-5401-46bf-bfa7-2bde65779623"),
+("2548c7aa-d94f-46bf-b0a4-d769f248cbb2"),
+("1bd32347-274f-4a30-93f3-9087594de9cd");
+-- result:
+-- !result
+select ngram_search(rowkey,"000073a7-274f-46bf-bfaf-678868cc26cd",4) as a from string_table order by a;
+-- result:
+0.15151512622833252
+0.1818181872367859
+0.21212118864059448
+0.24242424964904785
+1.0
+-- !result
+select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757",4) as a from string_table order by a;
+-- result:
+0.0
+0.12121212482452393
+0.1818181872367859
+0.24242424964904785
+1.0
+-- !result
+select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string_table;
+-- result:
+1.0
+0.24242424964904785
+0.15151512622833252
+0.1818181872367859
+0.21212118864059448
+-- !result
+select ngram_search("chi","chi",0);
+-- result:
+[REGEX].*third parameter must be a constant positive integer.*
+-- !result
+select ngram_search("chi","chi",-1);
+-- result:
+[REGEX].*third parameter must be a constant positive integer.*
+-- !result
+select ngram_search(date('2020-06-23'), "2020", 4);
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 49. Detail message: ngram_search function 's first parameter and second parameter must be string type.")
+-- !result
+select sum(result) from ( select ngram_search("normal_string", "normal_string", 5) as result from (   select generate_series    from TABLE(generate_series(0, 4097 - 1)) ) as t1) as t2;
+-- result:
+4097.0
+-- !result
+
+
+-- name: test_strpos
+-- function: strpos basic tests
+select strpos('abc', 'b');
+-- result:
+2
+-- !result
+select strpos('abc', 'c');
+-- result:
+3
+-- !result
+select strpos('abc', 'd');
+-- result:
+0
+-- !result
+select strpos('abc', '');
+-- result:
+1
+-- !result
+select strpos('', 'abc');
+-- result:
+0
+-- !result
+select strpos('', '');
+-- result:
+1
+-- !result
+select strpos('hello world hello', 'hello');
+-- result:
+1
+-- !result
+select strpos('abc', 'b', 1);
+-- result:
+2
+-- !result
+select strpos('abcabc', 'abc', 1);
+-- result:
+1
+-- !result
+select strpos('abcabc', 'abc', 2);
+-- result:
+4
+-- !result
+select strpos('abcabc', 'abc', 3);
+-- result:
+0
+-- !result
+select strpos('hello world hello', 'hello', 1);
+-- result:
+1
+-- !result
+select strpos('hello world hello', 'hello', 2);
+-- result:
+13
+-- !result
+select strpos('abcabc', 'abc', -1);
+-- result:
+4
+-- !result
+select strpos('abcabc', 'abc', -2);
+-- result:
+1
+-- !result
+select strpos('abcabc', 'abc', -3);
+-- result:
+0
+-- !result
+select strpos('hello world hello', 'hello', -1);
+-- result:
+13
+-- !result
+select strpos('hello world hello', 'hello', -2);
+-- result:
+1
+-- !result
+select strpos('abc', '', 1);
+-- result:
+1
+-- !result
+select strpos('', 'abc', 1);
+-- result:
+0
+-- !result
+select strpos('', '', 1);
+-- result:
+1
+-- !result
+select strpos('abc', 'abc', 0);
+-- result:
+0
+-- !result
+select strpos('abc', 'abc', -3);
+-- result:
+0
+-- !result
+select strpos(null, 'abc');
+-- result:
+None
+-- !result
+select strpos('abc', null);
+-- result:
+None
+-- !result
+select strpos('abc', 'b', null);
+-- result:
+None
+-- !result
+create table t_strpos(c0 varchar(20), c1 varchar(20), c2 int)
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_strpos values ('hello world', 'world', 1), ('hello world', 'world', -1), ('abcabc', 'abc', 2);
+-- result:
+-- !result
+select c0, c1, strpos(c0, c1) from t_strpos;
+-- result:
+abcabc	abc	1
+hello world	world	7
+hello world	world	7
+-- !result
+select c0, c1, c2, strpos(c0, c1, c2) from t_strpos;
+-- result:
+abcabc	abc	2	4
+hello world	world	1	7
+hello world	world	-1	7
+-- !result
+select format_bytes(0);
+-- result:
+0 B
+-- !result
+select format_bytes(123);
+-- result:
+123 B
+-- !result
+select format_bytes(1023);
+-- result:
+1023 B
+-- !result
+select format_bytes(1024);
+-- result:
+1.00 KB
+-- !result
+select format_bytes(4096);
+-- result:
+4.00 KB
+-- !result
+select format_bytes(123456789);
+-- result:
+117.74 MB
+-- !result
+select format_bytes(10737418240);
+-- result:
+10.00 GB
+-- !result
+select format_bytes(-1);
+-- result:
+None
+-- !result
+select format_bytes(-1024);
+-- result:
+None
+-- !result
+select format_bytes(null);
+-- result:
+None
+-- !result
+select format_bytes(1);
+-- result:
+1 B
+-- !result
+select format_bytes(512);
+-- result:
+512 B
+-- !result
+select format_bytes(1536);
+-- result:
+1.50 KB
+-- !result
+select format_bytes(2048);
+-- result:
+2.00 KB
+-- !result
+select format_bytes(1048576);
+-- result:
+1.00 MB
+-- !result
+select format_bytes(1572864);
+-- result:
+1.50 MB
+-- !result
+select format_bytes(1073741824);
+-- result:
+1.00 GB
+-- !result
+select format_bytes(2147483648);
+-- result:
+2.00 GB
+-- !result
+select format_bytes(1099511627776);
+-- result:
+1.00 TB
+-- !result
+select format_bytes(1125899906842624);
+-- result:
+1.00 PB
+-- !result
+select format_bytes(1152921504606846976);
+-- result:
+1.00 EB
+-- !result
+select format_bytes(1024 + 1);
+-- result:
+1.00 KB
+-- !result
+select format_bytes(1024 + 512);
+-- result:
+1.50 KB
+-- !result
+select format_bytes(1024 + 256);
+-- result:
+1.25 KB
+-- !result
+select format_bytes(1048576 + 52429);
+-- result:
+1.05 MB
+-- !result
+create table t_format_bytes(bytes bigint)
+        DUPLICATE KEY(bytes)
+        DISTRIBUTED BY HASH(bytes)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_format_bytes values (0), (123), (1024), (1048576), (1073741824), (-1), (null);
+-- result:
+-- !result
+select bytes, format_bytes(bytes) from t_format_bytes order by bytes;
+-- result:
+None	None
+-1	None
+0	0 B
+123	123 B
+1024	1.00 KB
+1048576	1.00 MB
+1073741824	1.00 GB
+-- !result
+
+
+-- name: test_raise_error
+select raise_error('custom error message');
+-- result:
+[REGEX].*custom error message.*
+-- !result
+select raise_error(null);
+-- result:
+None
+-- !result
+select raise_error('');
+-- result:
+[REGEX].*
+-- !result
+create table t_raise_error(id int, msg varchar(100))
+        DUPLICATE KEY(id)
+        DISTRIBUTED BY HASH(id)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_raise_error values (1, null), (2, null);
+-- result:
+-- !result
+select raise_error(msg) from t_raise_error order by id;
+-- result:
+None
+None
 -- !result

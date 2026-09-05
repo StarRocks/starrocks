@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 40
+description: "How to use Colocate Join in StarRocks to perform joins locally without network data transmission by co-locating data from joined tables in the same..."
 ---
 
 # Colocate Join
@@ -24,8 +26,7 @@ Bucket Seq is obtained by `hash(key) mod buckets`. Suppose a Table has 8 buckets
 In order to have the same data distribution, tables within the same CG must comply with the following.
 
 1. Tables within the same CG must have the identical  bucketing key (type, number, order) and the same number of buckets so that the data slices of multiple tables can be distributed and controlled one by one. The bucketing key is the columns specified in the table creation statement `DISTRIBUTED BY HASH(col1, col2, ...)`. The bucketing key determines which columns of data are Hashed into different Bucket Seqs. The name of the bucketing key can vary for tables within the same CG.The bucketing columns can be different in the creation statement, but the order of the corresponding data types in `DISTRIBUTED BY HASH(col1, col2, ...)` should be exactly the same .
-2. Tables within the same CG must have the same number of partition copies. If not, it may happen that a tablet copy has no corresponding copy in the partition of  the same BE.
-3. Tables within the same CG may have different numbers of partitions and different partition keys.
+2. Tables within the same CG may have different numbers of partitions and different partition keys.
 
 When creating a table, the CG is specified by the attribute `"colocate_with" = "group_name"` in the table PROPERTIES. If the CG does not exist, it means the table is the first table of the CG and called Parent Table. The data distribution of the Parent Table (type, number and order of split bucket keys, number of copies and number of split buckets) determines the CGS. If the CG exists, check whether the data distribution of the table is consistent with the CGS.
 
@@ -66,7 +67,7 @@ A Colocation Group belongs to a database. The name of a Colocation Group is uniq
 
 ### Delete
 
- A complete deletion is a deletion from the Recycle Bin. Normally, after a table is deleted with the `DROP TABLE` command, by default it will stay in the recycle bin for a day before being deleted). When the last table in a Group is completely deleted, the Group will also be deleted automatically.
+ A complete deletion is a deletion from the Recycle Bin. Normally, after a table is deleted with the `DROP TABLE` command, by default it will stay in the recycle bin for a day before being deleted. When the last table in a Group is completely deleted, the Group will also be deleted automatically.
 
 ### View group information
 
@@ -112,7 +113,7 @@ SHOW PROC '/colocation_group/10005.10008';
 * **BucketIndex**: Subscript of the sequence of buckets.
 * **BackendIds**: The ids of BE nodes where the bucketing data slices t are located.
 
-> Note: The above command requires AMDIN privilege. Regular users cannot access it.
+> Note: The above command requires the NODE privilege or the `cluster_admin` role. Regular users cannot access it.
 
 ### Modifying Table Group Properties
 
@@ -170,10 +171,14 @@ PARTITION BY RANGE(`k1`)
     PARTITION p1 VALUES LESS THAN ('2019-05-31'),
     PARTITION p2 VALUES LESS THAN ('2019-06-30')
 )
-DISTRIBUTED BY HASH(`k2`)
+DISTRIBUTED BY HASH(`k2`)  BUCKETS 6
 PROPERTIES (
     "colocate_with" = "group1"
 );
+INSERT INTO tbl1
+VALUES
+    ("2015-09-12",1000,1),
+    ("2015-09-13",2000,2);
 ~~~
 
 Table 2:
@@ -185,55 +190,65 @@ CREATE TABLE `tbl2` (
     `v1` double SUM NOT NULL COMMENT ""
 ) ENGINE=OLAP
 AGGREGATE KEY(`k1`, `k2`)
-DISTRIBUTED BY HASH(`k2`)
+DISTRIBUTED BY HASH(`k2`)  BUCKETS 6
 PROPERTIES (
     "colocate_with" = "group1"
 );
+INSERT INTO tbl2
+VALUES
+    ("2015-09-12 00:00:00",3000,3),
+    ("2015-09-12 00:00:00",4000,4);
 ~~~
 
 View query plan:
 
 ~~~Plain Text
-DESC SELECT * FROM tbl1 INNER JOIN tbl2 ON (tbl1.k2 = tbl2.k2);
-
-+----------------------------------------------------+
-| Explain String                                     |
-+----------------------------------------------------+
-| PLAN FRAGMENT 0                                    |
-|  OUTPUT EXPRS:`tbl1`.`k1` |                        |
-|   PARTITION: RANDOM                                |
-|                                                    |
-|   RESULT SINK                                      |
-|                                                    |
-|   2:HASH JOIN                                      |
-|   |  join op: INNER JOIN                           |
-|   |  hash predicates:                              |
-|   |  colocate: true                                |
-|   |    `tbl1`.`k2` = `tbl2`.`k2`                   |
-|   |  tuple ids: 0 1                                |
-|   |                                                |
-|   |----1:OlapScanNode                              |
-|   |       TABLE: tbl2                              |
-|   |       PREAGGREGATION: OFF. Reason: null        |
-|   |       partitions=0/1                           |
-|   |       rollup: null                             |
-|   |       buckets=0/0                              |
-|   |       cardinality=-1                           |
-|   |       avgRowSize=0.0                           |
-|   |       numNodes=0                               |
-|   |       tuple ids: 1                             |
-|   |                                                |
-|   0:OlapScanNode                                   |
-|      TABLE: tbl1                                   |
-|      PREAGGREGATION: OFF. Reason: No AggregateInfo |
-|      partitions=0/2                                |
-|      rollup: null                                  |
-|      buckets=0/0                                   |
-|      cardinality=-1                                |
-|      avgRowSize=0.0                                |
-|      numNodes=0                                    |
-|      tuple ids: 0                                  |
-+----------------------------------------------------+
+EXPLAIN SELECT * FROM tbl1 INNER JOIN tbl2 ON (tbl1.k2 = tbl2.k2);
++-------------------------------------------------------------------------+
+| Explain String                                                          |
++-------------------------------------------------------------------------+
+| PLAN FRAGMENT 0                                                         |
+|  OUTPUT EXPRS:1: k1 | 2: k2 | 3: v1 | 4: k1 | 5: k2 | 6: v1             |
+|   PARTITION: UNPARTITIONED                                              |
+|                                                                         |
+|   RESULT SINK                                                           |
+|                                                                         |
+|   3:EXCHANGE                                                            |
+|                                                                         |
+| PLAN FRAGMENT 1                                                         |
+|  OUTPUT EXPRS:                                                          |
+|   PARTITION: RANDOM                                                     |
+|                                                                         |
+|   STREAM DATA SINK                                                      |
+|     EXCHANGE ID: 03                                                     |
+|     UNPARTITIONED                                                       |
+|                                                                         |
+|   2:HASH JOIN                                                           |
+|   |  join op: INNER JOIN (COLOCATE)                                     |
+|   |  colocate: true                                                     |
+|   |  equal join conjunct: 5: k2 = 2: k2                                 |
+|   |                                                                     |
+|   |----1:OlapScanNode                                                   |
+|   |       TABLE: tbl1                                                   |
+|   |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join |
+|   |       partitions=1/2                                                |
+|   |       rollup: tbl1                                                  |
+|   |       tabletRatio=6/6                                               |
+|   |       tabletList=15344,15346,15348,15350,15352,15354                |
+|   |       cardinality=1                                                 |
+|   |       avgRowSize=3.0                                                |
+|   |                                                                     |
+|   0:OlapScanNode                                                        |
+|      TABLE: tbl2                                                        |
+|      PREAGGREGATION: OFF. Reason: None aggregate function               |
+|      partitions=1/1                                                     |
+|      rollup: tbl2                                                       |
+|      tabletRatio=6/6                                                    |
+|      tabletList=15373,15375,15377,15379,15381,15383                     |
+|      cardinality=1                                                      |
+|      avgRowSize=3.0                                                     |
++-------------------------------------------------------------------------+
+40 rows in set (0.03 sec)
 ~~~
 
 If a Colocate Join takes effect, the Hash Join node displays `colocate: true`.
@@ -318,7 +333,7 @@ Whether to disable automatic Colocation replica balancing for StarRocks. The def
 
 StarRocks provides several HTTP Restful APIs related to Colocate Join for viewing and modifying Colocation Groups.
 
-This API is implemented on the FE and can be accessed using `fe_host:fe_http_port` with ADMIN permissions.
+This API is implemented on the FE and can be accessed using `fe_host:fe_http_port` with `db_admin` and `user_admin` permissions.
 
 1. View all Colocation information of a cluster
 

@@ -15,45 +15,57 @@
 
 package com.starrocks.persist;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 
 public class DropCatalogTest {
 
     private String fileName = "./DropCatalogTest";
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+    }
 
-
-    @After
+    @AfterEach
     public void tearDownDrop() throws Exception {
         File file = new File(fileName);
         file.delete();
     }
 
     @Test
-    public void testNormal() throws IOException {
-        // 1. Write objects to file
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+    public void testDropCatalog() throws Exception {
+        String dropSql = "DROP CATALOG IF EXISTS hive_catalog";
 
-        DropCatalogLog dropCatalogLog =
-                new DropCatalogLog("catalog_name");
-        dropCatalogLog.write(out);
-        out.flush();
-        out.close();
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
 
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        DropCatalogLog readDropCatalogInfo = DropCatalogLog.read(in);
-        Assert.assertEquals(readDropCatalogInfo.getCatalogName(), "catalog_name");
-        in.close();
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        Assertions.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+
+        StatementBase dropStmtBase = AnalyzeTestUtil.analyzeSuccess(dropSql);
+        Assertions.assertEquals("DROP CATALOG IF EXISTS \'hive_catalog\'", dropStmtBase.toSql());
+        Assertions.assertTrue(dropStmtBase instanceof DropCatalogStmt);
+        DropCatalogStmt dropCatalogStmt = (DropCatalogStmt) dropStmtBase;
+        DDLStmtExecutor.execute(dropCatalogStmt, connectCtx);
+        Assertions.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+
     }
 }

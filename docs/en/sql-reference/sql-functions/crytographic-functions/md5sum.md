@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Calculates the 128-bit checksum of multiple strings."
 ---
 
 # md5sum

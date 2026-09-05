@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Adds a new element to the end of the array."
 ---
 
 # array_append
 
-## Description
+
 
 Adds a new element to the end of the array. Returns an array.
 

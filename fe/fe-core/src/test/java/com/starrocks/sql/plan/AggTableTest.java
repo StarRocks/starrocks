@@ -15,10 +15,12 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.Test;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class AggTableTest extends PlanTestBase {
     public static void assertTestAggOFF(String sql, String reason) {
@@ -164,4 +166,77 @@ public class AggTableTest extends PlanTestBase {
         String sql = getFragmentPlan("select NDV(v2) from test_agg group by k1");
         assertTestAggOFF(sql, "Aggregation function NDV just work on key column");
     }
+
+    @Test
+    public void testAggregateOverJsonSubfieldOfAggTable() throws Exception {
+        // The JSON path pushdown rewrites get_json_xxx(col, '<constant path>') into a synthetic subfield
+        // column on the scan, and a synthetic subfield has no aggregation type. This rule compares the
+        // query's aggregate against every scanned column's aggregation type, so it dereferenced null and
+        // the raw NullPointerException reached the client as ERROR 1064 -- only for AGGREGATE KEY tables,
+        // which are the ones that run this rule at all. Nothing can be pre-aggregated through a derived
+        // subfield, so the scan turns pre-aggregation off.
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `agg_json` (\n" +
+                "  `k` int(11) NULL,\n" +
+                "  `v` json REPLACE\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k`)\n" +
+                "DISTRIBUTED BY HASH(`k`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        String plan = getFragmentPlan("select sum(get_json_int(v, '$.a')) from agg_json");
+        assertContains(plan, "TABLE: agg_json");
+        assertContains(plan, "PREAGGREGATION: OFF");
+
+        // A key-column aggregate on the same table still pre-aggregates.
+        assertContains(getFragmentPlan("select max(k) from agg_json"), "PREAGGREGATION: ON");
+    }
+
+    @Test
+    public void testMultiDistinctCountWithSum() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `reproduce` (\n" +
+                "  `id` int(11) NULL COMMENT \"\",\n" +
+                "  `v2` int(11) NULL COMMENT \"\",\n" +
+                "  `v3` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`, `v2`, `v3`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        String sql = "select COUNT(distinct (case WHEN 1=2 THEN v2 else null end)) AS x0, " +
+                      "COUNT(distinct (case WHEN (true) THEN v2 else null end)) AS x1, " +
+                      "SUM((case WHEN (true) THEN v3 else null end)) " +
+                      "FROM reproduce";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: multi_distinct_count(NULL), multi_distinct_count(2: v2), sum(3: v3)");
+    }
+
+    @Test
+    public void testSplitTopNAgg() throws Exception {
+        final SessionVariable sv = ConnectContext.get().getSessionVariable();
+        sv.setEnableSplitTopNAgg(true);
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS invalid_plan (\n" +
+                "    `time` DATETIME NOT NULL,\n" +
+                "    `country` STRING NOT NULL,\n" +
+                "    `spend` DOUBLE SUM DEFAULT \"0\",\n" +
+                "    `revenue` DOUBLE SUM DEFAULT \"0\"\n" +
+                ")\n" +
+                "ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`time`, `country`)\n" +
+                "PARTITION BY date_trunc('day', `time`)\n" +
+                "DISTRIBUTED BY HASH(`country`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\" \n" +
+                ");");
+        String sql = "SELECT sum(spend) AS spend, sum(revenue) AS revenue FROM invalid_plan WHERE " +
+                "time >= '2000-01-01' ORDER BY spend DESC LIMIT 200;";
+        // Should not throw "Invalid plan" due to prunedPartitionPredicates col refs mismatch
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "invalid_plan");
+    }
+
+
 }

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "根据指定时间单位，返回输入日期对应的最后一天。"
 ---
 
 # last_day
 
-## 功能
+
 
 根据指定的时间单位，返回输入的日期对应的最后一天。比如 `last_day('2023-05-10', 'month')` 返回 '2023-05-10' 所在月份的最后一天。
 

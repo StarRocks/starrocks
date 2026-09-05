@@ -41,14 +41,14 @@
 #include <string>
 #include <vector>
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "runtime/mem_pool.h"
-#include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "util/coding.h"
-#include "util/faststring.h"
-#include "util/slice.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 
@@ -121,16 +121,15 @@ class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
     BinaryPrefixPageDecoder(Slice data) : _data(data) {}
 
-    [[nodiscard]] Status init() override;
+    Status init() override;
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override;
+    Status seek_to_position_in_page(uint32_t pos) override;
 
-    [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override;
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override;
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
-
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
     uint32_t count() const override {
         DCHECK(_parsed);
         return _num_values;

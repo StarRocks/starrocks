@@ -1,0 +1,53 @@
+-- name: test_spill_sort_restore_error @sequential
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop=4;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(100))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t1 SELECT generate_series, 100000 - generate_series FROM TABLE(generate_series(1, 300000));
+-- result:
+-- !result
+admin enable failpoint 'spill_restore_error';
+-- result:
+-- !result
+set enable_parallel_merge=true;
+-- result:
+-- !result
+[UC] select count(*) from (select k1, k2 from t1 order by k1, k2) t;
+[UC] select sum(k1) from (select k1, k2 from t1 order by k1, k2 limit 270000, 10) t;
+set enable_parallel_merge=false;
+-- result:
+-- !result
+[UC] select count(*) from (select k1, k2 from t1 order by k1, k2) t;
+[UC] select sum(k1) from (select k1, k2 from t1 order by k1, k2 limit 270000, 10) t;
+admin disable failpoint 'spill_restore_error';
+-- result:
+-- !result
+set enable_parallel_merge=true;
+-- result:
+-- !result
+select count(*) from (select k1, k2 from t1 order by k1, k2) t;
+-- result:
+300000
+-- !result
+set enable_parallel_merge=false;
+-- result:
+-- !result
+select count(*) from (select k1, k2 from t1 order by k1, k2) t;
+-- result:
+300000
+-- !result
+CLEANUP {
+    admin disable failpoint 'spill_restore_error';
+} END CLEANUP

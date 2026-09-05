@@ -93,6 +93,17 @@ PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string co
     validate();
 }
 
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
+                             const std::vector<Literal>& literals)
+        : mOperator(op),
+          mType(type),
+          mHasColumnName(false),
+          mColumnId(columnId),
+          mLiterals(literals.begin(), literals.end()) {
+    mHashCode = hashCode();
+    validate();
+}
+
 void PredicateLeaf::validateColumn() const {
     if (mHasColumnName && mColumnName.empty()) {
         throw std::invalid_argument("column name should not be empty");
@@ -693,6 +704,9 @@ TruthValue PredicateLeaf::evaluate(const WriterVersion writerVersion, const prot
             return TruthValue::YES_NO_NULL;
         }
     }
+
+    // files written by trino may lack of hasnull field.
+    if (!colStats.has_hasnull()) return TruthValue::YES_NO_NULL;
 
     bool allNull = colStats.hasnull() && colStats.numberofvalues() == 0;
     if (mOperator == Operator::IS_NULL ||

@@ -1,0 +1,22 @@
+diff --git a/cmake/ragel.cmake b/cmake/ragel.cmake
+index 7af794a..d2e6180 100644
+--- a/cmake/ragel.cmake
++++ b/cmake/ragel.cmake
+@@ -24,13 +24,6 @@
+  function(ragelcopyer src_rl)
+      get_filename_component(src_dir ${src_rl} PATH) # old cmake needs PATH
+      get_filename_component(src_file ${src_rl} NAME_WE)
+-     set(rl_out ${CMAKE_CURRENT_BINARY_DIR}/${src_dir}/${src_file}.cpp)
+-     add_custom_command(
+-             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${src_dir}/${src_file}.cpp
+-             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/${src_dir}
+-			 COMMAND ${COPY} -f  ${CMAKE_CURRENT_SOURCE_DIR}/${src_dir}/${src_file}.cpp ${rl_out} 2>/dev/null ||:
+-             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${src_dir}/${src_file}.cpp
+-     )
+-     add_custom_target(ragel_${src_file} DEPENDS ${rl_out})
+-     set_source_files_properties(${rl_out} PROPERTIES GENERATED TRUE)
+- endfunction(ragelcopyer)
+\ No newline at end of file
++     add_custom_target(ragel_${src_file}
++             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${src_dir}/${src_file}.cpp)
++ endfunction(ragelcopyer)

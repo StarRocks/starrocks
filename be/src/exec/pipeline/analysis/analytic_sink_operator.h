@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/analytor.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
@@ -60,6 +60,7 @@ public:
               _analytor_factory(std::move(analytor_factory)) {}
 
     ~AnalyticSinkOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         auto analytor = _analytor_factory->create(driver_sequence);

@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 /**
@@ -30,7 +30,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
  * - Aggregate
  * - Scan
  */
-public class AggregateScanRule extends SingleTableRewriteBaseRule {
+public class AggregateScanRule extends BaseMaterializedViewRewriteRule {
     private static final AggregateScanRule INSTANCE = new AggregateScanRule();
 
     public AggregateScanRule() {
@@ -51,7 +51,8 @@ public class AggregateScanRule extends SingleTableRewriteBaseRule {
     }
 
     @Override
-    public MaterializedViewRewriter getMaterializedViewRewrite(MvRewriteContext mvContext) {
+    public IMaterializedViewRewriter createRewriter(OptimizerContext optimizerContext,
+                                                    MvRewriteContext mvContext) {
         return new AggregatedMaterializedViewRewriter(mvContext);
     }
 }

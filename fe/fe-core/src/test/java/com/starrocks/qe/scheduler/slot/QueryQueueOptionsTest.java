@@ -1,0 +1,356 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.qe.scheduler.slot;
+
+import com.starrocks.common.Config;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.scheduler.SchedulerTestBase;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.BackendResourceStat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
+import static org.assertj.core.api.Assertions.assertThat;
+
+public class QueryQueueOptionsTest extends SchedulerTestBase {
+    private boolean prevEnableQueryQueueV2 = false;
+    private boolean prevEnableQueryQueueSelect = false;
+    private int prevQueryQueueV2ConcurrencyLevel = 0;
+    private long prevQueryQueueV2MemBytesPerSlot = 0;
+    private String prevQueryQueueSlotsEstimatorStrategy;
+
+    @BeforeEach
+    public void before() {
+        prevEnableQueryQueueV2 = Config.enable_query_queue_v2;
+        prevEnableQueryQueueSelect = GlobalVariable.isEnableQueryQueueSelect();
+        prevQueryQueueV2ConcurrencyLevel = Config.query_queue_v2_concurrency_level;
+        prevQueryQueueV2MemBytesPerSlot = Config.query_queue_v2_mem_bytes_per_slot;
+        prevQueryQueueSlotsEstimatorStrategy = Config.query_queue_slots_estimator_strategy;
+        Config.query_queue_v2_concurrency_level = 4;
+        Config.query_queue_v2_mem_bytes_per_slot = 0;
+        Config.query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
+    }
+
+    @AfterEach
+    public void after() {
+        Config.enable_query_queue_v2 = prevEnableQueryQueueV2;
+        Config.query_queue_v2_concurrency_level = prevQueryQueueV2ConcurrencyLevel;
+        Config.query_queue_v2_mem_bytes_per_slot = prevQueryQueueV2MemBytesPerSlot;
+        Config.query_queue_slots_estimator_strategy = prevQueryQueueSlotsEstimatorStrategy;
+        GlobalVariable.setEnableQueryQueueSelect(prevEnableQueryQueueSelect);
+
+        BackendResourceStat.getInstance().reset();
+    }
+
+    @Test
+    public void testZeroConcurrencyLevel() {
+        QueryQueueOptions.V2 opts = new QueryQueueOptions.V2(0, 0, 0, 0, 0, 0, 0);
+        assertThat(opts.getTotalSlots()).isOne();
+    }
+
+    @Test
+    public void testZeroOthers() {
+        QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2(2, 0, 0, 0, 0, 0, 0));
+        assertThat(opts.v2().getNumWorkers()).isOne();
+        assertThat(opts.v2().getNumRowsPerSlot()).isOne();
+        assertThat(opts.v2().getTotalSlots()).isOne();
+        assertThat(opts.v2().getTotalSmallSlots()).isZero();
+        assertThat(opts.v2().getMemBytesPerSlot()).isEqualTo(Long.MAX_VALUE);
+        assertThat(opts.v2().getCpuCostsPerSlot()).isOne();
+    }
+
+    @Test
+    public void testTotalSlotsSaturatesWhenCapacityOverflowsInteger() {
+        QueryQueueOptions.V2 opts = new QueryQueueOptions.V2(Integer.MAX_VALUE, Integer.MAX_VALUE, 1,
+                1024L, 0, 4096, 100);
+        assertThat(opts.getTotalSlots()).isEqualTo(Integer.MAX_VALUE);
+    }
+
+    @Test
+    public void testCoreTotalSlotsClampedToNumWorkers() {
+        // A below-default capacity level on a low-core warehouse can drive core-based total slots under the
+        // worker count (3 one-core workers at level 1 => round(3 * 1 * 1/4) = 1). SlotSelectionStrategyV2's
+        // WeightedRoundRobinQueue then computes numSlotsPerWorker = totalSlots / numWorkers = 0 and
+        // Utils.log2(0) = -1, corrupting the sub-queue bounds. Total slots must stay >= numWorkers.
+        QueryQueueOptions.V2 opts = new QueryQueueOptions.V2(1, 3, 1, 0, 0, 4096, 100);
+        assertThat(opts.getNumWorkers()).isEqualTo(3);
+        assertThat(opts.getTotalSlots()).isGreaterThanOrEqualTo(opts.getNumWorkers());
+    }
+
+    @Test
+    public void testMemoryTotalSlotsClampedToNumWorkers() {
+        // Same invariant for the memory-based estimator: a tight memory budget can yield
+        // floor(3 * 64GB * 1/4 / 32GB) = 1 < numWorkers, which would corrupt the WRR queue as well.
+        final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+        final long memBytesPerSlot = 32L * 1024 * 1024 * 1024;
+        QueryQueueOptions.V2 opts = new QueryQueueOptions.V2(1, 3, 16, memLimitBytes, memBytesPerSlot, 4096, 100,
+                SlotEstimatorFactory.EstimatorPolicy.MBE);
+        assertThat(opts.getNumWorkers()).isEqualTo(3);
+        assertThat(opts.getTotalSlots()).isGreaterThanOrEqualTo(opts.getNumWorkers());
+    }
+
+    @Test
+    public void testAutoMemBytesPerSlotUsesMemPerCore() {
+        final int numCores = 16;
+        final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+
+        QueryQueueOptions.V2 opts = new QueryQueueOptions.V2(8, 1, numCores, memLimitBytes, 0, 4096, 100);
+        assertThat(opts.getMemBytesPerSlot()).isEqualTo(memLimitBytes / numCores);
+
+        QueryQueueOptions.V2 legacyOpts = new QueryQueueOptions.V2(8, 1, numCores, memLimitBytes, 4096, 100);
+        assertThat(legacyOpts.getMemBytesPerSlot()).isEqualTo(memLimitBytes / numCores);
+
+        QueryQueueOptions.V2 invalidCoresOpts = new QueryQueueOptions.V2(2, 1, 0, 1024L, 0, 4096, 100);
+        assertThat(invalidCoresOpts.getMemBytesPerSlot()).isEqualTo(Long.MAX_VALUE);
+    }
+
+    @Test
+    public void testCreateFromEnv() {
+        {
+            Config.enable_query_queue_v2 = false;
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+            assertThat(opts.isEnableQueryQueueV2()).isFalse();
+        }
+
+        {
+            final int numCores = 16;
+            final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+            final int numBEs = 2;
+            final int concurrencyLevel = Config.query_queue_v2_concurrency_level;
+
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 1, memLimitBytes);
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 2, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 2, memLimitBytes);
+            Config.enable_query_queue_v2 = true;
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            int effectiveConcurrencyLevel = concurrencyLevel <= 0 ? 4 : concurrencyLevel;
+            double capacityRatio = (double) effectiveConcurrencyLevel / 4;
+
+            assertThat(opts.isEnableQueryQueueV2()).isTrue();
+            assertThat(opts.v2().getNumWorkers()).isEqualTo(numBEs);
+            assertThat(opts.v2().getNumRowsPerSlot()).isEqualTo(Config.query_queue_v2_num_rows_per_slot);
+            assertThat(opts.v2().getTotalSlots()).isEqualTo((int) Math.round(numBEs * numCores * capacityRatio));
+            assertThat(opts.v2().getMemBytesPerSlot()).isEqualTo(memLimitBytes / numCores);
+            assertThat(opts.v2().getTotalSmallSlots()).isZero();
+        }
+    }
+
+    @Test
+    public void testCreateFromEnvUsesDefaultCapacityLevelWhenConcurrencyLevelIsZero() {
+        int prevConcurrencyLevel = Config.query_queue_v2_concurrency_level;
+        try {
+            final int numCores = 16;
+            final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+            final int numBEs = 2;
+
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 1, memLimitBytes);
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 2, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 2, memLimitBytes);
+            Config.enable_query_queue_v2 = true;
+            Config.query_queue_v2_concurrency_level = 0;
+
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            int effectiveConcurrencyLevel = 4;
+            double capacityRatio = (double) effectiveConcurrencyLevel / 4;
+
+            assertThat(opts.isEnableQueryQueueV2()).isTrue();
+            assertThat(opts.v2().getNumWorkers()).isEqualTo(numBEs);
+            assertThat(opts.v2().getTotalSlots()).isEqualTo((int) (numBEs * numCores * capacityRatio));
+            assertThat(opts.v2().getMemBytesPerSlot()).isEqualTo(memLimitBytes / numCores);
+            assertThat(opts.v2().getTotalSmallSlots()).isZero();
+        } finally {
+            Config.query_queue_v2_concurrency_level = prevConcurrencyLevel;
+        }
+    }
+
+    @Test
+    public void testCreateFromEnvUsesConcurrencyLevelAsCapacityLevel() {
+        int prevConcurrencyLevel = Config.query_queue_v2_concurrency_level;
+        try {
+            final int numCores = 16;
+            final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+            final int numBEs = 2;
+            final int concurrencyLevel = 8;
+
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 1, memLimitBytes);
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 2, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 2, memLimitBytes);
+            Config.enable_query_queue_v2 = true;
+            Config.query_queue_v2_concurrency_level = concurrencyLevel;
+
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            double capacityRatio = (double) concurrencyLevel / 4;
+
+            assertThat(opts.isEnableQueryQueueV2()).isTrue();
+            assertThat(opts.v2().getNumWorkers()).isEqualTo(numBEs);
+            assertThat(opts.v2().getTotalSlots()).isEqualTo((int) (numBEs * numCores * capacityRatio));
+            assertThat(opts.v2().getMemBytesPerSlot()).isEqualTo(memLimitBytes / numCores);
+            assertThat(opts.v2().getTotalSmallSlots()).isZero();
+        } finally {
+            Config.query_queue_v2_concurrency_level = prevConcurrencyLevel;
+        }
+    }
+
+    @Test
+    public void testCreateFromEnvUsesConfiguredMemBytesPerSlot() {
+        final int numCores = 16;
+        final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+        final long configuredMemBytesPerSlot = 2L * 1024 * 1024 * 1024;
+
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, numCores);
+        BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 1, memLimitBytes);
+        Config.enable_query_queue_v2 = true;
+        Config.query_queue_v2_concurrency_level = 8;
+        Config.query_queue_v2_mem_bytes_per_slot = configuredMemBytesPerSlot;
+
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        assertThat(opts.v2().getTotalSlots()).isEqualTo(32);
+        assertThat(opts.v2().getMemBytesPerSlot()).isEqualTo(configuredMemBytesPerSlot);
+    }
+
+    @Test
+    public void testCreateFromEnvUsesMemoryBudgetTotalSlotsForMemoryBasedEstimator() {
+        final int numCores = 16;
+        final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+        final int numBEs = 3;
+        final int concurrencyLevel = 8;
+        final long configuredMemBytesPerSlot = 8L * 1024 * 1024 * 1024;
+
+        for (int backendId = 1; backendId <= numBEs; backendId++) {
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, backendId, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, backendId, memLimitBytes);
+        }
+        Config.enable_query_queue_v2 = true;
+        Config.query_queue_slots_estimator_strategy = "MBE";
+        Config.query_queue_v2_concurrency_level = concurrencyLevel;
+        Config.query_queue_v2_mem_bytes_per_slot = configuredMemBytesPerSlot;
+
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        double capacityRatio = (double) concurrencyLevel / 4;
+        int expectedTotalSlots = (int) Math.floor(numBEs * (double) memLimitBytes * capacityRatio
+                / configuredMemBytesPerSlot);
+
+        assertThat(opts.v2().getTotalSlots()).isEqualTo(expectedTotalSlots);
+        assertThat(opts.v2().getMemBytesPerSlot()).isEqualTo(configuredMemBytesPerSlot);
+    }
+
+    @Test
+    public void testCreateFromEnvUsesMemPerCoreWhenMemBytesPerSlotIsAuto() {
+        int prevConcurrencyLevel = Config.query_queue_v2_concurrency_level;
+        try {
+            final int numCores = 16;
+            final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, numCores);
+            BackendResourceStat.getInstance().setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 1, memLimitBytes);
+            Config.enable_query_queue_v2 = true;
+            Config.query_queue_v2_concurrency_level = 8;
+            Config.query_queue_v2_mem_bytes_per_slot = 0;
+
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+            assertThat(opts.v2().getTotalSlots()).isEqualTo(32);
+            assertThat(opts.v2().getMemBytesPerSlot()).isEqualTo(memLimitBytes / numCores);
+        } finally {
+            Config.query_queue_v2_concurrency_level = prevConcurrencyLevel;
+        }
+    }
+
+    @Test
+    public void testCreateFromEnvAndQuery() throws Exception {
+        Config.enable_query_queue_v2 = true;
+
+        {
+            GlobalVariable.setEnableQueryQueueSelect(false);
+            DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(enable_query_queue=true)*/ * FROM lineitem");
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coordinator);
+            assertThat(opts.isEnableQueryQueueV2()).isFalse();
+        }
+
+        {
+            GlobalVariable.setEnableQueryQueueSelect(true);
+            DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(enable_query_queue=true)*/ * FROM lineitem");
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coordinator);
+            assertThat(opts.isEnableQueryQueueV2()).isTrue();
+        }
+
+        {
+            GlobalVariable.setEnableQueryQueueSelect(true);
+            DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(enable_query_queue=false)*/ * FROM lineitem");
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coordinator);
+            assertThat(opts.isEnableQueryQueueV2()).isFalse();
+        }
+
+        {
+            GlobalVariable.setEnableQueryQueueSelect(true);
+            DefaultCoordinator coordinator = getScheduler(
+                    "SELECT /*+SET_VAR(enable_query_queue=true)*/ * FROM information_schema.columns");
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coordinator);
+            assertThat(opts.isEnableQueryQueueV2()).isFalse();
+        }
+    }
+
+    @Test
+    public void testCreateV2WithMetrics() {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        assertThat(warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID)).isNotNull();
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        assertThat(slotManager.getQueryQueuePendingTimeoutSecond(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+                .isEqualTo(GlobalVariable.getQueryQueuePendingTimeoutSecond());
+        assertThat(slotManager.getQueryQueueMaxQueuedQueries(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+                .isEqualTo(GlobalVariable.getQueryQueueMaxQueuedQueries());
+        assertThat(slotManager.isEnableQueryQueueV2(WarehouseManager.DEFAULT_WAREHOUSE_ID))
+                .isEqualTo(Config.enable_query_queue_v2);
+
+        {
+            Config.enable_query_queue_v2 = false;
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            assertThat(opts.isEnableQueryQueueV2()).isFalse();
+            assertThat(opts.v2()).isEqualTo(new QueryQueueOptions.V2());
+        }
+
+        {
+            Config.enable_query_queue_v2 = true;
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            assertThat(opts.isEnableQueryQueueV2()).isTrue();
+            assertThat(opts.v2()).isNotEqualTo(new QueryQueueOptions.V2());
+            QueryQueueOptions.V2 v2 = opts.v2();
+            assertThat(v2.getNumWorkers()).isEqualTo(1);
+            assertThat(v2.getNumRowsPerSlot()).isEqualTo(Config.query_queue_v2_num_rows_per_slot);
+            assertThat(v2.getTotalSlots()).isOne();
+            assertThat(v2.getTotalSmallSlots()).isZero();
+            assertThat(v2.getCpuCostsPerSlot()).isEqualTo(Config.query_queue_v2_cpu_costs_per_slot);
+        }
+    }
+
+    @Test
+    public void testCorrectSlotNum() {
+        assertThat(QueryQueueOptions.correctSlotNum(-1)).isEqualTo(0);
+        assertThat(QueryQueueOptions.correctSlotNum(0)).isEqualTo(0);
+        assertThat(QueryQueueOptions.correctSlotNum(1)).isEqualTo(1);
+        assertThat(QueryQueueOptions.correctSlotNum(2)).isEqualTo(2);
+        assertThat(QueryQueueOptions.correctSlotNum(4)).isEqualTo(4);
+        assertThat(QueryQueueOptions.correctSlotNum(5)).isEqualTo(5);
+    }
+}

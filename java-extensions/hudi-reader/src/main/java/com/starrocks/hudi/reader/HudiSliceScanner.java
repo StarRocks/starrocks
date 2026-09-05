@@ -14,6 +14,7 @@
 
 package com.starrocks.hudi.reader;
 
+import com.starrocks.connector.share.credential.CloudConfigurationApplier;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -78,18 +79,20 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final int fetchSize;
     private final ClassLoader classLoader;
     private final String fsOptionsProps;
+    private final Map<String, String> fsOptionsPropsMap;
+    private final String timeZone;
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
-        this.hiveColumnTypes = params.get("hive_column_types").split("#");
-        this.requiredFields = params.get("required_fields").split(",");
-        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
+        this.hiveColumnTypes = ScannerHelper.splitAndOmitEmptyStrings(params.get("hive_column_types"), "#");
+        this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
+        this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
         this.instantTime = params.get("instant_time");
         if (params.get("delta_file_paths").length() == 0) {
             this.deltaFilePaths = new String[0];
         } else {
-            this.deltaFilePaths = params.get("delta_file_paths").split(",");
+            this.deltaFilePaths = ScannerHelper.splitAndOmitEmptyStrings(params.get("delta_file_paths"), ",");
         }
         this.basePath = params.get("base_path");
         this.dataFilePath = params.get("data_file_path");
@@ -100,9 +103,16 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
         this.fsOptionsProps = params.get("fs_options_props");
+        Map<String, String> propsMap = new HashMap<>();
+        ScannerHelper.parseFSOptionsProps(this.fsOptionsProps, kv -> {
+            propsMap.put(kv[0], kv[1]);
+            return null;
+        }, t -> null);
+        this.fsOptionsPropsMap = propsMap;
         for (Map.Entry<String, String> kv : params.entrySet()) {
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
+        this.timeZone = params.get("time_zone");
     }
 
     private JobConf makeJobConf(Properties properties) {
@@ -110,11 +120,12 @@ public class HudiSliceScanner extends ConnectorScanner {
         JobConf jobConf = new JobConf(conf);
         jobConf.setBoolean("hive.io.file.read.all.columns", false);
         properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
+        CloudConfigurationApplier.applyCloudConfiguration(fsOptionsPropsMap, jobConf);
         return jobConf;
     }
 
     private void parseRequiredTypes() {
-        String[] hiveColumnNames = this.hiveColumnNames.split(",");
+        String[] hiveColumnNames = ScannerHelper.splitAndOmitEmptyStrings(this.hiveColumnNames, ",");
         HashMap<String, Integer> hiveColumnNameToIndex = new HashMap<>();
         HashMap<String, String> hiveColumnNameToType = new HashMap<>();
         for (int i = 0; i < hiveColumnNames.length; i++) {
@@ -163,7 +174,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp
 
         List<String> types = new ArrayList<>();
-        String[] hiveColumnNames = this.hiveColumnNames.split(",");
+        String[] hiveColumnNames = ScannerHelper.splitAndOmitEmptyStrings(this.hiveColumnNames, ",");
         for (int i = 0; i < this.hiveColumnTypes.length; i++) {
             ColumnType columnType = new ColumnType(hiveColumnNames[i], hiveColumnTypes[i]);
             String type = HudiScannerUtils.mapColumnTypeToHiveType(columnType);
@@ -248,7 +259,7 @@ public class HudiSliceScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData);
+                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData, timeZone);
                         appendData(i, fieldValue);
                     }
                 }

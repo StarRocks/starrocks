@@ -1,0 +1,27 @@
+-- name: testORCBuildSearchArgument
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/multi_stripes.orc oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/multi_stripes.orc | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE multi_stripes
+(
+    c0 int,
+    c1 string
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+select count(*) from multi_stripes;
+select count(*) from multi_stripes where c1 is not null;
+select count(*) from multi_stripes where c1 is null;
+select count(*) from multi_stripes where c1 like '%smith%';
+select count(*) from multi_stripes where c1 = '%smith%';
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

@@ -15,12 +15,12 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -28,13 +28,19 @@ import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
+import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.List;
@@ -85,44 +91,119 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                    HashDistributionSpec rightLocalDistributionSpec,
                                    List<DistributionCol> leftShuffleColumns,
                                    List<DistributionCol> rightShuffleColumns) {
-        HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
-        HashDistributionDesc rightLocalDistributionDesc = rightLocalDistributionSpec.getHashDistributionDesc();
-
         if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
             return false;
         }
+        return canColocate(leftLocalDistributionSpec, rightLocalDistributionSpec, leftShuffleColumns,
+                rightShuffleColumns);
 
-        EquivalentDescriptor leftDesc = leftLocalDistributionSpec.getEquivDesc();
-        EquivalentDescriptor rightDesc = rightLocalDistributionSpec.getEquivDesc();
+    }
 
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
-        long leftTableId = leftDesc.getTableId();
-        long rightTableId = rightDesc.getTableId();
-
-        // join self
-        if (leftTableId == rightTableId && !colocateIndex.isColocateTable(leftTableId)) {
-            if (!leftDesc.isSinglePartition() || !rightDesc.isSinglePartition() ||
-                    !leftDesc.getPartitionIds().equals(rightDesc.getPartitionIds())) {
-                return false;
-            }
-        } else {
-            // colocate group
-            if (!colocateIndex.isSameGroup(leftTableId, rightTableId)) {
-                return false;
-            }
-
-            ColocateTableIndex.GroupId leftGroupId = colocateIndex.getGroup(leftTableId);
-            ColocateTableIndex.GroupId rightGroupId = colocateIndex.getGroup(rightTableId);
-            if (colocateIndex.isGroupUnstable(leftGroupId) || colocateIndex.isGroupUnstable(rightGroupId)) {
-                return false;
-            }
-            checkState(leftLocalDistributionDesc.getDistributionCols().size()
-                            == rightLocalDistributionDesc.getDistributionCols().size(),
-                    "Failed to enforce the output property of children in the join operator. " +
-                            "left child distribution info %s, right child distribution info %s",
-                    leftLocalDistributionSpec, rightLocalDistributionSpec);
+    /**
+     * Range-colocate join gate. All gates must pass to skip the shuffle.
+     * <ol>
+     * <li>Join hint: user-specified {@code HINT_JOIN_SHUFFLE},
+     *     {@code HINT_JOIN_SKEW}, or {@code HINT_JOIN_BUCKET} disables
+     *     colocate. Only {@code null} or {@code HINT_JOIN_COLOCATE} lets
+     *     the range fast path proceed.
+     * <li>Join-type allowlist: INNER, LEFT/RIGHT OUTER, LEFT/RIGHT SEMI,
+     *     LEFT/RIGHT ANTI, FULL OUTER. All equi-join families are colocate-safe
+     *     because a colocate range join is bucket-local: rows sharing a colocate
+     *     key (NULL included — NULL sorts into the first ColocateRange on every
+     *     table in the group) always land in the same bucket, so the unmatched
+     *     right rows a right/full-outer join must emit are produced by the right
+     *     scan node in the same fragment. CROSS, NULL-aware anti, and ASOF joins
+     *     stay rejected (no covering equijoin key / cross-bucket NULL semantics /
+     *     inequality match).
+     * <li>{@code disable_colocate_join} session kill switch (shared with
+     *     hash colocate).
+     * <li>Structural {@link RangeDistributionSpec#canColocate}: same group,
+     *     both stable, non-empty partitions, same colocate column count.
+     * <li>Position-preserving join-key pairing: for each colocate column
+     *     index {@code i}, there must exist some equijoin-pair index
+     *     {@code k} such that left colocate[i] is equivalent to
+     *     leftShuffle[k] AND right colocate[i] is equivalent to
+     *     rightShuffle[k]. Same {@code k} on both sides blocks
+     *     swapped-column joins. Each side uses its own descriptor.
+     * </ol>
+     * {@code isConnected} argument order is {@code (required, existing)} —
+     * shuffle column is required, colocate column is existing — matching
+     * {@code checkChildDistributionSatisfyShuffle} and
+     * {@code HashDistributionSpec.isJoinEqColumnsCompatible}.
+     */
+    private boolean canRangeColocateJoin(String hint,
+                                         JoinOperator joinType,
+                                         RangeDistributionSpec leftSpec,
+                                         RangeDistributionSpec rightSpec,
+                                         List<DistributionCol> leftShuffleColumns,
+                                         List<DistributionCol> rightShuffleColumns) {
+        // User hint takes precedence over the range fast path. Mirrors the
+        // hash path (line 438 area) which enforces shuffle when the user asks
+        // for SHUFFLE/SKEW/BUCKET regardless of local-hash detection.
+        if (HintNode.HINT_JOIN_SHUFFLE.equals(hint)
+                || HintNode.HINT_JOIN_SKEW.equals(hint)
+                || HintNode.HINT_JOIN_BUCKET.equals(hint)) {
+            return false;
         }
+        boolean supportedJoinType = joinType == JoinOperator.INNER_JOIN
+                || joinType == JoinOperator.LEFT_OUTER_JOIN
+                || joinType == JoinOperator.LEFT_SEMI_JOIN
+                || joinType == JoinOperator.LEFT_ANTI_JOIN
+                || joinType == JoinOperator.RIGHT_OUTER_JOIN
+                || joinType == JoinOperator.RIGHT_SEMI_JOIN
+                || joinType == JoinOperator.RIGHT_ANTI_JOIN
+                || joinType == JoinOperator.FULL_OUTER_JOIN;
+        if (!supportedJoinType) {
+            return false;
+        }
+        if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
+            return false;
+        }
+        if (!leftSpec.canColocate(rightSpec)) {
+            return false;
+        }
+        if (leftShuffleColumns.size() != rightShuffleColumns.size()) {
+            return false;
+        }
+        List<DistributionCol> leftColocate = leftSpec.getColocateColumns();
+        List<DistributionCol> rightColocate = rightSpec.getColocateColumns();
+        if (leftColocate.size() != rightColocate.size()) {
+            return false;
+        }
+        EquivalentDescriptor leftDesc = leftSpec.getEquivalentDescriptor();
+        EquivalentDescriptor rightDesc = rightSpec.getEquivalentDescriptor();
+        for (int i = 0; i < leftColocate.size(); i++) {
+            DistributionCol leftColocateCol = leftColocate.get(i);
+            DistributionCol rightColocateCol = rightColocate.get(i);
+            boolean paired = false;
+            for (int k = 0; k < leftShuffleColumns.size(); k++) {
+                if (leftDesc.isConnected(leftShuffleColumns.get(k), leftColocateCol)
+                        && rightDesc.isConnected(rightShuffleColumns.get(k), rightColocateCol)) {
+                    paired = true;
+                    break;
+                }
+            }
+            if (!paired) {
+                return false;
+            }
+        }
+        return true;
+    }
+    private boolean canColocate(HashDistributionSpec leftLocalDistributionSpec,
+                                   HashDistributionSpec rightLocalDistributionSpec,
+                                   List<DistributionCol> leftShuffleColumns,
+                                   List<DistributionCol> rightShuffleColumns) {
+        return leftLocalDistributionSpec.canColocate(rightLocalDistributionSpec) &&
+                checkDistributionMatchShuffle(leftLocalDistributionSpec, rightLocalDistributionSpec,
+                        leftShuffleColumns, rightShuffleColumns);
+    }
 
+    private boolean checkDistributionMatchShuffle(HashDistributionSpec leftLocalDistributionSpec,
+                                                  HashDistributionSpec rightLocalDistributionSpec,
+                                                  List<DistributionCol> leftShuffleColumns,
+                                                  List<DistributionCol> rightShuffleColumns) {
+        HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
+        HashDistributionDesc rightLocalDistributionDesc = rightLocalDistributionSpec.getHashDistributionDesc();
         for (int i = 0; i < leftLocalDistributionDesc.getDistributionCols().size(); ++i) {
             DistributionCol leftCol = leftLocalDistributionDesc.getDistributionCols().get(i);
             DistributionCol rightCol = rightLocalDistributionDesc.getDistributionCols().get(i);
@@ -150,6 +231,50 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(enforceNullStrict(shuffleColumns),
                         HashDistributionDesc.SourceType.SHUFFLE_ENFORCE));
 
+        Pair<GroupExpression, PhysicalPropertySet> pair =
+                enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
+        PhysicalPropertySet newChildInputProperty = pair.second;
+
+        requiredChildrenProperties.set(childIndex, newChildInputProperty);
+        childrenOutputProperties.set(childIndex, newChildInputProperty);
+        return pair.first;
+    }
+
+    // Convert a RangeDistributionSpec child into a hash-shuffle child using
+    // SourceType SHUFFLE_JOIN (NOT SHUFFLE_ENFORCE). SHUFFLE_JOIN is what the
+    // downstream hash/hash compatibility branch expects — HashDistributionDesc.isShuffle()
+    // only returns true for SHUFFLE_JOIN / SHUFFLE_AGG; SHUFFLE_ENFORCE would
+    // fall through to checkState(false, "Children output property distribution error").
+    private GroupExpression convertRangeToHashShuffle(List<DistributionCol> shuffleColumns,
+                                                     GroupExpression child,
+                                                     PhysicalPropertySet childOutputProperty,
+                                                     int childIndex) {
+        DistributionSpec enforceDistributionSpec =
+                DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(enforceNullStrict(shuffleColumns),
+                        HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+
+        Pair<GroupExpression, PhysicalPropertySet> pair =
+                enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
+        PhysicalPropertySet newChildInputProperty = pair.second;
+
+        requiredChildrenProperties.set(childIndex, newChildInputProperty);
+        childrenOutputProperties.set(childIndex, newChildInputProperty);
+        // Publish the enforcer into childrenBestExprList; downstream enforcements
+        // (transToBucketShuffleJoin) read this list directly and need the converted
+        // child whose lowestCostTable contains the new hash output property.
+        childrenBestExprList.set(childIndex, pair.first);
+        return pair.first;
+    }
+
+    // enforce child round-robin type distribution
+    // In previous version, random shuffle ExchangeNode is interpolated between UnionNode and its children
+    // directly in plan-fragment-build-phase(PlanFragmentBuilder.java); now, random shuffle ExchangeNode is
+    // translated from round-robin PhysicalDistribution enforcer in plan-fragment-build-phase. the motivation
+    // is that union-distinct query can adopt colocate plan or random-shuffle plan which depends on its
+    // children's data distribution uniformly.
+    private GroupExpression enforceChildRoundRobinDistribution(GroupExpression child,
+                                                            PhysicalPropertySet childOutputProperty, int childIndex) {
+        DistributionSpec enforceDistributionSpec = new RoundRobinDistributionSpec();
         Pair<GroupExpression, PhysicalPropertySet> pair =
                 enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
         PhysicalPropertySet newChildInputProperty = pair.second;
@@ -187,6 +312,11 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
     private void transToBucketShuffleJoin(HashDistributionSpec leftLocalDistributionSpec,
                                           List<DistributionCol> leftShuffleColumns,
                                           List<DistributionCol> rightShuffleColumns) {
+        transToBucketShuffle(leftLocalDistributionSpec, leftShuffleColumns, rightShuffleColumns, 1);
+    }
+    private void transToBucketShuffle(HashDistributionSpec leftLocalDistributionSpec,
+                                          List<DistributionCol> leftShuffleColumns,
+                                          List<DistributionCol> rightShuffleColumns, int childIdx) {
         List<DistributionCol> bucketShuffleColumns = Lists.newArrayList();
         HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
         EquivalentDescriptor leftEquivDesc = leftLocalDistributionSpec.getEquivDesc();
@@ -208,15 +338,15 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(bucketShuffleColumns,
                         HashDistributionDesc.SourceType.BUCKET));
 
-        GroupExpression rightChild = childrenBestExprList.get(1);
-        PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
+        GroupExpression rightChild = childrenBestExprList.get(childIdx);
+        PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(childIdx);
         // enforce right child BUCKET_JOIN type distribution
         // update group expression require property
         PhysicalPropertySet newRightChildInputProperty =
                 enforceChildDistribution(rightDistributionSpec, rightChild, rightChildOutputProperty).second;
 
-        requiredChildrenProperties.set(1, newRightChildInputProperty);
-        childrenOutputProperties.set(1, newRightChildInputProperty);
+        requiredChildrenProperties.set(childIdx, newRightChildInputProperty);
+        childrenOutputProperties.set(childIdx, newRightChildInputProperty);
     }
 
     private Pair<GroupExpression, PhysicalPropertySet> enforceChildDistribution(DistributionSpec distributionSpec,
@@ -252,17 +382,6 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         }
     }
 
-    private GroupExpression addChildEnforcer(PhysicalPropertySet oldOutputProperty,
-                                             DistributionProperty newDistributionProperty,
-                                             double childCost, Group childGroup) {
-        PhysicalPropertySet newOutputProperty = new PhysicalPropertySet(newDistributionProperty);
-        GroupExpression enforcer = newDistributionProperty.appendEnforcers(childGroup);
-
-        enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
-        updateChildCostWithEnforcer(enforcer, oldOutputProperty, newOutputProperty, childCost, childGroup);
-        return enforcer;
-    }
-
     private void updateChildCostWithEnforcer(GroupExpression enforcer,
                                              PhysicalPropertySet oldOutputProperty,
                                              PhysicalPropertySet newOutputProperty,
@@ -288,6 +407,118 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         return visitPhysicalJoin(node, context);
     }
 
+    @Override
+    public Void visitPhysicalIntersect(PhysicalIntersectOperator node, ExpressionContext context) {
+        return visitPhysicalSetOperation(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalUnion(PhysicalUnionOperator node, ExpressionContext context) {
+        return visitPhysicalSetOperation(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalExcept(PhysicalExceptOperator node, ExpressionContext context) {
+        return visitPhysicalSetOperation(node, context);
+    }
+
+    private boolean canColocateSet(HashDistributionSpec firstHashSpec, HashDistributionSpec otherHashSpec,
+                                   List<DistributionCol> firstShuffleColumns,
+                                   List<DistributionCol> otherShuffleColumns) {
+        HashDistributionDesc firstHashDesc = firstHashSpec.getHashDistributionDesc();
+        HashDistributionDesc otherHashDesc = otherHashSpec.getHashDistributionDesc();
+        if (!firstHashDesc.isLocal() || !otherHashDesc.isLocal() ||
+                firstHashDesc.getDistributionCols().size() != otherHashDesc.getDistributionCols().size()) {
+            return false;
+        }
+        return canColocate(firstHashSpec, otherHashSpec, firstShuffleColumns, otherShuffleColumns);
+    }
+
+    private Void transToRoundRobinUnion(PhysicalSetOperation node, ExpressionContext context) {
+        for (int i = 0; i < childrenOutputProperties.size(); ++i) {
+            if (childrenOutputProperties.get(i).getDistributionProperty().getSpec().getType()
+                    .equals(DistributionSpec.DistributionType.ROUND_ROBIN)) {
+                continue;
+            }
+            enforceChildRoundRobinDistribution(childrenBestExprList.get(i), childrenOutputProperties.get(i), i);
+        }
+        return visitOperator(node, context);
+    }
+
+    public Void visitPhysicalSetOperation(PhysicalSetOperation node, ExpressionContext context) {
+        if (node instanceof PhysicalUnionOperator && ((PhysicalUnionOperator) node).isUnionAll()) {
+            return transToRoundRobinUnion(node, context);
+        }
+
+        // Range-normalization pass: before any `isShuffle()` precondition or
+        // HashDistributionSpec cast, convert every RangeDistributionSpec child
+        // to a hash SHUFFLE_JOIN child. RangeDistributionSpec has type RANGE;
+        // it would fail the isShuffle() precondition at line
+        // `firstChildDistProperty.isShuffle()` below, so normalize first.
+        List<PhysicalPropertySet> setOpRequiredPropertySets =
+                PropertyDeriverBase.computeShuffleSetRequiredProperties(node);
+        for (int i = 0; i < childrenOutputProperties.size(); i++) {
+            DistributionSpec childSpec = childrenOutputProperties.get(i).getDistributionProperty().getSpec();
+            if (childSpec instanceof RangeDistributionSpec) {
+                List<DistributionCol> setShuffleCols =
+                        ((HashDistributionSpec) setOpRequiredPropertySets.get(i).getDistributionProperty().getSpec())
+                                .getShuffleColumns();
+                convertRangeToHashShuffle(setShuffleCols, childrenBestExprList.get(i),
+                        childrenOutputProperties.get(i), i);
+            }
+        }
+
+        DistributionProperty firstChildDistProperty = childrenOutputProperties.get(0).getDistributionProperty();
+        Preconditions.checkArgument(firstChildDistProperty.isShuffle());
+        HashDistributionSpec firstHashDistSpec = (HashDistributionSpec) firstChildDistProperty.getSpec();
+        List<PhysicalPropertySet> childRequiredPropertySets = setOpRequiredPropertySets;
+
+        List<DistributionCol> firstShuffleColumns =
+                ((HashDistributionSpec) childRequiredPropertySets.get(0).getDistributionProperty()
+                        .getSpec()).getShuffleColumns();
+
+        boolean isUnionDistinct = (node instanceof PhysicalUnionOperator) &&
+                !((PhysicalUnionOperator) node).isUnionAll();
+        boolean disableColocateSet = ConnectContext.get().getSessionVariable().isDisableColocateSet();
+        if (!disableColocateSet && firstHashDistSpec.getHashDistributionDesc().isLocal()) {
+            boolean hasNonColocate = false;
+            for (int i = 1; i < childrenOutputProperties.size(); ++i) {
+                DistributionProperty childDistProperty = childrenOutputProperties.get(i).getDistributionProperty();
+                Preconditions.checkArgument(childDistProperty.isShuffle());
+                HashDistributionSpec otherHashDistSpec = (HashDistributionSpec) childDistProperty.getSpec();
+                List<DistributionCol> otherShuffleColumns =
+                        ((HashDistributionSpec) childRequiredPropertySets.get(i).getDistributionProperty()
+                                .getSpec()).getShuffleColumns();
+                if (!canColocateSet(firstHashDistSpec, otherHashDistSpec, firstShuffleColumns, otherShuffleColumns)) {
+                    if (isUnionDistinct) {
+                        hasNonColocate = true;
+                    } else {
+                        transToBucketShuffle(firstHashDistSpec, firstShuffleColumns, otherShuffleColumns, i);
+                    }
+                }
+            }
+            if (isUnionDistinct && hasNonColocate) {
+                return transToRoundRobinUnion(node, context);
+            }
+            return null;
+        } else if (isUnionDistinct) {
+            return transToRoundRobinUnion(node, context);
+        } else {
+            for (int i = 0; i < childrenOutputProperties.size(); ++i) {
+                PhysicalPropertySet childPropertySet = childRequiredPropertySets.get(i);
+                List<DistributionCol> shuffleColumns =
+                        ((HashDistributionSpec) childPropertySet.getDistributionProperty()
+                                .getSpec()).getShuffleColumns();
+                if (childPropertySet.getDistributionProperty()
+                        .equals(childrenOutputProperties.get(i).getDistributionProperty())) {
+                    continue;
+                }
+                enforceChildShuffleDistribution(shuffleColumns, childrenBestExprList.get(i),
+                        childrenOutputProperties.get(i), i);
+            }
+        }
+        return null;
+    }
     @Override
     public Void visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
         return visitPhysicalJoin(node, context);
@@ -329,6 +560,53 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 ((HashDistributionSpec) requiredProperties.get(1).getDistributionProperty().getSpec())
                         .getShuffleColumns();
 
+        // Range-colocate dispatch:
+        // - both children range + canRangeColocateJoin → skip exchange (return).
+        // - both children range but NOT colocate → force a full (PARTITIONED)
+        //   shuffle on both sides and return (see below).
+        // - exactly one range child (range × hash) → normalize the range child to
+        //   hash SHUFFLE_JOIN via convertRangeToHashShuffle, then fall through to the
+        //   existing hash/hash compatibility path unchanged (the hash side is a valid
+        //   crc32 bucket-shuffle stay side).
+        DistributionSpec leftRawSpec = leftChildOutputProperty.getDistributionProperty().getSpec();
+        DistributionSpec rightRawSpec = rightChildOutputProperty.getDistributionProperty().getSpec();
+        boolean leftIsRange = leftRawSpec instanceof RangeDistributionSpec;
+        boolean rightIsRange = rightRawSpec instanceof RangeDistributionSpec;
+        if (leftIsRange && rightIsRange) {
+            if (canRangeColocateJoin(hint, node.getJoinType(),
+                    (RangeDistributionSpec) leftRawSpec,
+                    (RangeDistributionSpec) rightRawSpec,
+                    leftShuffleColumns, rightShuffleColumns)) {
+                return visitOperator(node, context);
+            }
+            // Two range children that cannot colocate (disable_colocate_join, different
+            // group, unstable/empty group, unsupported join type, ...) must be joined
+            // via a full PARTITIONED shuffle — a range table can never be the local
+            // (stay) side of a bucket-shuffle, because bucket-shuffle re-buckets the
+            // other side with crc32 which does not match the range tablet layout.
+            //
+            // We must NOT use convertRangeToHashShuffle (SourceType.SHUFFLE_JOIN) here:
+            // a range scan natively satisfies a SHUFFLE_JOIN requirement
+            // (RangeDistributionSpec.isSatisfyHashShuffle), so for a null-safe key (<=>)
+            // — whose required distribution is already null-strict, matching the enforced
+            // one — the memo discards the shuffle enforcer and reuses the un-exchanged
+            // range scan, yielding a SHUFFLE_HASH_BUCKET join that silently drops all
+            // matches. enforceChildShuffleDistribution uses SourceType.SHUFFLE_ENFORCE,
+            // which a range scan does not satisfy, so the shuffle exchange is guaranteed
+            // on both sides and the join is PARTITIONED.
+            enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
+            enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
+            return visitOperator(node, context);
+        }
+        if (leftIsRange) {
+            leftChild = convertRangeToHashShuffle(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
+            leftChildOutputProperty = childrenOutputProperties.get(0);
+        }
+        if (rightIsRange) {
+            rightChild = convertRangeToHashShuffle(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
+            rightChildOutputProperty = childrenOutputProperties.get(1);
+        }
+
         DistributionProperty leftChildDistributionProperty = leftChildOutputProperty.getDistributionProperty();
         DistributionProperty rightChildDistributionProperty = rightChildOutputProperty.getDistributionProperty();
         if (leftChildDistributionProperty.isShuffle() && rightChildDistributionProperty.isShuffle()) {
@@ -341,7 +619,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             HashDistributionDesc rightDistributionDesc = rightDistributionSpec.getHashDistributionDesc();
 
             // 2.1 respect the hint
-            if (JoinOperator.HINT_SHUFFLE.equals(hint)) {
+            if (HintNode.HINT_JOIN_SHUFFLE.equals(hint) || HintNode.HINT_JOIN_SKEW.equals(hint)) {
                 if (leftDistributionDesc.isLocal()) {
                     enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
                 }
@@ -366,7 +644,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
             if (leftDistributionDesc.isLocal() && rightDistributionDesc.isLocal()) {
                 // colocate join
-                if (JoinOperator.HINT_BUCKET.equals(hint) ||
+                if (HintNode.HINT_JOIN_BUCKET.equals(hint) ||
                         !canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
                                 rightShuffleColumns)) {
                     transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);

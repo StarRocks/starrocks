@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.backup;
 
-import autovalue.shaded.com.google.common.common.collect.Maps;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.backup.BackupJobInfo;
@@ -28,11 +27,11 @@ import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.backup.Status;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
@@ -42,12 +41,9 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.RestoreInfo;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
@@ -55,15 +51,13 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -84,9 +78,10 @@ public class LakeRestoreJob extends RestoreJob {
 
     public LakeRestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
                           boolean allowLoad, int restoreReplicationNum, long timeoutMs,
-                          GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta) {
+                          GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta,
+                          MvRestoreContext mvRestoreContext) {
         super(label, backupTs, dbId, dbName, jobInfo, allowLoad, restoreReplicationNum, timeoutMs,
-                globalStateMgr, repoId, backupMeta);
+                globalStateMgr, repoId, backupMeta, mvRestoreContext);
         this.type = JobType.LAKE_RESTORE;
     }
 
@@ -98,8 +93,9 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void genFileMapping(OlapTable localTbl, Partition localPartition, Long remoteTblId,
                                   BackupJobInfo.BackupPartitionInfo backupPartInfo, boolean overwrite) {
-        for (MaterializedIndex localIdx : localPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-            BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
+        for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+            BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getMetaId()));
             Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
             for (int i = 0; i < localIdx.getTablets().size(); i++) {
                 BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
@@ -123,17 +119,21 @@ public class LakeRestoreJob extends RestoreJob {
         for (IdChain idChain : fileMapping.getMapping().keySet()) {
             LakeTablet tablet = null;
             try {
-                OlapTable tbl = (OlapTable) db.getTable(idChain.getTblId());
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), idChain.getTblId());
                 Partition part = tbl.getPartition(idChain.getPartId());
-                MaterializedIndex index = part.getIndex(idChain.getIdxId());
+                MaterializedIndex index = part.getDefaultPhysicalPartition().getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryComputeNodeId());
+                Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet.getId());
+                Preconditions.checkArgument(computeNodeId != null,
+                        "No alive backend or compute node in %s warehouse", WarehouseManager.DEFAULT_RESOURCE);
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
-                        backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
-                snapshotInfos.put(idChain.getTabletId(), backend.getId(), info);
-            } catch (UserException e) {
-                LOG.error(e.getMessage());
+                        computeNodeId, tbl.getSchemaHashByIndexMetaId(index.getMetaId()), -1);
+                snapshotInfos.put(idChain.getTabletId(), computeNodeId, info);
+            } catch (Exception e) {
+                LOG.error(e.getMessage(), e);
                 status = new Status(Status.ErrCode.COMMON_ERROR,
                         "failed to choose replica to make snapshot for tablet " + tablet.getId());
             }
@@ -151,7 +151,8 @@ public class LakeRestoreJob extends RestoreJob {
         }
         request.restoreInfos = Lists.newArrayList();
         for (SnapshotInfo info : beSnapshotInfos) {
-            OlapTable tbl = (OlapTable) db.getTable(info.getTblId());
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), info.getTblId());
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "restored table "
                         + info.getTblId() + " does not exist");
@@ -166,7 +167,7 @@ public class LakeRestoreJob extends RestoreJob {
                 return;
             }
 
-            MaterializedIndex idx = part.getIndex(info.getIndexId());
+            MaterializedIndex idx = part.getDefaultPhysicalPartition().getIndex(info.getIndexId());
             if (idx == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND,
                         "index " + info.getIndexId() + " does not exist in partion " + part.getName()
@@ -206,7 +207,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void sendDownloadTasks() {
         for (Map.Entry<Long, RestoreSnapshotsRequest> entry : requests.entrySet()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(entry.getKey());
             LakeService lakeService = null;
             try {
                 lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
@@ -260,25 +261,14 @@ public class LakeRestoreJob extends RestoreJob {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static LakeRestoreJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeRestoreJob.class);
-    }
-
-    @Override
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
-        for (MaterializedIndex restoredIdx : restorePart.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-            MaterializedIndexMeta indexMeta = restoreTbl.getIndexMetaByIndexId(restoredIdx.getId());
+        for (MaterializedIndex restoredIdx : restorePart.getDefaultPhysicalPartition()
+                .getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             TStorageMedium medium = restoreTbl.getPartitionInfo().getDataProperty(restorePart.getId()).getStorageMedium();
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
-                    restoredIdx.getId(), indexMeta.getSchemaHash(), medium, true);
+                    restoredIdx.getId(), medium, true);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
-                GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
             }
         }
     }
@@ -286,7 +276,8 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void addRestoredPartitions(Database db, boolean modify) {
         for (Pair<String, Partition> entry : restoredPartitions) {
-            OlapTable localTbl = (OlapTable) db.getTable(entry.first);
+            OlapTable localTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), entry.first);
             Partition restorePart = entry.second;
             OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
             RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();
@@ -298,7 +289,6 @@ public class LakeRestoreJob extends RestoreJob {
             DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
             localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
                     remoteDataProperty, (short) restoreReplicationNum,
-                    remotePartitionInfo.getIsInMemory(remotePartId),
                     remotePartitionInfo.getDataCacheInfo(remotePartId));
             localTbl.addPartition(restorePart);
             if (modify) {
@@ -311,11 +301,11 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
         try {
-            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
+            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(db.getId(), remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getDataCacheInfo());
-            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+            resetIdsForRestore(globalStateMgr, remoteOlapTbl, db, restoreReplicationNum, new MvRestoreContext());
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }

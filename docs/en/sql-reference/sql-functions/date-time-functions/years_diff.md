@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the year difference between two date expressions (expr1 − expr2), accurate to the year."
 ---
 
 # years_diff
 
-## Description
+
 
 Returns the year difference between two date expressions (`expr1` − `expr2`), accurate to the year.
 

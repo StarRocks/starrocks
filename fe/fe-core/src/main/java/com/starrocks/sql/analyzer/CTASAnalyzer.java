@@ -16,35 +16,28 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.Pair;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
-import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.type.Type;
 
 import java.util.HashMap;
 import java.util.List;
@@ -62,8 +55,6 @@ public class CTASAnalyzer {
 
         Analyzer.analyze(queryStatement, session);
 
-        // Pair<TableName, Pair<ColumnName, ColumnAlias>>
-        Map<Pair<String, Pair<String, String>>, Table> columnNameToTable = Maps.newHashMap();
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
         Map<String, Table> tableRefToTable = new HashMap<>();
         for (Map.Entry<TableName, Table> t : tables.entrySet()) {
@@ -96,28 +87,28 @@ public class CTASAnalyzer {
             }
         }
 
-        for (int i = 0; i < allFields.size(); i++) {
-            Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType());
-            Expr originExpression = allFields.get(i).getOriginExpression();
-            ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                    null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
-            if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
-                columnDef.setAllowNull(false);
-            }
-            createTableStmt.addColumnDef(columnDef);
-            if (originExpression instanceof SlotRef) {
-                SlotRef slotRef = (SlotRef) originExpression;
-                // lateral json_each(parse_json(c1)) will return null
-                if (slotRef.getTblNameWithoutAnalyzed() == null) {
-                    continue;
+        TableRef tableRef = createTableStmt.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference is null in CTAS statement");
+        }
+        TableRef normalizedTableRef = AnalyzerUtils.normalizedTableRef(tableRef, session);
+        createTableStmt.setTableRef(normalizedTableRef);
+        TableName tableNameObject = TableName.fromTableRef(normalizedTableRef);
+        CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
+
+        // Recursive CTE execution rewrites and analyzes the same CTAS AST again. Preserve the columns
+        // inferred from the original query instead of appending columns derived from the rewritten query.
+        if (createTableStmt.getColumnDefs().isEmpty()) {
+            for (int i = 0; i < allFields.size(); i++) {
+                Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(),
+                        createTableStmt.isOlapEngine(), /* preferStringForVarchar */ false);
+                Expr originExpression = allFields.get(i).getOriginExpression();
+                ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
+                        null, null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+                if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
+                    columnDef.setAllowNull(false);
                 }
-                String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
-                Table table = tableRefToTable.get(tableName);
-                if (!(table instanceof OlapTable)) {
-                    continue;
-                }
-                columnNameToTable.put(new Pair<>(tableName,
-                        new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
+                createTableStmt.addColumnDef(columnDef);
             }
         }
 
@@ -131,37 +122,6 @@ public class CTASAnalyzer {
             createTableStmt.setProperties(properties);
         } else if (!stmtProperties.containsKey("replication_num")) {
             stmtProperties.put("replication_num", String.valueOf(defaultReplicationNum));
-        }
-
-        if (null == createTableStmt.getDistributionDesc()) {
-            if ((createTableStmt.getKeysDesc() != null && createTableStmt.getKeysDesc().getKeysType() != KeysType.DUP_KEYS)
-                    || createTableStmt.getProperties().containsKey("colocate_with")) {
-                // For HashDistributionDesc key
-                // If we have statistics cache, we pick the column with the highest cardinality in the statistics,
-                // if we don't, we pick the first column
-                String defaultColumnName = finalColumnNames.get(0);
-                double candidateDistinctCountCount = 1.0;
-                StatisticStorage currentStatisticStorage = GlobalStateMgr.getCurrentStatisticStorage();
-
-                for (Map.Entry<Pair<String, Pair<String, String>>, Table> columnEntry : columnNameToTable.entrySet()) {
-                    Pair<String, String> columnName = columnEntry.getKey().second;
-                    ColumnStatistic columnStatistic = currentStatisticStorage.getColumnStatistic(
-                            columnEntry.getValue(), columnName.first);
-                    double curDistinctValuesCount = columnStatistic.getDistinctValuesCount();
-                    if (curDistinctValuesCount > candidateDistinctCountCount) {
-                        defaultColumnName = columnName.second;
-                        candidateDistinctCountCount = curDistinctValuesCount;
-                    }
-                }
-
-                DistributionDesc distributionDesc =
-                        new HashDistributionDesc(0, Lists.newArrayList(defaultColumnName));
-                createTableStmt.setDistributionDesc(distributionDesc);
-            } else {
-                // no specified distribution, use random distribution
-                DistributionDesc distributionDesc = new RandomDistributionDesc();
-                createTableStmt.setDistributionDesc(distributionDesc);
-            }
         }
 
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
@@ -189,6 +149,16 @@ public class CTASAnalyzer {
             }
             AnalyzerUtils.checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
             rangePartitionDesc.setAutoPartitionTable(true);
+        } else if (partitionDesc instanceof ListPartitionDesc && createTableStmt.isOlapEngine()) {
+            // Only OLAP needs a non-nullable list partition column. External engines keep the
+            // nullability the query derived: an Iceberg identity partition accepts NULL.
+            for (ColumnDef columnDef : columnDefs) {
+                for (String partitionColName : ((ListPartitionDesc) partitionDesc).getPartitionColNames()) {
+                    if (columnDef.getName().equalsIgnoreCase(partitionColName)) {
+                        columnDef.setAllowNull(false);
+                    }
+                }
+            }
         }
 
         Analyzer.analyze(createTableStmt, session);

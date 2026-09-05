@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Creates and returns a date based on the given year and day of year values."
 ---
 
 # makedate
 
-## Description
+
 
 Creates and returns a date based on the given year and day of year values.
 

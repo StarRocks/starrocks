@@ -22,16 +22,18 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.TableMetricsEntity;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -40,49 +42,55 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 public class AnalyzeMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeMgr.class);
+    public static final String USER_CANCEL_MESSAGE = "kill analyze";
     private static final Pair<Long, Long> CHECK_ALL_TABLES =
             new Pair<>(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID);
+    public static final String IS_MULTI_COLUMN_STATS = "is_multi_column_stats";
 
     private final Map<Long, AnalyzeJob> analyzeJobMap;
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
     private final Map<StatsMetaKey, ExternalBasicStatsMeta> externalBasicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
+    private final Map<StatsMetaColumnKey, ExternalHistogramStatsMeta> externalHistogramStatsMetaMap;
+    private final Map<MultiColumnStatsKey, MultiColumnStatsMeta> multiColumnStatsMetaMap;
 
     // ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+    // Cancellation markers for analyze tasks. Used to make KILL ANALYZE deterministic even if it misses the SQL window.
+    private final Set<Long> cancelledAnalyzeIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
     // only first load of table will trigger analyze, so we don't need limit thread pool queue size
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
-            Config.statistic_collect_concurrency, Integer.MAX_VALUE,
+            Config.statistic_analyze_task_pool_size, Integer.MAX_VALUE,
             "analyze-task-concurrency-pool", true);
 
     private final Set<Long> dropPartitionIds = new ConcurrentSkipListSet<>();
     private final List<Pair<Long, Long>> checkTableIds = Lists.newArrayList(CHECK_ALL_TABLES);
+
+    private LocalDateTime lastCleanTime;
 
     public AnalyzeMgr() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -90,6 +98,8 @@ public class AnalyzeMgr implements Writable {
         basicStatsMetaMap = Maps.newConcurrentMap();
         externalBasicStatsMetaMap = Maps.newConcurrentMap();
         histogramStatsMetaMap = Maps.newConcurrentMap();
+        externalHistogramStatsMetaMap = Maps.newConcurrentMap();
+        multiColumnStatsMetaMap = Maps.newConcurrentMap();
     }
 
     public AnalyzeJob getAnalyzeJob(long id) {
@@ -100,11 +110,28 @@ public class AnalyzeMgr implements Writable {
         return analyzeStatusMap.get(id);
     }
 
-    public void addAnalyzeJob(AnalyzeJob job) {
+    public void addAnalyzeJob(AnalyzeJob job) throws AlreadyExistsException {
+        for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+            try {
+                if (analyzeJob.getCatalogName().equals(job.getCatalogName()) &&
+                        analyzeJob.getDbName().equals(job.getDbName()) &&
+                        analyzeJob.getColumns().stream().sorted().collect(Collectors.toList())
+                        .equals(job.getColumns().stream().sorted().collect(Collectors.toList())) &&
+                        analyzeJob.getTableName().equals(job.getTableName()) &&
+                        analyzeJob.getAnalyzeType().equals(job.getAnalyzeType()) &&
+                        analyzeJob.getScheduleType().equals(job.getScheduleType()) &&
+                        analyzeJob.getProperties().equals(job.getProperties())) {
+                    throw new AlreadyExistsException("AnalyzeJob Already Exists");
+                }
+            } catch (MetaNotFoundException e) {
+                LOG.warn("add analyze job failed", e);
+            }
+        }
+
         long id = GlobalStateMgr.getCurrentState().getNextId();
         job.setId(id);
-        analyzeJobMap.put(id, job);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job,
+                wal -> analyzeJobMap.put(id, job));
     }
 
     public void updateAnalyzeJobWithoutLog(AnalyzeJob job) {
@@ -112,13 +139,23 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void updateAnalyzeJobWithLog(AnalyzeJob job) {
-        analyzeJobMap.put(job.getId(), job);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job,
+                wal -> analyzeJobMap.put(job.getId(), job));
     }
 
     public void removeAnalyzeJob(long id) {
+        if (id == -1) {
+            List<Long> keysToRemove = new ArrayList<>(analyzeJobMap.keySet());
+            for (Long key : keysToRemove) {
+                AnalyzeJob job = analyzeJobMap.get(key);
+                GlobalStateMgr.getCurrentState().getEditLog()
+                        .logRemoveAnalyzeJob(job, wal -> analyzeJobMap.remove(key));
+            }
+        }
         if (analyzeJobMap.containsKey(id)) {
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(analyzeJobMap.remove(id));
+            AnalyzeJob job = analyzeJobMap.get(id);
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logRemoveAnalyzeJob(job, wal -> analyzeJobMap.remove(id));
         }
     }
 
@@ -145,8 +182,8 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void addAnalyzeStatus(AnalyzeStatus status) {
-        analyzeStatusMap.put(status.getId(), status);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logAddAnalyzeStatus(status, wal -> analyzeStatusMap.put(status.getId(), status));
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
@@ -169,9 +206,9 @@ public class AnalyzeMgr implements Writable {
                 expireList.add(analyzeStatus);
             }
         }
-        expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
         for (AnalyzeStatus status : expireList) {
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logRemoveAnalyzeStatus(status, wal -> analyzeStatusMap.remove(status.getId()));
         }
     }
 
@@ -183,9 +220,9 @@ public class AnalyzeMgr implements Writable {
                 expireList.add(analyzeStatus);
             }
         }
-        expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
         for (AnalyzeStatus status : expireList) {
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logRemoveAnalyzeStatus(status, wal -> analyzeStatusMap.remove(status.getId()));
         }
     }
 
@@ -193,22 +230,46 @@ public class AnalyzeMgr implements Writable {
         List<AnalyzeStatus> expireList = analyzeStatusMap.values().stream().
                 filter(status -> status instanceof ExternalAnalyzeStatus).
                 filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID().equals(tableUUID)).
-                collect(Collectors.toList());
+                toList();
 
-        expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
         for (AnalyzeStatus status : expireList) {
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logRemoveAnalyzeStatus(status, wal -> analyzeStatusMap.remove(status.getId()));
         }
     }
 
     public void dropExternalBasicStatsData(String tableUUID) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
+        statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
+    }
+
+    public void dropExternalBasicStatsData(String catalogName, String dbName, String tableName) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), catalogName, dbName, tableName);
+    }
+
+    public void dropAnalyzeJob(String catalogName, String dbName, String tblName) {
+        List<AnalyzeJob> expireList = Lists.newArrayList();
+        try {
+            for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+                if (analyzeJob.getCatalogName().equals(catalogName) &&
+                        analyzeJob.getDbName().equals(dbName) &&
+                        analyzeJob.getTableName().equals(tblName)) {
+                    expireList.add(analyzeJob);
+                }
+            }
+        } catch (MetaNotFoundException e) {
+            LOG.warn("drop analyze job failed", e);
+        }
+        for (AnalyzeJob job : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logRemoveAnalyzeJob(job, wal -> analyzeJobMap.remove(job.getId()));
+        }
     }
 
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
-        basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(
+                basicStatsMeta, wal -> basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta));
     }
 
     public void replayAddBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -216,9 +277,11 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void addExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
-        externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
-                basicStatsMeta.getDbName(), basicStatsMeta.getTableName()), basicStatsMeta);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddExternalBasicStatsMeta(basicStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddExternalBasicStatsMeta(basicStatsMeta,
+                wal -> externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
+                        basicStatsMeta.getDbName(),
+                        basicStatsMeta.getTableName()),
+                        basicStatsMeta));
     }
 
     public void replayAddExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
@@ -229,8 +292,20 @@ public class AnalyzeMgr implements Writable {
     public void removeExternalBasicStatsMeta(String catalogName, String dbName, String tableName) {
         StatsMetaKey key = new StatsMetaKey(catalogName, dbName, tableName);
         if (externalBasicStatsMetaMap.containsKey(key)) {
-            ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.remove(key);
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(basicStatsMeta);
+            ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.get(key);
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(
+                    basicStatsMeta, wal -> externalBasicStatsMetaMap.remove(key));
+        }
+    }
+
+    public void removeExternalHistogramStatsMeta(String catalogName, String dbName, String tableName, List<String> columns) {
+        for (String column : columns) {
+            StatsMetaColumnKey histogramKey = new StatsMetaColumnKey(catalogName, dbName, tableName, column);
+            if (externalHistogramStatsMetaMap.containsKey(histogramKey)) {
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalHistogramStatsMeta(
+                        externalHistogramStatsMetaMap.get(histogramKey),
+                        wal -> externalHistogramStatsMetaMap.remove(histogramKey));
+            }
         }
     }
 
@@ -239,57 +314,112 @@ public class AnalyzeMgr implements Writable {
                 basicStatsMeta.getDbName(), basicStatsMeta.getTableName()));
     }
 
+    public void addMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
+        GlobalStateMgr.getCurrentState().getEditLog().logAddMultiColumnStatsMeta(meta, wal -> {
+            multiColumnStatsMetaMap.put(
+                    new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsTypes()), meta);
+        });
+    }
+
+    public void replayAddMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
+        multiColumnStatsMetaMap.put(new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsTypes()), meta);
+    }
+
+    public void replayRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
+        multiColumnStatsMetaMap.remove(new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsTypes()));
+    }
+
+    public Map<MultiColumnStatsKey, MultiColumnStatsMeta> getMultiColumnStatsMetaMap() {
+        return multiColumnStatsMetaMap;
+    }
+
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
-        Table table;
-        try {
-            table = MetaUtils.getTable(dbId, tableId);
-        } catch (SemanticException e) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
             return;
         }
 
-        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
         if (async) {
-            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatistic(table);
-            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table, false);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshColumnStatistics(table, columns, false);
         } else {
-            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatisticSync(table);
-            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatisticsSync(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table, true);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshColumnStatistics(table, columns, true);
         }
+    }
+
+    public void expireTableAndColumnStatistics(Long dbId, Long tableId, List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireTableAndColumnStatistics(table, columns);
+    }
+
+    public void expireConnectorTableAndColumnStatistics(String catalogName, String dbName,
+                                                        String tableName, List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
     }
 
     public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                           List<String> columns, boolean async) {
-        Table table;
-        try {
-            table = MetaUtils.getTable(catalogName, dbName, tableName);
-        } catch (SemanticException e) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
+        if (table == null) {
             return;
         }
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, !async);
+    }
 
-        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
-        if (async) {
-            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table, columns);
-        } else {
-            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
-        }
+    public void refreshMultiColumnStatisticsCache(long tableId, boolean isSync) {
+        GlobalStateMgr.getCurrentState().getStatisticStorage().refreshMultiColumnStatistics(tableId, isSync);
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.remove(basicStatsMeta.getTableId());
     }
 
+    public BasicStatsMeta getTableBasicStatsMeta(long tableId) {
+        return basicStatsMetaMap.get(tableId);
+    }
+
     public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
         return basicStatsMetaMap;
+    }
+
+    public long getExistUpdateRows(Long tableId) {
+        BasicStatsMeta existInfo =  basicStatsMetaMap.get(tableId);
+        return existInfo == null ? 0 : existInfo.getTotalRows();
     }
 
     public Map<StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
         return externalBasicStatsMetaMap;
     }
 
+    public ExternalBasicStatsMeta getExternalTableBasicStatsMeta(String catalogName, String dbName, String tableName) {
+        return externalBasicStatsMetaMap.get(new StatsMetaKey(catalogName, dbName, tableName));
+    }
+
+    public List<HistogramStatsMeta> getHistogramMetaByTable(long tableId) {
+        return histogramStatsMetaMap.entrySet().stream()
+                .filter(x -> x.getKey().first == tableId)
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+    }
+
     public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
-        histogramStatsMetaMap.put(
-                new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddHistogramStatsMeta(histogramStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddHistogramStatsMeta(histogramStatsMeta, wal -> {
+            histogramStatsMetaMap.put(
+                    new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
+
+        });
     }
 
     public void replayAddHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
@@ -298,21 +428,16 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void refreshHistogramStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (null == db) {
             return;
         }
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (null == table) {
             return;
         }
 
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
-        if (async) {
-            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
-        } else {
-            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatisticsSync(table, columns);
-        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().refreshHistogramStatistics(table, columns, !async);
     }
 
     public void replayRemoveHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
@@ -323,16 +448,145 @@ public class AnalyzeMgr implements Writable {
         return histogramStatsMetaMap;
     }
 
+    public Map<StatsMetaColumnKey, ExternalHistogramStatsMeta> getExternalHistogramStatsMetaMap() {
+        return externalHistogramStatsMetaMap;
+    }
+
+    public void addExternalHistogramStatsMeta(ExternalHistogramStatsMeta histogramStatsMeta) {
+        GlobalStateMgr.getCurrentState().getEditLog().logAddExternalHistogramStatsMeta(histogramStatsMeta, wal -> {
+            externalHistogramStatsMetaMap.put(new StatsMetaColumnKey(histogramStatsMeta.getCatalogName(),
+                            histogramStatsMeta.getDbName(),
+                            histogramStatsMeta.getTableName(),
+                            histogramStatsMeta.getColumn()), histogramStatsMeta);
+        });
+    }
+
+    public void replayAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta histogramStatsMeta) {
+        externalHistogramStatsMetaMap.put(new StatsMetaColumnKey(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn()),
+                histogramStatsMeta);
+    }
+
+    public void replayRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta histogramStatsMeta) {
+        externalHistogramStatsMetaMap.remove(new StatsMetaColumnKey(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn()));
+    }
+
+    public void refreshConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
+                                                              List<String> columns, boolean async) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
+        if (async) {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatisticsSync(table, columns);
+        }
+    }
+
+    public void expireConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
+                                                              List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
+    }
+
+    /**
+     * Replay handler for OP_ADD_EXTERNAL_BASIC_STATS_META on followers.
+     * <p>
+     * Prefer invalidating the connector cache by the table UUID persisted in the journal, so that replay
+     * never resolves external table metadata (which may block on HMS/object storage and stall the replayer).
+     * The fresh statistics are reloaded lazily on the next query. Fall back to the legacy metadata-based
+     * refresh only for journals written before the UUID was persisted.
+     */
+    public void replayRefreshExternalBasicStatsCache(ExternalBasicStatsMeta basicStatsMeta) {
+        if (invalidateConnectorColumnStatsByUUID(basicStatsMeta.getTableUUID(), basicStatsMeta.getColumns())) {
+            return;
+        }
+        refreshConnectorTableBasicStatisticsCache(basicStatsMeta.getCatalogName(), basicStatsMeta.getDbName(),
+                basicStatsMeta.getTableName(), basicStatsMeta.getColumns(), true);
+    }
+
+    /**
+     * Replay handler for OP_REMOVE_EXTERNAL_BASIC_STATS_META on followers.
+     * See {@link #replayRefreshExternalBasicStatsCache} for the UUID-first / legacy-fallback rationale.
+     */
+    public void replayExpireExternalBasicStatsCache(ExternalBasicStatsMeta basicStatsMeta) {
+        if (invalidateConnectorColumnStatsByUUID(basicStatsMeta.getTableUUID(), basicStatsMeta.getColumns())) {
+            return;
+        }
+        expireConnectorTableAndColumnStatistics(basicStatsMeta.getCatalogName(), basicStatsMeta.getDbName(),
+                basicStatsMeta.getTableName(), basicStatsMeta.getColumns());
+    }
+
+    /**
+     * Replay handler for OP_ADD_EXTERNAL_HISTOGRAM_STATS_META on followers.
+     * See {@link #replayRefreshExternalBasicStatsCache} for the UUID-first / legacy-fallback rationale.
+     */
+    public void replayRefreshExternalHistogramStatsCache(ExternalHistogramStatsMeta histogramStatsMeta) {
+        List<String> columns = Lists.newArrayList(histogramStatsMeta.getColumn());
+        if (invalidateConnectorHistogramStatsByUUID(histogramStatsMeta.getTableUUID(), columns)) {
+            return;
+        }
+        refreshConnectorTableHistogramStatisticsCache(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), columns, true);
+    }
+
+    /**
+     * Replay handler for OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META on followers.
+     * See {@link #replayRefreshExternalBasicStatsCache} for the UUID-first / legacy-fallback rationale.
+     */
+    public void replayExpireExternalHistogramStatsCache(ExternalHistogramStatsMeta histogramStatsMeta) {
+        List<String> columns = Lists.newArrayList(histogramStatsMeta.getColumn());
+        if (invalidateConnectorHistogramStatsByUUID(histogramStatsMeta.getTableUUID(), columns)) {
+            return;
+        }
+        expireConnectorTableHistogramStatisticsCache(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), columns);
+    }
+
+    private boolean invalidateConnectorColumnStatsByUUID(String tableUUID, List<String> columns) {
+        // Feature off (default) or legacy journal without a UUID: fall back to the legacy eager refresh.
+        if (!Config.enable_external_stats_lazy_refresh_on_replay || tableUUID == null || tableUUID.isEmpty()) {
+            return false;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .invalidateConnectorTableColumnStatistics(tableUUID, columns);
+        return true;
+    }
+
+    private boolean invalidateConnectorHistogramStatsByUUID(String tableUUID, List<String> columns) {
+        // Feature off (default) or legacy journal without a UUID: fall back to the legacy eager refresh.
+        if (!Config.enable_external_stats_lazy_refresh_on_replay || tableUUID == null || tableUUID.isEmpty()) {
+            return false;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .invalidateConnectorHistogramStatistics(tableUUID, columns);
+        return true;
+    }
+
     public void clearStatisticFromDroppedTable() {
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        clearStatisticFromNativeDroppedTable();
+        clearStatisticFromExternalDroppedTable();
+    }
+
+    public void clearStatisticFromNativeDroppedTable() {
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         Set<Long> tables = new HashSet<>();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                 continue;
             }
 
-            for (Table table : db.getTables()) {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 /*
                  * If the meta contains statistical information, but the data is empty,
                  * it means that the table has been truncate or insert overwrite, and it is set to empty,
@@ -346,21 +600,62 @@ public class AnalyzeMgr implements Writable {
 
         Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
         tableIdHasDeleted.removeAll(tables);
+        if (tableIdHasDeleted.isEmpty()) {
+            return;
+        }
+
+        int exprLimit = Config.expr_children_limit / 2;
+        List<Long> batchTableIds = tableIdHasDeleted.stream()
+                .distinct()
+                .limit(exprLimit)
+                .collect(Collectors.toList());
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
+        try (var guard = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStatisticsConnection(true);
+            statsConnectCtx.getSessionVariable().setExprChildrenLimit(batchTableIds.size() * 3);
 
-        dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
-        dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
+            dropBasicStatsMetaAndData(statsConnectCtx, batchTableIds);
+            dropHistogramStatsMetaAndData(statsConnectCtx, batchTableIds);
+            dropMultiColumnStatsMetaAndData(statsConnectCtx, batchTableIds);
+        }
     }
 
-    public void dropPartition(long partitionId) {
+    public void clearStatisticFromExternalDroppedTable() {
+        List<StatsMetaKey> droppedTables = new ArrayList<>();
+        for (Map.Entry<StatsMetaKey, ExternalBasicStatsMeta> entry : externalBasicStatsMetaMap.entrySet()) {
+            StatsMetaKey tableKey = entry.getKey();
+            try {
+                boolean exists = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .tableExists(new ConnectContext(), tableKey.getCatalogName(), tableKey.getDbName(),
+                                tableKey.getTableName());
+                if (!exists) {
+                    LOG.warn("Table {}.{}.{} not exists, clear it's statistics", tableKey.getCatalogName(),
+                            tableKey.getDbName(), tableKey.getTableName());
+                    droppedTables.add(tableKey);
+                }
+            } catch (Exception e) {
+                LOG.warn("Table {}.{}.{} throw exception, clear it's statistics", tableKey.getCatalogName(),
+                        tableKey.getDbName(), tableKey.getTableName(), e);
+                droppedTables.add(tableKey);
+            }
+        }
+
+        for (StatsMetaKey droppedTable : droppedTables) {
+            dropExternalBasicStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
+                    droppedTable.getTableName());
+            dropExternalHistogramStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
+                    droppedTable.getTableName());
+        }
+    }
+
+    public void recordDropPartition(long partitionId) {
         dropPartitionIds.add(partitionId);
     }
 
     public void clearStatisticFromDroppedPartition() {
-        checkAndDropPartitionStatistics();
+        clearStaleStatsWhenStarted();
+        clearStalePartitionStats();
         dropPartitionStatistics();
     }
 
@@ -370,33 +665,101 @@ public class AnalyzeMgr implements Writable {
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
+        try (var scope = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStatisticsConnection(true);
+            List<Long> pids =
+                    dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
 
-        List<Long> pids = dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
-
-        StatisticExecutor executor = new StatisticExecutor();
-        statsConnectCtx.setThreadLocalInfo();
-        if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
-            pids.forEach(dropPartitionIds::remove);
+            StatisticExecutor executor = new StatisticExecutor();
+            if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
+                pids.forEach(dropPartitionIds::remove);
+            }
         }
     }
 
-    private void checkAndDropPartitionStatistics() {
+    private void clearStalePartitionStats() {
+        // It means FE is restarted, the previous step had cleared the stats.
+        if (lastCleanTime == null) {
+            lastCleanTime = LocalDateTime.now();
+            return;
+        }
+
+        //  do the clear task once every 12 hours.
+        if (Duration.between(lastCleanTime, LocalDateTime.now()).toSeconds() < Config.clear_stale_stats_interval_sec) {
+            return;
+        }
+
+        List<Table> tables = Lists.newArrayList();
+        LocalDateTime workTime = LocalDateTime.now();
+        for (Map.Entry<Long, AnalyzeStatus> entry : analyzeStatusMap.entrySet()) {
+            AnalyzeStatus analyzeStatus = entry.getValue();
+            LocalDateTime endTime = analyzeStatus.getEndTime();
+            // After the last cleanup, if a table has successfully undergone a statistics collection,
+            // and the collection completion time is after the last cleanup time,
+            // then during the next cleanup process, the stale column statistics would be cleared.
+            if (analyzeStatus instanceof NativeAnalyzeStatus
+                    && analyzeStatus.getStatus() == StatsConstants.ScheduleStatus.FINISH
+                    && Duration.between(endTime, lastCleanTime).toMinutes() < 30) {
+                NativeAnalyzeStatus nativeAnalyzeStatus = (NativeAnalyzeStatus) analyzeStatus;
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nativeAnalyzeStatus.getDbId());
+                if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), nativeAnalyzeStatus.getTableId()) != null) {
+                    tables.add(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), nativeAnalyzeStatus.getTableId()));
+                }
+            }
+        }
+
+        if (tables.isEmpty()) {
+            lastCleanTime = workTime;
+        }
+
+        List<Long> tableIds = Lists.newArrayList();
+        List<Long> partitionIds = Lists.newArrayList();
+        int exprLimit = Config.expr_children_limit / 2;
+        for (Table table : tables) {
+            List<Long> pids = table.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+            if (pids.size() > exprLimit) {
+                tableIds.clear();
+                partitionIds.clear();
+                tableIds.add(table.getId());
+                partitionIds.addAll(pids);
+                break;
+            } else if ((tableIds.size() + partitionIds.size() + pids.size()) > exprLimit) {
+                break;
+            }
+            tableIds.add(table.getId());
+            partitionIds.addAll(pids);
+        }
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        try (var scope = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStatisticsConnection(true);
+            StatisticExecutor executor = new StatisticExecutor();
+            statsConnectCtx.getSessionVariable().setExprChildrenLimit(partitionIds.size() * 3);
+            boolean res = executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tableIds, partitionIds);
+            if (!res) {
+                LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
+            }
+            lastCleanTime = LocalDateTime.now();
+        }
+    }
+
+    private void clearStaleStatsWhenStarted() {
         if (!Config.statistic_check_expire_partition || checkTableIds.isEmpty()) {
             return;
         }
 
         if (checkTableIds.contains(CHECK_ALL_TABLES)) {
             checkTableIds.clear();
-            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
             for (Long dbId : dbIds) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                     continue;
                 }
 
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
                         continue;
                     }
@@ -413,12 +776,12 @@ public class AnalyzeMgr implements Writable {
 
         int exprLimit = Config.expr_children_limit / 2;
         for (Pair<Long, Long> dbTableId : checkTableIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbTableId.first);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbTableId.first);
             if (null == db) {
                 continue;
             }
 
-            Table table = db.getTable(dbTableId.second);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), dbTableId.second);
             if (table == null) {
                 continue;
             }
@@ -445,55 +808,142 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        statsConnectCtx.setThreadLocalInfo();
-        StatisticExecutor executor = new StatisticExecutor();
-        List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
+        try (var scope = statsConnectCtx.bindScope()) {
+            StatisticExecutor executor = new StatisticExecutor();
+            List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
 
-        statsConnectCtx.getSessionVariable().setExprChildrenLimit(checkPartitionIds.size() * 3);
-        if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
-            checkDbTableIds.forEach(checkTableIds::remove);
+            statsConnectCtx.getSessionVariable().setExprChildrenLimit(checkPartitionIds.size() * 3);
+            if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
+                checkDbTableIds.forEach(checkTableIds::remove);
+            }
         }
     }
 
-    public void dropBasicStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
+    public void dropBasicStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        for (Long tableId : tableIdHasDeleted) {
-            BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
-            if (basicStatsMeta == null) {
-                continue;
+        try (var guard = statsConnectCtx.bindScope()) {
+            if (tableIds == null || tableIds.isEmpty()) {
+                return;
             }
+            List<Long> distinctTableIds = tableIds.stream().distinct().collect(Collectors.toList());
+            List<BasicStatsMeta> metasToRemove = distinctTableIds.stream()
+                    .map(basicStatsMetaMap::get)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(Collectors.toList());
+            if (metasToRemove.isEmpty()) {
+                return;
+            }
+
             // Both types of tables need to be deleted, because there may have been a switch of
             // collecting statistics types, leaving some discarded statistics data.
-            statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.SAMPLE);
-            statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.FULL);
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
-            basicStatsMetaMap.remove(tableId);
+            boolean sampleOk = statisticExecutor.dropTableStatistics(statsConnectCtx, distinctTableIds,
+                    StatsConstants.AnalyzeType.SAMPLE);
+            boolean fullOk = statisticExecutor.dropTableStatistics(statsConnectCtx, distinctTableIds,
+                    StatsConstants.AnalyzeType.FULL);
+            if (sampleOk && fullOk) {
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMetaBatch(metasToRemove, wal -> {
+                    for (BasicStatsMeta meta : metasToRemove) {
+                        basicStatsMetaMap.remove(meta.getTableId());
+                    }
+                });
+            }
         }
     }
 
-    public void dropHistogramStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
-        Map<Long, List<String>> expireHistogram = new HashMap<>();
-        for (Pair<Long, String> entry : histogramStatsMetaMap.keySet()) {
-            if (tableIdHasDeleted.contains(entry.first)) {
-                if (expireHistogram.containsKey(entry.first)) {
-                    expireHistogram.get(entry.first).add(entry.second);
-                } else {
-                    expireHistogram.put(entry.first, Lists.newArrayList(entry.second));
-                }
+    public void dropHistogramStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
+        if (tableIds == null || tableIds.isEmpty()) {
+            return;
+        }
+        List<Long> distinctTableIdsToDelete = tableIds.stream().distinct().collect(Collectors.toList());
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        boolean ok = statisticExecutor.dropHistogramByTableIds(statsConnectCtx, distinctTableIdsToDelete);
+        if (!ok) {
+            return;
+        }
+
+        Set<Long> tableIdSet = new HashSet<>(distinctTableIdsToDelete);
+        List<Pair<Long, String>> keysToRemove = new ArrayList<>();
+        List<HistogramStatsMeta> metasToRemove = new ArrayList<>();
+        for (Map.Entry<Pair<Long, String>, HistogramStatsMeta> entry : histogramStatsMetaMap.entrySet()) {
+            if (tableIdSet.contains(entry.getKey().first)) {
+                keysToRemove.add(entry.getKey());
+                metasToRemove.add(entry.getValue());
+            }
+        }
+        if (metasToRemove.isEmpty()) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logRemoveHistogramStatsMetaBatch(metasToRemove, wal -> {
+            for (Pair<Long, String> key : keysToRemove) {
+                histogramStatsMetaMap.remove(key);
+            }
+        });
+    }
+
+    public void dropMultiColumnStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
+        if (tableIds == null || tableIds.isEmpty()) {
+            return;
+        }
+        List<Long> distinctTableIdsToDelete = tableIds.stream().distinct().collect(Collectors.toList());
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        boolean ok = statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, distinctTableIdsToDelete);
+        if (!ok) {
+            return;
+        }
+
+        Set<Long> tableIdSet = new HashSet<>(distinctTableIdsToDelete);
+        List<MultiColumnStatsKey> keysToRemove = new ArrayList<>();
+        List<MultiColumnStatsMeta> metasToRemove = new ArrayList<>();
+        for (Map.Entry<MultiColumnStatsKey, MultiColumnStatsMeta> entry : multiColumnStatsMetaMap.entrySet()) {
+            MultiColumnStatsKey key = entry.getKey();
+            if (tableIdSet.contains(key.tableId)) {
+                keysToRemove.add(key);
+                metasToRemove.add(entry.getValue());
+            }
+        }
+        if (metasToRemove.isEmpty()) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logRemoveMultiColumnStatsMetaBatch(metasToRemove, wal -> {
+            for (MultiColumnStatsKey key : keysToRemove) {
+                multiColumnStatsMetaMap.remove(key);
+            }
+        });
+    }
+
+    public void dropExternalBasicStatsMetaAndData(String catalogName, String dbName, String tableName) {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(catalogName, dbName, tableName);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(catalogName, dbName, tableName);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName) {
+        List<String> columns = Lists.newArrayList();
+        StatsMetaKey tableKey = new StatsMetaKey(catalogName, dbName, tableName);
+        for (StatsMetaColumnKey histogramKey : externalHistogramStatsMetaMap.keySet()) {
+            if (histogramKey.getTableKey().equals(tableKey)) {
+                columns.add(histogramKey.getColumnName());
             }
         }
 
-        for (Map.Entry<Long, List<String>> histogramItem : expireHistogram.entrySet()) {
-            StatisticExecutor statisticExecutor = new StatisticExecutor();
-            statisticExecutor.dropHistogram(statsConnectCtx, histogramItem.getKey(), histogramItem.getValue());
+        dropExternalHistogramStatsMetaAndData(catalogName, dbName, tableName, columns);
+    }
 
-            for (String histogramColumn : histogramItem.getValue()) {
-                Pair<Long, String> histogramKey = new Pair<>(histogramItem.getKey(), histogramColumn);
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logRemoveHistogramStatsMeta(histogramStatsMetaMap.get(histogramKey));
-                histogramStatsMetaMap.remove(histogramKey);
-            }
-        }
+    public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName,
+                                                      List<String> columns) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalHistogram(StatisticUtils.buildConnectContext(), catalogName, dbName, tableName,
+                columns);
+
+        removeExternalHistogramStatsMeta(catalogName, dbName, tableName, columns);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(ConnectContext statsConnectCtx,
+                                                      TableName tableName, Table table,
+                                                      List<String> columns) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalHistogram(statsConnectCtx, table.getUUID(), columns);
+
+        removeExternalHistogramStatsMeta(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), columns);
     }
 
     public void registerConnection(long analyzeID, ConnectContext ctx) {
@@ -502,6 +952,7 @@ public class AnalyzeMgr implements Writable {
 
     public void unregisterConnection(long analyzeID, boolean killExecutor) {
         ConnectContext context = connectionMap.remove(analyzeID);
+        cancelledAnalyzeIds.remove(analyzeID);
         if (killExecutor) {
             if (context != null) {
                 context.kill(false, "kill analyze unregisterConnection");
@@ -513,10 +964,31 @@ public class AnalyzeMgr implements Writable {
 
     public void killConnection(long analyzeID) {
         ConnectContext context = connectionMap.get(analyzeID);
-        if (context != null) {
-            context.kill(false, "kill analyze");
-        } else {
+        if (context == null) {
             throw new SemanticException("There is no running task with analyzeId " + analyzeID);
+        }
+        cancelledAnalyzeIds.add(analyzeID);
+        context.kill(false, USER_CANCEL_MESSAGE);
+    }
+
+    public boolean isAnalyzeCancelled(long analyzeID) {
+        return cancelledAnalyzeIds.contains(analyzeID);
+    }
+
+    public void killAllPendingTasks() {
+        if (ANALYZE_TASK_THREAD_POOL instanceof ThreadPoolExecutor executor) {
+            BlockingQueue<Runnable> queue = executor.getQueue();
+            List<Runnable> tasksToRemove = new ArrayList<>();
+
+            for (Runnable task : queue) {
+                if (task instanceof CancelableAnalyzeTask cancellableTask) {
+                    cancellableTask.cancel();
+                    tasksToRemove.add(task);
+                }
+            }
+
+            queue.removeAll(tasksToRemove);
+            LOG.info("Cancelled {} CancelableAnalyzeTask from queue", tasksToRemove.size());
         }
     }
 
@@ -525,123 +997,46 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void updateLoadRows(TransactionState transactionState) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(transactionState.getDbId());
         if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
             return;
         }
         TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();
         if (attachment instanceof RLTaskTxnCommitAttachment) {
-            BasicStatsMeta basicStatsMeta = null;
             if (!transactionState.getTableIdList().isEmpty()) {
-                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
-                        .get(transactionState.getTableIdList().get(0));
-            }
-            if (basicStatsMeta != null) {
-                basicStatsMeta.increaseUpdateRows(((RLTaskTxnCommitAttachment) attachment).getLoadedRows());
+                long tableId = transactionState.getTableIdList().get(0);
+                long loadedRows = ((RLTaskTxnCommitAttachment) attachment).getLoadedRows();
+                updateBasicStatsMeta(db.getId(), tableId, loadedRows);
             }
         } else if (attachment instanceof ManualLoadTxnCommitAttachment) {
-            BasicStatsMeta basicStatsMeta = null;
             if (!transactionState.getTableIdList().isEmpty()) {
-                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
-                        .get(transactionState.getTableIdList().get(0));
-            }
-            if (basicStatsMeta != null) {
-                basicStatsMeta.increaseUpdateRows(((ManualLoadTxnCommitAttachment) attachment).getLoadedRows());
+                long tableId = transactionState.getTableIdList().get(0);
+                long loadedRows = ((ManualLoadTxnCommitAttachment) attachment).getLoadedRows();
+                updateBasicStatsMeta(db.getId(), tableId, loadedRows);
             }
         } else if (attachment instanceof LoadJobFinalOperation) {
             LoadJobFinalOperation loadJobFinalOperation = (LoadJobFinalOperation) attachment;
             loadJobFinalOperation.getLoadingStatus().travelTableCounters(
-                    kv -> {
-                        BasicStatsMeta basicStatsMeta =
-                                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(kv.getKey());
-                        if (basicStatsMeta != null) {
-                            basicStatsMeta.increaseUpdateRows(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
-                        }
-                    }
+                    kv -> updateBasicStatsMeta(db.getId(), kv.getKey(), kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS))
             );
         } else if (attachment instanceof InsertTxnCommitAttachment) {
-            BasicStatsMeta basicStatsMeta = null;
             if (!transactionState.getTableIdList().isEmpty()) {
-                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
-                        .get(transactionState.getTableIdList().get(0));
-            }
-            if (basicStatsMeta != null) {
+                long tableId = transactionState.getTableIdList().get(0);
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                 if (loadRows == 0) {
-                    OlapTable table = (OlapTable) db.getTable(basicStatsMeta.getTableId());
-                    if (table != null) {
-                        basicStatsMeta.increaseUpdateRows(table.getRowCount());
-                    }
-                } else {
-                    basicStatsMeta.increaseUpdateRows(((InsertTxnCommitAttachment) attachment).getLoadedRows());
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
+                    loadRows = table != null ? table.getRowCount() : 0;
                 }
+                updateBasicStatsMeta(db.getId(), tableId, loadRows);
             }
         }
     }
 
-    public void readFields(DataInputStream dis) throws IOException {
-        // read job
-        String s = Text.readString(dis);
-        SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
 
-        if (null != data) {
-            if (null != data.jobs) {
-                for (NativeAnalyzeJob job : data.jobs) {
-                    replayAddAnalyzeJob(job);
-                }
-            }
 
-            if (null != data.nativeStatus) {
-                for (AnalyzeStatus status : data.nativeStatus) {
-                    replayAddAnalyzeStatus(status);
-                }
-            }
 
-            if (null != data.basicStatsMeta) {
-                for (BasicStatsMeta meta : data.basicStatsMeta) {
-                    replayAddBasicStatsMeta(meta);
-                }
-            }
-
-            if (null != data.histogramStatsMeta) {
-                for (HistogramStatsMeta meta : data.histogramStatsMeta) {
-                    replayAddHistogramStatsMeta(meta);
-                }
-            }
-        }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // save history
-        SerializeData data = new SerializeData();
-        data.jobs = getAllNativeAnalyzeJobList();
-        data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
-                filter(AnalyzeStatus::isNative).
-                map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
-        data.basicStatsMeta = new ArrayList<>(getBasicStatsMetaMap().values());
-        data.histogramStatsMeta = new ArrayList<>(getHistogramStatsMetaMap().values());
-
-        String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(out, s);
-    }
-
-    public long loadAnalyze(DataInputStream dis, long checksum) throws IOException {
-        try {
-            readFields(dis);
-            LOG.info("finished replay analyze job from image");
-        } catch (EOFException e) {
-            LOG.info("none analyze job replay.");
-        }
-        return checksum;
-    }
-
-    public long saveAnalyze(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream()
                 .distinct().collect(Collectors.toList());
 
@@ -649,67 +1044,78 @@ public class AnalyzeMgr implements Writable {
                 + 1 + analyzeStatuses.size()
                 + 1 + basicStatsMetaMap.size()
                 + 1 + histogramStatsMetaMap.size()
-                + 1 + externalBasicStatsMetaMap.size();
+                + 1 + externalBasicStatsMetaMap.size()
+                + 1 + externalHistogramStatsMetaMap.size()
+                + 1 + multiColumnStatsMetaMap.size();
 
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ANALYZE_MGR, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ANALYZE_MGR, numJson);
 
-        writer.writeJson(analyzeJobMap.size());
+        writer.writeInt(analyzeJobMap.size());
         for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
             writer.writeJson(analyzeJob);
         }
 
-        writer.writeJson(analyzeStatuses.size());
+        writer.writeInt(analyzeStatuses.size());
         for (AnalyzeStatus analyzeStatus : analyzeStatuses) {
             writer.writeJson(analyzeStatus);
         }
 
-        writer.writeJson(basicStatsMetaMap.size());
+        writer.writeInt(basicStatsMetaMap.size());
         for (BasicStatsMeta basicStatsMeta : basicStatsMetaMap.values()) {
             writer.writeJson(basicStatsMeta);
         }
 
-        writer.writeJson(histogramStatsMetaMap.size());
+        writer.writeInt(histogramStatsMetaMap.size());
         for (HistogramStatsMeta histogramStatsMeta : histogramStatsMetaMap.values()) {
             writer.writeJson(histogramStatsMeta);
         }
 
-        writer.writeJson(externalBasicStatsMetaMap.size());
+        writer.writeInt(externalBasicStatsMetaMap.size());
         for (ExternalBasicStatsMeta basicStatsMeta : externalBasicStatsMetaMap.values()) {
             writer.writeJson(basicStatsMeta);
+        }
+
+        writer.writeInt(externalHistogramStatsMetaMap.size());
+        for (ExternalHistogramStatsMeta histogramStatsMeta : externalHistogramStatsMetaMap.values()) {
+            writer.writeJson(histogramStatsMeta);
+        }
+
+
+        writer.writeInt(multiColumnStatsMetaMap.size());
+        for (MultiColumnStatsMeta multiColumnStatsMeta : multiColumnStatsMetaMap.values()) {
+            writer.writeJson(multiColumnStatsMeta);
         }
 
         writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int analyzeJobSize = reader.readInt();
-        for (int i = 0; i < analyzeJobSize; ++i) {
-            AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
-            replayAddAnalyzeJob(analyzeJob);
-        }
+        reader.readCollection(AnalyzeJob.class, this::replayAddAnalyzeJob);
 
-        int analyzeStatusSize = reader.readInt();
-        for (int i = 0; i < analyzeStatusSize; ++i) {
-            AnalyzeStatus analyzeStatus = reader.readJson(AnalyzeStatus.class);
-            replayAddAnalyzeStatus(analyzeStatus);
-        }
+        reader.readCollection(AnalyzeStatus.class, this::replayAddAnalyzeStatus);
 
-        int basicStatsMetaSize = reader.readInt();
-        for (int i = 0; i < basicStatsMetaSize; ++i) {
-            BasicStatsMeta basicStatsMeta = reader.readJson(BasicStatsMeta.class);
-            replayAddBasicStatsMeta(basicStatsMeta);
-        }
+        reader.readCollection(BasicStatsMeta.class, this::replayAddBasicStatsMeta);
 
-        int histogramStatsMetaSize = reader.readInt();
-        for (int i = 0; i < histogramStatsMetaSize; ++i) {
-            HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
-            replayAddHistogramStatsMeta(histogramStatsMeta);
-        }
+        reader.readCollection(HistogramStatsMeta.class, this::replayAddHistogramStatsMeta);
 
-        int externalBasicStatsMetaSize = reader.readInt();
-        for (int i = 0; i < externalBasicStatsMetaSize; ++i) {
-            ExternalBasicStatsMeta basicStatsMeta = reader.readJson(ExternalBasicStatsMeta.class);
-            replayAddExternalBasicStatsMeta(basicStatsMeta);
+        reader.readCollection(ExternalBasicStatsMeta.class, this::replayAddExternalBasicStatsMeta);
+
+        reader.readCollection(ExternalHistogramStatsMeta.class, this::replayAddExternalHistogramStatsMeta);
+
+        reader.readCollection(MultiColumnStatsMeta.class, this::replayAddMultiColumnStatsMeta);
+    }
+
+    private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
+        BasicStatsMeta basicStatsMeta =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
+        if (basicStatsMeta == null) {
+            // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
+            BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
+                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                    StatsConstants.buildInitStatsProp(), loadedRows);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
+        } else {
+            basicStatsMeta.increaseDeltaRows(loadedRows);
         }
     }
 
@@ -725,16 +1131,32 @@ public class AnalyzeMgr implements Writable {
 
         @SerializedName("histogramStatsMeta")
         public List<HistogramStatsMeta> histogramStatsMeta;
+
+        @SerializedName("multiColumnStatsMeta")
+        public List<MultiColumnStatsMeta> multiColumnStatsMeta;
     }
 
     public static class StatsMetaKey {
-        String catalogName;
-        String dbName;
-        String tableName;
+        private final String catalogName;
+        private final String dbName;
+        private final String tableName;
+
         public StatsMetaKey(String catalogName, String dbName, String tableName) {
             this.catalogName = catalogName;
             this.dbName = dbName;
             this.tableName = tableName;
+        }
+
+        public String getCatalogName() {
+            return catalogName;
+        }
+
+        public String getDbName() {
+            return dbName;
+        }
+
+        public String getTableName() {
+            return tableName;
         }
 
         @Override
@@ -754,6 +1176,80 @@ public class AnalyzeMgr implements Writable {
         @Override
         public int hashCode() {
             return Objects.hashCode(catalogName, dbName, tableName);
+        }
+    }
+
+    public static class StatsMetaColumnKey {
+        private final StatsMetaKey tableKey;
+        private final String columnName;
+        public StatsMetaColumnKey(String catalogName, String dbName, String tableName, String columnName) {
+            this.tableKey = new StatsMetaKey(catalogName, dbName, tableName);
+            this.columnName = columnName;
+        }
+
+        public StatsMetaKey getTableKey() {
+            return tableKey;
+        }
+
+        public String getColumnName() {
+            return columnName;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof StatsMetaColumnKey)) {
+                return false;
+            }
+            StatsMetaColumnKey that = (StatsMetaColumnKey) o;
+            return Objects.equal(tableKey, that.tableKey) &&
+                    Objects.equal(columnName, that.columnName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(tableKey, columnName);
+        }
+    }
+
+    public static class MultiColumnStatsKey {
+        private final long tableId;
+        private final Set<Integer> columnIds;
+        private final List<StatisticsType> statisticsTypes;
+
+        public MultiColumnStatsKey(long tableId, Set<Integer> columnIds, List<StatisticsType> statisticsTypes) {
+            this.tableId = tableId;
+            this.columnIds = columnIds;
+            this.statisticsTypes = statisticsTypes;
+        }
+
+        public long getTableId() {
+            return tableId;
+        }
+
+        public Set<Integer> getColumnIds() {
+            return columnIds;
+        }
+
+        public List<StatisticsType> getStatisticsTypes() {
+            return statisticsTypes;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            MultiColumnStatsKey that = (MultiColumnStatsKey) o;
+            return tableId == that.tableId && java.util.Objects.equals(columnIds, that.columnIds) &&
+                    java.util.Objects.equals(statisticsTypes, that.statisticsTypes);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(tableId, columnIds, statisticsTypes);
         }
     }
 }

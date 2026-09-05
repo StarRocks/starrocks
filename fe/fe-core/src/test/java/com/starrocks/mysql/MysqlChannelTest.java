@@ -1,336 +1,183 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-//   http://www.apache.org/licenses/LICENSE-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.mysql;
 
-import mockit.Delegate;
+import com.starrocks.common.Config;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.xnio.StreamConnection;
+import org.xnio.channels.Channels;
+import org.xnio.conduits.ConduitStreamSinkChannel;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
+import java.util.concurrent.TimeUnit;
 
 public class MysqlChannelTest {
-    int packetId = 0;
-    int readIdx = 0;
+
     @Mocked
-    private SocketChannel channel;
+    private StreamConnection conn;
 
-    @Before
-    public void setUp() throws IOException {
-        packetId = 0;
-        readIdx = 0;
+    @Mocked
+    private ConduitStreamSinkChannel sinkChannel;
+
+    // @Mocked on Channels makes JMockit intercept the static writeBlocking / flushBlocking
+    // calls; without it the real XNIO code would block on the mocked sink channel.
+    @Mocked
+    private Channels channels;
+
+    private long originalTimeout;
+
+    @BeforeEach
+    public void setUp() {
+        originalTimeout = Config.mysql_send_packet_timeout_ms;
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.mysql_send_packet_timeout_ms = originalTimeout;
+    }
+
+    private MysqlChannel newChannelWithConn() {
+        // Constructor reads getPeerAddress() for diagnostics; return a real InetSocketAddress.
+        InetSocketAddress peer = new InetSocketAddress("127.0.0.1", 12345);
         new Expectations() {
             {
-                channel.getRemoteAddress();
+                conn.getPeerAddress();
+                result = peer;
                 minTimes = 0;
-                result = new InetSocketAddress(1024);
             }
         };
+        return new MysqlChannel(conn);
     }
 
     @Test
-    public void testReceive() throws IOException {
-        // mock
+    public void testRealNetSendUsesTimedWriteAndFlushWhenTimeoutConfigured() throws Exception {
+        Config.mysql_send_packet_timeout_ms = 30_000L;
+        MysqlChannel channel = newChannelWithConn();
+        ByteBuffer buffer = ByteBuffer.allocate(16);
+        buffer.position(buffer.limit());
+        buffer.flip();
+
         new Expectations() {
             {
-                channel.read((ByteBuffer) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    int fakeRead(ByteBuffer buffer) {
-                        MysqlSerializer serializer = MysqlSerializer.newInstance();
-                        if (readIdx == 0) {
-                            readIdx++;
-                            serializer.writeInt3(10);
-                            serializer.writeInt1(packetId++);
+                conn.getSinkChannel();
+                result = sinkChannel;
+                minTimes = 1;
 
-                            buffer.put(serializer.toArray());
-                            return 4;
-                        } else if (readIdx == 1) {
-                            readIdx++;
-                            byte[] buf = new byte[buffer.remaining()];
-                            for (int i = 0; i < buffer.remaining(); ++i) {
-                                buf[i] = (byte) ('a' + i);
+                Channels.writeBlocking(sinkChannel, buffer, 30_000L, TimeUnit.MILLISECONDS);
+                result = 16;
+                times = 1;
 
-                            }
-                            buffer.put(buf);
-                            return 10;
-                        }
-                        return -1;
-                    }
-                };
+                Channels.flushBlocking(sinkChannel, 30_000L, TimeUnit.MILLISECONDS);
+                result = true;
+                times = 1;
             }
         };
 
-        MysqlChannel channel1 = new MysqlChannel(channel);
-
-        ByteBuffer buf = channel1.fetchOnePacket();
-        Assert.assertEquals(10, buf.remaining());
-        for (int i = 0; i < 10; ++i) {
-            Assert.assertEquals('a' + i, buf.get());
-        }
+        channel.realNetSend(buffer);
     }
 
     @Test
-    public void testLongPacket() throws IOException {
-        // mock
+    public void testRealNetSendUsesUntimedWriteAndFlushWhenTimeoutDisabled() throws Exception {
+        Config.mysql_send_packet_timeout_ms = 0L;
+        MysqlChannel channel = newChannelWithConn();
+        ByteBuffer buffer = ByteBuffer.allocate(16);
+        buffer.position(buffer.limit());
+        buffer.flip();
+
         new Expectations() {
             {
-                channel.read((ByteBuffer) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    int fakeRead(ByteBuffer buffer) {
-                        int maxLen = MysqlChannel.MAX_PHYSICAL_PACKET_LENGTH;
-                        MysqlSerializer serializer = MysqlSerializer.newInstance();
-                        if (readIdx == 0) {
-                            // packet
-                            readIdx++;
-                            serializer.writeInt3(maxLen);
-                            serializer.writeInt1(packetId++);
+                conn.getSinkChannel();
+                result = sinkChannel;
+                minTimes = 1;
 
-                            buffer.put(serializer.toArray());
-                            return 4;
-                        } else if (readIdx == 1) {
-                            readIdx++;
-                            int readLen = buffer.remaining();
-                            byte[] buf = new byte[readLen];
-                            for (int i = 0; i < readLen; ++i) {
-                                buf[i] = (byte) ('a' + (i % 26));
+                Channels.writeBlocking(sinkChannel, buffer);
+                result = 16;
+                times = 1;
 
-                            }
-                            buffer.put(buf);
-                            return readLen;
-                        } else if (readIdx == 2) {
-                            // packet
-                            readIdx++;
-                            serializer.writeInt3(10);
-                            serializer.writeInt1(packetId++);
-
-                            buffer.put(serializer.toArray());
-                            return 4;
-                        } else if (readIdx == 3) {
-                            readIdx++;
-                            int readLen = buffer.remaining();
-                            byte[] buf = new byte[readLen];
-                            for (int i = 0; i < readLen; ++i) {
-                                buf[i] = (byte) ('a' + (maxLen + i) % 26);
-
-                            }
-                            buffer.put(buf);
-                            return readLen;
-                        }
-                        return 0;
-                    }
-                };
+                Channels.flushBlocking(sinkChannel);
+                times = 1;
             }
         };
 
-        MysqlChannel channel1 = new MysqlChannel(channel);
-
-        ByteBuffer buf = channel1.fetchOnePacket();
-        Assert.assertEquals(MysqlChannel.MAX_PHYSICAL_PACKET_LENGTH + 10, buf.remaining());
-        for (int i = 0; i < 0xffffff - 1 + 10; ++i) {
-            Assert.assertEquals('a' + (i % 26), buf.get());
-        }
-    }
-
-    @Test(expected = IOException.class)
-    public void testBadSeq() throws IOException {
-        // mock
-        new Expectations() {
-            {
-                channel.read((ByteBuffer) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    int fakeRead(ByteBuffer buffer) {
-                        int maxLen = MysqlChannel.MAX_PHYSICAL_PACKET_LENGTH;
-                        MysqlSerializer serializer = MysqlSerializer.newInstance();
-                        if (readIdx == 0) {
-                            // packet
-                            readIdx++;
-                            serializer.writeInt3(maxLen);
-                            serializer.writeInt1(packetId++);
-
-                            buffer.put(serializer.toArray());
-                            return 4;
-                        } else if (readIdx == 1) {
-                            readIdx++;
-                            int readLen = buffer.remaining();
-                            byte[] buf = new byte[readLen];
-                            for (int i = 0; i < readLen; ++i) {
-                                buf[i] = (byte) ('a' + (i % 26));
-
-                            }
-                            buffer.put(buf);
-                            return readLen;
-                        } else if (readIdx == 2) {
-                            // packet
-                            readIdx++;
-                            serializer.writeInt3(10);
-                            // NOTE: Bad packet seq
-                            serializer.writeInt1(0);
-
-                            buffer.put(serializer.toArray());
-                            return 4;
-                        } else if (readIdx == 3) {
-                            readIdx++;
-                            byte[] buf = new byte[buffer.remaining()];
-                            for (int i = 0; i < buffer.remaining(); ++i) {
-                                buf[i] = (byte) ('a' + (i % 26));
-
-                            }
-                            buffer.put(buf);
-                            return buffer.remaining();
-                        }
-                        return 0;
-                    }
-                };
-            }
-        };
-
-        MysqlChannel channel1 = new MysqlChannel(channel);
-
-        ByteBuffer buf = channel1.fetchOnePacket();
-    }
-
-    @Test(expected = IOException.class)
-    public void testException() throws IOException {
-        // mock
-        new Expectations() {
-            {
-                channel.read((ByteBuffer) any);
-                minTimes = 0;
-                result = new IOException();
-            }
-        };
-
-        MysqlChannel channel1 = new MysqlChannel(channel);
-
-        ByteBuffer buf = channel1.fetchOnePacket();
-        Assert.fail("No Exception throws.");
+        channel.realNetSend(buffer);
     }
 
     @Test
-    public void testSend() throws IOException {
-        // mock
+    public void testRealNetSendThrowsOnPartialWriteAfterTimeout() throws Exception {
+        Config.mysql_send_packet_timeout_ms = 5_000L;
+        MysqlChannel channel = newChannelWithConn();
+        ByteBuffer buffer = ByteBuffer.allocate(100);
+        buffer.position(buffer.limit());
+        buffer.flip();
+
         new Expectations() {
             {
-                channel.write((ByteBuffer) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    int fakeWrite(ByteBuffer buffer) {
-                        int writeLen = 0;
-                        writeLen += buffer.remaining();
-                        buffer.position(buffer.limit());
-                        return writeLen;
-                    }
-                };
+                conn.getSinkChannel();
+                result = sinkChannel;
+                minTimes = 1;
+
+                Channels.writeBlocking(sinkChannel, buffer, 5_000L, TimeUnit.MILLISECONDS);
+                result = 40; // simulate timeout after partial write
+                times = 1;
             }
         };
 
-        MysqlChannel channel1 = new MysqlChannel(channel);
-        ByteBuffer buf = ByteBuffer.allocate(1000);
-        channel1.sendOnePacket(buf);
-
-        buf = ByteBuffer.allocate(0xffffff0);
-        channel1.sendOnePacket(buf);
-    }
-
-    @Test(expected = IOException.class)
-    public void testSendException() throws IOException {
-        // mock
-        new Expectations() {
-            {
-                channel.write((ByteBuffer) any);
-                minTimes = 0;
-                result = new IOException();
-            }
-        };
-        MysqlChannel channel1 = new MysqlChannel(channel);
-        ByteBuffer buf = ByteBuffer.allocate(1000);
-        channel1.sendOnePacket(buf);
-
-        buf = ByteBuffer.allocate(0xffffff0);
-        channel1.sendAndFlush(buf);
-    }
-
-    @Test(expected = IOException.class)
-    public void testSendFail() throws IOException {
-        // mock
-        new Expectations() {
-            {
-                channel.write((ByteBuffer) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    int fakeWrite(ByteBuffer buffer) {
-                        int writeLen = 0;
-                        writeLen += buffer.remaining();
-                        buffer.position(buffer.limit());
-                        return writeLen - 1;
-                    }
-                };
-            }
-        };
-        MysqlChannel channel1 = new MysqlChannel(channel);
-        ByteBuffer buf = ByteBuffer.allocate(1000);
-        channel1.sendAndFlush(buf);
-        Assert.fail("No Exception throws.");
+        IOException ex = Assertions.assertThrows(IOException.class, () -> channel.realNetSend(buffer));
+        Assertions.assertTrue(ex.getMessage().contains("write=40"),
+                "Exception message should report bytes actually written; got: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("needToWrite=100"),
+                "Exception message should report bytes requested; got: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("timeoutMs=5000"),
+                "Exception message should include the configured timeout; got: " + ex.getMessage());
     }
 
     @Test
-    public void testSendAfterException() throws IOException {
-        // Mock.
+    public void testRealNetSendThrowsOnFlushTimeout() throws Exception {
+        Config.mysql_send_packet_timeout_ms = 5_000L;
+        MysqlChannel channel = newChannelWithConn();
+        ByteBuffer buffer = ByteBuffer.allocate(16);
+        buffer.position(buffer.limit());
+        buffer.flip();
+
         new Expectations() {
             {
-                channel.write((ByteBuffer) any);
-                // The first calling `write()` throws IOException.
-                result = new IOException();
-                // The other calling `write()` executes normally.
-                result = new Delegate() {
-                    int fakeRead(ByteBuffer buffer) {
-                        int writeLen = buffer.remaining();
-                        buffer.position(buffer.limit());
-                        return writeLen;
-                    }
-                };
+                conn.getSinkChannel();
+                result = sinkChannel;
+                minTimes = 1;
+
+                Channels.writeBlocking(sinkChannel, buffer, 5_000L, TimeUnit.MILLISECONDS);
+                result = 16;
+                times = 1;
+
+                Channels.flushBlocking(sinkChannel, 5_000L, TimeUnit.MILLISECONDS);
+                result = false; // flush timed out
+                times = 1;
             }
         };
 
-        MysqlChannel channel1 = new MysqlChannel(channel);
-
-        // The first calling `realNetSend()` in `flush()` throws IOException.
-        // If `flush()` doesn't consider this exception, `sendBuffer` won't be reset to write mode,
-        // which will cause BufferOverflowException at the next calling `sendOnePacket()`.
-        ByteBuffer buf = ByteBuffer.allocate(10);
-        buf.putInt(1);
-        buf.flip(); // limit=4
-        channel1.sendOnePacket(buf);
-        buf.clear();
-        Assert.assertThrows(IOException.class, channel1::flush);
-
-        buf.putInt(1);
-        buf.putInt(2);
-        buf.flip(); // limit=8
-        channel1.sendOnePacket(buf);
+        IOException ex = Assertions.assertThrows(IOException.class, () -> channel.realNetSend(buffer));
+        Assertions.assertTrue(ex.getMessage().contains("Flush"),
+                "Exception message should indicate flush failure; got: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("timeoutMs=5000"),
+                "Exception message should include the configured timeout; got: " + ex.getMessage());
     }
-
 }

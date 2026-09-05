@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算两个参数的乘积。"
 ---
 
 # multiply
 
-## 功能
+
 
 计算参数 `arg1` 与 `arg2` 的乘积。
 

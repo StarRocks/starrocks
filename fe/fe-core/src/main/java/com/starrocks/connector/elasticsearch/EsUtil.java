@@ -39,13 +39,19 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -56,35 +62,27 @@ import java.util.List;
 import java.util.TimeZone;
 
 public class EsUtil {
-
-    public static void analyzePartitionAndDistributionDesc(PartitionDesc partitionDesc,
-                                                           DistributionDesc distributionDesc) {
-        if (partitionDesc == null && distributionDesc == null) {
-            return;
-        }
-
+    public static void analyzePartitionDesc(PartitionDesc partitionDesc) {
         if (partitionDesc != null) {
             if (!(partitionDesc instanceof RangePartitionDesc)) {
                 throw new SemanticException("Elasticsearch table only permit range partition");
             }
 
             RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
-            analyzePartitionDesc(rangePartitionDesc);
-        }
+            if (rangePartitionDesc.getPartitionColNames() == null || rangePartitionDesc.getPartitionColNames().isEmpty()) {
+                throw new SemanticException("No partition columns.");
+            }
 
-        if (distributionDesc != null) {
-            throw new SemanticException("could not support distribution clause");
+            if (rangePartitionDesc.getPartitionColNames().size() > 1) {
+                throw new SemanticException(
+                        "Elasticsearch table's parition column could only be a single column");
+            }
         }
     }
 
-    private static void analyzePartitionDesc(RangePartitionDesc partDesc) {
-        if (partDesc.getPartitionColNames() == null || partDesc.getPartitionColNames().isEmpty()) {
-            throw new SemanticException("No partition columns.");
-        }
-
-        if (partDesc.getPartitionColNames().size() > 1) {
-            throw new SemanticException(
-                    "Elasticsearch table's parition column could only be a single column");
+    public static void analyzeDistributionDesc(DistributionDesc distributionDesc) {
+        if (distributionDesc != null) {
+            throw new SemanticException("could not support distribution clause");
         }
     }
 
@@ -126,7 +124,7 @@ public class EsUtil {
         for (String columnName : properties.keySet()) {
             JSONObject columnAttr = (JSONObject) properties.get(columnName);
             // default set json.
-            Type type = Type.JSON;
+            Type type = JsonType.JSON;
             if (columnAttr.has("type")) {
                 type = convertType(columnAttr.get("type").toString());
             }
@@ -142,35 +140,36 @@ public class EsUtil {
     public static Type convertType(String esType) {
         switch (esType) {
             case "null":
-                return Type.NULL;
+                return NullType.NULL;
             case "boolean":
-                return Type.BOOLEAN;
+                return BooleanType.BOOLEAN;
             case "byte":
-                return Type.TINYINT;
+                return IntegerType.TINYINT;
             case "short":
-                return Type.SMALLINT;
+                return IntegerType.SMALLINT;
             case "integer":
-                return Type.INT;
+                return IntegerType.INT;
             case "long":
-                return Type.BIGINT;
+                return IntegerType.BIGINT;
             case "unsigned_long":
-                return Type.LARGEINT;
+                return IntegerType.LARGEINT;
             case "float":
             case "half_float":
-                return Type.FLOAT;
+                return FloatType.FLOAT;
             case "double":
             case "scaled_float":
-                return Type.DOUBLE;
+                return FloatType.DOUBLE;
             //TODO
             case "date":
-                return Type.DATETIME;
+                return DateType.DATETIME;
+            case "nested":
+            case "object":
+                return JsonType.JSON;
             case "keyword":
             case "text":
             case "ip":
-            case "nested":
-            case "object":
             default:
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
         }
     }
 
@@ -225,19 +224,43 @@ public class EsUtil {
     }
 
     /**
-     * content
+     * {
+     *     "<table>" : {
+     *          "mappings": {
+     *              "dynamic": "false",
+     *              "_source": {....}
+     *              "properties": {
+     *              .....
+     *              }
+     *          }
+     *     }
+     * }
      *
-     * @param mappings
-     * @return
+     * NOTE: different version of ES can have various format, currently it takes care of 5.x/6.x/7.x/8.x
+     * @return root object of properties
      */
     private static JSONObject parsePropertiesRoot(JSONObject mappings) {
-        String element = mappings.keySet().iterator().next();
-        if (!"properties".equals(element)) {
-            // If type is not passed in takes the first type.
-            return (JSONObject) mappings.get(element);
+        if (mappings == null || mappings.isEmpty()) {
+            throw new IllegalArgumentException("empty mappings");
         }
-        // Equal 7.x and after
-        return mappings;
+
+        // 7.x+ format
+        if (mappings.has("properties")) {
+            return mappings;
+        }
+
+        // 6.x format with type
+        Iterator<String> iterator = mappings.keySet().iterator();
+        while (iterator.hasNext()) {
+            String element = iterator.next();
+            Object value = mappings.get(element);
+
+            if (value instanceof JSONObject && ((JSONObject) value).has("properties")) {
+                return (JSONObject) value;
+            }
+        }
+
+        throw new IllegalArgumentException("No properties found in mappings");
     }
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()

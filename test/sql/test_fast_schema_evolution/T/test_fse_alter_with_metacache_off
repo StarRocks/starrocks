@@ -1,0 +1,25 @@
+-- name: test_lake_alter_add_first_key_no_metacache @cloud
+-- Regression for the SortedSchemaChange path on lake tables: when the BE schema cache is
+-- disabled, the schema-change writer must still find the new schema. The fix passes the
+-- tablet schema directly into DeltaWriter, bypassing TableSchemaService entirely. Before
+-- the fix the writer fell back to an FE schema RPC and the alter was cancelled with
+-- "table not found, db id: 0, table id: 0" because the alter task carried no catalog ids.
+update information_schema.be_configs set value = "0" where name = "lake_metadata_cache_limit";
+create database test_db_${uuid0};
+use test_db_${uuid0};
+
+create table t1 (k1 int, k2 int, v1 int) duplicate key(k1)
+  distributed by hash(k1) buckets 1 properties("replication_num" = "1");
+insert into t1 values (1, 10, 100), (2, 20, 200), (3, 30, 300);
+
+-- Trigger SortedSchemaChange by adding a key column at the head: this rewrites rowsets
+-- through DeltaWriter, the only schema-change path that built a writer without a schema.
+alter table t1 add column k0 int key default "0" first;
+function: wait_alter_table_finish()
+
+select * from t1 order by k1;
+insert into t1 values (-1, 4, 40, 400);
+select * from t1 order by k1;
+
+drop database test_db_${uuid0};
+update information_schema.be_configs set value = "2147483648" where name = "lake_metadata_cache_limit";

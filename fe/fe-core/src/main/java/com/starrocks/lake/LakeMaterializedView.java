@@ -16,31 +16,35 @@ package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RecyclePartitionInfo;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -63,6 +67,14 @@ public class LakeMaterializedView extends MaterializedView {
         this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
     }
 
+    public LakeMaterializedView(Database db, String mvName,
+                            MaterializedIndexMeta indexMeta, OlapTable baseTable,
+                            PartitionInfo partitionInfo, DistributionInfo distributionInfo,
+                            MvRefreshScheme refreshScheme) {
+        super(db, mvName, indexMeta, baseTable, partitionInfo, distributionInfo, refreshScheme);
+        this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
+    }
+
     @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
@@ -77,9 +89,6 @@ public class LakeMaterializedView extends MaterializedView {
 
     @Override
     public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.setStorageInfo(new StorageInfo(pathInfo, dataCacheInfo.getCacheInfo()));
     }
 
@@ -94,39 +103,38 @@ public class LakeMaterializedView extends MaterializedView {
         return (MaterializedView) selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
-    public static LakeMaterializedView read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeMaterializedView.class);
+    @Override
+    public boolean isDeleteRetryable() {
+        return true;
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        // write type first
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    public boolean delete(long dbId, boolean replay) {
+        return LakeTableHelper.deleteTable(dbId, this, replay);
     }
 
     @Override
-    public Runnable delete(boolean replay) {
-        onErase(replay);
-        return replay ? null : new DeleteLakeTableTask(this);
+    public boolean deleteFromRecycleBin(long dbId, boolean replay) {
+        return LakeTableHelper.deleteTableFromRecycleBin(dbId, this, replay);
+    }
+
+    @Override
+    public AlterJobV2Builder alterTable() {
+        return LakeTableHelper.alterTable(this);
     }
 
     @Override
     public Map<String, String> getProperties() {
         Map<String, String> properties = super.getProperties();
-        if (tableProperty != null) {
-            StorageInfo storageInfo = tableProperty.getStorageInfo();
-            if (storageInfo != null) {
-                // datacache.enable
-                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
-                        String.valueOf(storageInfo.isEnableDataCache()));
+        StorageInfo storageInfo = tableProperty.getStorageInfo();
+        if (storageInfo != null) {
+            // datacache.enable
+            properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                    String.valueOf(storageInfo.isEnableDataCache()));
 
-                // enable_async_write_back
-                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
-                        String.valueOf(storageInfo.isEnableAsyncWriteBack()));
-            }
+            // enable_async_write_back
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                    String.valueOf(storageInfo.isEnableAsyncWriteBack()));
         }
         return properties;
     }
@@ -148,7 +156,6 @@ public class LakeMaterializedView extends MaterializedView {
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
 
         // storage_volume
-        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(id);
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
                 PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
@@ -168,5 +175,53 @@ public class LakeMaterializedView extends MaterializedView {
             return CatalogUtils.addEscapeCharacter(comment);
         }
         return TableType.MATERIALIZED_VIEW.name();
+    }
+
+    @Override
+    protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
+        if (partitionInfo.isRangePartition()) {
+            Range<PartitionKey> range = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+            return new RecycleLakeRangePartitionInfo(dbId, id, partition, range,
+                    partitionInfo.getDataProperty(partition.getId()),
+                    partitionInfo.getReplicationNum(partition.getId()),
+                    partitionInfo.getDataCacheInfo(partition.getId()));
+        } else if (partitionInfo.isListPartition()) {
+            return new RecycleLakeListPartitionInfo(dbId, id, partition,
+                    partitionInfo.getDataProperty(partition.getId()),
+                    partitionInfo.getReplicationNum(partition.getId()),
+                    partitionInfo.getDataCacheInfo(partition.getId()));
+        } else if (partitionInfo.isUnPartitioned()) {
+            return new RecycleLakeUnPartitionInfo(dbId, id, partition,
+                    partitionInfo.getDataProperty(partition.getId()),
+                    partitionInfo.getReplicationNum(partition.getId()),
+                    partitionInfo.getDataCacheInfo(partition.getId()));
+        } else {
+            throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // We should restore column unique id before calling super.gsonPostProcess(), which will rebuild full schema there.
+        // And the max unique id will be reset while rebuilding full schema.
+        LakeTableHelper.restoreColumnUniqueIdIfNeeded(this);
+        super.gsonPostProcess();
+    }
+
+    // used in colocate table index, return an empty list for LakeMaterializedView
+    @Override
+    public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
+        return Lists.newArrayList();
+    }
+
+    public boolean isFastSchemaEvolutionV2() {
+        return tableProperty.isCloudNativeFastSchemaEvolutionV2();
+    }
+
+    public void setFastSchemaEvolutionV2(boolean enabled) {
+        tableProperty.modifyTableProperties(
+                PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                Boolean.valueOf(enabled).toString());
+        tableProperty.buildCloudNativeFastSchemaEvolutionV2();
     }
 }

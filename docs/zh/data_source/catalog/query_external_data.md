@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+sidebar_position: 160
+displayed_sidebar: docs
+description: "External Catalog 方便访问并查询存储在各类外部数据源的数据，无需创建外部表。"
 ---
 
 # 查询外部数据
@@ -8,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 ## 前提条件
 
-根据数据源已创建不同类型的 External Catalog。关于当前支持的 External Catalog 类型，请参见 [Catalog](../catalog/catalog_overview.md#catalog)。
+根据数据源已创建不同类型的 External Catalog。关于当前支持的 External Catalog 类型，请参见 [Catalog](./catalog_overview.md#catalog)。
 
 ## 操作步骤
 
@@ -16,25 +18,25 @@ displayed_sidebar: "Chinese"
    - 如从 MySQL 客户端连接到 StarRocks。连接后，默认进入到 `default_catalog`。
    - 如使用 JDBC 连接到 StarRocks，连接时即可通过 `default_catalog.db_name` 的方式指定要连接的数据库。
 
-2. （可选）执行以下语句查看当前 StarRocks 集群中的所有 Catalog 并找到指定的 External Catalog。有关返回值说明，请参见 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md)。
+2. （可选）执行以下语句查看当前 StarRocks 集群中的所有 Catalog 并找到指定的 External Catalog。有关返回值说明，请参见 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md)。
 
     ```SQL
     SHOW CATALOGS;
     ```
 
-3. （可选）执行以下语句查看指定 external catalog 中的数据库。有关参数和返回值说明，请参见 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md)。
+3. （可选）执行以下语句查看指定 external catalog 中的数据库。有关参数和返回值说明，请参见 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md)。
 
     ```SQL
     SHOW DATABASES FROM catalog_name;
     ```
 
-4. （可选）执行以下语句将当前会话切换到指定 external catalog 的指定数据库。有关参数说明和示例，请参见 [USE](../../sql-reference/sql-statements/data-definition/USE.md)。
+4. （可选）执行以下语句将当前会话切换到指定 external catalog 的指定数据库。有关参数说明和示例，请参见 [USE](../../sql-reference/sql-statements/Database/USE.md)。
 
     ```SQL
     USE catalog_name.db_name;
     ```
 
-5. 查询外部数据。更多 SELECT 的使用方法，请参见 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md)。
+5. 查询外部数据。更多 SELECT 的使用方法，请参见 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md)。
 
     ```SQL
     SELECT * FROM table_name;
@@ -63,4 +65,4 @@ SELECT * FROM hive1.hive_db.hive_table limit 1;
 
 ## 更多操作
 
-如要查询 StarRocks 的内部数据，请参见[查询内部数据](../catalog/default_catalog.md#查询内部数据)。
+如要查询 StarRocks 的内部数据，请参见[查询内部数据](./default_catalog.md#查询内部数据)。

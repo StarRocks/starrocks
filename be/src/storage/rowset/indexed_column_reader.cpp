@@ -35,10 +35,10 @@
 #include "storage/rowset/indexed_column_reader.h"
 
 #include "fs/fs.h"
-#include "gutil/strings/substitute.h" // for Substitute
-#include "storage/key_coder.h"
+#include "gutil/strings/substitute.h"     // for Substitute
 #include "storage/rowset/encoding_info.h" // for EncodingInfo
 #include "storage/rowset/page_io.h"
+#include "storage_primitive/key_coder.h"
 
 namespace starrocks {
 
@@ -95,7 +95,6 @@ Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePo
     page_opts.codec = _compress_codec;
     page_opts.stats = opts.stats;
     page_opts.use_page_cache = opts.use_page_cache;
-    page_opts.kept_in_memory = opts.kept_in_memory;
     page_opts.encoding_type = _encoding_info->encoding();
     return PageIO::read_and_decompress_page(page_opts, handle, body, footer);
 }
@@ -106,9 +105,9 @@ Status IndexedColumnReader::new_iterator(const IndexReadOptions& opts, std::uniq
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts)
+IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts)
         : _reader(reader),
-          _opts(opts),
+          _opts(std::move(opts)),
           _ordinal_iter(&reader->_ordinal_index_reader),
           _value_iter(&reader->_value_index_reader) {}
 
@@ -123,6 +122,17 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
 }
 
 Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {
+    // Hard bounds check (not just a debug DCHECK): callers such as the bloom
+    // filter read path derive `idx` from a data-page index, and a layout
+    // mismatch (e.g. fewer stored bloom filters than data pages) would pass an
+    // ordinal past the end. Relying on the DCHECK alone means release builds
+    // skip it and run off the end of the page data -> out-of-bounds read /
+    // SIGSEGV. Return a recoverable error so the caller can degrade gracefully.
+    // Seeking to exactly num_values() stays allowed (a valid past-the-last seek).
+    if (idx > static_cast<ordinal_t>(_reader->num_values())) {
+        return Status::InvalidArgument(strings::Substitute(
+                "IndexedColumnIterator::seek_to_ordinal out of range: $0 > $1", idx, _reader->num_values()));
+    }
     DCHECK(idx >= 0 && idx <= _reader->num_values());
 
     if (!_reader->support_ordinal_seek()) {

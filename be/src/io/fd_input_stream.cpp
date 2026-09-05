@@ -18,13 +18,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/io_error.h"
+#include "io/io_profiler.h"
 
 #ifdef USE_STAROS
-#include "fslib/metric_key.h"
-#include "metrics/metrics.h"
+#include <fslib/metric_key.h>
+#include <metrics/metrics.h>
 #endif
 
 #ifdef USE_STAROS
@@ -46,7 +48,7 @@ namespace starrocks::io {
         if (UNLIKELY(is_closed)) return Status::InternalError("file has been close()d"); \
     } while (0)
 
-FdInputStream::FdInputStream(int fd) : _fd(fd), _errno(0), _offset(0), _close_on_delete(false), _is_closed(false) {}
+FdInputStream::FdInputStream(int fd) : _fd(fd) {}
 
 FdInputStream::~FdInputStream() {
     if (_close_on_delete) {
@@ -68,6 +70,8 @@ Status FdInputStream::close() {
 
 StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
+    MonotonicStopWatch watch;
+    watch.start();
     ssize_t res;
 #ifdef USE_STAROS
     staros::starlet::metrics::TimeObserver<prometheus::Histogram> observer(s_posixread_iolatency);
@@ -81,6 +85,7 @@ StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     s_posixread_iosize.Observe(res);
 #endif
     _offset += res;
+    IOProfiler::add_read(res, watch.elapsed_time());
     return res;
 }
 

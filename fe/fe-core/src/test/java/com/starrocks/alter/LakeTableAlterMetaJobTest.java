@@ -15,363 +15,516 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Table;
-import com.staros.proto.FileCacheInfo;
+import com.staros.client.StarClientException;
 import com.staros.proto.FilePathInfo;
-import com.staros.proto.FileStoreInfo;
-import com.staros.proto.FileStoreType;
-import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
+import com.staros.proto.ShardInfo;
+import com.staros.proto.StarStatus;
+import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.RpcException;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
-import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.thrift.TCompactionStrategy;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
+import com.starrocks.utframe.MockedWarehouseManager;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import javax.validation.constraints.NotNull;
 
 public class LakeTableAlterMetaJobTest {
-    private static final int NUM_BUCKETS = 4;
-    private ConnectContext connectContext;
-    private LakeTableAlterMetaJob alterMetaJob;
-    private Database db;
+    private static final String DB_NAME = "test";
+    private static Database db;
+    private static ConnectContext connectContext;
     private LakeTable table;
-    private List<Long> shadowTabletIds = new ArrayList<>();
+    private LakeTableAlterMetaJob job;
 
     public LakeTableAlterMetaJobTest() {
-        connectContext = new ConnectContext(null);
-        connectContext.setStartTime();
-        connectContext.setThreadLocalInfo();
     }
 
-    @Before
-    public void before() throws Exception {
-        FeConstants.runningUnitTest = true;
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
-                                           List<Long> matchShardIds, Map<String, String> properties)
-                    throws DdlException {
-                for (int i = 0; i < shardCount; i++) {
-                    shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
-                }
-                return shadowTabletIds;
-            }
-        };
-
-        new MockUp<EditLog>() {
-            @Mock
-            public void logSaveNextId(long nextId) {
-
-            }
-
-            @Mock
-            public void logAlterJob(AlterJobV2 alterJob) {
-
-            }
-
-            @Mock
-            public void logSaveTransactionId(long transactionId) {
-
-            }
-
-            @Mock
-            public void logModifyEnablePersistentIndex(ModifyTablePropertyOperationLog info) {
-
-            }
-        };
-
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
-        final long dbId = GlobalStateMgr.getCurrentState().getNextId();
-        final long partitionId = GlobalStateMgr.getCurrentState().getNextId();
-        final long tableId = GlobalStateMgr.getCurrentState().getNextId();
-        final long indexId = GlobalStateMgr.getCurrentState().getNextId();
-
-        GlobalStateMgr.getCurrentState().setStarOSAgent(new StarOSAgent());
-
-        KeysType keysType = KeysType.DUP_KEYS;
-        db = new Database(dbId, "db0");
-
-        Database oldDb = GlobalStateMgr.getCurrentState().getIdToDb().putIfAbsent(db.getId(), db);
-        Assert.assertNull(oldDb);
-
-        Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
-        DistributionInfo dist = new HashDistributionInfo(NUM_BUCKETS, Collections.singletonList(c0));
-        PartitionInfo partitionInfo = new RangePartitionInfo(Collections.singletonList(c0));
-        partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-
-        table = new LakeTable(tableId, "t0", Collections.singletonList(c0), keysType, partitionInfo, dist);
-        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        Partition partition = new Partition(partitionId, "t0", index, dist);
-        TStorageMedium storage = TStorageMedium.HDD;
-        TabletMeta tabletMeta =
-                new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
-        for (int i = 0; i < NUM_BUCKETS; i++) {
-            Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
-            index.addTablet(tablet, tabletMeta);
-        }
-        table.addPartition(partition);
-
-        table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN,
-                keysType);
-        table.setBaseIndexId(index.getId());
-
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/object-1");
-        FilePathInfo pathInfo = builder.build();
-
-        table.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
-        DataCacheInfo dataCacheInfo = new DataCacheInfo(false, false);
-        partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
-
-        db.registerTableUnlocked(table);
-
-        Map<String, String> properties = new HashMap<>();
-        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
-        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
-
-        List<AlterClause> alterList = Collections.singletonList(modify);
-        alterMetaJob = (LakeTableAlterMetaJob) schemaChangeHandler.createAlterMetaJob(alterList, db, table);
-        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        connectContext = UtFrameUtils.createDefaultCtx();
     }
 
-    @After
-    public void after() throws Exception {
+    @BeforeEach
+    public void setUp() throws Exception {
+        String createDbStmtStr = "create database " + DB_NAME;
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        connectContext.setDatabase(DB_NAME);
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+
+        table = createTable(connectContext,
+                    "CREATE TABLE t0(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true')");
+        Assertions.assertTrue(table.enablePersistentIndex());
+        job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
+                    table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
+    }
+
+    @AfterEach
+    public void tearDown() throws DdlException, MetaNotFoundException {
         db.dropTable(table.getName());
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
+        } catch (MetaNotFoundException ignored) {
+        }
+    }
+
+    private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     @Test
-    public void testRunPendingJob() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseBackend(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-        Assert.assertEquals(alterMetaJob.jobState, AlterJobV2.JobState.PENDING);
-        alterMetaJob.runPendingJob();
-        Assert.assertEquals(alterMetaJob.jobState, AlterJobV2.JobState.RUNNING);
-        Assert.assertNotEquals(alterMetaJob.getTransactionId().get().longValue(), -1L);
+    public void testJobState() throws Exception {
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
+        Assertions.assertTrue(table.enablePersistentIndex());
     }
 
     @Test
-    public void testUpdatePartitonMetaFailed() throws AlterCancelException {
-        FeConstants.runningUnitTest = false;
+    public void testForceCancelAtFinishedRewriting() throws Exception {
+        // Phase 2: CANCEL ALTER TABLE ... FORCE must bypass the FINISHED_REWRITING
+        // guard. Lake AlterMeta has no shadow tablets to clean up — pure state
+        // transition + persisted edit log.
+        //
+        // Stub the no-op publish RPC so this unit test does not need a live
+        // BE. Production force-cancel sends publish_version(no_op=true) to
+        // advance the partition version chain past the cancelled alter; the
+        // BE-side short-circuit behaviour is exercised by integration tests.
+        new MockUp<LakeTableAlterMetaJobBase>() {
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                return true;
+            }
+        };
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // Non-force cancel is a no-op in FINISHED_REWRITING (existing behavior).
+        Assertions.assertFalse(job.cancel("non-force-cancel"));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertFalse(job.isForceSkippedAtCommitted());
+
+        // Capture each partition's commitVersion as (VisibleVersion + 1).
+        Map<Long, Long> expectedCommitVersion = new HashMap<>();
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            expectedCommitVersion.put(pp.getId(), pp.getVisibleVersion() + 1);
+        }
+
+        // Force cancel succeeds; catalog reverts so the alter property does NOT
+        // take effect (operator opted-in to discard the half-applied change).
+        Assertions.assertTrue(job.cancel("force-cancel-from-stuck-publish", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.isForceSkippedAtCommitted(),
+                "forceSkippedAtCommitted must record the force-cancel for audit");
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        // copyForPersist must propagate the marker so the edit log records it.
+        AlterJobV2 persistCopy = job.copyForPersist();
+        Assertions.assertTrue(persistCopy.isForceSkippedAtCommitted(),
+                "copyForPersist must propagate forceSkippedAtCommitted");
+
+        // Replay regression: simulate FE recovering from a pre-cancel image
+        // by replaying the persisted CANCELLED entry onto a SEPARATE in-memory
+        // job that still looks pre-cancel (state=FINISHED_REWRITING, marker
+        // cleared, VisibleVersion reset to commitVersion-1). The copy-block in
+        // replay() must propagate forceSkippedAtCommitted from the persisted
+        // entry onto `this` before the CANCELLED branch reads it — otherwise
+        // the version bump is silently skipped and FE stays stuck at
+        // commitVersion-1 against BE metadata already advanced by the no-op
+        // publish. (staleInMemory must NOT be the same object as persistCopy,
+        // else replay's `this != other` copy-block is skipped.)
+        LakeTableAlterMetaJob staleInMemory = (LakeTableAlterMetaJob) job.copyForPersist();
+        staleInMemory.forceSkippedAtCommitted = false;
+        staleInMemory.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            pp.setVisibleVersion(expectedCommitVersion.get(pp.getId()) - 1, 0);
+        }
+        staleInMemory.replay(persistCopy);
+        Assertions.assertTrue(staleInMemory.isForceSkippedAtCommitted(),
+                "replay must copy forceSkippedAtCommitted from the persisted entry");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            Assertions.assertEquals(expectedCommitVersion.get(pp.getId()).longValue(),
+                    pp.getVisibleVersion(),
+                    "replay must bump VisibleVersion to commitVersion when forceSkippedAtCommitted=true");
+        }
+    }
+
+    @Test
+    public void testLakePublishVersionWithSkipSingleDispatch() throws Exception {
+        // Current (pre-alter) format is per-tablet (file_bundling=false), so the
+        // no-op publish must use the per-tablet (non-aggregate) publish_version
+        // path — dispatch keys off the table's CURRENT format, not the alter's
+        // target.
+        LakeTable single = createTable(connectContext,
+                "CREATE TABLE t_single(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), single.getId(), single.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                true, "CLOUD_NATIVE");
+        runForceCancelNoOpPublishBody(job, /*expectAggregate=*/ false);
+    }
+
+    @Test
+    public void testLakePublishVersionWithSkipAggregateDispatch() throws Exception {
+        // Current (pre-alter) format is bundled (file_bundling=true), so the
+        // no-op publish must use the aggregate publish_version path (BE expects
+        // one bundle file per partition) — again keyed off the table's CURRENT
+        // format.
+        LakeTable bundled = createTable(connectContext,
+                "CREATE TABLE t_bundled(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='true')");
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), bundled.getId(), bundled.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                true, "CLOUD_NATIVE");
+        runForceCancelNoOpPublishBody(job, /*expectAggregate=*/ true);
+    }
+
+    @Test
+    public void testForceCancelFileBundlingAlterDoesNotSetMetadataSwitchVersion() throws Exception {
+        // Regression for the leader/replay divergence: force-cancelling a
+        // file_bundling alter must NOT record a metadataSwitchVersion. The alter
+        // is discarded (no-op publish writes V-1 content as V), so no format
+        // switch happened at commitVersion; recording one would diverge from the
+        // replay path (which never sets it) and needlessly pin vacuum's retain
+        // version.
+        LakeTable bundled = createTable(connectContext,
+                "CREATE TABLE t_switch(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        // ENABLE_FILE_BUNDLING alter (enable): updateVisibleVersion's old code
+        // would have set metadataSwitchVersion for exactly this metaType.
+        LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), bundled.getId(), bundled.getName(), 60 * 1000, TTabletMetaType.ENABLE_FILE_BUNDLING,
+                true, "CLOUD_NATIVE", /*enableFileBundling=*/ true, "DEFAULT");
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
-                return 1L;
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish) {
+            }
+        };
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        Assertions.assertTrue(job.cancel("force-cancel-switch-version", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        for (PhysicalPartition pp : bundled.getPhysicalPartitions()) {
+            Assertions.assertEquals(0L, pp.getMetadataSwitchVersion(),
+                    "force-cancel must not record a metadataSwitchVersion");
+        }
+    }
+
+    // Runs the REAL lakePublishVersionWithSkip body (the other force-cancel
+    // tests stub it out) by intercepting Utils.publishVersion, and asserts the
+    // helper builds a TxnInfoPB with noOpPublish=true and dispatches via the
+    // expected single-vs-aggregate path so BE's transactions.cpp short-circuit
+    // fires and writes V-1 content as V.
+    private void runForceCancelNoOpPublishBody(LakeTableAlterMetaJob localJob, boolean expectAggregate)
+            throws Exception {
+        java.util.concurrent.atomic.AtomicInteger publishCalls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean lastNoOp = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicBoolean lastAggregate = new java.util.concurrent.atomic.AtomicBoolean();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                       long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish) {
+                publishCalls.incrementAndGet();
+                lastNoOp.set(txnInfo.noOpPublish);
+                lastAggregate.set(useAggregatePublish);
             }
         };
 
-        Assert.assertEquals(alterMetaJob.jobState, AlterJobV2.JobState.PENDING);
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            alterMetaJob.runPendingJob();
-        });
+        localJob.runPendingJob();
+        localJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, localJob.getJobState());
 
-        Assert.assertTrue(exception.getMessage().contains("Failed to update partition"));
-        Assert.assertEquals(alterMetaJob.jobState, AlterJobV2.JobState.PENDING);
+        Assertions.assertTrue(localJob.cancel("force-cancel-meta-publish-body", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, localJob.getJobState());
+        Assertions.assertTrue(publishCalls.get() > 0,
+                "lakePublishVersionWithSkip must invoke Utils.publishVersion at least once");
+        Assertions.assertTrue(lastNoOp.get(),
+                "TxnInfoPB.noOpPublish must be set so BE short-circuits the txn-log apply");
+        Assertions.assertEquals(expectAggregate, lastAggregate.get(),
+                "no-op publish must follow the expected single-vs-aggregate dispatch");
+        Assertions.assertTrue(localJob.isForceSkippedAtCommitted(),
+                "marker must be set after the no-op publish actually ran");
+    }
+
+    @Test
+    public void testJobStateEnableFileBundling() throws Exception {
+        LakeTable table1 = createTable(connectContext,
+                    "CREATE TABLE t1(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true', " + 
+                                "'file_bundling'='true')");
+        LakeTableAlterMetaJob job1 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), 
+                        table1.getId(), table1.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, 
+                        "CLOUD_NATIVE");
+
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job1.getJobState());
+        job1.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job1.getJobState());
+        Assertions.assertNotEquals(-1L, job1.getTransactionId().orElse(-1L).longValue());
+        job1.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job1.getJobState());
+        while (job1.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job1.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job1.getJobState());
+
+        Assertions.assertTrue(table1.enablePersistentIndex());
+    }
+
+    @Test
+    public void testSetEnablePersistentWithoutType() throws Exception {
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertTrue(table.enablePersistentIndex());
+        // check persistent index type been set
+        Assertions.assertTrue(table.getPersistentIndexType() == (Config.enable_cloud_native_persistent_index_by_default
+                ? TPersistentIndexType.CLOUD_NATIVE : TPersistentIndexType.LOCAL));
+    }
+
+    @Test
+    public void testSetEnablePersistentWithLocalindex() throws Exception {
+        LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table.getId(), table.getName(), 60 * 1000,
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "LOCAL");
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        job2.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assertions.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        job2.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job2.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assertions.assertTrue(table.enablePersistentIndex());
+        // check persistent index type been set
+        Assertions.assertTrue(table.getPersistentIndexType() == TPersistentIndexType.LOCAL);
+    }
+
+    @Test
+    public void testSetDisblePersistentIndex() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t1(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true')");
+        // Simulate a legacy LOCAL persistent index table: creating one with LOCAL is no longer
+        // allowed, but existing tables must still be handled by the alter-meta job path.
+        table2.setPersistentIndexType(TPersistentIndexType.LOCAL);
+        LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table2.getId(), table2.getName(), 60 * 1000,
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, false, "LOCAL");
+        Assertions.assertTrue(table2.enablePersistentIndex());
+        Assertions.assertTrue(table2.getPersistentIndexType() == TPersistentIndexType.LOCAL);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        job2.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assertions.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        job2.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job2.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assertions.assertFalse(table2.enablePersistentIndex());
+
+        db.dropTable(table2.getName());
+    }
+
+    @Test
+    public void testUpdatePartitonMetaFailed() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+        mockedWarehouseManager.setComputeNodeId(null);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        System.err.println(job.errMsg);
+        Assertions.assertTrue(job.errMsg.contains("no alive node"));
     }
 
     @Test
     public void testCancelPendingJob() {
-        alterMetaJob.cancel("cancel test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, alterMetaJob.getJobState());
-
-        // test cancel again
-        Assert.assertFalse(alterMetaJob.cancel("test"));
+        job.cancel("cancel test");
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
-    public void testDropTableBeforeCancel() {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseBackend(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
-        db.dropTable(table.getName());
-        Assert.assertTrue(alterMetaJob.cancel("test"));
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, alterMetaJob.getJobState());
+    public void testDropTable01() {
+        db.dropTable(table.getId());
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
-    public void testRunningJob() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseBackend(LakeTablet tablet) {
-                return 1L;
-            }
-        };
+    public void testDropDb01() throws DdlException, MetaNotFoundException {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
 
-        alterMetaJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, alterMetaJob.getJobState());
+    @Test
+    public void testDropTable02() throws AlterCancelException {
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
 
-        Table<Long, Long, MaterializedIndex> partitionIndexMap = alterMetaJob.getPartitionIndexMap();
-        Map<Long, Long> commitVersionMap = alterMetaJob.getCommitVersionMap();
-        Assert.assertEquals(1, partitionIndexMap.size());
-        Assert.assertEquals(0, commitVersionMap.size());
+        db.dropTable(table.getId());
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
 
-        alterMetaJob.runRunningJob();
-        for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
-            Assert.assertEquals(commitVersionMap.get(partitionId).longValue(), partition.getCommittedVersion());
+    @Test
+    public void testDropDb02() throws DdlException, MetaNotFoundException {
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
+
+    @Test
+    public void testDropTable03() throws AlterCancelException {
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        db.dropTable(table.getId());
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
+
+    @Test
+    public void testDropDb03() throws DdlException, MetaNotFoundException {
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
+
+    @Test
+    public void testReplay() throws Exception {
+        job.run();
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.run();
+            Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, alterMetaJob.getJobState());
-        Assert.assertTrue(alterMetaJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
-    }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
-    @Test
-    public void testFinishedRewritingJob() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseBackend(LakeTablet tablet) {
-                return 1L;
-            }
+        LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
+                    job.dbId, job.tableId, job.tableName,
+                    job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
 
-            @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                       long commitTime) throws
-                    RpcException {
-            }
-        };
-
-        alterMetaJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, alterMetaJob.getJobState());
-
-        alterMetaJob.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, alterMetaJob.getJobState());
-        Assert.assertTrue(alterMetaJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
-
-        alterMetaJob.runFinishedRewritingJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterMetaJob.getJobState());
-        Assert.assertTrue(alterMetaJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
-
-        Table<Long, Long, MaterializedIndex> partitionIndexMap = alterMetaJob.getPartitionIndexMap();
-        Map<Long, Long> commitVersionMap = alterMetaJob.getCommitVersionMap();
-        for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
-            Assert.assertEquals(commitVersionMap.get(partitionId).longValue(), partition.getVisibleVersion());
-        }
-
-        Assert.assertTrue(table.enablePersistentIndex());
-    }
-
-    @Test
-    public void testReplay() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseBackend(LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                       long commitTime) throws
-                    RpcException {
-            }
-        };
-
-        LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(alterMetaJob.jobId,
-                alterMetaJob.dbId, alterMetaJob.tableId, alterMetaJob.tableName,
-                alterMetaJob.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true);
-
-        alterMetaJob.runPendingJob();
-        alterMetaJob.runRunningJob();
-        alterMetaJob.runFinishedRewritingJob();
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(alterMetaJob.getDbId());
-        LakeTable table = (LakeTable) db.getTable(alterMetaJob.getTableId());
-
-        Table<Long, Long, MaterializedIndex> partitionIndexMap = alterMetaJob.getPartitionIndexMap();
-        Map<Long, Long> commitVersionMap = alterMetaJob.getCommitVersionMap();
+        Table<Long, Long, MaterializedIndex> partitionIndexMap = job.getPartitionIndexMap();
+        Map<Long, Long> commitVersionMap = job.getCommitVersionMap();
 
         // for replay will check partition.getVisibleVersion()
         // here we reduce the visibleVersion for test
         for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
-            partition.updateVisibleVersion(commitVersion - 1);
+            Assertions.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
+            physicalPartition.updateVisibleVersion(commitVersion - 1);
         }
 
-        replayAlterMetaJob.replay(alterMetaJob);
+        replayAlterMetaJob.replay(job);
 
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, replayAlterMetaJob.getJobState());
-        Assert.assertEquals(alterMetaJob.getFinishedTimeMs(), replayAlterMetaJob.getFinishedTimeMs());
-        Assert.assertEquals(alterMetaJob.getTransactionId(), replayAlterMetaJob.getTransactionId());
-        Assert.assertEquals(alterMetaJob.getJobId(), replayAlterMetaJob.getJobId());
-        Assert.assertEquals(alterMetaJob.getTableId(), replayAlterMetaJob.getTableId());
-        Assert.assertEquals(alterMetaJob.getDbId(), replayAlterMetaJob.getDbId());
-        Assert.assertEquals(alterMetaJob.getCommitVersionMap(), replayAlterMetaJob.getCommitVersionMap());
-        Assert.assertEquals(alterMetaJob.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, replayAlterMetaJob.getJobState());
+        Assertions.assertEquals(job.getFinishedTimeMs(), replayAlterMetaJob.getFinishedTimeMs());
+        Assertions.assertEquals(job.getTransactionId(), replayAlterMetaJob.getTransactionId());
+        Assertions.assertEquals(job.getJobId(), replayAlterMetaJob.getJobId());
+        Assertions.assertEquals(job.getTableId(), replayAlterMetaJob.getTableId());
+        Assertions.assertEquals(job.getDbId(), replayAlterMetaJob.getDbId());
+        Assertions.assertEquals(job.getCommitVersionMap(), replayAlterMetaJob.getCommitVersionMap());
+        Assertions.assertEquals(job.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
 
         for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
+            Assertions.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
         }
     }
 
@@ -379,16 +532,16 @@ public class LakeTableAlterMetaJobTest {
     public void testUpdateTabletMetaInfoTaskToThrift() throws AlterCancelException {
         long backend = 1L;
         long txnId = 1L;
-        Set<Pair<Long, Integer>> tableIdWithSchemaHash = new HashSet<>();
-        Pair<Long, Integer> item = new Pair<>(1L, 1);
-        tableIdWithSchemaHash.add(item);
-        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch = new MarkedCountDownLatch<>(1);
-
-        UpdateTabletMetaInfoTask updateTabletMetaInfoTask = new UpdateTabletMetaInfoTask(backend, tableIdWithSchemaHash,
-                true, latch, TTabletMetaType.ENABLE_PERSISTENT_INDEX, TTabletType.TABLET_TYPE_LAKE, txnId);
-        TUpdateTabletMetaInfoReq result = updateTabletMetaInfoTask.toThrift();
-        Assert.assertEquals(result.txn_id, txnId);
-        Assert.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
+        Set<Long> tabletSet = new HashSet<>();
+        tabletSet.add(1L);
+        MarkedCountDownLatch<Long, Set<Long>> latch = new MarkedCountDownLatch<>(1);
+        TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
+                    backend, tabletSet, true);
+        task.setLatch(latch);
+        task.setTxnId(txnId);
+        TUpdateTabletMetaInfoReq result = task.toThrift();
+        Assertions.assertEquals(result.txn_id, txnId);
+        Assertions.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
     }
 
     @Test
@@ -396,9 +549,301 @@ public class LakeTableAlterMetaJobTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, "all");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        List<AlterClause> alterList = Collections.singletonList(modify);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         Assertions.assertThrows(DdlException.class,
-                () -> schemaChangeHandler.createAlterMetaJob(alterList, db, table));
+                    () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
+    }
+
+    @Test
+    public void testModifyPropertyWithIndex() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "true");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table);
+        Assertions.assertNull(job);
+    }
+
+    @Test
+    public void testModifyPropertyWithIndexType() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t11(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true')");
+        // Simulate a legacy LOCAL persistent index table; migrating it to CLOUD_NATIVE must succeed.
+        table2.setPersistentIndexType(TPersistentIndexType.LOCAL);
+        Map<String, String> properties = new HashMap<>();
+        properties.put("persistent_index_type", "CLOUD_NATIVE");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        // success
+        AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
+        Assertions.assertNotNull(job2);
+    }
+
+    @Test
+    public void testModifyPropertyWithIndexTypeFailure() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t11(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true')");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "false");
+        properties.put("persistent_index_type", "CLOUD_NATIVE");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        // disabling the persistent index is no longer supported for shared-data primary key tables
+        ExceptionChecker.expectThrows(DdlException.class,
+                () -> schemaChangeHandler.createAlterMetaJob(modify, db, table2));
+
+    }
+
+    @Test
+    public void testModifyEnablePersistentIndexOnNonPkTableNoop() throws Exception {
+        LakeTable dupTable = createTable(connectContext,
+                    "CREATE TABLE t_dup(c0 INT, c1 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "false");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        // enable_persistent_index is a no-op for non-primary-key tables and must not be rejected by the
+        // shared-data primary key restriction.
+        AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify, db, dupTable);
+        Assertions.assertNull(job2);
+
+        db.dropTable(dupTable.getName());
+    }
+
+    @Test
+    public void testModifyPropertyToLocalIndexRejected() {
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        // switching persistent_index_type to LOCAL is deprecated for shared-data primary key tables
+        Map<String, String> typeProps = new HashMap<>();
+        typeProps.put("persistent_index_type", "LOCAL");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Only cloud native persistent index",
+                () -> schemaChangeHandler.createAlterMetaJob(new ModifyTablePropertiesClause(typeProps), db, table));
+    }
+
+    @Test
+    public void testModifyPropertyFileBundling() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t12(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('file_bundling'='false')");
+        Assertions.assertFalse(table2.isFileBundling());
+        try {
+            String alterStmtStr = "alter table test.t12 set ('file_bundling'='true')";
+            List<ShardInfo> shardInfos = new ArrayList<>();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
+                        throws StarClientException {
+                    throw new StarClientException(
+                        StarStatus.newBuilder().setStatusCode(StatusCode.INTERNAL).setErrorMsg("injected error")
+                                .build());
+                }
+            };
+            Assertions.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
+                        throws StarClientException {
+                    return shardInfos;
+                }
+            };
+
+            Assertions.assertTrue(table2.checkLakeRollupAllowFileBundling());
+            ShardInfo shardInfo1 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002/")).build();
+            shardInfos.add(shardInfo1);
+            Assertions.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            shardInfos.clear();
+
+            ShardInfo shardInfo2 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10003")).build();
+            ShardInfo shardInfo3 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002")).build();
+            shardInfos.add(shardInfo2);
+            shardInfos.add(shardInfo3);
+    
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertFalse(table2.isFileBundling());
+        }
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
+                    throws StarClientException {
+                return new ArrayList<>();
+            }
+        };
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("file_bundling", "true");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
+        Assertions.assertNotNull(job);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertTrue(((LakeTableAlterMetaJob) job).enableFileBundling());
+        Assertions.assertFalse(((LakeTableAlterMetaJob) job).disableFileBundling());
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertTrue(table2.isFileBundling());
+        Assertions.assertFalse(table2.allowUpdateFileBundling());
+
+        properties.put("file_bundling", "true");
+        ModifyTablePropertiesClause modify1 = new ModifyTablePropertiesClause(properties);
+        AlterJobV2 job1 = schemaChangeHandler.createAlterMetaJob(modify1, db, table2);
+        Assertions.assertNull(job1);
+        Assertions.assertFalse(table2.allowUpdateFileBundling());
+
+        try {
+            String alterStmtStr = "alter table test.t12 set ('file_bundling'='true')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertTrue(table2.isFileBundling());
+        }
+
+        try {
+            String alterStmtStr = "alter table test.t12 set ('file_bundling'='false')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertFalse(table2.allowUpdateFileBundling());
+            Assertions.assertTrue(table2.isFileBundling());
+        }
+
+        properties.clear();
+        properties.put("file_bundling", "false");
+        ModifyTablePropertiesClause modify2 = new ModifyTablePropertiesClause(properties);
+        AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify2, db, table2);
+        Assertions.assertNotNull(job2);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        job2.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assertions.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertTrue(((LakeTableAlterMetaJob) job2).disableFileBundling());
+        Assertions.assertFalse(((LakeTableAlterMetaJob) job2).enableFileBundling());
+        job2.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job2.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assertions.assertFalse(table2.isFileBundling());
+    }
+
+    @Test
+    public void testModifyPropertyCompactionStrategy() throws Exception {
+        try {
+            createTable(connectContext,
+                        "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                        "PROPERTIES('compaction_strategy'='real_time')");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Only default compaction strategy is allowed"));
+        }
+
+        try {
+            createTable(connectContext,
+                        "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
+            String alterStmtStr = "alter table test.non_pk set ('compaction_strategy'='real_time')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("can be only update for a primary key table"));
+        }
+    
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t13(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+        try {
+            String alterStmtStr = "alter table test.t13 set ('compaction_strategy'='unknown')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("compaction_strategy", "real_time");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
+        Assertions.assertNotNull(job);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.REAL_TIME);
+        try {
+            String alterStmtStr = "alter table test.t13 set ('compaction_strategy'='DEFAULT')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.REAL_TIME);
+        }
+        while (table2.getState() != OlapTable.OlapTableState.NORMAL) {
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+    }
+
+    @Test
+    public void testGetInfo() {
+        // The meta job is in PENDING right after setUp().
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+
+        // Exactly one row, matching the shared-data SHOW ALTER TABLE COLUMN schema (the 13 common
+        // columns plus the trailing Warehouse column present in shared-data mode).
+        Assertions.assertEquals(1, infos.size());
+        List<Comparable> row = infos.get(0);
+        Assertions.assertEquals(14, row.size());
+
+        // Key fields are populated (column order matches SchemaChangeProcDir.TITLE_NAMES).
+        Assertions.assertEquals(job.getJobId(), row.get(0));                        // JobId
+        Assertions.assertEquals(table.getName(), row.get(1));                       // TableName
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING.name(), row.get(9));    // State
+        Assertions.assertEquals(job.getTimeoutMs() / 1000, row.get(12));            // Timeout
+
+        // A meta-only change has no shadow index / schema version, so the numeric index columns
+        // use placeholders. They MUST stay numeric (Long), not NULL_STRING, otherwise the cross-job
+        // sort in SchemaChangeHandler.getAlterJobInfosByDb mixes String and Long comparables.
+        Assertions.assertTrue(row.get(0) instanceof Long);    // JobId
+        Assertions.assertTrue(row.get(5) instanceof Long);    // IndexId
+        Assertions.assertTrue(row.get(6) instanceof Long);    // OriginIndexId
+        Assertions.assertTrue(row.get(8) instanceof Long);    // TransactionId
+        Assertions.assertTrue(row.get(12) instanceof Long);   // Timeout
+        Assertions.assertEquals(-1L, row.get(5));
+        Assertions.assertEquals(-1L, row.get(6));
+
+        // Regression guard: the meta-job row must sort together with a regular schema-change row
+        // (which carries real Long IndexId / OriginIndexId and a String SchemaVersion) without
+        // throwing. Keep columns 0-4 equal so the comparator actually reaches the IndexId column.
+        List<Comparable> schemaChangeRow = new ArrayList<>(row);
+        schemaChangeRow.set(5, 10001L);   // real IndexId, like SchemaChangeJobV2
+        schemaChangeRow.set(6, 10001L);   // real OriginIndexId
+        schemaChangeRow.set(7, "1:0");    // real SchemaVersion
+        List<List<Comparable>> combined = new ArrayList<>();
+        combined.add(schemaChangeRow);
+        combined.add(row);
+        combined.sort(new ListComparator<>(0, 1, 2, 3, 4, 5));
+        Assertions.assertEquals(2, combined.size());
     }
 }

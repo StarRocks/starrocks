@@ -16,22 +16,34 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.junit.Test;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.VarcharType;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 public class SqlToScalarOperatorTranslatorTest {
 
@@ -59,5 +71,60 @@ public class SqlToScalarOperatorTranslatorTest {
         CallOperator so = (CallOperator) SqlToScalarOperatorTranslator.translate(complexFunc,
                 new ExpressionMapping(null, Collections.emptyList()), new ColumnRefFactory());
         assertEquals("if", so.getFnName());
+    }
+
+    // Regression for issue #72831 / PR #72832. The LambdaArgument -> ColumnRefOperator cache must live
+    // on the ColumnRefFactory (not on the AST node), so that re-planning with a fresh factory yields
+    // a fresh ColumnRefOperator rather than a stale id from a previous factory. Within one factory,
+    // repeated lookups for the same AST node must return the identical ref.
+    @Test
+    public void testLambdaArgRefCacheScopedToFactory() {
+        LambdaArgument arg = new LambdaArgument("x");
+        arg.setType(IntegerType.INT);
+        arg.setOriginType(IntegerType.INT);
+
+        ColumnRefFactory firstFactory = new ColumnRefFactory();
+        ColumnRefOperator first = firstFactory.computeLambdaArgRefIfAbsent(arg,
+                n -> firstFactory.create(n.getName(), n.getType(), n.isNullable(), true));
+        ColumnRefOperator firstAgain = firstFactory.computeLambdaArgRefIfAbsent(arg,
+                n -> firstFactory.create(n.getName(), n.getType(), n.isNullable(), true));
+        assertSame(first, firstAgain, "same factory must reuse the cached ref");
+
+        ColumnRefFactory secondFactory = new ColumnRefFactory();
+        ColumnRefOperator second = secondFactory.computeLambdaArgRefIfAbsent(arg,
+                n -> secondFactory.create(n.getName(), n.getType(), n.isNullable(), true));
+        assertNotSame(first, second, "re-plan with a new factory must allocate a new ref");
+    }
+
+    @Test
+    public void testAICompleteCallsHaveDistinctHiddenOccurrenceIds() {
+        FunctionSet functionSet = new FunctionSet();
+        functionSet.init();
+        Function function = functionSet.getFunction(
+                new Function(new FunctionName("ai_complete"), new com.starrocks.type.Type[] {VarcharType.VARCHAR},
+                        InvalidType.INVALID, false),
+                Function.CompareMode.IS_IDENTICAL);
+        assertNotNull(function);
+        assertEquals(1, function.getNumArgs());
+
+        FunctionCallExpr firstExpr = new FunctionCallExpr("ai_complete", ImmutableList.of(new StringLiteral("same")));
+        firstExpr.setFn(function);
+        firstExpr.setType(VarcharType.VARCHAR);
+        FunctionCallExpr secondExpr = new FunctionCallExpr("ai_complete", ImmutableList.of(new StringLiteral("same")));
+        secondExpr.setFn(function);
+        secondExpr.setType(VarcharType.VARCHAR);
+
+        ColumnRefFactory factory = new ColumnRefFactory();
+        ExpressionMapping mapping = new ExpressionMapping(null, Collections.emptyList());
+        CallOperator first = (CallOperator) SqlToScalarOperatorTranslator.translate(firstExpr, mapping, factory);
+        CallOperator second = (CallOperator) SqlToScalarOperatorTranslator.translate(secondExpr, mapping, factory);
+
+        assertEquals(2, first.getArguments().size());
+        assertEquals(2, second.getArguments().size());
+        assertEquals(1, first.getFunction().getNumArgs());
+        assertEquals(1, second.getFunction().getNumArgs());
+        int firstOccurrenceId = ((ConstantOperator) first.getArguments().get(1)).getInt();
+        int secondOccurrenceId = ((ConstantOperator) second.getArguments().get(1)).getInt();
+        assertNotEquals(firstOccurrenceId, secondOccurrenceId);
     }
 }

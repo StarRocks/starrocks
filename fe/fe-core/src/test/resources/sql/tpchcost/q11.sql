@@ -1,31 +1,3 @@
-[sql]
-select
-    ps_partkey,
-    sum(ps_supplycost * ps_availqty) as value
-from
-    partsupp,
-    supplier,
-    nation
-where
-    ps_suppkey = s_suppkey
-  and s_nationkey = n_nationkey
-  and n_name = 'PERU'
-group by
-    ps_partkey having
-    sum(ps_supplycost * ps_availqty) > (
-    select
-    sum(ps_supplycost * ps_availqty) * 0.0001000000
-    from
-    partsupp,
-    supplier,
-    nation
-    where
-    ps_suppkey = s_suppkey
-                  and s_nationkey = n_nationkey
-                  and n_name = 'PERU'
-    )
-order by
-    value desc ;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:1: PS_PARTKEY | 21: sum
@@ -33,30 +5,30 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-30:MERGING-EXCHANGE
+29:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 30
+EXCHANGE ID: 29
 UNPARTITIONED
 
-29:SORT
+28:SORT
 |  order by: <slot 21> 21: sum DESC
 |  offset: 0
 |
-28:Project
+27:Project
 |  <slot 1> : 1: PS_PARTKEY
 |  <slot 21> : 21: sum
 |
-27:NESTLOOP JOIN
+26:NESTLOOP JOIN
 |  join op: INNER JOIN
 |  colocate: false, reason:
 |  other join predicates: 21: sum > 43: expr
 |
-|----26:EXCHANGE
+|----25:EXCHANGE
 |
 10:AGGREGATE (update finalize)
 |  output: sum(20: expr)
@@ -87,12 +59,9 @@ OUTPUT EXPRS:
 PARTITION: UNPARTITIONED
 
 STREAM DATA SINK
-EXCHANGE ID: 26
+EXCHANGE ID: 25
 UNPARTITIONED
 
-25:ASSERT NUMBER OF ROWS
-|  assert number of rows: LE 1
-|
 24:Project
 |  <slot 43> : 42: sum * 1.0E-4
 |

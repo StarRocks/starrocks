@@ -34,28 +34,25 @@
 
 #include "http/download_action.h"
 
-#include <sstream>
 #include <string>
 
+#include "base/path/filesystem_util.h"
+#include "base/path/path_util.h"
+#include "base/time/time.h"
+#include "common/config_http_fwd.h"
+#include "common/system/master_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
 #include "http/utils.h"
-#include "runtime/exec_env.h"
-#include "util/filesystem_util.h"
-#include "util/path_util.h"
-#include "util/time.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
 
 namespace starrocks {
 
 const std::string FILE_PARAMETER = "file";
-const std::string DB_PARAMETER = "db";
-const std::string LABEL_PARAMETER = "label";
 const std::string TOKEN_PARAMETER = "token";
 
-DownloadAction::DownloadAction(ExecEnv* exec_env, const std::vector<std::string>& allow_dirs)
-        : _exec_env(exec_env), _download_type(NORMAL) {
+DownloadAction::DownloadAction(const std::vector<std::string>& allow_dirs) : _download_type(NORMAL) {
     for (auto& dir : allow_dirs) {
         std::string p;
         WARN_IF_ERROR(fs::canonicalize(dir, &p), "canonicalize path " + dir + " failed");
@@ -63,8 +60,7 @@ DownloadAction::DownloadAction(ExecEnv* exec_env, const std::vector<std::string>
     }
 }
 
-DownloadAction::DownloadAction(ExecEnv* exec_env, const std::string& error_log_root_dir)
-        : _exec_env(exec_env), _download_type(ERROR_LOG) {
+DownloadAction::DownloadAction(const std::string& error_log_root_dir) : _download_type(ERROR_LOG) {
     WARN_IF_ERROR(fs::canonicalize(error_log_root_dir, &_error_log_root_dir),
                   "canonicalize path " + error_log_root_dir + " failed");
 }
@@ -75,23 +71,24 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
     if (config::enable_token_check) {
         status = check_token(req);
         if (!status.ok()) {
-            std::string error_msg = status.get_error_msg();
-            HttpChannel::send_reply(req, error_msg);
+            HttpChannel::send_reply(req, status.message());
+            LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
+                         << " error:" << status;
             return;
         }
     }
 
     status = check_path_is_allowed(file_param);
     if (!status.ok()) {
-        std::string error_msg = status.get_error_msg();
-        HttpChannel::send_reply(req, error_msg);
+        HttpChannel::send_reply(req, status.message());
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param << " error:" << status;
         return;
     }
     auto is_dir = fs::is_directory(file_param);
     if (!is_dir.ok()) {
-        std::string error_msg = is_dir.status().get_error_msg();
-        HttpChannel::send_reply(req, error_msg);
-        return;
+        HttpChannel::send_reply(req, is_dir.status().message());
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
+                     << " error:" << is_dir.status();
     }
     if (*is_dir) {
         do_dir_response(file_param, req);
@@ -105,14 +102,12 @@ void DownloadAction::handle_error_log(HttpRequest* req, const std::string& file_
 
     Status status = check_log_path_is_allowed(absolute_path);
     if (!status.ok()) {
-        std::string error_msg = status.get_error_msg();
-        HttpChannel::send_reply(req, error_msg);
+        HttpChannel::send_reply(req, status.message());
         return;
     }
     auto is_dir = fs::is_directory(absolute_path);
     if (!is_dir.ok()) {
-        std::string error_msg = is_dir.status().get_error_msg();
-        HttpChannel::send_reply(req, error_msg);
+        HttpChannel::send_reply(req, is_dir.status().message());
         return;
     }
     if (*is_dir) {
@@ -153,7 +148,7 @@ Status DownloadAction::check_token(HttpRequest* req) {
         return Status::InternalError("token is not specified.");
     }
 
-    if (token_str != _exec_env->token()) {
+    if (token_str != get_master_token()) {
         return Status::InternalError("invalid token.");
     }
 

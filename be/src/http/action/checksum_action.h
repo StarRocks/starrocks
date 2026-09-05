@@ -36,18 +36,24 @@
 
 #include <cstdint>
 
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
+class RuntimeEnv;
+
 class ChecksumAction : public HttpHandler {
 public:
-    ChecksumAction() = default;
+    explicit ChecksumAction(const RuntimeEnv& runtime_env) : _runtime_env(runtime_env) {}
     ~ChecksumAction() override = default;
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
+    const RuntimeEnv& _runtime_env;
+
     int64_t _do_checksum(int64_t tablet_id, int64_t version);
 };
 

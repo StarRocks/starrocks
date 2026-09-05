@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将整数转换为二进制表示。"
 ---
 
 # bin
 
-## 功能
+
 
 将参数`x`转成二进制。
 

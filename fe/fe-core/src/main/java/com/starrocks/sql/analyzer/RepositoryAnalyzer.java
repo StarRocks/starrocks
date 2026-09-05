@@ -17,12 +17,11 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
@@ -37,7 +36,7 @@ public class RepositoryAnalyzer {
         new RepositoryAnalyzerVisitor().analyze(dropRepositoryStmt, session);
     }
 
-    public static class RepositoryAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class RepositoryAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(DdlStmt statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -58,13 +57,7 @@ public class RepositoryAnalyzer {
                     throw new SemanticException("You must specify the broker of the repository");
                 }
 
-                FsBroker brokerAddr = null;
-                try {
-                    brokerAddr = context.getGlobalStateMgr().getBrokerMgr().getBroker(brokerName, location);
-                } catch (AnalysisException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "failed to get address of broker " + brokerName);
-                }
+                FsBroker brokerAddr = context.getGlobalStateMgr().getBrokerMgr().getBroker(brokerName, location);
 
                 if (brokerAddr == null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,

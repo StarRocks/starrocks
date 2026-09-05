@@ -18,21 +18,25 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
+import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -48,6 +52,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class PipeAnalyzer {
 
     public static final String TASK_VARIABLES_PREFIX = "TASK.";
@@ -62,20 +68,26 @@ public class PipeAnalyzer {
                     .add(PROPERTY_POLL_INTERVAL)
                     .add(PROPERTY_BATCH_SIZE)
                     .add(PROPERTY_BATCH_FILES)
+                    .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
                     .build();
 
-    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+    public static void analyzePipeName(PipeName pipeName, String defaultDbName) {
         if (Strings.isNullOrEmpty(pipeName.getDbName())) {
-            if (Strings.isNullOrEmpty(context.getDatabase())) {
+            if (Strings.isNullOrEmpty(defaultDbName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
-            pipeName.setDbName(context.getDatabase());
+            defaultDbName = normalizeName(defaultDbName);
+            pipeName.setDbName(defaultDbName);
         }
         if (Strings.isNullOrEmpty(pipeName.getPipeName())) {
             throw new SemanticException("empty pipe name");
         }
-        FeNameFormat.checkCommonName("db", pipeName.getDbName());
+        FeNameFormat.checkDbName(pipeName.getDbName());
         FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
+    }
+
+    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+        analyzePipeName(pipeName, context.getDatabase());
     }
 
     private static void analyzeProperties(Map<String, String> properties) {
@@ -86,7 +98,7 @@ public class PipeAnalyzer {
             if (propertyName.toUpperCase().startsWith(TASK_VARIABLES_PREFIX)) {
                 // Task execution variable
                 String taskVariableName = StringUtils.removeStartIgnoreCase(propertyName, TASK_VARIABLES_PREFIX);
-                if (!VariableMgr.containsVariable(taskVariableName)) {
+                if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(taskVariableName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
                 }
                 continue;
@@ -102,9 +114,9 @@ public class PipeAnalyzer {
                         value = Integer.parseInt(valueStr);
                     } catch (NumberFormatException ignored) {
                     }
-                    if (value < 1 || value > 1024) {
+                    if (value < 1 || value > Pipe.MAX_POLL_INTERVAL) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                                PROPERTY_POLL_INTERVAL + " should in [1, 1024]");
+                                String.format("%s should in [1, %d]", PROPERTY_POLL_INTERVAL, Pipe.MAX_POLL_INTERVAL));
                     }
                     break;
                 }
@@ -133,7 +145,11 @@ public class PipeAnalyzer {
                     break;
                 }
                 case PROPERTY_AUTO_INGEST: {
-                    VariableMgr.parseBooleanVariable(valueStr);
+                    ParseUtil.parseBooleanValue(valueStr, PROPERTY_AUTO_INGEST);
+                    break;
+                }
+                case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
+                    analyzeWarehouseProperty(valueStr);
                     break;
                 }
                 default: {
@@ -143,16 +159,27 @@ public class PipeAnalyzer {
         }
     }
 
+    public static void analyzeWarehouseProperty(String warehouseName) {
+        // If the warehouse does not exist, will report a runtime exception
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+    }
+
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
-        analyzePipeName(stmt.getPipeName(), context);
         analyzeProperties(stmt.getProperties());
-        Map<String, String> properties = stmt.getProperties();
 
         InsertStmt insertStmt = stmt.getInsertStmt();
-        stmt.setTargetTable(insertStmt.getTableName());
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
-        InsertAnalyzer.analyze(insertStmt, context);
+        Analyzer.analyze(insertStmt, context);
+        stmt.setTargetTableRef(insertStmt.getTableRef());
+
+        analyzePipeName(stmt.getPipeName(), insertStmt.getDbName());
+
+        if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getDbName())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
+                    String.format("pipe's database [%s] and target table's database [%s] should be the same",
+                            stmt.getPipeName().getDbName(), insertStmt.getDbName()));
+        }
 
         // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]
         if (!Strings.isNullOrEmpty(insertStmt.getLabel())) {
@@ -167,7 +194,9 @@ public class PipeAnalyzer {
         }
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         if (selectRelation.hasAggregation() || selectRelation.hasOrderByClause() || selectRelation.hasLimit()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "must be a vanilla select statement");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
+                    "must be a vanilla select statement." +
+                            " Aggregation, order by clause, limit clause are not supported yet.");
         }
         if (!(selectRelation.getRelation() instanceof FileTableFunctionRelation)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");
@@ -195,6 +224,7 @@ public class PipeAnalyzer {
             stmt.setDbName(context.getDatabase());
         }
 
+        ShowResultSetMetaData showResultSetMetaData = new ShowResultMetaFactory().getMetadata(stmt);
         // Analyze order by
         if (CollectionUtils.isNotEmpty(stmt.getOrderBy())) {
             List<OrderByPair> orderByPairs = new ArrayList<>();
@@ -204,7 +234,7 @@ public class PipeAnalyzer {
                             "only support order by specific column");
                 }
                 SlotRef slot = (SlotRef) element.getExpr();
-                int index = ShowPipeStmt.findSlotIndex(slot.getColumnName());
+                int index = showResultSetMetaData.getColumnIdx(slot.getColumnName());
                 orderByPairs.add(new OrderByPair(index, !element.getIsAsc()));
             }
             stmt.setOrderByPairs(orderByPairs);

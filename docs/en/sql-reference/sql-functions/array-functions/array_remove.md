@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Removes an element from an array."
 ---
 
 # array_remove
 
-## Description
+
 
 Removes an element from an array.
 

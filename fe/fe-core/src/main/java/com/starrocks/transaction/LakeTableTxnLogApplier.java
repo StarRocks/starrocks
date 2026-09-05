@@ -16,18 +16,27 @@ package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
     private static final Logger LOG = LogManager.getLogger(LakeTableTxnLogApplier.class);
@@ -41,38 +50,95 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     @Override
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            partition.setNextVersion(partition.getNextVersion() + 1);
+            if (partition == null) {
+                LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
+                continue;
+            }
+
+            // A shadow-rewrite txn does not allocate or advance any partition version.
+            if (txnState.isShadowRewrite()) {
+                continue;
+            }
+
+            // The version of a replication transaction may not continuously
+            if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partitionCommitInfo.getDataVersion() + 1);
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+                if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                    partition.setNextDataVersion(partition.getNextDataVersion() + 1);
+                }
+            }
         }
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
-        List<String> validDictCacheColumns = Lists.newArrayList();
+        List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
         long tableId = table.getId();
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionCommitInfo.getPartitionId());
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("ignored dropped partition {} when applying visible log", partitionId);
+                continue;
+            }
+            // A shadow-rewrite txn does not advance the partition's visible version; its rowsets
+            // are anchored later when the schema-change flip publishes the converted op_schema_change log.
+            if (txnState.isShadowRewrite()) {
+                continue;
+            }
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
-            Preconditions.checkState(version == partition.getVisibleVersion() + 1);
+
+            // The version of a replication transaction may not continuously
+            Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                    || txnState.isVersionOverwrite()
+                    || partitionCommitInfo.isDoubleWrite()
+                    || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
+            if (txnState.isUserWriteSource()) {
+                partition.updateLastUpdateTime(versionTime);
+            }
+            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                if (partitionCommitInfo.getVersionEpoch() > 0) {
+                    partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                }
+                partition.setVersionTxnType(txnState.getTransactionType());
+            }
 
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
-                compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore);
+                boolean isPartialSuccess = false;
+                boolean isUnshare = false;
+                if (txnState.getTxnCommitAttachment() instanceof CompactionTxnCommitAttachment attachment) {
+                    isPartialSuccess = attachment.getForceCommit();
+                    isUnshare = attachment.isUnshare();
+                }
+                compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore,
+                        txnState.getTransactionId(), isPartialSuccess);
+                if (isUnshare && partition.finishUnshare()) {
+                    // This method runs under the transaction-visible table write lock. Make the query-layout
+                    // cutover part of the same catalog mutation as the UNSHARE version, then invalidate any
+                    // optimistic plan that captured the parent layout before this point.
+                    table.lastSchemaUpdateTime.set(System.nanoTime());
+                }
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
-                for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
-                    IDictManager.getInstance().removeGlobalDict(tableId, column);
+                for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                    IDictManager.getInstance().removeGlobalDict(table, column);
                 }
             }
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
@@ -81,22 +147,90 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
             }
+            // Publish-driven real-time reshard triggering + transient stat refresh. Leader-only; on
+            // followers / replay / checkpoint the transient tabletStats map is empty, so skip there.
+            if (GlobalStateMgr.getCurrentState().isLeader() && !GlobalStateMgr.isCheckpointThread()) {
+                Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
+                if (tabletStats != null && !tabletStats.isEmpty()) {
+                    refreshTabletStatsAndMarkReshardCandidate(partition, tabletStats, db, version, versionTime);
+                }
+            }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
+        }
+
+        if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            warehouseManager.recordWarehouseInfoForTable(tableId, txnState.getComputeResource());
         }
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
-                String columnName = validDictCacheColumns.get(i);
+                ColumnId columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
-                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+                        .updateGlobalDict(table, columnName, collectedVersion, maxPartitionVersionTime);
             }
         }
     }
 
+    /**
+     * Leader-only post-publish bookkeeping for one lake partition: refresh each LakeTablet's data size
+     * and row count from the BE-reported {@code tabletStats}, then mark the table a reshard candidate
+     * with the largest just-published tablet size ({@code addReshardCandidate} applies the split threshold).
+     *
+     * <p>The candidate carries only the split signal (merge = Long.MAX_VALUE): split is the publish
+     * path's real-time benefit and is never gated by the merge parallelism floor, so this stays a pure
+     * in-memory max with no StarMgr RPC on the write-locked publish path. maxTabletSize is taken over
+     * only the just-published tablets (those in {@code tabletStats}); a tablet only grows when written,
+     * so this is the real-time signal, and the periodic TabletStatMgr scan is the backstop for any
+     * already-oversized tablet this publish did not touch. It is also monotone (table-wide &gt;= this
+     * partition's), so a per-partition crossing is decision-safe. Merge is left to the periodic scan,
+     * whose adjacency signal requires every neighbor to be fresh — a single publish rarely satisfies that.
+     *
+     * <p>{@code tabletStats} is transient transport: it is consumed here and cleared to bound FE heap,
+     * since the LakeTablet row counts set above persist independently and the post-visible first-load
+     * statistics collector samples from LakeTablet.getFuzzyRowCount(), not from this map.
+     */
+    private void refreshTabletStatsAndMarkReshardCandidate(PhysicalPartition partition,
+            Map<Long, TabletStatPB> tabletStats, Database db, long version, long versionTime) {
+        List<MaterializedIndex> indexes = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+        long maxTabletSize = 0L;
+        // Walk only the tablets this publish actually reported, not every tablet in the partition: this
+        // runs under the table write lock, so resolve each reported id directly (O(1) per index).
+        for (Map.Entry<Long, TabletStatPB> entry : tabletStats.entrySet()) {
+            Tablet tablet = null;
+            for (MaterializedIndex index : indexes) {
+                tablet = index.getTablet(entry.getKey());
+                if (tablet != null) {
+                    break;
+                }
+            }
+            if (!(tablet instanceof LakeTablet)) {
+                continue;
+            }
+            LakeTablet lakeTablet = (LakeTablet) tablet;
+            TabletStatPB tabletStat = entry.getValue();
+            long dataSize = tabletStat.dataSize != null ? tabletStat.dataSize : 0L;
+            lakeTablet.setDataSize(dataSize);
+            // These stats came back with the publish of exactly this version.
+            lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L, version);
+            lakeTablet.setDataSizeUpdateTime(versionTime);
+            maxTabletSize = Math.max(maxTabletSize, dataSize);
+        }
+        if (maxTabletSize > 0 && table.isRangeDistribution()) {
+            GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                    .addReshardCandidate(db.getId(), table.getId(), maxTabletSize, Long.MAX_VALUE);
+        }
+        tabletStats.clear();
+    }
+
     public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
-            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
+            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(table.getId());
+            if (tableCommitInfo == null) {
+                // in a multi-table batch this txn does not write this applier's table
+                continue;
+            }
             applyVisibleLog(txnState, tableCommitInfo, db);
         }
     }

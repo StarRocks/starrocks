@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回一个空 Bitmap。"
 ---
 
 # bitmap_empty
 
-## 功能
+
 
 返回一个空 bitmap，主要用于 insert 或 stream load 时填充默认值，如下例:
 

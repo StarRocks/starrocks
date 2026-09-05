@@ -1,16 +1,17 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Replaces all occurrences of characters in a string with another string."
 ---
 
 # replace
 
-## Description
+
 
 Replaces all occurrences of characters in a string with another string. This function performs a case-sensitive match when searching for `pattern`.
 
 This function is supported from v3.0.
 
-Note: Prior to 3.0, this function was implemented as [regexp_replace](../like_predicate-functions/regexp_replace.md).
+Note: Prior to 3.0, this function was implemented as [regexp_replace](../like-predicate-functions/regexp_replace.md).
 
 ## Syntax
 

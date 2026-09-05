@@ -35,7 +35,6 @@
 #pragma once
 
 #include "common/status.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/internal_service.h"
 
@@ -46,11 +45,16 @@ class Controller;
 namespace starrocks {
 
 class ExecEnv;
+class BatchWriteMgr;
+class LoadChannelMgr;
 
 template <typename T>
 class BackendInternalServiceImpl : public PInternalServiceImplBase<T> {
 public:
-    BackendInternalServiceImpl(ExecEnv* exec_env) : PInternalServiceImplBase<T>(exec_env) {}
+    BackendInternalServiceImpl(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env,
+                               LoadChannelMgr* load_channel_mgr, BatchWriteMgr* batch_write_mgr = nullptr)
+            : PInternalServiceImplBase<T>(exec_env, orchestration_env, batch_write_mgr),
+              _load_channel_mgr(load_channel_mgr) {}
 
     void tablet_writer_open(google::protobuf::RpcController* controller, const PTabletWriterOpenRequest* request,
                             PTabletWriterOpenResult* response, google::protobuf::Closure* done) override;
@@ -67,12 +71,26 @@ public:
                                   const PTabletWriterAddChunksRequest* request, PTabletWriterAddBatchResult* response,
                                   google::protobuf::Closure* done) override;
 
+    void tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller, const PHttpRequest* request,
+                                          PTabletWriterAddBatchResult* response,
+                                          google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller, const PHttpRequest* request,
+                                           PTabletWriterAddBatchResult* response,
+                                           google::protobuf::Closure* done) override;
+
     void tablet_writer_add_segment(google::protobuf::RpcController* controller,
                                    const PTabletWriterAddSegmentRequest* request,
                                    PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
 
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
+
+    void get_load_replica_status(google::protobuf::RpcController* controller, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response, google::protobuf::Closure* done) override;
+
+    void load_diagnose(google::protobuf::RpcController* controller, const PLoadDiagnoseRequest* request,
+                       PLoadDiagnoseResult* response, google::protobuf::Closure* done) override;
 
     void local_tablet_reader_open(google::protobuf::RpcController* controller, const PTabletReaderOpenRequest* request,
                                   PTabletReaderOpenResult* response, google::protobuf::Closure* done) override;
@@ -89,6 +107,9 @@ public:
                                            const PTabletReaderScanGetNextRequest* request,
                                            PTabletReaderScanGetNextResult* response,
                                            google::protobuf::Closure* done) override;
+
+private:
+    LoadChannelMgr* _load_channel_mgr;
 };
 
 } // namespace starrocks

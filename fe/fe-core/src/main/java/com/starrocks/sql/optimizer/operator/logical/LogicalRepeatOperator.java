@@ -27,20 +27,25 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class LogicalRepeatOperator extends LogicalOperator {
     private List<ColumnRefOperator> outputGrouping;
     private List<List<ColumnRefOperator>> repeatColumnRefList;
     private List<List<Long>> groupingIds;
+    private Map<ColumnRefOperator, List<ColumnRefOperator>> groupingsFnArgs; // SPM use
+    private boolean hasPushDown;
 
     public LogicalRepeatOperator(List<ColumnRefOperator> outputGrouping,
-                                 List<List<ColumnRefOperator>> repeatColumnRefList,
-                                 List<List<Long>> groupingIds) {
+                                 List<List<ColumnRefOperator>> repeatColumnRefList, List<List<Long>> groupingIds,
+                                 Map<ColumnRefOperator, List<ColumnRefOperator>> groupingsFnArgs) {
         super(OperatorType.LOGICAL_REPEAT);
         this.outputGrouping = outputGrouping;
         this.repeatColumnRefList = repeatColumnRefList;
         this.groupingIds = groupingIds;
+        this.hasPushDown = false;
+        this.groupingsFnArgs = groupingsFnArgs;
     }
 
     private LogicalRepeatOperator() {
@@ -59,6 +64,14 @@ public class LogicalRepeatOperator extends LogicalOperator {
         return groupingIds;
     }
 
+    public boolean hasPushDown() {
+        return hasPushDown;
+    }
+
+    public Map<ColumnRefOperator, List<ColumnRefOperator>> getGroupingsFnArgs() {
+        return groupingsFnArgs;
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         ColumnRefSet outputColumns = new ColumnRefSet(outputGrouping);
@@ -72,7 +85,7 @@ public class LogicalRepeatOperator extends LogicalOperator {
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
-        outputGrouping.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+        outputGrouping.forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
         for (ColumnOutputInfo columnOutputInfo : inputs.get(0).getRowOutputInfo().getColumnOutputInfo()) {
             columnOutputInfoList.add(new ColumnOutputInfo(columnOutputInfo.getColumnRef(), columnOutputInfo.getColumnRef()));
         }
@@ -102,20 +115,44 @@ public class LogicalRepeatOperator extends LogicalOperator {
         LogicalRepeatOperator that = (LogicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
                 Objects.equals(repeatColumnRefList, that.repeatColumnRefList) &&
-                Objects.equals(groupingIds, that.groupingIds);
+                Objects.equals(groupingIds, that.groupingIds) &&
+                Objects.equals(hasPushDown, that.hasPushDown);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRefList);
+        return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRefList, hasPushDown);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
     public static class Builder
             extends LogicalOperator.Builder<LogicalRepeatOperator, LogicalRepeatOperator.Builder> {
 
         @Override
         protected LogicalRepeatOperator newInstance() {
             return new LogicalRepeatOperator();
+        }
+
+        public LogicalRepeatOperator.Builder setHasPushDown(boolean hasPushDown) {
+            builder.hasPushDown = hasPushDown;
+            return this;
+        }
+
+        public LogicalRepeatOperator.Builder setOutputGrouping(List<ColumnRefOperator> outputGrouping) {
+            builder.outputGrouping = outputGrouping;
+            return this;
+        }
+
+        public LogicalRepeatOperator.Builder setGroupingIds(List<List<Long>> groupingIds) {
+            builder.groupingIds = groupingIds;
+            return this;
+        }
+
+        public LogicalRepeatOperator.Builder setRepeatColumnRefList(List<List<ColumnRefOperator>> repeatColumnRefList) {
+            builder.repeatColumnRefList = repeatColumnRefList;
+            return this;
         }
 
         @Override

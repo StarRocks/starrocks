@@ -34,136 +34,120 @@
 
 package com.starrocks.plugin;
 
+import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.util.DigitalVersion;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.UninstallPluginLog;
+import com.starrocks.persist.WALApplier;
+import com.starrocks.plugin.PluginInfo.PluginType;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.InstallPluginStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PluginMgrTest {
+    private static final String TARGET_DIR = "target_plugin_mgr";
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
-        FileUtils.deleteQuietly(PluginTestUtil.getTestFile("target"));
-        assertFalse(Files.exists(PluginTestUtil.getTestPath("target")));
-        Files.createDirectory(PluginTestUtil.getTestPath("target"));
-        assertTrue(Files.exists(PluginTestUtil.getTestPath("target")));
-        Config.plugin_dir = PluginTestUtil.getTestPathString("target");
+        FileUtils.deleteQuietly(PluginTestUtil.getTestFile(TARGET_DIR));
+        assertFalse(Files.exists(PluginTestUtil.getTestPath(TARGET_DIR)));
+        Files.createDirectory(PluginTestUtil.getTestPath(TARGET_DIR));
+        assertTrue(Files.exists(PluginTestUtil.getTestPath(TARGET_DIR)));
+        Config.plugin_dir = PluginTestUtil.getTestPathString(TARGET_DIR);
     }
 
-    //    @Test
-    //    public void testInstallPluginZip() {
-    //        try {
-    //            // path "target/audit_plugin_demo" is where we are going to install the plugin
-    //            assertFalse(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_demo")));
-    //            assertFalse(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_demo/auditdemo.jar")));
-    //
-    //            InstallPluginStmt stmt =
-    //                    new InstallPluginStmt(PluginTestUtil.getTestPathString("auditdemo.zip"), Maps.newHashMap());
-    //            GlobalStateMgr.getCurrentState().installPlugin(stmt);
-    //
-    //            PluginMgr pluginMgr = GlobalStateMgr.getCurrentPluginMgr();
-    //
-    //            assertEquals(2, pluginMgr.getActivePluginList(PluginInfo.PluginType.AUDIT).size());
-    //
-    //            Plugin p = pluginMgr.getActivePlugin("audit_plugin_demo", PluginInfo.PluginType.AUDIT);
-    //
-    //            assertNotNull(p);
-    //            assertTrue(p instanceof AuditPlugin);
-    //            assertTrue(((AuditPlugin) p).eventFilter(AuditEvent.EventType.AFTER_QUERY));
-    //            assertFalse(((AuditPlugin) p).eventFilter(AuditEvent.EventType.BEFORE_QUERY));
-    //
-    //            assertTrue(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_demo")));
-    //            assertTrue(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_demo/auditdemo.jar")));
-    //
-    //            assertEquals(1, pluginMgr.getAllDynamicPluginInfo().size());
-    //            PluginInfo info = pluginMgr.getAllDynamicPluginInfo().get(0);
-    //
-    //            assertEquals("audit_plugin_demo", info.getName());
-    //            assertEquals(PluginInfo.PluginType.AUDIT, info.getType());
-    //            assertEquals("just for test", info.getDescription());
-    //            assertEquals("plugin.AuditPluginDemo", info.getClassName());
-    //
-    //            pluginMgr.uninstallPlugin("audit_plugin_demo");
-    //
-    //            assertFalse(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_demo")));
-    //            assertFalse(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_demo/auditdemo.jar")));
-    //
-    //        } catch (IOException | UserException e) {
-    //            e.printStackTrace();
-    //            assert false;
-    //        }
-    //    }
-
-    //    @Test
-    //    public void testInstallPluginLocal() {
-    //        try {
-    //            // path "target/audit_plugin_demo" is where we are going to install the plugin
-    //            assertFalse(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_local_demo")));
-    //            assertFalse(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_local_demo/auditdemo.jar")));
-    //
-    //            InstallPluginStmt stmt =
-    //                    new InstallPluginStmt(PluginTestUtil.getTestPathString("test_local_plugin"), Maps.newHashMap());
-    //            GlobalStateMgr.getCurrentState().installPlugin(stmt);
-    //
-    //            PluginMgr pluginMgr = GlobalStateMgr.getCurrentPluginMgr();
-    //
-    //            assertTrue(Files.exists(PluginTestUtil.getTestPath("test_local_plugin")));
-    //            assertTrue(Files.exists(PluginTestUtil.getTestPath("test_local_plugin/auditdemo.jar")));
-    //
-    //            Plugin p = pluginMgr.getActivePlugin("audit_plugin_local_demo", PluginInfo.PluginType.AUDIT);
-    //
-    //            assertEquals(2, pluginMgr.getActivePluginList(PluginInfo.PluginType.AUDIT).size());
-    //
-    //            assertNotNull(p);
-    //            assertTrue(p instanceof AuditPlugin);
-    //            assertTrue(((AuditPlugin) p).eventFilter(AuditEvent.EventType.AFTER_QUERY));
-    //            assertFalse(((AuditPlugin) p).eventFilter(AuditEvent.EventType.BEFORE_QUERY));
-    //
-    //            assertTrue(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_local_demo")));
-    //            assertTrue(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_local_demo/auditdemo.jar")));
-    //
-    //            testSerializeBuiltinPlugin(pluginMgr);
-    //            pluginMgr.uninstallPlugin("audit_plugin_local_demo");
-    //
-    //            assertFalse(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_local_demo")));
-    //            assertFalse(Files.exists(PluginTestUtil.getTestPath("target/audit_plugin_local_demo/auditdemo.jar")));
-    //
-    //        } catch (IOException | UserException e) {
-    //            e.printStackTrace();
-    //            assert false;
-    //        }
-    //    }
-
-    private void testSerializeBuiltinPlugin(PluginMgr mgr) {
+    @Test
+    public void testLoadPluginFail() {
         try {
-            DataOutputBuffer dob = new DataOutputBuffer();
-            DataOutputStream dos = new DataOutputStream(dob);
-            mgr.write(dos);
 
-            PluginMgr test = new PluginMgr();
-
-            test.readFields(new DataInputStream(new ByteArrayInputStream(dob.getData())));
-            assertEquals(1, test.getAllDynamicPluginInfo().size());
+            PluginMgr pluginMgr = GlobalStateMgr.getCurrentState().getPluginMgr();
+            PluginInfo info = new PluginInfo();
+            info.name = "plugin-name";
+            info.type = PluginType.AUDIT;
+            info.description = "plugin description";
+            info.version = DigitalVersion.CURRENT_STARROCKS_VERSION;
+            info.javaVersion = DigitalVersion.JDK_1_8_0;
+            info.className = "hello.jar";
+            info.soName = "hello.so";
+            info.source = "test";
+            info.properties.put("md5sum", "cf0c536b8f2a0a0690b44d783d019e90");
+            pluginMgr.replayLoadDynamicPlugin(info);
 
         } catch (IOException e) {
             e.printStackTrace();
+            assert false;
         }
+    }
+
+    @Test
+    public void testInstallPluginIfNotExistsIdempotent() throws Exception {
+        String pluginName = "idempotent_install_plugin";
+        PluginInfo pluginInfo = new PluginInfo(pluginName, PluginType.AUDIT, "test");
+
+        PluginMgr pluginMgr = new PluginMgr();
+        pluginMgr.replayLoadDynamicPlugin(pluginInfo);
+
+        new MockUp<DynamicPluginLoader>() {
+            @Mock
+            public PluginInfo getPluginInfo() throws IOException {
+                return pluginInfo;
+            }
+        };
+
+        Map<String, String> props = Maps.newHashMap();
+        InstallPluginStmt stmt = new InstallPluginStmt("http://dummy/test.zip", props, true, NodePosition.ZERO);
+        PluginInfo result = pluginMgr.installPlugin(stmt);
+        assertSame(pluginInfo, result);
+    }
+
+    @Test
+    public void testUninstallPluginIfExistsIdempotent() {
+        PluginMgr pluginMgr = new PluginMgr();
+        UninstallPluginStmt stmt = new UninstallPluginStmt("nonexistent_plugin", true, NodePosition.ZERO);
+        assertDoesNotThrow(() -> pluginMgr.uninstallPluginFromStmt(stmt));
+    }
+
+    @Test
+    public void testUninstallPluginFromStmtNormal() throws Exception {
+        String pluginName = "normal_uninstall_plugin";
+        PluginInfo pluginInfo = new PluginInfo(pluginName, PluginType.AUDIT, "test");
+
+        PluginMgr pluginMgr = new PluginMgr();
+        pluginMgr.replayLoadDynamicPlugin(pluginInfo);
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logUninstallPlugin(UninstallPluginLog log, WALApplier walApplier) {
+                walApplier.apply(log);
+            }
+        };
+
+        UninstallPluginStmt stmt = new UninstallPluginStmt(pluginName);
+        pluginMgr.uninstallPluginFromStmt(stmt);
+        assertFalse(pluginMgr.getAllDynamicPluginInfo()
+                .stream().anyMatch(p -> p.getName().equals(pluginName)));
     }
 }

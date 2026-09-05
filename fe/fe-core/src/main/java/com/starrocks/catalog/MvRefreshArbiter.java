@@ -1,0 +1,260 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.catalog;
+
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
+import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
+import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
+import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
+import com.starrocks.sql.common.UnsupportedException;
+import org.apache.commons.collections4.MapUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
+
+/**
+* The arbiter of materialized view refresh. All implementations of refresh strategies should be here.
+*/
+public class MvRefreshArbiter {
+    private static final Logger LOG = LogManager.getLogger(MvRefreshArbiter.class);
+
+    public static boolean needsToRefreshTable(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
+                                              MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, baseTableInfo, table, true, queryRewriteParams);
+        if (needsToRefresh.isPresent()) {
+            return needsToRefresh.get();
+        }
+        return true;
+    }
+
+    /**
+     * Once materialized view's base tables have updated, we need to check correspond materialized views' partitions
+     * to be refreshed.
+     * @param mv The materialized view to check
+     * @param queryRewriteParams Mark whether this caller is query rewrite or not, when it's true we can use staleness to shortcut
+     * @return mv timeliness update info which contains all need refreshed partitions of materialized view and partition name
+     * to partition values.
+     */
+    public static MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        // Skip check for sync materialized view.
+        if (mv.getRefreshScheme().isSync()) {
+            return MvUpdateInfo.noRefresh(mv);
+        }
+
+        // check mv's query rewrite consistency mode property only in query rewrite.
+        TableProperty tableProperty = mv.getTableProperty();
+        TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode = tableProperty.getQueryRewriteConsistencyMode();
+        if (queryRewriteParams.isQueryRewrite()) {
+            switch (mvConsistencyRewriteMode) {
+                case DISABLE:
+                    return MvUpdateInfo.fullRefresh(mv);
+                case NOCHECK:
+                    return MvUpdateInfo.noRefresh(mv);
+                case LOOSE:
+                case CHECKED:
+                default:
+                    break;
+            }
+        }
+
+        logMVPrepare(mv, "MV refresh arbiter start to get partition names to refresh, query rewrite mode: {}",
+                mvConsistencyRewriteMode);
+        MVTimelinessArbiter timelinessArbiter = buildMVTimelinessArbiter(mv, queryRewriteParams);
+        try (Timer ignored = Tracers.watchScope("MVTimelinessUpdateInfo")) {
+            return timelinessArbiter.getMVTimelinessUpdateInfo(mvConsistencyRewriteMode);
+        } catch (AnalysisException e) {
+            logMVPrepare(mv, "Failed to get mv timeliness info: {}", DebugUtil.getStackTrace(e));
+            return MvUpdateInfo.unknown(mv);
+        }
+    }
+
+    /**
+     * Create the MVTimelinessArbiter instance according to the partition info of the materialized view.
+     * @param mv the materialized view to get the timeliness arbiter
+     * @param queryRewriteParams whether this caller is query rewrite or mv refresh
+     * @return MVTimelinessArbiter instance according to the partition info of the materialized view
+     */
+    public static MVTimelinessArbiter buildMVTimelinessArbiter(MaterializedView mv,
+                                                               MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return new MVTimelinessNonPartitionArbiter(mv, queryRewriteParams);
+        } else if (partitionInfo.isRangePartition()) {
+            return new MVTimelinessRangePartitionArbiter(mv, queryRewriteParams);
+        } else if (partitionInfo.isListPartition()) {
+            return new MVTimelinessListPartitionArbiter(mv, queryRewriteParams);
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported partition info type:" +
+                    partitionInfo.getClass().getName());
+        }
+    }
+
+    /**
+     * Check whether mv needs to refresh based on the ref base table. It's a shortcut version of getMvBaseTableUpdateInfo.
+     * @return Optional<Boolean> : true if needs to refresh, false if not, empty if there are some unkown results.
+     */
+    private static Optional<Boolean> needsToRefreshTable(MaterializedView mv,
+                                                         BaseTableInfo baseTableInfo,
+                                                         Table baseTable,
+                                                         boolean withMv,
+                                                         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        if (baseTable.isView()) {
+            // do nothing
+            return Optional.of(false);
+        } else if (baseTable.isNativeTableOrMaterializedView()) {
+            OlapTable olapBaseTable = (OlapTable) baseTable;
+
+            if (!mv.shouldRefreshTable(baseTableInfo.getDbName(), baseTable.name)) {
+                return Optional.of(false);
+            }
+
+            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
+                    queryRewriteParams.isQueryRewrite());
+            if (!baseUpdatedPartitionNames.isEmpty()) {
+                return Optional.of(true);
+            }
+
+            // recursive check its children
+            if (withMv && baseTable.isMaterializedView()) {
+                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, queryRewriteParams);
+                if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
+                    return Optional.empty();
+                }
+                // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
+                return Optional.of(!mvUpdateInfo.getMVToRefreshPCells().isEmpty());
+            }
+            return Optional.of(false);
+        } else {
+            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
+                    queryRewriteParams.isQueryRewrite());
+            if (baseUpdatedPartitionNames == null) {
+                return Optional.empty();
+            }
+            return Optional.of(!baseUpdatedPartitionNames.isEmpty());
+        }
+    }
+
+    /**
+     * Get to refresh partition info of the specific table.
+     * @param baseTable: the table to check
+     * @param withMv: whether to check the materialized view if it's a materialized view
+     * @param queryRewriteParams: whether this caller is query rewrite or not
+     * @return MvBaseTableUpdateInfo: the update info of the base table
+     */
+    public static MvBaseTableUpdateInfo getMvBaseTableUpdateInfo(MaterializedView mv,
+                                                                 Table baseTable,
+                                                                 boolean withMv,
+                                                                 MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        MvBaseTableUpdateInfo baseTableUpdateInfo = new MvBaseTableUpdateInfo();
+        if (baseTable.isView()) {
+            // do nothing
+            return baseTableUpdateInfo;
+        } else if (baseTable.isNativeTableOrMaterializedView()) {
+            OlapTable olapBaseTable = (OlapTable) baseTable;
+            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
+                    queryRewriteParams.isQueryRewrite());
+            if (baseUpdatedPartitionNames == null) {
+                return null;
+            }
+            PCellSortedSet updatedPCellSet = PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
+            // recursive check its children
+            if (withMv && baseTable.isMaterializedView()) {
+                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, queryRewriteParams);
+                if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
+                    return null;
+                }
+                // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
+                updatedPCellSet.addAll(mvUpdateInfo.getMVToRefreshPCells());
+                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getRefBaseNestedMVPCells());
+            }
+            // update base table's partition info
+            baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
+        } else {
+            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
+                    queryRewriteParams.isQueryRewrite());
+            if (baseUpdatedPartitionNames == null) {
+                return null;
+            }
+            PCellSortedSet updatedPCellSet = PCellUtils.ofTable(mv, baseTable, baseUpdatedPartitionNames);
+            baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
+        }
+        return baseTableUpdateInfo;
+    }
+
+    /**
+     * Check if any partitions have been deleted from the base table.
+     * For MVs with external tables, if partitions that were previously refreshed no longer exist
+     * in the base table, the MV needs a full refresh.
+     *
+     * @param mv the materialized view
+     * @param baseTableInfo the base table info
+     * @param table the base table
+     * @return true if partitions have been deleted from the base table, false otherwise
+     */
+    public static boolean hasDeletedPartitions(MaterializedView mv, BaseTableInfo baseTableInfo, Table table) {
+        // Only check for external tables (Iceberg, Hive, etc.)
+        if (table.isNativeTableOrMaterializedView()) {
+            return false;
+        }
+
+        try {
+            // Get current partitions from the base table
+            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table);
+            Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
+                    traits.getPartitionNameWithPartitionInfo();
+
+            // Get the partitions that were previously refreshed
+            Map<String, MaterializedView.BasePartitionInfo> versionMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableRefreshInfo(baseTableInfo);
+
+            if (MapUtils.isEmpty(versionMap)) {
+                return false;
+            }
+
+            // Check if any previously refreshed partitions no longer exist
+            Set<String> currentPartitions = latestPartitionInfo.keySet();
+            for (String refreshedPartition : versionMap.keySet()) {
+                if (!currentPartitions.contains(refreshedPartition)) {
+                    logMVPrepare(mv, String.format(
+                            "Base table partition %s has been deleted, need refresh totally.", refreshedPartition));
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // If we can't determine partition info (e.g., connector doesn't support partition metadata APIs),
+            // skip the deleted partition check rather than forcing a refresh. This avoids regressing MV rewrite
+            // for connectors that don't implement full partition metadata support.
+            LOG.debug("Cannot check for deleted partitions for table {}.{}.{}, skipping check: {}",
+                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName(),
+                    e.getMessage());
+            return false;
+        }
+
+        return false;
+    }
+}

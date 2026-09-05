@@ -16,12 +16,12 @@ package com.starrocks.http;
 
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SystemActionTest extends StarRocksHttpTestCase {
 
@@ -36,7 +36,7 @@ public class SystemActionTest extends StarRocksHttpTestCase {
         Response response = networkClient.newCall(request).execute();
         assertTrue(response.isSuccessful());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
+        Assertions.assertNotNull(respStr);
     }
 
     @Test

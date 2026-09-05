@@ -30,11 +30,32 @@ public class TextFileFormatDesc {
     // For example, {"smith": age} mapkey_delimiter is ':'.
     private final String mapkeyDelim;
 
+    private final int skipHeaderLineCount;
+
+    // OpenCSVSerde quote (enclose) and escape characters. 0 means unset, in which
+    // case the BE keeps using the naive split_record path.
+    private final int enclose;
+
+    private final int escape;
+
     public TextFileFormatDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim) {
+        this(fieldDelim, lineDelim, collectionDelim, mapkeyDelim, 0);
+    }
+
+    public TextFileFormatDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim,
+                              int skipHeaderLineCount) {
+        this(fieldDelim, lineDelim, collectionDelim, mapkeyDelim, skipHeaderLineCount, 0, 0);
+    }
+
+    public TextFileFormatDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim,
+                              int skipHeaderLineCount, int enclose, int escape) {
         this.fieldDelim = fieldDelim;
         this.lineDelim = lineDelim;
         this.collectionDelim = collectionDelim;
         this.mapkeyDelim = mapkeyDelim;
+        this.skipHeaderLineCount = skipHeaderLineCount;
+        this.enclose = enclose;
+        this.escape = escape;
     }
 
     public String getFieldDelim() {
@@ -53,6 +74,18 @@ public class TextFileFormatDesc {
         return mapkeyDelim;
     }
 
+    public int getSkipHeaderLineCount() {
+        return skipHeaderLineCount;
+    }
+
+    public int getEnclose() {
+        return enclose;
+    }
+
+    public int getEscape() {
+        return escape;
+    }
+
     public TTextFileDesc toThrift() {
         TTextFileDesc desc = new TTextFileDesc();
         if (fieldDelim != null) {
@@ -67,6 +100,13 @@ public class TextFileFormatDesc {
         if (mapkeyDelim != null) {
             desc.setMapkey_delim(mapkeyDelim);
         }
+        desc.setSkip_header_line_count(skipHeaderLineCount);
+        if (enclose != 0) {
+            desc.setEnclose((byte) enclose);
+        }
+        if (escape != 0) {
+            desc.setEscape((byte) escape);
+        }
         return desc;
     }
 
@@ -77,6 +117,9 @@ public class TextFileFormatDesc {
         sb.append(", lineDelim='").append(lineDelim).append('\'');
         sb.append(", collectionDelim='").append(collectionDelim).append('\'');
         sb.append(", mapkeyDelim='").append(mapkeyDelim).append('\'');
+        sb.append(", skipHeaderLineCount='").append(skipHeaderLineCount).append('\'');
+        sb.append(", enclose='").append(enclose).append('\'');
+        sb.append(", escape='").append(escape).append('\'');
         sb.append('}');
         return sb.toString();
     }

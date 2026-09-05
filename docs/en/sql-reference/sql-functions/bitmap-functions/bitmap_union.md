@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Calculates the bitmap union of a set of values after grouping."
 ---
 
 # bitmap_union
 
-## Description
+
 
 Calculates the bitmap union of a set of values after grouping. Common usage scenarios include calculating PV and UV.
 

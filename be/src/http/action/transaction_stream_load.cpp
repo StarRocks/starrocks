@@ -17,6 +17,7 @@
 #include <deque>
 #include <future>
 #include <sstream>
+#include <utility>
 
 // use string iequal
 #include <event2/buffer.h>
@@ -26,38 +27,38 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "agent/master_info.h"
+#include "base/auth/auth_info.h"
+#include "base/json/json_util.h"
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
-#include "common/utils.h"
+#include "common/system/master_info.h"
+#include "common/util/debug_util.h"
+#include "common/util/thrift_client_cache.h"
+#include "compute_env/load/http_load_params.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_pipe.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
+#include "data_workflows/load/stream_load/transaction_mgr.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_response.h"
-#include "http/utils.h"
-#include "runtime/client_cache.h"
+#include "orchestration/stream_load_orchestrator.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_response.h"
+#include "platform/thrift_rpc_helper.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/load_path_mgr.h"
-#include "runtime/plan_fragment_executor.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/stream_load_pipe.h"
-#include "runtime/stream_load/transaction_mgr.h"
-#include "util/byte_buffer.h"
-#include "util/debug_util.h"
-#include "util/defer_op.h"
-#include "util/json_util.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
-#include "util/thrift_rpc_helper.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -84,20 +85,25 @@ static TFileFormatType::type parse_stream_load_format(const std::string& format_
     return TFileFormatType::FORMAT_UNKNOWN;
 }
 
-TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env, TransactionMgr* transaction_mgr)
+        : _exec_env(exec_env), _transaction_mgr(transaction_mgr) {}
 
 TransactionManagerAction::~TransactionManagerAction() = default;
 
 static void _send_reply(HttpRequest* req, const std::string& str) {
-    HttpChannel::send_reply(req, str);
+    TEST_SYNC_POINT_CALLBACK("TransactionStreamLoad::send_reply", req);
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "transaction streaming load response: " << str;
+    }
+    HttpChannel::send_reply_json(req, HttpStatus::OK, str);
 }
 
 void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env->load_stream_mgr());
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(req->param(HTTP_TXN_OP_KEY), st);
-    HttpChannel::send_reply(req, str);
+    HttpChannel::send_reply_json(req, HttpStatus::OK, str);
 }
 
 void TransactionManagerAction::handle(HttpRequest* req) {
@@ -106,7 +112,7 @@ void TransactionManagerAction::handle(HttpRequest* req) {
 
     auto txn_op = req->param(HTTP_TXN_OP_KEY);
     if (boost::iequals(txn_op, TXN_LIST)) {
-        st = _exec_env->transaction_mgr()->list_transactions(req, &resp);
+        st = _transaction_mgr->list_transactions(req, &resp);
         return _send_reply(req, resp);
     }
 
@@ -114,12 +120,20 @@ void TransactionManagerAction::handle(HttpRequest* req) {
         return _send_error_reply(req, Status::InvalidArgument(fmt::format("empty label")));
     }
 
+    // HTTP_TRANSACTION_TYPE header is used for multi-statement transactions and should only be sent to FE
+    // (Frontend) nodes. BE (Backend) nodes cannot process multi-statement transaction requests.
+    if (!req->header(HTTP_TRANSACTION_TYPE).empty()) {
+        return _send_error_reply(
+                req, Status::InvalidArgument(
+                             "Multi-statement transaction requests can only be sent to FE nodes, not BE nodes"));
+    }
+
     if (boost::iequals(txn_op, TXN_BEGIN)) {
-        st = _exec_env->transaction_mgr()->begin_transaction(req, &resp);
+        st = _transaction_mgr->begin_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
-        st = _exec_env->transaction_mgr()->commit_transaction(req, &resp);
+        st = _transaction_mgr->commit_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_ROLLBACK)) {
-        st = _exec_env->transaction_mgr()->rollback_transaction(req, &resp);
+        st = _transaction_mgr->rollback_transaction(req, &resp);
     } else {
         return _send_error_reply(req,
                                  Status::InvalidArgument(fmt::format("unsupport transaction operation {}", txn_op)));
@@ -128,40 +142,85 @@ void TransactionManagerAction::handle(HttpRequest* req) {
     _send_reply(req, resp);
 }
 
-TransactionStreamLoadAction::TransactionStreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+// Handle the resource acquired by the http request
+class ResourceHandler {
+public:
+    // ctx has been referenced and locked outside
+    ResourceHandler(StreamLoadContext* ctx) : _ctx(ctx) {
+        DCHECK(_ctx != nullptr);
+        DCHECK(!_ctx->lock.try_lock());
+    }
+
+    ~ResourceHandler() { release(); }
+
+    StreamLoadContext* ctx() { return _ctx; }
+
+    void release() {
+        if (_released) {
+            return;
+        }
+        _released = true;
+        _ctx->lock.unlock();
+        if (config::enable_stream_load_verbose_log) {
+            LOG(INFO) << "release resource, " << _ctx->brief();
+        }
+        if (_ctx->unref()) {
+            delete _ctx;
+        }
+        _ctx = nullptr;
+    }
+
+private:
+    StreamLoadContext* _ctx;
+    bool _released{false};
+};
+
+TransactionStreamLoadAction::TransactionStreamLoadAction(
+        ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
+        TransactionMgr* transaction_mgr)
+        : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator), _transaction_mgr(transaction_mgr) {
+    DCHECK(_stream_load_orchestrator != nullptr);
+}
 
 TransactionStreamLoadAction::~TransactionStreamLoadAction() = default;
 
 void TransactionStreamLoadAction::_send_error_reply(HttpRequest* req, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env->load_stream_mgr());
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(TXN_LOAD, st);
     HttpChannel::send_reply(req, str);
 }
 
-void TransactionStreamLoadAction::handle(HttpRequest* req) {
-    StreamLoadContext* ctx = nullptr;
-    const auto& label = req->header(HTTP_LABEL_KEY);
-    if (!req->header(HTTP_CHANNEL_ID).empty()) {
-        int channel_id = std::stoi(req->header(HTTP_CHANNEL_ID));
-        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, channel_id);
-    } else {
-        ctx = _exec_env->stream_context_mgr()->get(label);
+void TransactionStreamLoadAction::_finish_and_reply(HttpRequest* req, const std::string& reply) {
+    ResourceHandler* handler = static_cast<ResourceHandler*>(req->handler_ctx());
+    if (handler != nullptr) {
+        // release StreamLoadContext lock before sending reply to the client,
+        // otherwise client may meet TXN_IN_PROCESSING error. The reason is that
+        // the client can send another load request quickly after receiving the
+        // reply, but the lock has not been released, so the new request can not
+        // acquire the lock, and meet the TXN_IN_PROCESSING error.
+        handler->release();
     }
-    if (ctx == nullptr) {
+    _send_reply(req, reply);
+}
+
+void TransactionStreamLoadAction::handle(HttpRequest* req) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "transaction streaming load request, handle: " << req->debug_string();
+    }
+
+    ResourceHandler* handler = static_cast<ResourceHandler*>(req->handler_ctx());
+    if (handler == nullptr) {
         return;
     }
-    DeferOp defer([&] {
-        if (ctx->unref()) {
-            delete ctx;
-        }
-    });
+    StreamLoadContext* ctx = handler->ctx();
+    DCHECK(ctx != nullptr);
     ctx->last_active_ts = MonotonicNanos();
 
     if (!ctx->status.ok()) {
-        if (ctx->need_rollback) {
-            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
+        if (ctx->need_rollback()) {
+            (void)_transaction_mgr->_rollback_transaction(ctx);
         }
     }
 
@@ -169,30 +228,38 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
     // For CSV, it supports parsing in stream.
     // For JSON, now the buffer contains a complete json.
     if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
-        ctx->buffer->flip();
+        ctx->buffer->flip_to_read();
         WARN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)),
                       "append MessageBodySink failed when handle TransactionStreamLoad");
         ctx->buffer = nullptr;
     }
 
-    auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
-    ctx->lock.unlock();
-    _send_reply(req, resp);
+    auto resp = _transaction_mgr->_build_reply(TXN_LOAD, ctx);
+    _finish_and_reply(req, resp);
 }
 
 int TransactionStreamLoadAction::on_header(HttpRequest* req) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "transaction streaming load request, header: " << req->debug_string();
+    }
+
     const auto& label = req->header(HTTP_LABEL_KEY);
     if (label.empty()) {
         _send_error_reply(req, Status::InvalidArgument(fmt::format("Invalid label {}", req->header(HTTP_LABEL_KEY))));
         return -1;
     }
 
+    const auto& table_name = req->header(HTTP_TABLE_KEY);
+
     StreamLoadContext* ctx = nullptr;
     if (!req->header(HTTP_CHANNEL_ID).empty()) {
         int channel_id = std::stoi(req->header(HTTP_CHANNEL_ID));
-        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, channel_id);
+        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, channel_id);
     } else {
         ctx = _exec_env->stream_context_mgr()->get(label);
+        if (ctx == nullptr) {
+            ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, 0);
+        }
     }
     if (ctx == nullptr) {
         _send_error_reply(req, Status::TransactionNotExists(fmt::format("Transaction with label {} not exists",
@@ -218,10 +285,14 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         return -1;
     }
 
-    if (!ctx->lock.try_lock()) {
-        _send_error_reply(req, Status::TransactionInProcessing("Transaction in processing, please retry later"));
+    Status lock_st = ctx->try_lock();
+    if (!lock_st.ok()) {
+        _send_error_reply(req, lock_st);
         return -1;
     }
+    // referenced by the http request
+    ctx->ref();
+    req->set_handler_ctx(new ResourceHandler(ctx));
     ctx->last_active_ts = MonotonicNanos();
     ctx->received_data_cost_nanos = 0;
     ctx->receive_bytes = 0;
@@ -231,12 +302,11 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;
-        if (ctx->need_rollback) {
-            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
+        if (ctx->need_rollback()) {
+            (void)_transaction_mgr->_rollback_transaction(ctx);
         }
-        auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
-        ctx->lock.unlock();
-        _send_reply(req, resp);
+        auto resp = _transaction_mgr->_build_reply(TXN_LOAD, ctx);
+        _finish_and_reply(req, resp);
         return -1;
     }
     return 0;
@@ -313,6 +383,11 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
     request.fileType = TFileType::FILE_STREAM;
+    request.__set_warehouse(ctx->warehouse);
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
 
     if (!http_req->header(HTTP_COLUMNS).empty()) {
         request.__set_columns(http_req->header(HTTP_COLUMNS));
@@ -383,6 +458,14 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     } else {
         request.__set_strip_outer_array(false);
     }
+    if (!http_req->header(HTTP_ENVELOPE).empty()) {
+        auto envelope_str = http_req->header(HTTP_ENVELOPE);
+        if (boost::iequals(envelope_str, "debezium")) {
+            request.__set_envelope(TEnvelopeType::DEBEZIUM);
+        } else if (!boost::iequals(envelope_str, "none")) {
+            return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
+        }
+    }
     if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
         request.__set_partial_update(true);
     } else {
@@ -415,21 +498,39 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         request.__set_timeout(ctx->timeout_second);
     }
 
+    if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty() && !http_req->header(HTTP_COMPRESSION).empty()) {
+        return Status::InvalidArgument("Only one of http header content-encoding and compression can be set");
+    }
+
+    if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty()) {
+        request.__set_payload_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
+    } else if (!http_req->header(HTTP_COMPRESSION).empty()) {
+        request.__set_payload_compression_type(http_req->header(HTTP_COMPRESSION));
+    }
+
     return Status::OK();
 }
 
 Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, StreamLoadContext* ctx) {
-    if (ctx->is_channel_stream_load_context()) {
-        return Status::OK();
-    }
     TStreamLoadPutRequest request;
     RETURN_IF_ERROR(_parse_request(http_req, ctx, request));
+    // Enforce request parameter consistency across multiple HTTP calls of the same transaction.
+    // A streaming load may arrive in several requests (e.g., chunked uploads). We cache the first
+    // TStreamLoadPutRequest in ctx->request and require subsequent requests to be identical
+    // (headers like columns, format, separators, partitions, etc.). This prevents parameter drift
+    // that could lead to undefined behavior or loading into an unexpected schema.
+    // Note: For channel stream load, this check still applies; planning is skipped later.
     if (ctx->request.db != "") {
         if (ctx->request != request) {
             return Status::InternalError("load request not equal last.");
         }
     } else {
         ctx->request = request;
+    }
+    if (ctx->is_channel_stream_load_context()) {
+        // Channel stream load is planned elsewhere; here we only validate request equality above
+        // and return. The data path will proceed without re-planning.
+        return Status::OK();
     }
     // setup stream pipe
     auto pipe = _exec_env->load_stream_mgr()->get(ctx->id);
@@ -441,7 +542,9 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
         return Status::OK();
     }
 
-    request.__set_thrift_rpc_timeout_ms(config::thrift_rpc_timeout_ms);
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+    TEST_SYNC_POINT_CALLBACK("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout", &request);
     // plan this load
     auto master_addr = get_master_address();
 #ifndef BE_TEST
@@ -452,7 +555,8 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
     int64_t stream_load_put_start_time = MonotonicNanos();
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
-            [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); }));
+            [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); },
+            rpc_timeout_ms));
     ctx->stream_load_put_cost_nanos = MonotonicNanos() - stream_load_put_start_time;
     ctx->timeout_second = ctx->put_result.params.query_options.query_timeout;
     ctx->request.__set_timeout(ctx->timeout_second);
@@ -461,7 +565,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
 #endif
     Status plan_status(ctx->put_result.status);
     if (!plan_status.ok()) {
-        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.get_error_msg() << " " << ctx->brief();
+        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << " " << ctx->brief();
         return plan_status;
     }
     VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
@@ -473,28 +577,19 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
+    request.__set_warehouse(ctx->warehouse);
 
     // check reuse
-    return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
+    return _stream_load_orchestrator->execute_plan_fragment(ctx);
 }
 
 void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
-    StreamLoadContext* ctx = nullptr;
-    const string& label = req->header(HTTP_LABEL_KEY);
-    if (!req->header(HTTP_CHANNEL_ID).empty()) {
-        int channel_id = std::stoi(req->header(HTTP_CHANNEL_ID));
-        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, channel_id);
-    } else {
-        ctx = _exec_env->stream_context_mgr()->get(label);
-    }
-    if (ctx == nullptr) {
+    ResourceHandler* handler = static_cast<ResourceHandler*>(req->handler_ctx());
+    if (handler == nullptr) {
         return;
     }
-    DeferOp defer([&] {
-        if (ctx->unref()) {
-            delete ctx;
-        }
-    });
+    StreamLoadContext* ctx = handler->ctx();
+    DCHECK(ctx != nullptr);
 
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->instance_mem_tracker.get());
 
@@ -507,8 +602,11 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
-            ctx->buffer = ByteBuffer::allocate(
-                    ctx->format == TFileFormatType::FORMAT_JSON ? std::max(len, ctx->kDefaultBufferSize) : len);
+            ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                    ctx->status, ctx->buffer,
+                    ByteBuffer::allocate_with_tracker(ctx->format == TFileFormatType::FORMAT_JSON
+                                                              ? std::max(len, ctx->kDefaultBufferSize)
+                                                              : len));
 
         } else if (ctx->buffer->remaining() < len) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
@@ -522,14 +620,16 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
                     ctx->status = Status::MemoryLimitExceeded(err_msg);
                     return;
                 }
-                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(data_sz));
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                        ctx->status, ByteBufferPtr buf,
+                        ByteBuffer::allocate_with_tracker(BitUtil::RoundUpToPowerOfTwo(data_sz)));
                 buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
                 std::swap(buf, ctx->buffer);
 
             } else {
                 // For non-json format, we could push buffer to the body_sink in streaming mode.
                 // buffer capacity is not enough, so we push the buffer to the pipe and allocate new one.
-                ctx->buffer->flip();
+                ctx->buffer->flip_to_read();
                 auto st = ctx->body_sink->append(std::move(ctx->buffer));
                 if (!st.ok()) {
                     LOG(WARNING) << "append body content failed. errmsg=" << st << " context=" << ctx->brief();
@@ -537,7 +637,9 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
                     return;
                 }
 
-                ctx->buffer = ByteBuffer::allocate(std::max(len, ctx->kDefaultBufferSize));
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                        ctx->status, ctx->buffer,
+                        ByteBuffer::allocate_with_tracker(std::max(len, ctx->kDefaultBufferSize)));
             }
         }
 
@@ -555,6 +657,16 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
     ctx->last_active_ts = MonotonicNanos();
     ctx->received_data_cost_nanos += ctx->last_active_ts - start_read_data_time;
     ctx->total_received_data_cost_nanos += ctx->last_active_ts - start_read_data_time;
+    VLOG(1) << "Receive http chunk, " << ctx->brief() << ", total expected bytes: " << ctx->body_bytes
+            << ", total received bytes: " << ctx->total_receive_bytes;
+}
+
+void TransactionStreamLoadAction::free_handler_ctx(void* param) {
+    ResourceHandler* handler = static_cast<ResourceHandler*>(param);
+    if (handler == nullptr) {
+        return;
+    }
+    delete handler;
 }
 
 } // namespace starrocks

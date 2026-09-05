@@ -14,20 +14,21 @@
 
 package com.starrocks.load;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ExportCheckerTest {
     
@@ -37,7 +38,7 @@ public class ExportCheckerTest {
 
         new MockUp<ExportJob>() {
             @Mock
-            public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws UserException {
+            public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws StarRocksException {
             }
         };
 
@@ -63,20 +64,20 @@ public class ExportCheckerTest {
         ExportJob job = new ExportJob();
         job.setBeStartTime(1, 1000L);
         boolean cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
 
         be.setAlive(true);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
 
         be.setLastStartTime(1001L);
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
 
         be.setLastStartTime(999L);
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(!cancelled);
+        Assertions.assertTrue(!cancelled);
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -86,6 +87,67 @@ public class ExportCheckerTest {
         };
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
+    }
+
+    @Test
+    public void testStopAllClosesExecutorsAndInitRebuilds() throws Exception {
+        // stopAll must shut down all three LeaderTaskExecutor instances so their worker
+        // threads exit on demotion; a subsequent init() must replace the static maps with
+        // fresh instances for the next leader.
+        ExportChecker.init(1000L);
+        com.starrocks.task.LeaderTaskExecutor pendingBefore = readExecutor(JobState.PENDING);
+        com.starrocks.task.LeaderTaskExecutor exportingBefore = readExecutor(JobState.EXPORTING);
+        com.starrocks.task.LeaderTaskExecutor subTaskBefore = readSubTaskExecutor();
+        Assertions.assertNotNull(pendingBefore);
+        Assertions.assertNotNull(exportingBefore);
+        Assertions.assertNotNull(subTaskBefore);
+
+        ExportChecker.stopAll();
+        Assertions.assertTrue(readPoolFromExecutor(pendingBefore).isShutdown(),
+                "pending executor pool must be shut down");
+        Assertions.assertTrue(readPoolFromExecutor(exportingBefore).isShutdown(),
+                "exporting executor pool must be shut down");
+        Assertions.assertTrue(readPoolFromExecutor(subTaskBefore).isShutdown(),
+                "sub-task executor pool must be shut down");
+        // stopAll is fire-and-forget (no drain wait); the shutdownNow'd executors terminate shortly
+        // after. With idle pools (no in-flight tasks) they terminate promptly - await it rather than
+        // assert synchronously to avoid a race with the asynchronous termination.
+        Assertions.assertTrue(readPoolFromExecutor(pendingBefore).awaitTermination(5, TimeUnit.SECONDS),
+                "pending executor pool must terminate");
+        Assertions.assertTrue(readPoolFromExecutor(exportingBefore).awaitTermination(5, TimeUnit.SECONDS),
+                "exporting executor pool must terminate");
+        Assertions.assertTrue(readPoolFromExecutor(subTaskBefore).awaitTermination(5, TimeUnit.SECONDS),
+                "sub-task executor pool must terminate");
+
+        // init() again must produce fresh instances.
+        ExportChecker.init(1000L);
+        Assertions.assertNotSame(pendingBefore, readExecutor(JobState.PENDING));
+        Assertions.assertNotSame(exportingBefore, readExecutor(JobState.EXPORTING));
+        Assertions.assertNotSame(subTaskBefore, readSubTaskExecutor());
+        // Tear down what init() just created so the test does not leak threads.
+        ExportChecker.stopAll();
+    }
+
+    private com.starrocks.task.LeaderTaskExecutor readExecutor(JobState state) throws Exception {
+        Field field = ExportChecker.class.getDeclaredField("executors");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<JobState, com.starrocks.task.LeaderTaskExecutor> executors =
+                (Map<JobState, com.starrocks.task.LeaderTaskExecutor>) field.get(null);
+        return executors.get(state);
+    }
+
+    private com.starrocks.task.LeaderTaskExecutor readSubTaskExecutor() throws Exception {
+        Field field = ExportChecker.class.getDeclaredField("exportingSubTaskExecutor");
+        field.setAccessible(true);
+        return (com.starrocks.task.LeaderTaskExecutor) field.get(null);
+    }
+
+    private java.util.concurrent.ThreadPoolExecutor readPoolFromExecutor(com.starrocks.task.LeaderTaskExecutor lte)
+            throws Exception {
+        Field field = com.starrocks.task.LeaderTaskExecutor.class.getDeclaredField("executor");
+        field.setAccessible(true);
+        return (java.util.concurrent.ThreadPoolExecutor) field.get(lte);
     }
 }

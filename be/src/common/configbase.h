@@ -16,11 +16,17 @@
 // under the License.
 
 #pragma once
+
+#include <butil/containers/doubly_buffered_data.h>
+
 #include <cstdint>
-#include <map>
-#include <mutex>
+#include <iosfwd>
+#include <ostream>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include "fmt/format.h"
 
 namespace starrocks {
 class Status;
@@ -33,68 +39,75 @@ struct ConfigInfo {
     std::string type;
     std::string defval;
     bool valmutable;
+
+    bool operator<(const ConfigInfo& rhs) const { return name < rhs.name; }
+
+    bool operator==(const ConfigInfo& rhs) const = default;
 };
 
-class Register {
-public:
-    struct Field {
-        const char* type = nullptr;
-        const char* name = nullptr;
-        void* storage = nullptr;
-        const char* defval = nullptr;
-        bool valmutable = false;
-        Field(const char* ftype, const char* fname, void* fstorage, const char* fdefval, bool fvalmutable)
-                : type(ftype), name(fname), storage(fstorage), defval(fdefval), valmutable(fvalmutable) {}
+inline std::ostream& operator<<(std::ostream& os, const ConfigInfo& info) {
+    os << "ConfigInfo{"
+       << "name=\"" << info.name << "\","
+       << "value=\"" << info.value << "\","
+       << "type=" << info.type << ","
+       << "default=\"" << info.defval << "\","
+       << "mutable=" << info.valmutable << "}";
+    return os;
+}
 
-        // Get the field value as string
-        std::string value() const;
-    };
-
+// A wrapper on std::string, it's safe to read/write MutableString concurrently.
+class MutableString {
 public:
-    static std::map<std::string, Field>* _s_field_map;
+    MutableString() = default;
+    ~MutableString() = default;
 
-public:
-    Register(const char* ftype, const char* fname, void* fstorage, const char* fdefval, bool fvalmutable) {
-        if (_s_field_map == nullptr) {
-            _s_field_map = new std::map<std::string, Field>();
-        }
-        Field field(ftype, fname, fstorage, fdefval, fvalmutable);
-        _s_field_map->insert(std::make_pair(std::string(fname), field));
+    // Disallow copy and move, because no usage now.
+    MutableString(const MutableString&) = delete;
+    void operator=(const MutableString&) = delete;
+    MutableString(MutableString&&) = delete;
+    void operator=(MutableString&&) = delete;
+
+    std::string value() const;
+
+    operator std::string() const { return value(); }
+
+    MutableString& operator=(const std::string& s);
+
+private:
+    static bool update_value(std::string& bg, std::string new_value) {
+        bg = std::move(new_value);
+        return true;
     }
+
+    mutable butil::DoublyBufferedData<std::string> _str;
 };
 
-#define DEFINE_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE) \
-    FIELD_TYPE FIELD_NAME;                                              \
-    static Register reg_##FIELD_NAME(#FIELD_TYPE, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE);
+inline std::string MutableString::value() const {
+    butil::DoublyBufferedData<std::string>::ScopedPtr ptr;
+    _str.Read(&ptr);
+    return *ptr;
+}
+
+inline MutableString& MutableString::operator=(const std::string& s) {
+    _str.Modify(update_value, s);
+    return *this;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
+    return os << s.value();
+}
 
 #define DECLARE_FIELD(FIELD_TYPE, FIELD_NAME) extern FIELD_TYPE FIELD_NAME;
 
-#ifdef __IN_CONFIGBASE_CPP__
-#define CONF_Bool(name, defaultstr) DEFINE_FIELD(bool, name, defaultstr, false)
-#define CONF_Int16(name, defaultstr) DEFINE_FIELD(int16_t, name, defaultstr, false)
-#define CONF_Int32(name, defaultstr) DEFINE_FIELD(int32_t, name, defaultstr, false)
-#define CONF_Int64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, false)
-#define CONF_Double(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, false)
-#define CONF_String(name, defaultstr) DEFINE_FIELD(std::string, name, defaultstr, false)
-#define CONF_Bools(name, defaultstr) DEFINE_FIELD(std::vector<bool>, name, defaultstr, false)
-#define CONF_Int16s(name, defaultstr) DEFINE_FIELD(std::vector<int16_t>, name, defaultstr, false)
-#define CONF_Int32s(name, defaultstr) DEFINE_FIELD(std::vector<int32_t>, name, defaultstr, false)
-#define CONF_Int64s(name, defaultstr) DEFINE_FIELD(std::vector<int64_t>, name, defaultstr, false)
-#define CONF_Doubles(name, defaultstr) DEFINE_FIELD(std::vector<double>, name, defaultstr, false)
-#define CONF_Strings(name, defaultstr) DEFINE_FIELD(std::vector<std::string>, name, defaultstr, false)
-#define CONF_mBool(name, defaultstr) DEFINE_FIELD(bool, name, defaultstr, true)
-#define CONF_mInt16(name, defaultstr) DEFINE_FIELD(int16_t, name, defaultstr, true)
-#define CONF_mInt32(name, defaultstr) DEFINE_FIELD(int32_t, name, defaultstr, true)
-#define CONF_mInt64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, true)
-#define CONF_mDouble(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, true)
-#define CONF_mString(name, defaultstr) DEFINE_FIELD(std::string, name, defaultstr, true)
-#else
+// NOTE: alias configs must be defined after the true config, otherwise there will be a compile error
+#define CONF_Alias(name, alias)
 #define CONF_Bool(name, defaultstr) DECLARE_FIELD(bool, name)
 #define CONF_Int16(name, defaultstr) DECLARE_FIELD(int16_t, name)
 #define CONF_Int32(name, defaultstr) DECLARE_FIELD(int32_t, name)
 #define CONF_Int64(name, defaultstr) DECLARE_FIELD(int64_t, name)
 #define CONF_Double(name, defaultstr) DECLARE_FIELD(double, name)
 #define CONF_String(name, defaultstr) DECLARE_FIELD(std::string, name)
+#define CONF_String_enum(name, defaultstr, enums) DECLARE_FIELD(std::string, name)
 #define CONF_Bools(name, defaultstr) DECLARE_FIELD(std::vector<bool>, name)
 #define CONF_Int16s(name, defaultstr) DECLARE_FIELD(std::vector<int16_t>, name)
 #define CONF_Int32s(name, defaultstr) DECLARE_FIELD(std::vector<int32_t>, name)
@@ -106,32 +119,28 @@ public:
 #define CONF_mInt32(name, defaultstr) DECLARE_FIELD(int32_t, name)
 #define CONF_mInt64(name, defaultstr) DECLARE_FIELD(int64_t, name)
 #define CONF_mDouble(name, defaultstr) DECLARE_FIELD(double, name)
-#define CONF_mString(name, defaultstr) DECLARE_FIELD(std::string, name)
-#endif
+#define CONF_mString(name, defaultstr) DECLARE_FIELD(MutableString, name)
 
-// Configuration properties load from config file.
-class Properties {
-public:
-    bool load(const char* filename);
-    template <typename T>
-    bool get(const char* key, const char* defstr, T& retval) const;
+// Initialize configurations from a config file.
+bool init(const char* filename);
 
-private:
-    std::map<std::string, std::string> file_conf_map;
-};
-
-extern Properties props;
-
-// Full configurations.
-extern std::map<std::string, std::string>* full_conf_map;
-
-bool init(const char* filename, bool fillconfmap = false);
+// Initialize configurations from a input stream.
+bool init(std::istream& input);
 
 Status set_config(const std::string& field, const std::string& value);
 
-std::mutex* get_mstring_conf_lock();
+Status rollback_config(const std::string& field);
 
 std::vector<ConfigInfo> list_configs();
 
+void TEST_clear_configs();
+
 } // namespace config
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::config::MutableString> : formatter<std::string> {
+    auto format(const starrocks::config::MutableString& s, format_context& ctx) const {
+        return formatter<std::string>::format(s.value(), ctx);
+    }
+};

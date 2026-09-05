@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Decodes a Base64-encoded string and return a BINARY."
 ---
 
 # base64_decode_binary
 
-## Description
+
 
 Decodes a Base64-encoded string and return a BINARY.
 

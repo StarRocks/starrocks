@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "max 返回表达式的最大值。"
 ---
 
-# MAX
+# max
 
-## 功能
+
 
 返回 expr 表达式的最大值。
 

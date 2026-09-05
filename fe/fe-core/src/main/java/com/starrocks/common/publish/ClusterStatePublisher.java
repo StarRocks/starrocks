@@ -34,12 +34,12 @@
 
 package com.starrocks.common.publish;
 
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentPublishRequest;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -70,7 +70,7 @@ public class ClusterStatePublisher {
     // Fuck singleton.
     public static ClusterStatePublisher getInstance() {
         if (INSTANCE == null) {
-            INSTANCE = new ClusterStatePublisher(GlobalStateMgr.getCurrentSystemInfo());
+            INSTANCE = new ClusterStatePublisher(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         }
         return INSTANCE;
     }
@@ -107,44 +107,25 @@ public class ClusterStatePublisher {
 
         @Override
         public void run() {
-            // Here to publish all worker
             TNetworkAddress addr = new TNetworkAddress(node.getHost(), node.getBePort());
-            BackendService.Client client = null;
-            try {
-                client = ClientPool.backendPool.borrowObject(addr);
-            } catch (Exception e) {
-                LOG.warn("Fetch a agent client failed. backend=[{}] reason=[{}]", addr, e);
-                handler.onFailure(node, e);
-                return;
-            }
             try {
                 TAgentPublishRequest request = stateUpdate.toThrift();
-                TAgentResult tAgentResult = null;
-                try {
-                    tAgentResult = client.publish_cluster_state(request);
-                } catch (TException e) {
-                    // Ok, lets try another time
-                    if (!ClientPool.backendPool.reopen(client)) {
-                        // Failed another time, throw this
-                        throw e;
-                    }
-                    tAgentResult = client.publish_cluster_state(request);
-                }
+                TAgentResult tAgentResult = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.backendPool,
+                        addr,
+                        client -> client.publish_cluster_state(request));
                 if (tAgentResult.getStatus().getStatus_code() != TStatusCode.OK) {
                     // Success execute, no dirty data possibility
                     LOG.warn("Backend execute publish failed. backend=[{}], message=[{}]",
                             addr, tAgentResult.getStatus().getError_msgs());
+                } else {
+                    LOG.debug("Success publish to backend([{}])", addr);
+                    // Publish here
+                    handler.onResponse(node);
                 }
-                LOG.debug("Success publish to backend([{}])", addr);
-                // Publish here
-                handler.onResponse(node);
             } catch (TException e) {
-                LOG.warn("A thrift exception happened when publish to a backend. backend=[{}], reason=[{}]", addr, e);
+                LOG.warn("Fetch a agent client failed. backend=[{}] reason=[{}]", addr, e);
                 handler.onFailure(node, e);
-                ClientPool.backendPool.invalidateObject(addr, client);
-                client = null;
-            } finally {
-                ClientPool.backendPool.returnObject(addr, client);
             }
         }
     }

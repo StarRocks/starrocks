@@ -19,7 +19,10 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 
+import java.util.Locale;
 import java.util.Map;
 
 // Helper class to drives the convert of session variables according to the converters.
@@ -35,6 +38,9 @@ public class VariableVarConverters {
         CONVERTERS.put(SessionVariable.SQL_MODE, sqlModeConverter);
         PartialUpdateModeConverter partialUpdateModeConverter = new PartialUpdateModeConverter();
         CONVERTERS.put(SessionVariable.PARTIAL_UPDATE_MODE, partialUpdateModeConverter);
+        CONVERTERS.put(SessionVariable.INSERT_MAX_FILTER_RATIO, new InsertMaxFilterRatioConverter());
+        CONVERTERS.put(SessionVariable.CUSTOM_SESSION_NAME, new CustomSessionNameConverter());
+        CONVERTERS.put(SessionVariable.PAIMON_READER_MODE, new PaimonReaderModeConverter());
     }
 
     public static String convert(String varName, String value) throws DdlException {
@@ -63,6 +69,51 @@ public class VariableVarConverters {
             } else {
                 throw new DdlException("partial_update_mode only support auto|row|column");
             }
+        }
+    }
+
+    public static class PaimonReaderModeConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            String mode = value.toUpperCase(Locale.ROOT);
+            try {
+                return SessionVariable.PaimonReaderMode.valueOf(mode).name();
+            } catch (IllegalArgumentException e) {
+                throw new DdlException("paimon_reader_mode only supports AUTO, JNI, or NATIVE");
+            }
+        }
+    }
+
+    // Check var `insert_max_filter_ratio`
+    public static class InsertMaxFilterRatioConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            try {
+                double insertMaxFilterRatio = Double.parseDouble(value);
+                if (insertMaxFilterRatio < 0 || insertMaxFilterRatio > 1) {
+                    ErrorReport.reportDdlException(
+                            ErrorCode.ERR_INVALID_VALUE, SessionVariable.INSERT_MAX_FILTER_RATIO, value, "between 0.0 and 1.0");
+                }
+            } catch (NumberFormatException e) {
+                ErrorReport.reportDdlException(
+                        ErrorCode.ERR_INVALID_VALUE, SessionVariable.INSERT_MAX_FILTER_RATIO, value, "between 0.0 and 1.0");
+            }
+            return value;
+        }
+    }
+
+    // check var `custom_session_name`
+    public static class CustomSessionNameConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            if (value.length() > 64) {
+                throw new DdlException("custom_session_name length can not exceed 64 characters");
+            }
+            // check invalid characters
+            if (!value.matches("^[a-zA-Z0-9_\\-]*$")) {
+                throw new DdlException("custom_session_name can only contain letters, digits, hyhens and underscores");
+            }
+            return value;
         }
     }
 }

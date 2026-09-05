@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -62,6 +63,14 @@ public abstract class Rule {
         return 1;
     }
 
+    public List<Rule> predecessorRules() {
+        return Collections.emptyList();
+    }
+
+    public List<Rule> successorRules() {
+        return Collections.emptyList();
+    }
+
     public boolean check(final OptExpression input, OptimizerContext context) {
         return true;
     }
@@ -71,8 +80,16 @@ public abstract class Rule {
      */
     public abstract List<OptExpression> transform(OptExpression input, OptimizerContext context);
 
+    /**
+     * For some rules it could be treated as a best-effort optimization, which means it could give up the optimization
+     * if it takes too much time.
+     */
+    public boolean exhausted(OptimizerContext context) {
+        return false;
+    }
+
     @Override
     public String toString() {
-        return type.name() + " " + type.id();
+        return type.name();
     }
 }

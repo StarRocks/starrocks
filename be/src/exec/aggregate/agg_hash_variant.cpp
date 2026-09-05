@@ -14,13 +14,93 @@
 //
 #include "exec/aggregate/agg_hash_variant.h"
 
-#include <type_traits>
+#include <tuple>
 #include <variant>
 
-#include "util/phmap/phmap.h"
+#include "base/phmap/phmap.h"
+#include "runtime/runtime_state.h"
+
+#define APPLY_FOR_AGG_VARIANT_ALL(M) \
+    M(phase1_uint8)                  \
+    M(phase1_int8)                   \
+    M(phase1_int16)                  \
+    M(phase1_int32)                  \
+    M(phase1_int64)                  \
+    M(phase1_int128)                 \
+    M(phase1_decimal32)              \
+    M(phase1_decimal64)              \
+    M(phase1_decimal128)             \
+    M(phase1_decimal256)             \
+    M(phase1_date)                   \
+    M(phase1_timestamp)              \
+    M(phase1_string)                 \
+    M(phase1_slice)                  \
+    M(phase1_null_uint8)             \
+    M(phase1_null_int8)              \
+    M(phase1_null_int16)             \
+    M(phase1_null_int32)             \
+    M(phase1_null_int64)             \
+    M(phase1_null_int128)            \
+    M(phase1_null_decimal32)         \
+    M(phase1_null_decimal64)         \
+    M(phase1_null_decimal128)        \
+    M(phase1_null_decimal256)        \
+    M(phase1_null_date)              \
+    M(phase1_null_timestamp)         \
+    M(phase1_null_string)            \
+    M(phase1_slice_two_level)        \
+    M(phase1_int32_two_level)        \
+    M(phase1_null_string_two_level)  \
+    M(phase1_string_two_level)       \
+                                     \
+    M(phase2_uint8)                  \
+    M(phase2_int8)                   \
+    M(phase2_int16)                  \
+    M(phase2_int32)                  \
+    M(phase2_int64)                  \
+    M(phase2_int128)                 \
+    M(phase2_decimal32)              \
+    M(phase2_decimal64)              \
+    M(phase2_decimal128)             \
+    M(phase2_decimal256)             \
+    M(phase2_date)                   \
+    M(phase2_timestamp)              \
+    M(phase2_string)                 \
+    M(phase2_slice)                  \
+    M(phase2_null_uint8)             \
+    M(phase2_null_int8)              \
+    M(phase2_null_int16)             \
+    M(phase2_null_int32)             \
+    M(phase2_null_int64)             \
+    M(phase2_null_int128)            \
+    M(phase2_null_decimal32)         \
+    M(phase2_null_decimal64)         \
+    M(phase2_null_decimal128)        \
+    M(phase2_null_decimal256)        \
+    M(phase2_null_date)              \
+    M(phase2_null_timestamp)         \
+    M(phase2_null_string)            \
+    M(phase2_slice_two_level)        \
+    M(phase2_int32_two_level)        \
+    M(phase2_null_string_two_level)  \
+    M(phase2_string_two_level)       \
+                                     \
+    M(phase1_slice_fx4)              \
+    M(phase1_slice_fx8)              \
+    M(phase1_slice_fx16)             \
+    M(phase2_slice_fx4)              \
+    M(phase2_slice_fx8)              \
+    M(phase2_slice_fx16)             \
+    M(phase1_slice_cx1)              \
+    M(phase1_slice_cx4)              \
+    M(phase1_slice_cx8)              \
+    M(phase1_slice_cx16)             \
+    M(phase2_slice_cx1)              \
+    M(phase2_slice_cx4)              \
+    M(phase2_slice_cx8)              \
+    M(phase2_slice_cx16)
 
 namespace starrocks {
-
 namespace detail {
 template <AggHashMapVariant::Type>
 struct AggHashMapVariantTypeTraits;
@@ -40,6 +120,7 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_int128, Int128AggHashMapWithOneN
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_decimal32, Decimal32AggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_decimal64, Decimal64AggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_decimal128, Decimal128AggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_decimal256, Decimal256AggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_date, DateAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_timestamp, TimeStampAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_string, OneStringAggHashMap<PhmapSeed1>);
@@ -52,15 +133,22 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_int128, NullInt128AggHashMa
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_decimal32, NullDecimal32AggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_decimal64, NullDecimal64AggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_decimal128, NullDecimal128AggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_decimal256, NullDecimal256AggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_date, NullDateAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_timestamp, NullTimeStampAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_string, NullOneStringAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice, SerializedKeyAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_two_level, SerializedKeyTwoLevelAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_int32_two_level, Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_string_two_level, NullOneStringTwoLevelAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_string_two_level, OneStringTwoLevelAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx4, SerializedKeyFixedSize4AggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx8, SerializedKeyFixedSize8AggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx16, SerializedKeyFixedSize16AggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_cx1, CompressedFixedSize1AggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_cx4, CompressedFixedSize4AggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_cx8, CompressedFixedSize8AggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_cx16, CompressedFixedSize16AggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_uint8, UInt8AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int8, Int8AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int16, Int16AggHashMapWithOneNumberKey<PhmapSeed2>);
@@ -70,6 +158,7 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int128, Int128AggHashMapWithOneN
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_decimal32, Decimal32AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_decimal64, Decimal64AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_decimal128, Decimal128AggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_decimal256, Decimal256AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_date, DateAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_timestamp, TimeStampAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_string, OneStringAggHashMap<PhmapSeed2>);
@@ -82,15 +171,22 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_int128, NullInt128AggHashMa
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_decimal32, NullDecimal32AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_decimal64, NullDecimal64AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_decimal128, NullDecimal128AggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_decimal256, NullDecimal256AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_date, NullDateAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_timestamp, NullTimeStampAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_string, NullOneStringAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice, SerializedKeyAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_two_level, SerializedKeyTwoLevelAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int32_two_level, Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_string_two_level, NullOneStringTwoLevelAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_string_two_level, OneStringTwoLevelAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx4, SerializedKeyFixedSize4AggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx8, SerializedKeyFixedSize8AggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx16, SerializedKeyFixedSize16AggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx1, CompressedFixedSize1AggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx4, CompressedFixedSize4AggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx8, CompressedFixedSize8AggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx16, CompressedFixedSize16AggHashMap<PhmapSeed2>);
 
 template <AggHashSetVariant::Type>
 struct AggHashSetVariantTypeTraits;
@@ -110,6 +206,7 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_int128, Int128AggHashSetOfOneNum
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_decimal32, Decimal32AggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_decimal64, Decimal64AggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_decimal128, Decimal128AggHashSetOfOneNumberKey<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_decimal256, Decimal256AggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_date, DateAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_timestamp, TimeStampAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_string, OneStringAggHashSet<PhmapSeed1>);
@@ -122,12 +219,16 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_int128, NullInt128AggHashSe
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_decimal32, NullDecimal32AggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_decimal64, NullDecimal64AggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_decimal128, NullDecimal128AggHashSetOfOneNumberKey<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_decimal256, NullDecimal256AggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_date, NullDateAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_timestamp, NullTimeStampAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_string, NullOneStringAggHashSet<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice, SerializedKeyAggHashSet<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_two_level, SerializedTwoLevelKeyAggHashSet<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_int32_two_level, Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_string_two_level, OneStringTwoLevelAggHashSet<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_string_two_level, NullOneStringTwoLevelAggHashSet<PhmapSeed1>);
+
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_uint8, UInt8AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_int8, Int8AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_int16, Int16AggHashSetOfOneNumberKey<PhmapSeed2>);
@@ -137,6 +238,7 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_int128, Int128AggHashSetOfOneNum
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_decimal32, Decimal32AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_decimal64, Decimal64AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_decimal128, Decimal128AggHashSetOfOneNumberKey<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_decimal256, Decimal256AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_date, DateAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_timestamp, TimeStampAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_string, OneStringAggHashSet<PhmapSeed2>);
@@ -149,18 +251,31 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_int128, NullInt128AggHashSe
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_decimal32, NullDecimal32AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_decimal64, NullDecimal64AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_decimal128, NullDecimal128AggHashSetOfOneNumberKey<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_decimal256, NullDecimal256AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_date, NullDateAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_timestamp, NullTimeStampAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_string, NullOneStringAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice, SerializedKeyAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_two_level, SerializedTwoLevelKeyAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_int32_two_level, Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_string_two_level, OneStringTwoLevelAggHashSet<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_string_two_level, NullOneStringTwoLevelAggHashSet<PhmapSeed2>);
+
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_fx4, SerializedKeyAggHashSetFixedSize4<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_fx8, SerializedKeyAggHashSetFixedSize8<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_fx16, SerializedKeyAggHashSetFixedSize16<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_fx4, SerializedKeyAggHashSetFixedSize4<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_fx8, SerializedKeyAggHashSetFixedSize8<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_fx16, SerializedKeyAggHashSetFixedSize16<PhmapSeed2>);
+
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_cx1, CompressedAggHashSetFixedSize1<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_cx4, CompressedAggHashSetFixedSize4<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_cx8, CompressedAggHashSetFixedSize8<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_cx16, CompressedAggHashSetFixedSize16<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx1, CompressedAggHashSetFixedSize1<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx4, CompressedAggHashSetFixedSize4<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx8, CompressedAggHashSetFixedSize8<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx16, CompressedAggHashSetFixedSize16<PhmapSeed2>);
 
 } // namespace detail
 void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat) {
@@ -187,6 +302,10 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                                                  typename decltype(dst->hash_map)::key_type>) {                       \
                         dst->hash_map.reserve(hash_map_with_key->hash_map.capacity());                                \
                         dst->hash_map.insert(hash_map_with_key->hash_map.begin(), hash_map_with_key->hash_map.end()); \
+                        auto null_data_ptr = hash_map_with_key->get_null_key_data();                                  \
+                        if (null_data_ptr != nullptr) {                                                               \
+                            dst->set_null_key_data(null_data_ptr);                                                    \
+                        }                                                                                             \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_map_with_key);                                                                                   \
@@ -199,6 +318,12 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 void AggHashMapVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_MAP(phase1_slice_two_level, phase1_slice);
     CONVERT_TO_TWO_LEVEL_MAP(phase2_slice_two_level, phase2_slice);
+
+    CONVERT_TO_TWO_LEVEL_MAP(phase1_string_two_level, phase1_string);
+    CONVERT_TO_TWO_LEVEL_MAP(phase2_string_two_level, phase2_string);
+
+    CONVERT_TO_TWO_LEVEL_MAP(phase1_null_string_two_level, phase1_null_string);
+    CONVERT_TO_TWO_LEVEL_MAP(phase2_null_string_two_level, phase2_null_string);
 }
 
 void AggHashMapVariant::reset() {
@@ -217,11 +342,20 @@ size_t AggHashMapVariant::size() const {
 }
 
 bool AggHashMapVariant::need_expand(size_t increasement) const {
-    size_t capacity = this->capacity();
-    // TODO: think about two-level hashmap
-    size_t size = this->size() + increasement;
-    // see detail implement in reset_growth_left
-    return size >= capacity - capacity / 8;
+    // Direct-array hash maps (SmallFixedSizeHashMap for TINYINT/BOOL/SMALLINT
+    // and the low-card-dict uint8 variant) have a hard-coded full keyspace
+    // and never rehash, so streaming/spill paths should only fall back when
+    // the array is actually full -- not at the 87.5% growth-heuristic
+    // threshold used by phmap.
+    return visit([increasement](const auto& hash_map_with_key) {
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        const size_t size = hash_map_with_key->hash_map.size() + increasement;
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
+            return size > HashMap::hash_table_size;
+        }
+        const size_t capacity = hash_map_with_key->hash_map.capacity();
+        return size >= capacity - capacity / 8;
+    });
 }
 
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
@@ -233,19 +367,29 @@ size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
 
 size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
-        return sizeof(typename decltype(hash_map_with_key->hash_map)::key_type) *
-                       hash_map_with_key->hash_map.capacity() +
-               pool->total_allocated_bytes();
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        size_t hash_map_bytes;
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
+            // SmallFixedSizeHashMap pre-allocates a dense pointer array; the
+            // SMALLINT path is ~512 KiB and must be reported as such, not as
+            // sizeof(KeyType) * capacity.
+            hash_map_bytes = HashMap::bucket_byte_size();
+        } else {
+            hash_map_bytes = sizeof(typename HashMap::key_type) * hash_map_with_key->hash_map.capacity();
+        }
+        const size_t pool_bytes = (pool != nullptr) ? pool->total_allocated_bytes() : 0;
+        return hash_map_bytes + pool_bytes;
     });
 }
 
 void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat) {
     _type = type;
+    _agg_stat = agg_stat;
     switch (_type) {
 #define M(NAME)                                                                                                    \
     case Type::NAME:                                                                                               \
         hash_set_with_key = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::NAME>::HashSetWithKeyType>( \
-                state->chunk_size());                                                                              \
+                state->chunk_size(), _agg_stat);                                                                   \
         break;
         APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
@@ -255,13 +399,18 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 #define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                            \
     if (_type == AggHashSetVariant::Type::SRC) {                                                                      \
         auto dst = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>(              \
-                state->chunk_size());                                                                                 \
+                state->chunk_size(), _agg_stat);                                                                      \
         std::visit(                                                                                                   \
                 [&](auto& hash_set_with_key) {                                                                        \
                     if constexpr (std::is_same_v<typename decltype(hash_set_with_key->hash_set)::key_type,            \
                                                  typename decltype(dst->hash_set)::key_type>) {                       \
                         dst->hash_set.reserve(hash_set_with_key->hash_set.capacity());                                \
                         dst->hash_set.insert(hash_set_with_key->hash_set.begin(), hash_set_with_key->hash_set.end()); \
+                        using SrcType = std::remove_reference_t<decltype(*hash_set_with_key)>;                        \
+                        using DstType = std::remove_reference_t<decltype(*dst)>;                                      \
+                        if constexpr (SrcType::has_single_null_key && DstType::has_single_null_key) {                 \
+                            dst->has_null_key = hash_set_with_key->has_null_key;                                      \
+                        }                                                                                             \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_set_with_key);                                                                                   \
@@ -273,6 +422,12 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 void AggHashSetVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
     CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
+
+    CONVERT_TO_TWO_LEVEL_SET(phase1_string_two_level, phase1_string);
+    CONVERT_TO_TWO_LEVEL_SET(phase2_string_two_level, phase2_string);
+
+    CONVERT_TO_TWO_LEVEL_SET(phase1_null_string_two_level, phase1_null_string);
+    CONVERT_TO_TWO_LEVEL_SET(phase2_null_string_two_level, phase2_null_string);
 }
 
 void AggHashSetVariant::reset() {
@@ -295,10 +450,17 @@ size_t AggHashSetVariant::size() const {
 }
 
 bool AggHashSetVariant::need_expand(size_t increasement) const {
-    size_t capacity = this->capacity();
-    size_t size = this->size() + increasement;
-    // see detail implement in reset_growth_left
-    return size >= capacity - capacity / 8;
+    // Direct-array hash sets (SmallFixedSizeHashSet for TINYINT/BOOL/SMALLINT)
+    // never rehash; only fall back when the array is actually full.
+    return visit([increasement](const auto& hash_set_with_key) {
+        using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
+        const size_t size = hash_set_with_key->hash_set.size() + increasement;
+        if constexpr (is_fixed_hash_set_v<HashSet>) {
+            return size > HashSet::hash_table_size;
+        }
+        const size_t capacity = hash_set_with_key->hash_set.capacity();
+        return size >= capacity - capacity / 8;
+    });
 }
 
 size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
@@ -310,10 +472,56 @@ size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
 
 size_t AggHashSetVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([&](auto& hash_set_with_key) {
-        return sizeof(typename decltype(hash_set_with_key->hash_set)::key_type) *
-                       hash_set_with_key->hash_set.capacity() +
-               pool->total_allocated_bytes();
+        using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
+        size_t hash_set_bytes;
+        if constexpr (is_fixed_hash_set_v<HashSet>) {
+            hash_set_bytes = HashSet::bucket_byte_size();
+        } else {
+            hash_set_bytes = sizeof(typename HashSet::key_type) * hash_set_with_key->hash_set.capacity();
+        }
+        const size_t pool_bytes = (pool != nullptr) ? pool->total_allocated_bytes() : 0;
+        return hash_set_bytes + pool_bytes;
     });
 }
+
+// HashVariantResolver
+template <typename HashVariantType>
+HashVariantResolver<HashVariantType>::HashVariantResolver() {
+#define VARIANT_EMPLACE(...) CHECK(_types.emplace(__VA_ARGS__).second)
+
+#define VARIANT_TYPE(value) HashVariantType::Type::value
+#define ADD_VARIANT_PHASE1_TYPE(LOGICAL_TYPE, VALUE)                                                     \
+    VARIANT_EMPLACE(std::make_tuple(AggrPhase1, LOGICAL_TYPE, true), VARIANT_TYPE(phase1_null_##VALUE)); \
+    VARIANT_EMPLACE(std::make_tuple(AggrPhase1, LOGICAL_TYPE, false), VARIANT_TYPE(phase1_##VALUE));     \
+    VARIANT_EMPLACE(std::make_tuple(AggrPhase2, LOGICAL_TYPE, true), VARIANT_TYPE(phase2_null_##VALUE)); \
+    VARIANT_EMPLACE(std::make_tuple(AggrPhase2, LOGICAL_TYPE, false), VARIANT_TYPE(phase2_##VALUE));
+
+    ADD_VARIANT_PHASE1_TYPE(TYPE_BOOLEAN, uint8);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_TINYINT, int8);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_SMALLINT, int16);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_INT, int32);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DECIMAL32, decimal32);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_BIGINT, int64);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DECIMAL64, decimal64);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DATE, date);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DATETIME, timestamp);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DECIMAL128, decimal128);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_DECIMAL256, decimal256);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_LARGEINT, int128);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_CHAR, string);
+    ADD_VARIANT_PHASE1_TYPE(TYPE_VARCHAR, string);
+}
+
+template <typename HashVariantType>
+auto HashVariantResolver<HashVariantType>::instance() -> HashVariantResolver<HashVariantType>& {
+    static HashVariantResolver resolver;
+    return resolver;
+}
+
+template class HashVariantResolver<AggHashSetVariant>;
+template class HashVariantResolver<AggHashMapVariant>;
+
+DEFINE_FAIL_POINT(agg_hash_set_bad_alloc);
+DEFINE_FAIL_POINT(aggregate_build_hash_map_bad_alloc);
 
 } // namespace starrocks

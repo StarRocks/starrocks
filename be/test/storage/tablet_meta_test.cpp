@@ -38,9 +38,23 @@
 
 #include <string>
 
-#include "runtime/decimalv2_value.h"
+#include "storage/olap_common.h"
+#include "storage/rowset/rowset_meta.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks {
+namespace {
+
+// Test helper: sum column-data bytes across all rowsets in tablet meta.
+size_t sum_rowset_data_disk_size(const TabletMeta& tablet_meta) {
+    size_t total_size = 0;
+    for (const auto& rs : tablet_meta.all_rs_metas()) {
+        total_size += rs->data_disk_size();
+    }
+    return total_size;
+}
+
+} // namespace
 
 // NOLINTNEXTLINE
 TEST(TabletMetaTest, test_create) {
@@ -218,8 +232,8 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_TRUE(c2_1.subcolumn(0).is_nullable());
     ASSERT_FALSE(c2_1.subcolumn(0).has_bitmap_index());
     ASSERT_FALSE(c2_1.subcolumn(0).has_default_value());
-    ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).length());
-    ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).index_length());
+    ASSERT_EQ(10 + sizeof(get_olap_string_max_length()), c2_1.subcolumn(0).length());
+    ASSERT_EQ(10 + sizeof(get_olap_string_max_length()), c2_1.subcolumn(0).index_length());
     ASSERT_EQ(0, c2_1.subcolumn(0).subcolumn_count());
 
     std::shared_ptr<BinlogConfig> binlog_config_ptr = tablet_meta->get_binlog_config();
@@ -250,6 +264,76 @@ TEST(TabletMetaTest, test_init_from_pb) {
     ASSERT_TRUE(binlog_config_ptr->binlog_enable);
     ASSERT_EQ(823, binlog_config_ptr->binlog_ttl_second);
     ASSERT_EQ(984, binlog_config_ptr->binlog_max_size);
+}
+
+TEST(TabletMetaTest, tablet_data_size_excludes_rowset_index_disk_bytes) {
+    constexpr int64_t kDataBytes = 421219;
+    constexpr int64_t kIndexBytes = 99173;
+
+    TabletMetaSharedPtr tablet_meta = TabletMeta::create();
+    RowsetMetaPB rowset_meta_pb;
+    rowset_meta_pb.set_tablet_id(100);
+    rowset_meta_pb.set_partition_id(1);
+    rowset_meta_pb.set_creation_time(0);
+    rowset_meta_pb.set_empty(false);
+    rowset_meta_pb.set_num_segments(1);
+    rowset_meta_pb.set_num_rows(100);
+    rowset_meta_pb.set_start_version(0);
+    rowset_meta_pb.set_end_version(1);
+    rowset_meta_pb.set_rowset_state(VISIBLE);
+    rowset_meta_pb.set_deprecated_rowset_id(0);
+    rowset_meta_pb.set_rowset_seg_id(1);
+    rowset_meta_pb.set_data_disk_size(kDataBytes);
+    rowset_meta_pb.set_index_disk_size(kIndexBytes);
+    RowsetId rowset_id;
+    rowset_id.init(2, 1, 0, 0);
+    rowset_meta_pb.set_rowset_id(rowset_id.to_string());
+
+    auto rs_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
+    tablet_meta->add_rs_meta(rs_meta);
+
+    ASSERT_EQ(sum_rowset_data_disk_size(*tablet_meta), static_cast<size_t>(kDataBytes));
+    ASSERT_EQ(tablet_meta->tablet_footprint(), static_cast<size_t>(kDataBytes + kIndexBytes));
+}
+
+TEST(TabletMetaTest, sum_rowset_data_disk_size_empty) {
+    TabletMetaSharedPtr tablet_meta = TabletMeta::create();
+    ASSERT_EQ(0u, sum_rowset_data_disk_size(*tablet_meta));
+    ASSERT_EQ(0u, tablet_meta->tablet_footprint());
+}
+
+TEST(TabletMetaTest, sum_rowset_data_disk_size_multiple_rowsets) {
+    TabletMetaSharedPtr tablet_meta = TabletMeta::create();
+
+    auto add_visible_rowset = [&tablet_meta](int64_t data_bytes, int64_t index_bytes, int32_t start_ver,
+                                             int32_t end_ver, RowsetId rowset_id) {
+        RowsetMetaPB rowset_meta_pb;
+        rowset_meta_pb.set_tablet_id(100);
+        rowset_meta_pb.set_partition_id(1);
+        rowset_meta_pb.set_creation_time(0);
+        rowset_meta_pb.set_empty(false);
+        rowset_meta_pb.set_num_segments(1);
+        rowset_meta_pb.set_num_rows(10);
+        rowset_meta_pb.set_start_version(start_ver);
+        rowset_meta_pb.set_end_version(end_ver);
+        rowset_meta_pb.set_rowset_state(VISIBLE);
+        rowset_meta_pb.set_deprecated_rowset_id(0);
+        rowset_meta_pb.set_rowset_seg_id(1);
+        rowset_meta_pb.set_data_disk_size(data_bytes);
+        rowset_meta_pb.set_index_disk_size(index_bytes);
+        rowset_meta_pb.set_rowset_id(rowset_id.to_string());
+        tablet_meta->add_rs_meta(std::make_shared<RowsetMeta>(rowset_meta_pb));
+    };
+
+    RowsetId id0;
+    id0.init(2, 1, 0, 0);
+    RowsetId id1;
+    id1.init(2, 1, 0, 1);
+    add_visible_rowset(100, 11, 0, 1, id0);
+    add_visible_rowset(200, 22, 2, 2, id1);
+
+    ASSERT_EQ(300u, sum_rowset_data_disk_size(*tablet_meta));
+    ASSERT_EQ(333u, tablet_meta->tablet_footprint());
 }
 
 } // namespace starrocks

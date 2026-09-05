@@ -1,43 +1,22 @@
-[sql]
-select
-    c_count,
-    count(*) as custdist
-from
-    (
-        select
-            c_custkey,
-            count(o_orderkey) as c_count
-        from
-            customer left outer join orders on
-                        c_custkey = o_custkey
-                    and o_comment not like '%unusual%deposits%'
-        group by
-            c_custkey
-    ) a
-group by
-    c_count
-order by
-    custdist desc,
-    c_count desc ;
 [scheduler]
 PLAN FRAGMENT 0(F04)
   DOP: 16
   INSTANCES
     INSTANCE(0-F04#0)
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 1(F03)
   DOP: 16
   INSTANCES
     INSTANCE(1-F03#0)
       DESTINATIONS: 0-F04#0
-      BE: 10003
+      BE: 10001
     INSTANCE(2-F03#1)
       DESTINATIONS: 0-F04#0
-      BE: 10002
+      BE: 10003
     INSTANCE(3-F03#2)
       DESTINATIONS: 0-F04#0
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -213,4 +192,3 @@ PLAN FRAGMENT 3
      cardinality=1
      avgRowSize=95.0
 [end]
-

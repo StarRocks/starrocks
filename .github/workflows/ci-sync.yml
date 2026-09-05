@@ -4,37 +4,61 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch*'
+      - 'branch-[0-9].[0-9]*'
     types:
       - closed
   workflow_dispatch:
 
 jobs:
   sync:
-    runs-on: self-hosted
+    runs-on: [self-hosted, sync]
     if: github.event.pull_request.merged == true && github.repository == 'StarRocks/starrocks'
     env:
       PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT2 }}
+      MS_PAT: ${{ secrets.MS_PAT }}
     steps:
       - name: commit_sha
         id: commit_sha
         run: |
           set -x
-          commit_sha=`curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER} 2>/dev/null \
-            | jq .merge_commit_sha`
-          commit_sha=$(echo ${commit_sha//\"})
-          echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
+          pr_info=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json mergeCommit,labels,title,headRefName)
+          labels=`echo $pr_info | jq -r '.labels[].name'`
+          # Anti-loop: skip forward SR->CD sync for reverse-synced PRs. `sync` covers the SR
+          # main PR; `cd-contributed` covers its mergify backport PRs (which do NOT inherit
+          # `sync`; contributed-backport-label.yml adds cd-contributed to them).
+          is_sync=false
+          if [[ "${labels}" =~ sync || "${labels}" =~ cd-contributed ]]; then
+            is_sync=true
+          else
+            # Durable fallback (don't rely solely on the opened-time labeling): a mergify
+            # backport whose SOURCE main PR is cd-contributed must be skipped even if this
+            # backport PR itself is missing the label. Recompute from the source at merge time.
+            title=`echo $pr_info | jq -r '.title'`
+            head=`echo $pr_info | jq -r '.headRefName'`
+            src=""
+            if [[ "$head" =~ ^mergify/bp/.*/pr-([0-9]+)$ ]]; then
+              src="${BASH_REMATCH[1]}"
+            else
+              src=$(echo "$title" | grep -oP '\(backport #\K[0-9]+' | tail -n1 || true)
+            fi
+            if [[ -n "$src" ]] && gh pr view "$src" -R ${{ github.repository }} --json labels -q '.labels[].name' | grep -qx 'cd-contributed'; then
+              is_sync=true
+            fi
+          fi
+          if [[ "$is_sync" == "true" ]]; then
+            echo "is_sync=true" >> $GITHUB_OUTPUT
+          else
+            commit_sha=`echo $pr_info | jq -r '.mergeCommit.oid'`
+            echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
+          fi
 
       - name: sync
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: repo-sync.yml
-          repo: CelerData/celerdata-enterprise
-          inputs: '{ "PR_ID": "${{ github.event.number }}", "COMMIT_ID": "${{ steps.commit_sha.outputs.commit_sha }}", "BRANCH": "${{ github.base_ref }}" }'
-          ref: 'main'
-          token: ${{ secrets.PAT }}
-
+        if: steps.commit_sha.outputs.is_sync != 'true'
+        env:
+          PR_ID: ${{ github.event.number }}
+          COMMIT_ID: ${{ steps.commit_sha.outputs.commit_sha }}
+          BRANCH: ${{ github.base_ref }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && timeout 60 git pull >/dev/null || echo "git pull timeout, using cached ci-tool"
+          ./scripts/run-repo-sync.sh

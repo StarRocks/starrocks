@@ -19,29 +19,38 @@
 #include <algorithm>
 #include <memory>
 #include <random>
+#include <unordered_map>
+#include <unordered_set>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_rowset_writer_sink.h"
+#include "storage/non_retryable_load_errors.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "testutil/assert.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
 using namespace std;
 
 static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nkey, KeysType key_type,
-                                                     std::vector<ColumnId> sort_key_idxes = {}) {
+                                                     const std::vector<ColumnId>& sort_key_idxes = {}) {
     TabletSchemaPB tspb;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
     uint32_t cid = 0;
@@ -166,10 +175,10 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
 }
 
 static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, size_t size) {
-    shared_ptr<Chunk> ret = ChunkHelper::new_chunk(slots, size);
-    auto& cols = ret->columns();
+    shared_ptr<Chunk> ret = RuntimeChunkHelper::new_chunk(slots, size);
+    auto cols = ret->columns();
     for (int ci = 0; ci < cols.size(); ci++) {
-        ColumnPtr& c = cols[ci];
+        MutableColumnPtr c = cols[ci]->as_mutable_ptr();
         Datum v;
         string strv;
         for (size_t i = 0; i < size; i++) {
@@ -183,7 +192,7 @@ static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, si
             } else if (type == TYPE_INT) {
                 v.set_int32(i + 3);
             } else if (type == TYPE_BIGINT) {
-                v.set_int16(i * 3);
+                v.set_int64(i * 3);
             } else if (type == TYPE_FLOAT) {
                 v.set_float(i * 4);
             } else if (type == TYPE_DOUBLE) {
@@ -202,7 +211,7 @@ static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, si
 
 class MemTableTest : public ::testing::Test {
 public:
-    void MySetUp(const shared_ptr<TabletSchema> schema, const string& slot_desc, const string& root) {
+    void MySetUp(const shared_ptr<TabletSchema>& schema, const string& slot_desc, const string& root) {
         _root_path = root;
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
@@ -226,6 +235,7 @@ public:
         _vectorized_schema = MemTable::convert_schema(_schema, _slots);
         _mem_table =
                 std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+        ASSERT_TRUE(_mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
     }
 
     void TearDown() override {
@@ -246,7 +256,7 @@ public:
 };
 
 TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
-    const string path = "./ut_dir/MemTableTest_testDupKeysInsertFlushRead";
+    const string path = "./MemTableTest_testDupKeysInsertFlushRead";
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",
             path);
     const size_t n = 3000;
@@ -257,7 +267,8 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -269,7 +280,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
     ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-    std::shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    ChunkPtr chunk = ChunkFactory::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -290,7 +301,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
 }
 
 TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
-    const string path = "./ut_dir/MemTableTest_testUniqKeysInsertFlushRead";
+    const string path = "./MemTableTest_testUniqKeysInsertFlushRead";
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::UNIQUE_KEYS), "pk int,name varchar,pv int",
             path);
     const size_t n = 1000;
@@ -305,7 +316,8 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -316,7 +328,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    std::shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    ChunkPtr chunk = ChunkFactory::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -337,18 +349,18 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysWithDeletes";
+    const string path = "./MemTableTest_testPrimaryKeysWithDeletes";
     MySetUp(create_tablet_schema("pk bigint,v1 int", 1, KeysType::PRIMARY_KEYS), "pk bigint,v1 int,__op tinyint", path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n; i++) {
         Datum v;
         v.set_int64(i);
-        chunk->get_column_by_index(0)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
         v.set_int32(i * 3);
-        chunk->get_column_by_index(1)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
         v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(2)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(v);
     }
     vector<uint32_t> indexes;
     indexes.reserve(n);
@@ -359,7 +371,8 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -367,18 +380,18 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysNullableSortKey";
+    const string path = "./MemTableTest_testPrimaryKeysNullableSortKey";
     auto tablet_schema = create_tablet_schema("pk bigint,v1 int, v2 tinyint null", 1, KeysType::PRIMARY_KEYS, {2});
     MySetUp(tablet_schema, "pk bigint,v1 int, v2 tinyint null", path);
     const size_t n = 10;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n; i++) {
-        chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(i)));
-        chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - i)));
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(i)));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - i)));
         if (i % 2) {
-            chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(i)));
+            chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(static_cast<int8_t>(i)));
         } else {
-            chunk->get_column_by_index(2)->append_nulls(1);
+            chunk->get_column_raw_ptr_by_index(2)->append_nulls(1);
         }
     }
     vector<uint32_t> indexes;
@@ -390,22 +403,23 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
 
-    shared_ptr<Chunk> expected_chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> expected_chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n / 2; i++) {
-        expected_chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i)));
-        expected_chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - 2 * i)));
-        expected_chunk->get_column_by_index(2)->append_nulls(1);
+        expected_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i)));
+        expected_chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - 2 * i)));
+        expected_chunk->get_column_raw_ptr_by_index(2)->append_nulls(1);
     }
 
     for (int i = 0; i < n / 2; i++) {
-        expected_chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i + 1)));
-        expected_chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 2 - 2 * i)));
-        expected_chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(2 * i + 1)));
+        expected_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i + 1)));
+        expected_chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 2 - 2 * i)));
+        expected_chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(static_cast<int8_t>(2 * i + 1)));
     }
 
     Schema read_schema = ChunkHelper::convert_schema(tablet_schema);
@@ -415,7 +429,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(read_schema, rs_opts);
-    std::shared_ptr<Chunk> read_chunk = ChunkHelper::new_chunk(read_schema, 4096);
+    ChunkPtr read_chunk = ChunkFactory::new_chunk(read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(read_chunk.get());
@@ -432,21 +446,21 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitSinglePK";
+    const string path = "./MemTableTest_testPrimaryKeysSizeLimitSinglePK";
     MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::PRIMARY_KEYS), "pk varchar,v1 int,__op tinyint",
             path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     string tmpstr(128, 's');
     tmpstr[tmpstr.size() - 1] = '\0';
     for (int i = 0; i < n; i++) {
         Datum v;
         v.set_slice(tmpstr);
-        chunk->get_column_by_index(0)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
         v.set_int32(i * 3);
-        chunk->get_column_by_index(1)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
         v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(2)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(v);
     }
     vector<uint32_t> indexes;
     indexes.reserve(n);
@@ -457,32 +471,33 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
 }
 
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitCompositePK";
+    const string path = "./MemTableTest_testPrimaryKeysSizeLimitCompositePK";
     MySetUp(create_tablet_schema("pk int, pk varchar, pk smallint, pk boolean,v1 int", 4, KeysType::PRIMARY_KEYS),
             "pk int, pk varchar, pk smallint, pk boolean ,v1 int,__op tinyint", path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     string tmpstr(121, 's');
     tmpstr[tmpstr.size() - 1] = '\0';
     for (int i = 0; i < n; i++) {
         Datum v;
         v.set_int32(42);
-        chunk->get_column_by_index(0)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
         v.set_slice(tmpstr);
-        chunk->get_column_by_index(1)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
         v.set_int16(42);
-        chunk->get_column_by_index(2)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(v);
         v.set_uint8(1);
-        chunk->get_column_by_index(3)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(3)->append_datum(v);
         v.set_int32(i * 3);
-        chunk->get_column_by_index(4)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(4)->append_datum(v);
         v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(5)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(5)->append_datum(v);
     }
     vector<uint32_t> indexes;
     indexes.reserve(n);
@@ -493,8 +508,184 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_FALSE(_mem_table->finalize().ok());
+}
+
+// The sort key size guard mirrors the primary key one above: it rejects a row whose encoded sort key
+// exceeds config::sort_key_limit_size, so that no admitted row can later produce an over-limit full
+// sort key index entry. DUP_KEYS exercises the _sort() branch of finalize().
+TEST_F(MemTableTest, testDupKeysSortKeySizeLimit) {
+    const string path = "./MemTableTest_testDupKeysSortKeySizeLimit";
+    MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::DUP_KEYS), "pk varchar,v1 int", path);
+
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+
+    const size_t n = 16;
+    string wide(200, 's');
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
+    for (size_t i = 0; i < n; i++) {
+        Datum v;
+        v.set_slice(wide);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
+        v.set_int32(static_cast<int32_t>(i));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
+    }
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+
+    // A single trailing VARCHAR encodes to 1 marker byte plus the value, unescaped.
+    const int32_t encoded_size = static_cast<int32_t>(wide.size()) + 1;
+
+    config::sort_key_limit_size = encoded_size - 1;
+    ASSERT_TRUE(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+    auto st = _mem_table->finalize();
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(is_non_retryable_load_error(st.message())) << st.to_string();
+}
+
+TEST_F(MemTableTest, testDupKeysSortKeyExactlyAtLimitAccepted) {
+    const string path = "./MemTableTest_testDupKeysSortKeyExactlyAtLimitAccepted";
+    MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::DUP_KEYS), "pk varchar,v1 int", path);
+
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+
+    const size_t n = 16;
+    string wide(200, 's');
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
+    for (size_t i = 0; i < n; i++) {
+        Datum v;
+        v.set_slice(wide);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
+        v.set_int32(static_cast<int32_t>(i));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
+    }
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+
+    // Exactly at the limit is accepted; the guard rejects only what exceeds it.
+    config::sort_key_limit_size = static_cast<int32_t>(wide.size()) + 1;
+    ASSERT_TRUE(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+    ASSERT_TRUE(_mem_table->finalize().ok());
+}
+
+// A primary key table whose sort key is a separate value column exercises the aggregate branch of
+// finalize(), and shows the guard bounds the sort key rather than the primary key.
+TEST_F(MemTableTest, testPrimaryKeysSeparateSortKeySizeLimit) {
+    const string path = "./MemTableTest_testPrimaryKeysSeparateSortKeySizeLimit";
+    MySetUp(create_tablet_schema("pk bigint,v1 varchar", 1, KeysType::PRIMARY_KEYS, {1}),
+            "pk bigint,v1 varchar,__op tinyint", path);
+
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+
+    const size_t n = 16;
+    string wide(200, 's');
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
+    for (size_t i = 0; i < n; i++) {
+        Datum v;
+        v.set_int64(static_cast<int64_t>(i));
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
+        v.set_slice(wide);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
+        v.set_int8(TOpType::UPSERT);
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(v);
+    }
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+
+    config::sort_key_limit_size = 32;
+    ASSERT_TRUE(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+    auto st = _mem_table->finalize();
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(is_non_retryable_load_error(st.message())) << st.to_string();
+
+    // A non-positive limit disables the guard entirely.
+    config::sort_key_limit_size = -1;
+    MySetUp(create_tablet_schema("pk bigint,v1 varchar", 1, KeysType::PRIMARY_KEYS, {1}),
+            "pk bigint,v1 varchar,__op tinyint", path);
+    ASSERT_TRUE(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+    ASSERT_TRUE(_mem_table->finalize().ok());
+}
+
+// The extra sort key ordering is what bounds the ordering a column-mode upsert will be materialised
+// under after commit. It is order-sensitive: a non-final variable-length column escapes its embedded
+// NULs and gains a terminator, while the final one does neither. Here the schema's own sort key and
+// the forward extra ordering both sit at or under the limit, and only the reversed one exceeds it --
+// so this fails if the extra ordering is not actually checked, or is checked in the wrong order.
+TEST_F(MemTableTest, testExtraSortKeyOrderingIsChecked) {
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+
+    // c0 = "x", c1 = 59 NUL bytes. [c0,c1] encodes to 64 bytes, [c1,c0] to 123.
+    string c0("x");
+    string c1(59, '\0');
+    const int32_t limit = 64;
+
+    auto build = [&](const string& path, const std::vector<ColumnId>& extra) {
+        MySetUp(create_tablet_schema("pk varchar,v1 varchar", 1, KeysType::DUP_KEYS), "pk varchar,v1 varchar", path);
+        config::sort_key_limit_size = limit;
+        _mem_table->set_extra_sort_key_idxes(extra);
+        const size_t n = 8;
+        shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
+        for (size_t i = 0; i < n; i++) {
+            Datum v;
+            v.set_slice(c0);
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
+            v.set_slice(c1);
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
+        }
+        // A non-trivial selection, so the check runs over exactly the admitted rows.
+        vector<uint32_t> indexes = {5, 1, 6};
+        CHECK(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+        return _mem_table->finalize();
+    };
+
+    // The schema's own sort key is column 0 alone: 1 marker + 1 byte, far under the limit.
+    // Forward extra ordering [c0,c1] is exactly at the limit, so it is accepted.
+    ASSERT_TRUE(build("./MemTableTest_testExtraSortKeyForward", {0, 1}).ok());
+
+    // Reversed extra ordering [c1,c0] is 123 bytes and must be rejected, even though the schema's own
+    // sort key still passes.
+    auto st = build("./MemTableTest_testExtraSortKeyReversed", {1, 0});
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(is_non_retryable_load_error(st.message())) << st.to_string();
+}
+
+TEST_F(MemTableTest, test_metrics) {
+    const string path = "./MemTableTest_test_metrics";
+    MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",
+            path);
+    const size_t n = 1000;
+    auto pchunk = gen_chunk(*_slots, n);
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (int i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+    ASSERT_TRUE(_mem_table->finalize().ok());
+    ASSERT_OK(_mem_table->flush());
+    // just verify the metrics have value, rather than verify it accurately
+    // because other test cases may also update the metrics concurrently if
+    // run tests in parallel, and it's hard to get the accurate value
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_memory_bytes_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_disk_bytes_total.value() > 0);
 }
 
 } // namespace starrocks

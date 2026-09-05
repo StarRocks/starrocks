@@ -21,8 +21,8 @@
 #include "column/fixed_length_column.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
-#include "runtime/time_types.h"
 #include "testutil/function_utils.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 
@@ -41,8 +41,8 @@ TEST_F(EsFunctionsTest, matchTest) {
         auto var2_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("STRING2"), 1);
 
         Columns columns;
-        columns.emplace_back(var1_col);
-        columns.emplace_back(var2_col);
+        columns.emplace_back(std::move(var1_col));
+        columns.emplace_back(std::move(var2_col));
 
         ColumnPtr result = ESFunctions::match(ctx, columns).value();
 

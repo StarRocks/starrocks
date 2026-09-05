@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Calculates the square root of a value."
 ---
 
 # sqrt, dsqrt
 
-## Description
+
 
 Calculates the square root of a value. dsqrt is same as sqrt.
 

@@ -46,10 +46,17 @@ include "Data.thrift"
 include "RuntimeProfile.thrift"
 include "WorkGroup.thrift"
 include "RuntimeFilter.thrift"
+include "CloudConfiguration.thrift"
 
 // constants for function version
 enum TFunctionVersion {
     RUNTIME_FILTER_SERIALIZE_VERSION_2 = 7,
+    RUNTIME_FILTER_SERIALIZE_VERSION_3 = 8,
+}
+
+enum TArrowFlightSQLVersion {
+  V0 = 0,
+  V1 = 1,
 }
 
 enum TQueryType {
@@ -102,7 +109,8 @@ enum TPipelineProfileLevel {
 enum TSpillMode {
   AUTO,
   FORCE,
-  NONE
+  NONE,
+  RANDOM,
 }
 
 enum TSpillableOperatorType {
@@ -111,6 +119,7 @@ enum TSpillableOperatorType {
   AGG_DISTINCT = 2;
   SORT = 3;
   NL_JOIN = 4;
+  MULTI_CAST_LOCAL_EXCHANGE = 5;
 }
 
 enum TTabletInternalParallelMode {
@@ -123,16 +132,72 @@ enum TOverflowMode {
   REPORT_ERROR = 1;
 }
 
+enum TTimeUnit {
+    NANOSECOND = 0;
+    MICROSECOND = 1;
+    MILLISECOND = 2;
+    SECOND = 3;
+    MINUTE = 4;
+}
+
+enum TBinaryEncodingFormat {
+  RAW = 0;
+  HEX = 1;
+  BASE64 = 2;
+}
+
+enum TBinaryEncodingLevel {
+  ALL = 0;
+  NESTED = 1;
+}
+
 struct TQueryQueueOptions {
   1: optional bool enable_global_query_queue;
   2: optional bool enable_group_level_query_queue;
+}
+
+struct TSpillToRemoteStorageOptions {
+  1: optional list<string> remote_storage_paths;
+  2: optional CloudConfiguration.TCloudConfiguration remote_storage_conf;
+  3: optional bool disable_spill_to_local_disk;
+}
+
+// spill options
+struct TSpillOptions {
+  1: optional i32 spill_mem_table_size;
+  2: optional i32 spill_mem_table_num;
+  3: optional double spill_mem_limit_threshold;
+  4: optional i64 spill_operator_min_bytes;
+  5: optional i64 spill_operator_max_bytes;
+  6: optional i32 spill_encode_level;
+  7: optional i64 spill_revocable_max_bytes;
+  8: optional bool spill_enable_direct_io;
+  9: optional bool spill_enable_compaction;
+  // only used in spill_mode="random"
+  // probability of triggering operator spill
+  // (0.0,1.0)
+  10: optional double spill_rand_ratio;
+  11: optional TSpillMode spill_mode;
+  // used to identify which operators allow spill, only meaningful when enable_spill=true
+  12: optional i64 spillable_operator_mask;
+  13: optional bool enable_agg_spill_preaggregation;
+
+  21: optional bool enable_spill_to_remote_storage;
+  22: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+  23: optional bool enable_spill_buffer_read;
+  24: optional i64 max_spill_read_buffer_bytes_per_driver;
+  25: optional i64 spill_hash_join_probe_op_max_bytes;
+
+  26: optional bool spill_partitionwise_agg;
+  27: optional i32 spill_partitionwise_agg_partition_num;
+  28: optional bool spill_partitionwise_agg_skew_elimination;
 }
 
 // Query options with their respective defaults
 struct TQueryOptions {
   2: optional i32 max_errors = 0
   4: optional i32 batch_size = 0
-  
+
   12: optional i64 mem_limit = 2147483648
   13: optional bool abort_on_default_limit_exceeded = 0
   14: optional i32 query_timeout = 3600
@@ -172,7 +237,8 @@ struct TQueryOptions {
   59: optional bool enable_tablet_internal_parallel;
 
   60: optional i32 query_delivery_timeout;
-  
+
+  // Deprecated: BE query debug trace support was removed. Keep field 61 for wire compatibility.
   61: optional bool enable_query_debug_trace;
 
   62: optional Types.TCompressionType load_transmission_compression_type;
@@ -186,7 +252,7 @@ struct TQueryOptions {
   67: optional bool enable_pipeline_query_statistic = false;
 
   68: optional i32 transmission_encode_level;
-  
+
   69: optional bool enable_populate_datacache;
 
   70: optional bool allow_throw_exception = 0;
@@ -195,7 +261,9 @@ struct TQueryOptions {
 
   72: optional i64 rpc_http_min_size;
 
+  // Deprecated
   // some experimental parameter for spill
+  // TODO: remove in 3.4.x
   73: optional i32 spill_mem_table_size;
   74: optional i32 spill_mem_table_num;
   75: optional double spill_mem_limit_threshold;
@@ -203,9 +271,12 @@ struct TQueryOptions {
   77: optional i64 spill_operator_max_bytes;
   78: optional i32 spill_encode_level;
   79: optional i64 spill_revocable_max_bytes;
-
+  80: optional bool spill_enable_direct_io;
+  81: optional double spill_rand_ratio;
   85: optional TSpillMode spill_mode;
-  
+
+  82: optional TSpillOptions spill_options;
+
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;
@@ -219,6 +290,7 @@ struct TQueryOptions {
   93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
   94: optional double scan_use_query_mem_ratio = 0.25;
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
+  // Deprecated
   // used to identify which operators allow spill, only meaningful when enable_spill=true
   96: optional i64 spillable_operator_mask;
   // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
@@ -232,24 +304,145 @@ struct TQueryOptions {
   103: optional i32 interleaving_group_size;
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
-  105: optional bool use_column_pool = true;
-
+  105: optional bool use_column_pool = true; // Deprecated
+  117: optional bool error_for_division_by_zero = false;
+  // Deprecated
   106: optional bool enable_agg_spill_preaggregation;
   107: optional i64 global_runtime_filter_build_max_size;
   108: optional i64 runtime_filter_rpc_http_min_size;
 
-  109: optional i64 big_query_profile_second_threshold;
+  109: optional i64 big_query_profile_threshold = 0;
 
   110: optional TQueryQueueOptions query_queue_options;
 
   111: optional bool enable_file_metacache;
-}
 
+  112: optional bool enable_pipeline_level_shuffle;
+  113: optional bool enable_hyperscan_vec;
+
+  114: optional i32 jit_level = 1;
+
+  115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
+
+  116: optional string sql_dialect;
+
+  119: optional bool enable_result_sink_accumulate;
+  120: optional bool enable_connector_split_io_tasks = false;
+  121: optional i64 connector_max_split_size = 0;
+  122: optional bool enable_connector_sink_writer_scaling = true;
+  123: optional TBinaryEncodingFormat binary_encoding_format = TBinaryEncodingFormat.HEX;
+  124: optional TBinaryEncodingLevel binary_encoding_level = TBinaryEncodingLevel.NESTED;
+
+  130: optional bool enable_wait_dependent_event = false;
+
+  131: optional bool orc_use_column_names = false;
+
+  132: optional bool enable_datacache_async_populate_mode;
+  133: optional bool enable_datacache_io_adaptor;
+  134: optional i32 datacache_priority;
+  135: optional i64 datacache_ttl_seconds;
+  136: optional bool enable_cache_select;
+  137: optional i64 datacache_sharing_work_period;
+  138: optional bool enable_file_pagecache;
+
+  140: optional string catalog;
+
+  141: optional i32 datacache_evict_probability;
+
+  142: optional bool enable_pipeline_event_scheduler;
+
+  150: optional map<string, string> ann_params;
+  151: optional double pq_refine_factor;
+  152: optional double k_factor;
+
+  160: optional bool enable_join_runtime_filter_pushdown;
+  161: optional bool enable_join_runtime_bitset_filter;
+  162: optional bool enable_hash_join_range_direct_mapping_opt;
+  163: optional bool enable_hash_join_linear_chained_opt;
+  164: optional bool enable_hash_join_serialize_fixed_size_string;
+
+  170: optional bool enable_parquet_reader_bloom_filter;
+  171: optional bool enable_parquet_reader_page_index;
+  
+  180: optional bool lower_upper_support_utf8;
+  181: optional bool ngram_search_support_utf8;
+
+  190: optional i64 column_view_concat_rows_limit;
+  191: optional i64 column_view_concat_bytes_limit;
+
+  200: optional bool enable_full_sort_use_german_string;
+
+  // Hash function version for exchange shuffle
+  // 0: fnv_hash (default, for backward compatibility)
+  // 1: xxh3_hash (faster)
+  201: optional i32 exchange_hash_function_version = 0;
+
+  // whether enable predicate column late materialization
+  202: optional bool enable_predicate_col_late_materialize;
+
+  210: optional bool enable_global_late_materialization;
+  211: optional bool enable_schedule_log;
+
+  // http_request function SSL settings
+  212: optional bool http_request_ssl_verification_required = true;
+
+  // http_request function SSRF protection settings
+  213: optional i32 http_request_security_level = 3;
+  214: optional string http_request_ip_allowlist = "";
+  215: optional string http_request_host_allowlist_regexp = "";
+  216: optional bool http_request_allow_private_in_allowlist = false;
+  217: optional bool enable_cache_udaf = false;
+
+  // Pre-built JSON anchor of the streaming source for a routine-load
+  // task fragment (e.g. {"format":"kafka","topic":"t","partitions":[0,1],
+  // "begin_offsets":[10,20]}). When set, BE writes it to the
+  // _statistics_.rejected_records.source_info column instead of the
+  // hardcoded "stream-load-pipe" filename. Optional and unused for
+  // non-routine-load query paths.
+  218: optional string routine_load_source_info;
+
+  // ---- TopN runtime-filter back-pressure tuning (lake/connector self-enabled path) ----
+  // Max concurrent IO tasks a scan may submit while a TopN runtime filter is still pending.
+  // Caps read-ahead so concurrent readers cannot overshoot the (non-concurrency-aware) row
+  // budget before the filter arrives. Full DOP resumes once the filter lands. <=0 disables
+  // the clamp (legacy overshoot behavior). Default 1.
+  219: optional i32 topn_filter_back_pressure_io_tasks = 1;
+  // Master switch for scans (both shared-nothing olap and shared-data lake/connector) to
+  // self-enable TopN back-pressure even when the FE-side topn_filter_back_pressure_mode is 0.
+  // Default true.
+  220: optional bool enable_topn_filter_back_pressure = true;
+  // Back-pressure throttle window parameters used by the lake/connector self-enabled path
+  // (the FE-driven olap path keeps using the per-scan-node thrift values). Defaults match the
+  // tuned values: finer, exponentially-backing-off throttle quanta.
+  221: optional i32 topn_back_pressure_max_rounds = 8;
+  222: optional i64 topn_back_pressure_num_rows = 1024;
+  223: optional i64 topn_back_pressure_throttle_time_ms = 8;
+  224: optional i64 topn_back_pressure_throttle_time_upper_bound_ms = 100;
+
+  // The lake prepared-physical-split scan treats an oversized tablet as a long-tail straggler (and splits
+  // it even when the scan-range count already reaches pipeline_dop) once its rows exceed this ratio times
+  // the per-driver ideal share. Only affects enable_lake_prepared_physical_split_scan. Default 1.5.
+  225: optional double lake_tablet_internal_parallel_skew_split_ratio = 1.5;
+
+  // Maximum number of elements in an array produced by an array function. The query fails once an
+  // array exceeds it. Only array_agg enforces it so far. <=0 disables the limit. Default 0.
+  226: optional i64 max_array_length = 0;
+}
 
 // A scan range plus the parameters needed to execute that scan.
 struct TScanRangeParams {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
+  // if this is just a placeholder and no `scan_range` data in it.
+  3: optional bool empty = false;
+  // if there is no more scan range from this scan node.
+  4: optional bool has_more = false;
+}
+
+struct TExecDebugOption {
+  1: optional Types.TPlanNodeId debug_node_id
+  2: optional PlanNodes.TDebugAction debug_action
+  3: optional i32 value
 }
 
 // Parameters for a single execution instance of a particular TPlanFragment
@@ -275,11 +468,6 @@ struct TPlanFragmentExecParams {
   // The number of output partitions is destinations.size().
   5: list<DataSinks.TPlanFragmentDestination> destinations
 
-  // Debug options: perform some action in a particular phase of a particular node
-  6: optional Types.TPlanNodeId debug_node_id
-  7: optional PlanNodes.TExecNodePhase debug_phase
-  8: optional PlanNodes.TDebugAction debug_action
-
   // Id of this fragment in its role as a sender.
   9: optional i32 sender_id
   10: optional i32 num_senders
@@ -297,6 +485,15 @@ struct TPlanFragmentExecParams {
   54: optional bool enable_exchange_perf
 
   70: optional i32 pipeline_sink_dop
+
+  73: optional bool report_when_finish
+
+  // Debug options: perform some action in a particular phase of a particular node
+  74: optional list<TExecDebugOption> exec_debug_options
+
+  // used for global lazy materialization
+  75: optional map<Types.TPlanNodeId, i32> per_look_up_num_fetchers
+  76: optional map<Types.TPlanNodeId, Descriptors.TNodesInfo> per_fetch_target_nodes
 }
 
 // Global query parameters assigned by the coordinator.
@@ -316,6 +513,10 @@ struct TQueryGlobals {
   // Added by StarRocks
   // Required by function 'last_query_id'.
   30: optional string last_query_id
+
+  31: optional i64 timestamp_us
+
+  32: optional i64 connector_scan_node_number
 }
 
 
@@ -328,6 +529,12 @@ enum InternalServiceVersion {
 struct TAdaptiveDopParam {
   1: optional i64 max_block_rows_per_driver_seq
   2: optional i64 max_output_amplification_factor
+}
+
+struct TPredicateTreeParams {
+  1: optional bool enable_or
+  2: optional bool enable_show_in_profile
+  3: optional i32 max_pushdown_or_predicates
 }
 
 // ExecPlanFragment
@@ -381,18 +588,29 @@ struct TExecPlanFragmentParams {
   53: optional WorkGroup.TWorkGroup workgroup
   54: optional bool enable_resource_group
   55: optional i32 func_version
-  
+
   // Sharing data between drivers of same scan operator
   56: optional bool enable_shared_scan
 
   57: optional bool is_stream_pipeline
 
   58: optional TAdaptiveDopParam adaptive_dop_param
+  59: optional i32 group_execution_scan_dop
+
+  60: optional TPredicateTreeParams pred_tree_params
+
+  61: optional list<i32> exec_stats_node_ids;
+
+  62: optional i32 arrow_flight_sql_version;
 }
 
 struct TExecPlanFragmentResult {
   // required in V1
   1: optional Status.TStatus status
+
+  // short circuit optimization on `select limit`
+  // scan nodes that don't need any scan ranges.
+  2: optional list<i32> closed_scan_nodes;
 }
 
 struct TExecBatchPlanFragmentsParams {

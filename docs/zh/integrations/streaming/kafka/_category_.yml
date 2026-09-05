@@ -1,0 +1,8 @@
+position: 20
+label: 'Apache Kafka'
+description: 'Streaming from Kafka'
+collapsible: true
+collapsed: true
+link:
+  id: kafka
+  type: doc

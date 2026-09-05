@@ -22,25 +22,43 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.TransferLeaderClause;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SystemHandlerTest {
 
@@ -48,58 +66,100 @@ public class SystemHandlerTest {
     private GlobalStateMgr globalStateMgr;
     private static FakeEditLog fakeEditLog;
     private static FakeGlobalStateMgr fakeGlobalStateMgr;
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         globalStateMgr = GlobalStateMgrTestUtil.createTestState();
+        globalStateMgr.getWarehouseMgr().initDefaultWarehouse();
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         systemHandler = new SystemHandler();
     }
 
-    @Test(expected = DdlException.class)
-    public void testModifyBackendAddressLogic() throws UserException {
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox-fqdn");
+    @Test
+    public void testTransferLeaderRejectedInSharedDataMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        // The guard runs before the host/port are even read, so an un-analyzed clause suffices.
+        TransferLeaderClause clause = new TransferLeaderClause("127.0.0.1:9010", false);
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
-        systemHandler.process(clauses, null, null);
-    }
-
-    @Test(expected = NullPointerException.class)
-    public void testModifyFrontendAddressLogic() throws UserException {
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
-        List<AlterClause> clauses = new ArrayList<>();
-        clauses.add(clause);
-        systemHandler.process(clauses, null, null);
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> systemHandler.process(clauses, null, null));
+        assertThat(e.getMessage(), containsString("not supported in shared-data mode"));
+        assertThat(e.getMessage(), containsString("restart the current leader FE"));
     }
 
     @Test
-    public void testDecommissionInvalidBackend() throws UserException {
+    public void testTransferLeaderRejectedWhenNoLongerLeader() {
+        // A queued TRANSFER LEADER dequeues from process()'s monitor only after a concurrent transfer
+        // finished - possibly having already moved leadership away. It must fail here instead of
+        // driving a second transfer through the JE admin from a non-leader node.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        TransferLeaderClause clause = new TransferLeaderClause("127.0.0.1:9010", false);
+        List<AlterClause> clauses = new ArrayList<>();
+        clauses.add(clause);
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> systemHandler.process(clauses, null, null));
+        assertThat(e.getMessage(), containsString("no longer the leader"));
+    }
+
+    @Test
+    public void testModifyBackendAddressLogic() {
+        assertThrows(RuntimeException.class, () -> {
+            ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
+            List<AlterClause> clauses = new ArrayList<>();
+            clauses.add(clause);
+            systemHandler.process(clauses, null, null);
+        });
+    }
+
+    @Test
+    public void testModifyFrontendAddressLogic() {
+        assertThrows(NullPointerException.class, () -> {
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
+            List<AlterClause> clauses = new ArrayList<>();
+            clauses.add(clause);
+            systemHandler.process(clauses, null, null);
+        });
+    }
+
+    @Test
+    public void testDecommissionInvalidBackend() {
         List<String> hostAndPorts = Lists.newArrayList("192.168.1.11:1234");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
-        expectedException.expect(DdlException.class);
-        expectedException.expectMessage("Backend does not exist");
-        systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        Throwable exception = assertThrows(RuntimeException.class, () -> {
+            systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        });
+        assertThat(exception.getMessage(), containsString("Backend does not exist"));
     }
 
     @Test
-    public void testDecommissionBackendsReplicasRequirement() throws UserException {
+    public void testDecommissionBackendsReplicasRequirement() {
         List<String> hostAndPorts = Lists.newArrayList("host1:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
-        expectedException.expect(DdlException.class);
-        expectedException.expectMessage("It will cause insufficient BE number");
-        systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        Throwable exception = assertThrows(RuntimeException.class, () -> {
+            systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        });
+        assertThat(exception.getMessage(), containsString("It will cause insufficient BE number"));
     }
 
     @Test
-    public void testDecommissionBackendsSpaceRequirement() throws UserException {
+    public void testDecommissionBackendsSpaceRequirement() {
         List<String> hostAndPorts = Lists.newArrayList("host1:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
@@ -111,24 +171,25 @@ public class SystemHandlerTest {
         Map<String, DiskInfo> diskInfoMap = Maps.newHashMap();
         diskInfoMap.put("/data", diskInfo);
 
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
+        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
             backend.setDisks(ImmutableMap.copyOf(diskInfoMap));
         }
 
-        expectedException.expect(DdlException.class);
-        expectedException.expectMessage("It will cause insufficient disk space");
-        systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        Throwable exception = assertThrows(RuntimeException.class, () -> {
+            systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        });
+        assertThat(exception.getMessage(), containsString("It will cause insufficient disk space"));
     }
 
     @Test
-    public void testDecommissionBackends() throws UserException {
+    public void testDecommissionBackends() throws StarRocksException {
         List<String> hostAndPorts = Lists.newArrayList("host1:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
         Backend backend4 = new Backend(100, "host4", 123);
         backend4.setAlive(true);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend4);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend4);
 
         DiskInfo diskInfo = new DiskInfo("/data");
         diskInfo.setAvailableCapacityB(900);
@@ -137,10 +198,168 @@ public class SystemHandlerTest {
         Map<String, DiskInfo> diskInfoMap = Maps.newHashMap();
         diskInfoMap.put("/data", diskInfo);
 
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
+        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
             backend.setDisks(ImmutableMap.copyOf(diskInfoMap));
         }
 
         systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+    }
+
+    void skipIfNotTheDefaultWarehouseManagerImplementation() {
+        WarehouseManager mgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Assumptions.assumeTrue(WarehouseManager.class.getName().equals(mgr.getClass().getName()));
+    }
+
+    @Test
+    public void testAddBackendIntoCNGroup() throws StarRocksException {
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+        {
+            List<String> hostAndPorts = Lists.newArrayList("127.0.0.1:13567");
+            AddBackendClause clause = new AddBackendClause(hostAndPorts, warehouseName, "", NodePosition.ZERO);
+            Analyzer.analyze(new AlterSystemStmt(clause), new ConnectContext());
+            systemHandler.process(Lists.newArrayList(clause), null, null);
+            Backend node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendWithHeartbeatPort("127.0.0.1", 13567);
+            Assertions.assertNotNull(node);
+            Warehouse warehouse =
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+            Assertions.assertEquals(warehouse.getId(), node.getWarehouseId());
+            Assertions.assertEquals(node.getWorkerGroupId(), (long) warehouse.getWorkerGroupIds().get(0));
+        }
+
+        // The following code is only true for the open source WarehouseManager implementation.
+        skipIfNotTheDefaultWarehouseManagerImplementation();
+        {
+            List<String> hostAndPorts = Lists.newArrayList("127.0.0.1:1234");
+            AddBackendClause clause = new AddBackendClause(hostAndPorts, warehouseName, "cngroup1", NodePosition.ZERO);
+            Analyzer.analyze(new AlterSystemStmt(clause), new ConnectContext());
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> systemHandler.process(Lists.newArrayList(clause), null, null));
+            Assertions.assertTrue(exception.getMessage().contains(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED.formatErrorMsg()));
+            ConnectContext connCtx = ConnectContext.get();
+            Assertions.assertEquals(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED, connCtx.getState().getErrorCode());
+        }
+    }
+
+    @Test
+    public void testAddComputeNodeIntoCNGroup() throws StarRocksException {
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+        {
+            List<String> hostAndPorts = Lists.newArrayList("127.0.0.1:13567");
+            AddComputeNodeClause clause = new AddComputeNodeClause(hostAndPorts, warehouseName, "", NodePosition.ZERO);
+            Analyzer.analyze(new AlterSystemStmt(clause), new ConnectContext());
+            systemHandler.process(Lists.newArrayList(clause), null, null);
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getComputeNodeWithHeartbeatPort("127.0.0.1", 13567);
+            Assertions.assertNotNull(node);
+            Warehouse warehouse =
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+            Assertions.assertEquals(warehouse.getId(), node.getWarehouseId());
+            Assertions.assertEquals(node.getWorkerGroupId(), (long) warehouse.getWorkerGroupIds().get(0));
+        }
+
+        // The following code is only true for the open source WarehouseManager implementation.
+        skipIfNotTheDefaultWarehouseManagerImplementation();
+        {
+            List<String> hostAndPorts = Lists.newArrayList("127.0.0.1:1234");
+            AddComputeNodeClause clause = new AddComputeNodeClause(hostAndPorts, warehouseName, "cngroup1", NodePosition.ZERO);
+            Analyzer.analyze(new AlterSystemStmt(clause), new ConnectContext());
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> systemHandler.process(Lists.newArrayList(clause), null, null));
+            Assertions.assertTrue(exception.getMessage().contains(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED.formatErrorMsg()));
+            ConnectContext connCtx = ConnectContext.get();
+            Assertions.assertEquals(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED, connCtx.getState().getErrorCode());
+        }
+    }
+
+    @Test
+    public void testDropBackendFromCNGroup() throws StarRocksException {
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        long nodeId = 10086;
+        Backend backend = new Backend(nodeId, "127.0.0.1", 10086);
+        String hostPort = String.format("%s:%d", backend.getHost(), backend.getHeartbeatPort());
+        {
+            ExceptionChecker.expectThrowsNoException(() -> sysInfo.addBackend(backend));
+
+            List<String> hostAndPorts = Lists.newArrayList(hostPort);
+            DropBackendClause clause = new DropBackendClause(hostAndPorts, false, warehouseName, "", NodePosition.ZERO);
+            Analyzer.analyze(new AlterSystemStmt(clause), new ConnectContext());
+            systemHandler.process(Lists.newArrayList(clause), null, null);
+
+            Backend node = sysInfo.getBackend(nodeId);
+            // removed successfully
+            Assertions.assertNull(node);
+        }
+
+        // The following code is only true for the open source WarehouseManager implementation.
+        skipIfNotTheDefaultWarehouseManagerImplementation();
+        {
+            ExceptionChecker.expectThrowsNoException(() -> sysInfo.addBackend(backend));
+            List<String> hostAndPorts = Lists.newArrayList(hostPort);
+            DropBackendClause clause = new DropBackendClause(hostAndPorts, false, warehouseName, "cngroup1", NodePosition.ZERO);
+            Analyzer.analyze(new AlterSystemStmt(clause), new ConnectContext());
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> systemHandler.process(Lists.newArrayList(clause), null, null));
+            Assertions.assertTrue(exception.getMessage().contains(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED.formatErrorMsg()));
+            ConnectContext connCtx = ConnectContext.get();
+            Assertions.assertEquals(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED, connCtx.getState().getErrorCode());
+
+            Backend node = sysInfo.getBackend(nodeId);
+            // The node is still there not removed
+            Assertions.assertNotNull(node);
+        }
+    }
+
+    @Test
+    public void testDropComputeNodeFromCNGroup() throws StarRocksException {
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        long nodeId = 10086;
+        ComputeNode cnNode = new ComputeNode(nodeId, "127.0.0.1", 10086);
+        String hostPort = String.format("%s:%d", cnNode.getHost(), cnNode.getHeartbeatPort());
+        {
+            ExceptionChecker.expectThrowsNoException(() -> sysInfo.addComputeNode(cnNode));
+
+            List<String> hostAndPorts = Lists.newArrayList(hostPort);
+            DropComputeNodeClause clause = new DropComputeNodeClause(hostAndPorts, warehouseName, "", NodePosition.ZERO);
+            Analyzer.analyze(new AlterSystemStmt(clause), new ConnectContext());
+            systemHandler.process(Lists.newArrayList(clause), null, null);
+
+            ComputeNode node = sysInfo.getComputeNode(nodeId);
+            // removed successfully
+            Assertions.assertNull(node);
+        }
+
+        // The following code is only true for the open source WarehouseManager implementation.
+        skipIfNotTheDefaultWarehouseManagerImplementation();
+        {
+            ExceptionChecker.expectThrowsNoException(() -> sysInfo.addComputeNode(cnNode));
+
+            List<String> hostAndPorts = Lists.newArrayList(hostPort);
+            DropComputeNodeClause clause = new DropComputeNodeClause(hostAndPorts, warehouseName, "cngroup1", NodePosition.ZERO);
+            Analyzer.analyze(new AlterSystemStmt(clause), new ConnectContext());
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> systemHandler.process(Lists.newArrayList(clause), null, null));
+            Assertions.assertTrue(exception.getMessage().contains(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED.formatErrorMsg()));
+            ConnectContext connCtx = ConnectContext.get();
+            Assertions.assertEquals(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED, connCtx.getState().getErrorCode());
+
+            ComputeNode node = sysInfo.getComputeNode(nodeId);
+            // The node is still there not removed
+            Assertions.assertNotNull(node);
+        }
     }
 }

@@ -17,12 +17,13 @@
 #include <cctz/civil_time.h>
 #include <cctz/time_zone.h>
 
+#include <chrono>
+#include <ostream>
 #include <string>
 
-#include "runtime/datetime_value.h"
-#include "runtime/time_types.h"
 #include "types/date_value.h"
-#include "util/hash_util.hpp"
+#include "types/datetime_value.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 
@@ -86,6 +87,10 @@ public:
 
     void to_timestamp(int* year, int* month, int* day, int* hour, int* minute, int* second, int* usec) const;
 
+    // Convert to C++20 chrono sys_time<microseconds> for time arithmetic
+    inline std::chrono::sys_time<std::chrono::microseconds> to_sys_time() const;
+
+    void trunc_to_millisecond();
     void trunc_to_second();
     void trunc_to_minute();
     void trunc_to_hour();
@@ -95,6 +100,10 @@ public:
     void trunc_to_week(int days);
     void trunc_to_quarter();
 
+    template <bool end>
+    void floor_to_microsecond_period(long period);
+    template <bool end>
+    void floor_to_millisecond_period(long period);
     template <bool end>
     void floor_to_second_period(long period);
     template <bool end>
@@ -115,12 +124,15 @@ public:
     bool from_string(const char* date_str, size_t len);
 
     int64_t to_unix_second() const;
+    int64_t to_unix_microsecond() const;
+    int64_t to_unixtime() const;
+    int64_t to_unixtime(const cctz::time_zone& ctz) const;
 
     bool from_unixtime(int64_t second, const std::string& timezone);
     void from_unixtime(int64_t second, const cctz::time_zone& ctz);
     void from_unixtime(int64_t second, int64_t microsecond, const cctz::time_zone& ctz);
 
-    void from_unix_second(int64_t second);
+    void from_unix_second(int64_t second, int64_t microsecond = 0);
 
     template <TimeUnit UNIT>
     TimestampValue add(int count) const {
@@ -135,7 +147,7 @@ public:
     // direct return microsecond will over int64
     int64_t diff_microsecond(TimestampValue other) const;
 
-    std::string to_string() const;
+    std::string to_string(bool igonre_microsecond = false) const;
 
     // Returns the formatted string length or -1 on error.
     int to_string(char* s, size_t n) const;
@@ -148,8 +160,8 @@ public:
     static TimestampValue MIN_TIMESTAMP_VALUE;
 
     /**
-     * Milliseconds since January 1, 2000, 00:00:00. A negative number indicates the number of
-     * milliseconds before January 1, 2000, 00:00:00.
+     * Microseconds since January 1, 2000, 00:00:00. A negative number indicates the number of
+     * microseconds before January 1, 2000, 00:00:00.
      */
     Timestamp _timestamp;
 };
@@ -159,6 +171,45 @@ TimestampValue TimestampValue::create(int year, int month, int day, int hour, in
     TimestampValue ts;
     ts.from_timestamp(year, month, day, hour, minute, second, microsecond);
     return ts;
+}
+
+std::chrono::sys_time<std::chrono::microseconds> TimestampValue::to_sys_time() const {
+    int year, month, day, hour, minute, second, microsecond;
+    to_timestamp(&year, &month, &day, &hour, &minute, &second, &microsecond);
+
+    auto ymd = std::chrono::year_month_day{std::chrono::year{year}, std::chrono::month{static_cast<unsigned>(month)},
+                                           std::chrono::day{static_cast<unsigned>(day)}};
+    return std::chrono::sys_days{ymd} + std::chrono::hours{hour} + std::chrono::minutes{minute} +
+           std::chrono::seconds{second} + std::chrono::microseconds{microsecond};
+}
+
+inline DateValue::operator TimestampValue() const {
+    return TimestampValue{date::to_timestamp(_julian)};
+}
+
+inline TimestampValue::operator DateValue() const {
+    return DateValue{timestamp::to_julian(_timestamp)};
+}
+
+template <bool end>
+void TimestampValue::floor_to_microsecond_period(long period) {
+    int64_t microseconds = ((timestamp::to_julian(_timestamp) - date::AD_EPOCH_JULIAN) * SECS_PER_DAY * USECS_PER_SEC) +
+                           (timestamp::to_time(_timestamp));
+
+    microseconds -= microseconds % period;
+    if constexpr (end) {
+        microseconds += period;
+    }
+
+    JulianDate days = microseconds / (USECS_PER_SEC * SECS_PER_DAY) + date::AD_EPOCH_JULIAN;
+    microseconds %= (USECS_PER_SEC * SECS_PER_DAY);
+
+    _timestamp = timestamp::from_julian_and_time(days, microseconds);
+}
+
+template <bool end>
+void TimestampValue::floor_to_millisecond_period(long period) {
+    TimestampValue::floor_to_microsecond_period<end>(period * 1000);
 }
 
 template <bool end>

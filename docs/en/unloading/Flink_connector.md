@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 30
+displayed_sidebar: docs
+description: "StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you read data in bulk from a..."
 ---
 
 # Read data from StarRocks using Flink connector
@@ -20,20 +22,22 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
   With the Flink connector of StarRocks, Flink can first obtain the query plan from the responsible FE, then distribute the obtained query plan as parameters to all the involved BEs, and finally obtain the data returned by the BEs.
 
-  ![- Flink connector of StarRocks](../assets/5.3.2-1.png)
+  ![- Flink connector of StarRocks](../_assets/5.3.2-1.png)
 
 - JDBC connector of Flink
 
   With the JDBC connector of Flink, Flink can only read data from individual FEs, one at a time. Data reads are slow.
 
-  ![JDBC connector of Flink](../assets/5.3.2-2.png)
+  ![JDBC connector of Flink](../_assets/5.3.2-2.png)
 
 ## Version requirements
 
-| Connector | Flink                    | StarRocks     | Java | Scala     |
-|-----------|--------------------------|---------------| ---- |-----------|
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Prerequisites
 
@@ -53,7 +57,7 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
    OpenJDK 64-Bit Server VM (Temurin)(build 25.322-b06, mixed mode)
    ```
 
-2. Download and unzip the [Flink package](https://flink.apache.org/downloads.html) of your choice.
+2. Download and unzip the [Flink package](https://flink.apache.org/downloads/) of your choice.
 
    > **NOTE**
    >
@@ -80,23 +84,27 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
    Starting taskexecutor daemon on host.
    ```
 
-You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/).
+You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/getting-started/local_installation/#option-b-local-installation).
 
 ## Before you begin
 
+### Deploy the Flink connector
+
 Follow these steps to deploy the Flink connector:
 
-1. Select and download the [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR package matching the Flink version that you are using.
+1. Select and download the [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR package matching the Flink version that you are using. If code debugging is needed, compile the Flink connector package to suit your business requirements.
 
    > **NOTICE**
    >
    > We recommend that you download the Flink connector package whose version is 1.2.x or later and whose matching Flink version has the same first two digits as the Flink version that you are using. For example, if you use Flink v1.14.x, you can download `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`.
 
-2. If code debugging is needed, compile the Flink connector package to suit your business requirements.
+2. Place the Flink connector package you downloaded or compiled into the `lib` directory of Flink.
 
-3. Place the Flink connector package you downloaded or compiled into the `lib` directory of Flink.
+3. Restart your Flink cluster.
 
-4. Restart your Flink cluster.
+### Network configuration
+
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) (default: `8030`) and [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port) (default: `9060`).
 
 ## Parameters
 
@@ -109,7 +117,7 @@ The following parameters apply to both the Flink SQL and Flink DataStream readin
 | connector                   | Yes      | STRING    | The type of connector that you want to use to read data. Set the value to `starrocks`.                                |
 | scan-url                    | Yes      | STRING    | The address that is used to connect the FE from the web server. Format: `<fe_host>:<fe_http_port>`. The default port is `8030`. You can specify multiple addresses, which must be separated with a comma (,). Example: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`. |
 | jdbc-url                    | Yes      | STRING    | The address that is used to connect the MySQL client of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`. The default port number is `9030`. |
-| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/User_privilege.md). |
+| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/user_privs/authorization/User_privilege.md). |
 | password                    | Yes      | STRING    | The password of your StarRocks cluster account.              |
 | database-name               | Yes      | STRING    | The name of the StarRocks database to which the StarRocks table you want to read belongs. |
 | table-name                  | Yes      | STRING    | The name of the StarRocks table you want to read.            |
@@ -154,6 +162,10 @@ The following data type mapping is valid only for Flink reading data from StarRo
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
+| JSON       | STRING <br /> **NOTE:** <br /> **Supported since version 1.2.10** |
+| ARRAY      | ARRAY  <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| STRUCT     | ROW    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| MAP        | MAP    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
 
 ## Examples
 
@@ -279,6 +291,7 @@ When you read data by using Flink SQL, take note of the following points:
 - Predicate pushdown is supported. For example, if your query contains a filter condition `char_1 <> 'A' and int_1 = -126`, the filter condition will be pushed down to the Flink connector and transformed into a statement that can be executed by StarRocks before the query is run. You do not need to perform extra configurations.
 - The LIMIT statement is not supported.
 - StarRocks does not support the checkpointing mechanism. As a result, data consistency cannot be guaranteed if the read task fails.
+- The order of the fields in the created table must be the same as in the StarRocks table.
 
 ### Read data using Flink DataStream
 
@@ -339,6 +352,12 @@ When you read data by using Flink SQL, take note of the following points:
        }
    ```
 
+## FAQ
+
+#### I got an error "Failed to get next from be" while exporting data with Flink Connector. What should I do?
+
+You can set the BE configuration `scan_context_gc_interval_min` (Default: 5, Unit: Minutes) to a larger value to increase the time interval at which the Scan Context is cleaned.
+
 ## What's next
 
-After Flink successfully reads data from StarRocks, you can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) to monitor the read task. For example, you can view the `totalScannedRows` metric on the **Metrics** page of the WebUI to obtain the number of rows that are successfully read. You can also use Flink SQL to perform calculations such as joins on the data you have read.
+After Flink successfully reads data from StarRocks, you can use the Flink WebUI to monitor the read task. For example, you can view the `totalScannedRows` metric on the **Metrics** page of the WebUI to obtain the number of rows that are successfully read. You can also use Flink SQL to perform calculations such as joins on the data you have read.

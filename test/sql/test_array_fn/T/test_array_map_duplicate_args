@@ -1,0 +1,23 @@
+-- name: test_array_map_duplicate_args
+-- description: passing the same array column as two (or more) lambda arguments makes every
+-- argument resolve to the very same elements column. Appending it once per argument into the
+-- lambda evaluation chunk violates Chunk's "columns must be unique" invariant and aborted the BE.
+CREATE TABLE `array_map_dup` (
+  `id` tinyint(4) NOT NULL COMMENT "",
+  `arr_str` array<string> NULL COMMENT "",
+  `arr_int` array<int> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into array_map_dup values (1, ["aa","bbb"], [1,2]), (2, null, null), (3, [], []);
+
+select id, array_map((x, y) -> x + y, arr_int, arr_int) from array_map_dup order by id;
+select id, array_map((x, y) -> length(x) + length(y), arr_str, arr_str) from array_map_dup order by id;
+select id, array_map((x, y, z) -> (x + y) + z, arr_int, arr_int, arr_int) from array_map_dup order by id;
+-- same column twice plus a captured column
+select count() from array_map_dup where array_length(array_map((x, y) -> (id + length(x)) + y, arr_str, arr_str)) > 10;
+-- control: distinct columns take the same code path and were already correct
+select id, array_map((x, y) -> x + length(y), arr_int, arr_str) from array_map_dup order by id;

@@ -35,18 +35,19 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "base/phmap/phmap.h"
+#include "base/status.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
+#include "common/mem_chunk.h"
 #include "gutil/macros.h"
-#include "runtime/memory/mem_chunk.h"
-#include "runtime/memory/mem_chunk_allocator.h"
 #include "types/constexpr.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -89,6 +90,15 @@ enum HllDataType {
 
 class HyperLogLog {
 public:
+    using RegistersAllocateFn = bool (*)(size_t size, void* ctx, MemChunk* chunk);
+    using RegistersFreeFn = void (*)(const MemChunk& chunk, void* ctx);
+
+    struct RegistersAllocator {
+        RegistersAllocateFn allocate = nullptr;
+        RegistersFreeFn free = nullptr;
+        void* ctx = nullptr;
+    };
+
     HyperLogLog() = default;
     HyperLogLog(const HyperLogLog& other);
 
@@ -141,8 +151,17 @@ public:
 
     uint64_t serialize_size() const { return max_serialized_size(); }
 
+    int64_t mem_usage() const { return max_serialized_size(); }
+
     // common interface
     void clear();
+
+    // Register the allocator used by HLL register buffers.
+    // This is a process-global setting and can only be set once.
+    // Returns OK on success, otherwise detailed reason if it has already been
+    // registered or
+    // if there are live register chunks allocated by default allocator.
+    static Status set_registers_allocator(RegistersAllocator allocator);
 
 private:
     using ElementSet = phmap::flat_hash_set<uint64_t>;
@@ -155,14 +174,13 @@ private:
 
     // This field is much space consumming(HLL_REGISTERS_COUNT), we create
     // it only when it is really needed.
-    // Allocate memory by MemChunkAllocator in order to reuse memory.
     MemChunk _registers;
 
 private:
-    void _convert_explicit_to_register();
+    bool _allocate_registers(size_t size);
+    void _free_registers();
 
-    // absorb other registers into this registers
-    void _merge_registers(uint8_t* other_registers);
+    void _convert_explicit_to_register();
 
     // update one hash value into this registers
     void _update_registers(uint64_t hash_value) {

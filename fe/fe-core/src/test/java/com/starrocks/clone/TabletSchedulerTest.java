@@ -12,29 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.clone;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RecyclePartitionInfo;
+import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.YieldableLock;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.persist.EditLog;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -42,14 +61,18 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
-import org.assertj.core.util.Lists;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -60,25 +83,39 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.PriorityQueue;
+import java.util.Queue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
-import static com.starrocks.catalog.KeysType.DUP_KEYS;
+import static com.starrocks.sql.ast.KeysType.DUP_KEYS;
 
 public class TabletSchedulerTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
 
+    @Mocked
+    private NodeMgr nodeMgr;
+
+    @Mocked
+    private EditLog editLog;
+
     SystemInfoService systemInfoService;
     TabletInvertedIndex tabletInvertedIndex;
     TabletSchedulerStat tabletSchedulerStat;
     FakeEditLog fakeEditLog;
+    LockManager lockManager;
+    VariableMgr variableMgr;
 
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         systemInfoService = new SystemInfoService();
         tabletInvertedIndex = new TabletInvertedIndex();
         tabletSchedulerStat = new TabletSchedulerStat();
         fakeEditLog = new FakeEditLog();
+        lockManager = new LockManager();
+        variableMgr = new VariableMgr();
+
 
         new Expectations() {
             {
@@ -86,15 +123,109 @@ public class TabletSchedulerTest {
                 result = globalStateMgr;
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentSystemInfo();
-                result = systemInfoService;
+                GlobalStateMgr.isCheckpointThread();
                 minTimes = 0;
-
-                GlobalStateMgr.getCurrentInvertedIndex();
-                result = tabletInvertedIndex;
-                minTimes = 0;
+                result = false;
             }
         };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+
+                globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
+                result = new ClusterSnapshotMgr();
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+    }
+
+    @Test
+    public void testRemoveAllTabletIdsIfExpired() throws InterruptedException {
+        Database db = new Database(1, "db");
+        Table table = new Table(3, "table", Table.TableType.OLAP, new ArrayList<>());
+        Partition partition = new Partition(5, 6, "partition", new MaterializedIndex(), null);
+
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        recycleBin.recycleDatabase(db, new HashSet<>(), true);
+        recycleBin.recycleTable(db.getId(), table, true);
+        RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(db.getId(), table.getId(),
+                partition, null, new DataProperty(null), (short) 2, null);
+        recycleBin.recyclePartition(recyclePartitionInfo);
+
+        List<TabletSchedCtx> allCtxs = new ArrayList<>();
+        List<Triple<Database, Table, Partition>> arguments = Arrays.asList(
+                Triple.of(db, table, partition),
+                Triple.of(db, table, partition),
+                Triple.of(db, table, partition),
+                Triple.of(db, table, partition)
+        );
+        int tabletId = 1;
+        for (Triple<Database, Table, Partition> triple : arguments) {
+            TabletSchedCtx tabletSchedCtx = new TabletSchedCtx(
+                    TabletSchedCtx.Type.REPAIR,
+                    triple.getLeft().getId(),
+                    triple.getMiddle().getId(),
+                    triple.getRight().getDefaultPhysicalPartition().getId(),
+                    1,
+                    tabletId++,
+                    System.currentTimeMillis(),
+                    systemInfoService);
+            tabletSchedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
+            allCtxs.add(tabletSchedCtx);
+        }
+
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "recycleBin", recycleBin);
+        TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
+
+        long originalCatalogTrashExpireSecond = Config.catalog_trash_expire_second;
+
+        try {
+            Config.catalog_trash_expire_second = 1;
+            allCtxs.forEach(e -> tabletScheduler.addTablet(e, false));
+            Assertions.assertEquals(tabletScheduler.getTotalNum(), 4);
+            Thread.sleep(1100);
+            List<TabletSchedCtx> nextBatch = Deencapsulation.invoke(tabletScheduler, "getNextTabletCtxBatch");
+            Assertions.assertEquals(nextBatch.size(), 0);
+            Assertions.assertEquals(tabletScheduler.getTotalNum(), 0);
+            Assertions.assertEquals(tabletScheduler.getHistoryNum(), 4);
+            for (TabletSchedCtx ctx : allCtxs) {
+                Assertions.assertEquals(ctx.getState(), TabletSchedCtx.State.EXPIRED);
+            }
+        } finally {
+            Config.catalog_trash_expire_second = originalCatalogTrashExpireSecond;
+        }
     }
 
     @Test
@@ -103,15 +234,16 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table badTable = new Table(3, "mal", Table.TableType.OLAP, new ArrayList<>());
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition badPartition = new Partition(5, "mal", null, null);
-        Partition goodPartition = new Partition(6, "bueno", null, null);
+        Partition badPartition = new Partition(5, 55, "mal", new MaterializedIndex(), null);
+        Partition goodPartition = new Partition(6, 66, "bueno", new MaterializedIndex(), null);
 
         long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(badDb, new HashSet<>());
-        recycleBin.recycleTable(goodDB.getId(), badTable);
-        recycleBin.recyclePartition(goodDB.getId(), goodTable.getId(), badPartition,
-                null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
+        recycleBin.recycleDatabase(badDb, new HashSet<>(), true);
+        recycleBin.recycleTable(goodDB.getId(), badTable, true);
+        RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(goodDB.getId(), goodTable.getId(),
+                badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, null);
+        recycleBin.recyclePartition(recyclePartitionInfo);
 
         List<TabletSchedCtx> allCtxs = new ArrayList<>();
         List<Triple<Database, Table, Partition>> arguments = Arrays.asList(
@@ -125,7 +257,7 @@ public class TabletSchedulerTest {
                     TabletSchedCtx.Type.REPAIR,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
-                    triple.getRight().getId(),
+                    triple.getRight().getDefaultPhysicalPartition().getId(),
                     1,
                     1,
                     System.currentTimeMillis(),
@@ -135,15 +267,15 @@ public class TabletSchedulerTest {
 
         long almostExpireTime = now + (Config.catalog_trash_expire_second - 1) * 1000L;
         for (int i = 0; i != allCtxs.size(); ++i) {
-            Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, almostExpireTime));
+            Assertions.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, almostExpireTime));
         }
 
         long expireTime = now + (Config.catalog_trash_expire_second + 600) * 1000L;
         for (int i = 0; i != allCtxs.size() - 1; ++i) {
-            Assert.assertTrue(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, expireTime));
+            Assertions.assertTrue(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, expireTime));
         }
         // only the last survive
-        Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
+        Assertions.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
     }
 
     @Test
@@ -154,8 +286,8 @@ public class TabletSchedulerTest {
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition goodPartition = new Partition(6, "bueno", null, null);
-        Locker locker = new Locker();
+        Partition goodPartition = new Partition(6, 66, "bueno", new MaterializedIndex(), null);
+
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
@@ -174,11 +306,8 @@ public class TabletSchedulerTest {
         new Thread(() -> {
             for (int i = 0; i < 10; i++) {
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-                try {
-                    goodDB.readLock();
-                    tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
-                } finally {
-                    goodDB.readUnlock();
+                try (YieldableLock lock = YieldableLock.lockDatabase(goodDB.getId(), LockType.READ)) {
+                    tabletScheduler.blockingAddTabletCtxToScheduler(tabletSchedCtxList.get(i), false, lock);
                 }
             }
         }, "testAddCtx").start();
@@ -186,7 +315,73 @@ public class TabletSchedulerTest {
         Thread.sleep(2000);
         tabletScheduler.removeOneFromPendingQ();
         Thread.sleep(1000);
-        Assert.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
+        Assertions.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
+
+        Config.tablet_sched_max_scheduling_tablets = oldVal;
+    }
+
+    @Test
+    public void testPendingAddTabletCtxWithIntensiveTableLock() throws InterruptedException {
+        int oldVal = Config.tablet_sched_max_scheduling_tablets;
+        Config.tablet_sched_max_scheduling_tablets = 8;
+
+        TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
+        Database db = new Database(20, "db20");
+        Table table = new Table(40, "tbl40", Table.TableType.OLAP, new ArrayList<>());
+        Partition partition = new Partition(60, 66, "p60", new MaterializedIndex(), null);
+
+        List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            TabletSchedCtx ctx = new TabletSchedCtx(
+                    TabletSchedCtx.Type.REPAIR,
+                    db.getId(),
+                    table.getId(),
+                    partition.getId(),
+                    1,
+                    i,
+                    System.currentTimeMillis(),
+                    systemInfoService);
+            ctx.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+            tabletSchedCtxList.add(ctx);
+        }
+
+        // Mimic TabletChecker.checkOneTable(): add tablet ctxs while holding an intensive
+        // table READ lock scope (INTENTION_SHARED on the db + READ on the table). The blocking
+        // add must yield exactly this scope while waiting; releasing any other lock shape would
+        // die with IllegalMonitorStateException once the queue is full.
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        Thread addThread = new Thread(() -> {
+            try {
+                for (int i = 0; i < 10; i++) {
+                    try (YieldableLock lock = YieldableLock.lockTableWithIntensiveDbLock(
+                            db.getId(), table.getId(), LockType.READ)) {
+                        tabletScheduler.blockingAddTabletCtxToScheduler(tabletSchedCtxList.get(i), false, lock);
+                    }
+                }
+            } catch (Throwable t) {
+                error.set(t);
+            }
+        }, "testAddCtxWithTableLock");
+        addThread.start();
+
+        Thread.sleep(2000);
+        // The adding thread is now blocked on the last tablet ctx and must have released both
+        // of its locks during the wait: a db WRITE lock (conflicts with INTENTION_SHARED) and
+        // an intensive table WRITE lock (conflicts with table READ) must be acquirable.
+        Locker probeLocker = new Locker();
+        Assertions.assertTrue(
+                probeLocker.tryLockDatabase(db.getId(), LockType.WRITE, 2000, TimeUnit.MILLISECONDS));
+        probeLocker.unLockDatabase(db.getId(), LockType.WRITE);
+        Assertions.assertTrue(probeLocker.tryLockTableWithIntensiveDbLock(
+                db.getId(), table.getId(), LockType.WRITE, 2000, TimeUnit.MILLISECONDS));
+        probeLocker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+
+        // Free one slot so the blocked add can complete and the thread can exit.
+        tabletScheduler.removeOneFromPendingQ();
+        addThread.join(10000);
+        Assertions.assertFalse(addThread.isAlive());
+        Assertions.assertNull(error.get(), "blocking add must not throw: " + error.get());
+        Assertions.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
 
         Config.tablet_sched_max_scheduling_tablets = oldVal;
     }
@@ -195,7 +390,7 @@ public class TabletSchedulerTest {
                                          TabletScheduler tabletScheduler)
             throws InvocationTargetException, IllegalAccessException {
         Config.tablet_sched_slot_num_per_path = newSlotPerPath;
-        updateWorkingSlotsMethod.invoke(tabletScheduler, null);
+        updateWorkingSlotsMethod.invoke(tabletScheduler, (Object[]) null);
     }
 
     private long takeSlotNTimes(int nTimes, TabletScheduler.PathSlot pathSlot, long pathHash) throws SchedException {
@@ -223,9 +418,9 @@ public class TabletSchedulerTest {
         backendDisks1.put("/path11", td11);
         backendDisks1.put("/path12", td12);
         Backend be1 = new Backend(1, "192.168.0.1", 9030);
-        be1.setIsAlive(new AtomicBoolean(true));
-        be1.updateDisks(backendDisks1);
         systemInfoService.addBackend(be1);
+        be1.setAlive(true);
+        be1.updateDisks(backendDisks1,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
 
         TDisk td21 = new TDisk("/path21", 1L, 2L, true);
         td21.setPath_hash(21);
@@ -235,58 +430,58 @@ public class TabletSchedulerTest {
         backendDisks2.put("/path21", td21);
         backendDisks2.put("/path22", td22);
         Backend be2 = new Backend(2, "192.168.0.2", 9030);
-        be2.updateDisks(backendDisks2);
-        be2.setIsAlive(new AtomicBoolean(true));
         systemInfoService.addBackend(be2);
+        be2.updateDisks(backendDisks2,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        be2.setAlive(true);
 
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
-        Method m = TabletScheduler.class.getDeclaredMethod("updateWorkingSlots", null);
+        Method m = TabletScheduler.class.getDeclaredMethod("updateWorkingSlots", (Class<?>[]) null);
         m.setAccessible(true);
-        m.invoke(tabletScheduler, null);
+        m.invoke(tabletScheduler, (Object[]) null);
         Map<Long, TabletScheduler.PathSlot> bslots = tabletScheduler.getBackendsWorkingSlots();
-        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(2L).peekSlot(22));
+        Assertions.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(2L).peekSlot(22));
         long result = takeSlotNTimes(Config.tablet_sched_slot_num_per_path, bslots.get(1L), 11L);
-        Assert.assertEquals(11, result);
+        Assertions.assertEquals(11, result);
         result = takeSlotNTimes(1, bslots.get(1L), 11L);
-        Assert.assertEquals(-1, result);
+        Assertions.assertEquals(-1, result);
         freeSlotNTimes(Config.tablet_sched_slot_num_per_path, bslots.get(1L), 11L);
-        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).getSlotTotal(11));
 
         updateSlotWithNewConfig(128, m, tabletScheduler); // test max slot
-        Assert.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
-        Assert.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
 
         updateSlotWithNewConfig(0, m, tabletScheduler); // test min slot
-        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(2L).peekSlot(22));
+        Assertions.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(2L).peekSlot(22));
         takeSlotNTimes(10, bslots.get(1L), 11L); // not enough, can only get 2 free slot
         takeSlotNTimes(10, bslots.get(2L), 21L); // not enough, can only get 2 free slot
-        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(0, bslots.get(2L).peekSlot(21));
-        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(0, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(0, bslots.get(2L).peekSlot(21));
+        Assertions.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
 
         updateSlotWithNewConfig(2, m, tabletScheduler);
-        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(12));
+        Assertions.assertEquals(0, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(12));
 
         updateSlotWithNewConfig(4, m, tabletScheduler);
-        Assert.assertEquals(2, bslots.get(2L).peekSlot(21));
-        Assert.assertEquals(4, bslots.get(2L).peekSlot(22));
-        Assert.assertEquals(4, bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(2, bslots.get(2L).peekSlot(21));
+        Assertions.assertEquals(4, bslots.get(2L).peekSlot(22));
+        Assertions.assertEquals(4, bslots.get(1L).getSlotTotal(11));
 
         takeSlotNTimes(5, bslots.get(1L), 11); // not enough, can only get 2 free slot
         updateSlotWithNewConfig(2, m, tabletScheduler); // decrease total slot
         // this is normal because slot taken haven't return
-        Assert.assertEquals(-2, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(2, bslots.get(1L).peekSlot(12));
-        Assert.assertEquals(0, bslots.get(2L).peekSlot(21));
+        Assertions.assertEquals(-2, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(2, bslots.get(1L).peekSlot(12));
+        Assertions.assertEquals(0, bslots.get(2L).peekSlot(21));
 
         freeSlotNTimes(2, bslots.get(1L), 11L);
-        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(0, bslots.get(1L).peekSlot(11));
 
         freeSlotNTimes(2, bslots.get(1L), 11L);
-        Assert.assertEquals(bslots.get(1L).peekSlot(11), bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(bslots.get(1L).peekSlot(11), bslots.get(1L).getSlotTotal(11));
     }
 
     @Test
@@ -314,15 +509,15 @@ public class TabletSchedulerTest {
             ctx.setColocateGroupId(v);
             ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
             if (k == 104L) {
-                ctx.setTabletStatus(LocalTablet.TabletStatus.VERSION_INCOMPLETE);
+                ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
             }
             Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
         });
 
         Map<ColocateTableIndex.GroupId, Long> result = tabletScheduler.getTabletsNumInScheduleForEachCG();
-        Assert.assertEquals(Optional.of(3L).get(),
+        Assertions.assertEquals(Optional.of(3L).get(),
                 result.get(new ColocateTableIndex.GroupId(200L, 300L)));
-        Assert.assertEquals(Optional.of(2L).get(),
+        Assertions.assertEquals(Optional.of(2L).get(),
                 result.get(new ColocateTableIndex.GroupId(200L, 301L)));
     }
 
@@ -335,11 +530,12 @@ public class TabletSchedulerTest {
         replicas.add(new Replica(4, 3003, -3, Replica.ReplicaState.NORMAL));
 
         LocalTablet localTablet = new LocalTablet(5001, replicas);
-        Pair<LocalTablet.TabletStatus, TabletSchedCtx.Priority> result = localTablet.getHealthStatusWithPriority(
-                systemInfoService, 1, 3, Arrays.asList(1001L, 1002L, 1003L));
+        Pair<LocalTablet.TabletHealthStatus, TabletSchedCtx.Priority> result = TabletChecker.getTabletHealthStatusWithPriority(
+                localTablet, systemInfoService, 1, 3,
+                Arrays.asList(1001L, 1002L, 1003L), null);
         System.out.println(result);
 
-        Assert.assertEquals(LocalTablet.TabletStatus.FORCE_REDUNDANT, result.first);
+        Assertions.assertEquals(LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, result.first);
 
         Config.recover_with_empty_tablet = false;
     }
@@ -353,19 +549,32 @@ public class TabletSchedulerTest {
         long indexId = 10005L;
         long tabletId = 10006L;
         long replicaId = 10007L;
-        short count = 1;
-        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, -1, TStorageMedium.HDD);
-        CreateReplicaTask createReplicaTask = new CreateReplicaTask(beId, dbId, tblId, partitionId, indexId, tabletId, count,
-                -1, -1L,
-                DUP_KEYS,
-                TStorageType.COLUMN,
-                TStorageMedium.HDD, null, null, 0.0, null,
-                null,
-                false,
-                false,
-                1,
-                TTabletType.TABLET_TYPE_DISK,
-                TCompressionType.LZ4_FRAME);
+        long schemaId = indexId;
+
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder().setId(schemaId)
+                .setKeysType(DUP_KEYS)
+                .setShortKeyColumnCount((short) 1)
+                .setSchemaHash(-1)
+                .setStorageType(TStorageType.COLUMN)
+                .addColumn(new Column("k1", IntegerType.INT))
+                .build().toTabletSchema();
+
+        CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()
+                .setNodeId(beId)
+                .setDbId(dbId)
+                .setTableId(tblId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId)
+                .setVersion(1)
+                .setTabletId(tabletId)
+                .setStorageMedium(TStorageMedium.HDD)
+                .setPrimaryIndexCacheExpireSec(1)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .build();
+
+        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, TStorageMedium.HDD);
 
         Replica replica = new Replica(replicaId, beId, -1, Replica.ReplicaState.RECOVER);
 
@@ -387,19 +596,263 @@ public class TabletSchedulerTest {
 
         // failure test: running tablet ctx is not exist
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
-        Assert.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
+        Assertions.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
 
         // failure test: request not ok
         tabletScheduler.addToRunningTablets(ctx);
         status.setStatus_code(TStatusCode.CANCELLED);
         status.setError_msgs(Lists.newArrayList("canceled"));
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
-        Assert.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
+        Assertions.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
 
         // success
         tabletScheduler.addToRunningTablets(ctx);
         status.setStatus_code(TStatusCode.OK);
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
-        Assert.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
+        Assertions.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
+    }
+
+    @Test
+    public void testScheduleTabletException() {
+        long dbId = 10002L;
+        long tblId = 10003L;
+        long partitionId = 10004L;
+        long physicalPartitionId = 10004L;
+        long indexId = 10005L;
+        long tabletId = 10006L;
+
+        Database db = new Database(dbId, "db");
+        OlapTable table = new OlapTable(tblId, "table", null, null, null, null);
+        MaterializedIndex index = new MaterializedIndex(indexId);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, index);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "partition", index, null);
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        new Expectations() {
+            {
+                globalStateMgr.getColocateTableIndex();
+                minTimes = 0;
+                result = colocateTableIndex;
+                globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+                minTimes = 0;
+                result = db;
+                globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+                minTimes = 0;
+                result = table;
+                globalStateMgr.getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(table, physicalPartitionId);
+                minTimes = 0;
+                result = physicalPartition;
+                globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(table, partitionId);
+                minTimes = 0;
+                result = partition;
+                globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin((PartitionInfo) any, partitionId);
+                minTimes = 0;
+                result = 3;
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin((PartitionInfo) any, partitionId);
+                minTimes = 0;
+                result = new DataProperty(TStorageMedium.HDD);
+            }
+        };
+
+        new MockUp<TabletScheduler>() {
+            @Mock
+            private boolean checkIfTabletExpired(TabletSchedCtx ctx) {
+                return false;
+            }
+        };
+
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId, tabletId,
+                System.currentTimeMillis());
+        LocalTablet tablet = new LocalTablet(tabletId);
+        ctx.setTablet(tablet);
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+        Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx);
+        Assertions.assertEquals(1L, tabletScheduler.getPendingNum(TabletSchedCtx.Type.REPAIR));
+
+        Deencapsulation.invoke(tabletScheduler, "schedulePendingTablets");
+        Assertions.assertEquals(TabletSchedCtx.State.UNEXPECTED, ctx.getState());
+        // index.getTablet returns null
+        // failed at Preconditions.checkNotNull(tablet);
+        Assertions.assertEquals(null, ctx.getErrMsg());
+    }
+
+    @Test
+    public void testFinishCloneTaskException() {
+        long beId = 10001L;
+        long dbId = 10002L;
+        long tblId = 10003L;
+        long partitionId = 10004L;
+        long indexId = 10005L;
+        long tabletId = 10006L;
+
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId, tabletId,
+                System.currentTimeMillis());
+        LocalTablet tablet = new LocalTablet(tabletId);
+        ctx.setTablet(tablet);
+        ctx.setState(TabletSchedCtx.State.RUNNING);
+
+        // taskVersion is VERSION_1
+        CloneTask task = new CloneTask(beId, "127.0.0.1", dbId, tblId, partitionId, indexId, tabletId, 0,
+                Arrays.asList(new TBackend("host1", 8290, 8390)), TStorageMedium.HDD, 2L, 3600);
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+        Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
+        Assertions.assertEquals(1L, tabletScheduler.getRunningNum(TabletSchedCtx.Type.REPAIR));
+
+        tabletScheduler.finishCloneTask(task, new TFinishTaskRequest());
+        Assertions.assertEquals(TabletSchedCtx.State.UNEXPECTED, ctx.getState());
+        // failed at Preconditions.checkArgument(cloneTask.getTaskVersion() == CloneTask.VERSION_2);
+        Assertions.assertEquals(null, ctx.getErrMsg());
+    }
+
+    @Test
+    public void testHandleColocateRedundantNoRedundantReplicas() {
+        long beId = 10001L;
+        long dbId = 10002L;
+        long tblId = 10003L;
+        long partitionId = 10004L;
+        long physicalPartitionId = 10004L;
+        long indexId = 10005L;
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+
+        Database db = new Database(dbId, "db");
+        OlapTable table = new OlapTable(tblId, "table", null, null, null, null);
+        Replica replica = new Replica(replicaId, beId, 0, Replica.ReplicaState.NORMAL);
+        LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
+        MaterializedIndex index = new MaterializedIndex(indexId);
+        index.addTablet(tablet, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, TStorageMedium.HDD));
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, index);
+
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+                minTimes = 0;
+                result = db;
+                globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+                minTimes = 0;
+                result = table;
+                globalStateMgr.getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(table, physicalPartitionId);
+                minTimes = 0;
+                result = physicalPartition;
+            }
+        };
+
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId, tabletId,
+                System.currentTimeMillis());
+        ctx.setTablet(tablet);
+        ctx.setTabletStatus(LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT);
+        ctx.setColocateGroupBackendIds(Sets.newHashSet(beId));
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+        ExceptionChecker.expectThrowsWithMsg(SchedException.class,
+                "unable to delete any colocate redundant replicas. replicas: 10001:-1/-1/-1/0:NORMAL:NIL,, backend set: [10001]",
+                () -> Deencapsulation.invoke(tabletScheduler, "handleColocateRedundant", ctx));
+    }
+
+    @Test
+    public void testResetDecommStatForSingleReplicaTabletWithNullTablet() {
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+        long beId = 10001L;
+
+        // Create a replica with DECOMMISSION state
+        Replica decommissionedReplica = new Replica(replicaId, beId, -1, Replica.ReplicaState.DECOMMISSION);
+        List<Replica> replicas = Lists.newArrayList(decommissionedReplica);
+
+        // Create a TabletSchedCtx but don't set the tablet (getTablet() will return null)
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
+                10002L, 10003L, 10004L, 10005L, tabletId, System.currentTimeMillis());
+        ctx.setDecommissionedReplica(decommissionedReplica);
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletScheduler getTabletScheduler() {
+                return tabletScheduler;
+            }
+        };
+
+        // Add the context to scheduler so getTabletSchedCtx can find it
+        Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx);
+
+        // This should not throw NullPointerException even though ctx.getTablet() returns null
+        TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
+    }
+
+    @Test
+    public void testOnStoppedClearsInternalState() {
+        TabletScheduler scheduler = new TabletScheduler(new TabletSchedulerStat());
+
+        TabletSchedCtx pending = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
+                1L, 2L, 3L, 4L, 100L, System.currentTimeMillis(), systemInfoService);
+        pending.setOrigPriority(TabletSchedCtx.Priority.LOW);
+        Deencapsulation.invoke(scheduler, "addToPendingTablets", pending);
+
+        // Populate remaining collections that onStopped() must reset.
+        java.util.Set<Long> allIds = Deencapsulation.getField(scheduler, "allTabletIds");
+        allIds.add(100L);
+        Map<Long, TabletSchedCtx> running = Deencapsulation.getField(scheduler, "runningTablets");
+        running.put(200L, pending);
+        Queue<TabletSchedCtx> history = Deencapsulation.getField(scheduler, "schedHistory");
+        history.add(pending);
+        Map<Long, TabletScheduler.PathSlot> slots = Deencapsulation.getField(scheduler, "backendsWorkingSlots");
+        slots.put(10L, new TabletScheduler.PathSlot(Lists.newArrayList(0L), 1));
+        scheduler.setClusterLoadStatistic(new ClusterLoadStatistic(systemInfoService, tabletInvertedIndex));
+        Deencapsulation.setField(scheduler, "lastStatUpdateTime", 123L);
+        Deencapsulation.setField(scheduler, "lastClusterLoadLoggingTime", 456L);
+        Deencapsulation.setField(scheduler, "lastSlotAdjustTime", 789L);
+        Deencapsulation.setField(scheduler, "currentSlotPerPathConfig", 7);
+        ((java.util.concurrent.atomic.AtomicBoolean) Deencapsulation.getField(scheduler, "forceCleanSchedQ")).set(true);
+
+        Assertions.assertEquals(1, scheduler.getTotalNum());
+        Assertions.assertEquals(1, scheduler.getRunningNum());
+        Assertions.assertEquals(1, scheduler.getHistoryNum());
+        Assertions.assertNotNull(scheduler.getClusterLoadStatistic());
+
+        Deencapsulation.invoke(scheduler, "onStopped");
+
+        Assertions.assertEquals(0, scheduler.getTotalNum());
+        Assertions.assertEquals(0, scheduler.getRunningNum());
+        Assertions.assertEquals(0, scheduler.getHistoryNum());
+        Assertions.assertNull(scheduler.getClusterLoadStatistic());
+        Map<Long, TabletScheduler.PathSlot> afterSlots = Deencapsulation.getField(scheduler, "backendsWorkingSlots");
+        Assertions.assertTrue(afterSlots.isEmpty(), "backendsWorkingSlots must be cleared");
+        PriorityQueue<TabletSchedCtx> afterPending = Deencapsulation.getField(scheduler, "pendingTablets");
+        Assertions.assertTrue(afterPending.isEmpty(), "pendingTablets must be cleared");
+        Assertions.assertEquals(0L, (long) Deencapsulation.getField(scheduler, "lastStatUpdateTime"));
+        Assertions.assertEquals(0L, (long) Deencapsulation.getField(scheduler, "lastClusterLoadLoggingTime"));
+        Assertions.assertEquals(0L, (long) Deencapsulation.getField(scheduler, "lastSlotAdjustTime"));
+        Assertions.assertEquals(0, (int) Deencapsulation.getField(scheduler, "currentSlotPerPathConfig"));
+        Assertions.assertFalse(
+                ((java.util.concurrent.atomic.AtomicBoolean) Deencapsulation.getField(scheduler, "forceCleanSchedQ"))
+                        .get(),
+                "forceCleanSchedQ must reset to false");
+    }
+
+    @Test
+    public void testResetDecommStatForSingleReplicaTabletWithNullTabletScheduler() {
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+        long beId = 10001L;
+
+        // Create a replica with DECOMMISSION state
+        Replica decommissionedReplica = new Replica(replicaId, beId, -1, Replica.ReplicaState.DECOMMISSION);
+        List<Replica> replicas = Lists.newArrayList(decommissionedReplica);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletScheduler getTabletScheduler() {
+                return null;
+            }
+        };
+
+        // This should not throw NullPointerException even though getTabletScheduler() returns null
+        TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
+
+        // If we reach here without exception, the test passes
+        Assertions.assertTrue(true);
     }
 }

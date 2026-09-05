@@ -18,7 +18,7 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
-import junit.framework.AssertionFailedError;
+import org.opentest4j.AssertionFailedError;
 
 public class ExceptionChecker {
 
@@ -70,7 +70,7 @@ public class ExceptionChecker {
                 if (!Strings.isNullOrEmpty(exceptionMsg)) {
                     if (!e.getMessage().contains(exceptionMsg)) {
                         AssertionFailedError assertion = new AssertionFailedError(
-                                "expceted msg: " + exceptionMsg + ", actual: " + e.getMessage());
+                                "expected msg: " + exceptionMsg + ", actual: " + e.getMessage());
                         assertion.initCause(e);
                         throw assertion;
                     }

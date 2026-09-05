@@ -58,8 +58,8 @@ Status MapOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& c
     DCHECK(_cur_chunk == nullptr);
     DCHECK(chunk != nullptr && !chunk->is_empty());
     DCHECK(chunk->num_columns() == 1);
-    auto column = chunk->get_column_by_slot_id(SlotId(1));
-    auto* col = dynamic_cast<DoubleColumn*>(column.get());
+    auto* column = chunk->get_column_raw_ptr_by_slot_id(SlotId(1));
+    auto* col = dynamic_cast<DoubleColumn*>(column);
     DCHECK(col != nullptr);
     auto num_rows = col->size();
     auto& data = col->get_data();
@@ -70,7 +70,7 @@ Status MapOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& c
         new_data[i] = _map_func(data[i]);
     }
     auto new_chunk = std::make_shared<Chunk>();
-    new_chunk->append_column(new_column, SlotId(1));
+    new_chunk->append_column(std::move(new_column), SlotId(1));
     _cur_chunk = std::move(new_chunk);
     return Status::OK();
 }
@@ -116,7 +116,7 @@ Status ReduceSinkOperator::push_chunk(starrocks::RuntimeState* state, const Chun
     auto column = chunk->get_column_by_slot_id(SlotId(1));
     const auto* col = dynamic_cast<const DoubleColumn*>(column.get());
     DCHECK(col != nullptr);
-    const auto& data = col->get_data();
+    const auto& data = col->immutable_data();
     const auto num_rows = data.size();
     auto reduce_func = _reducer->reduce_func();
     for (auto i = 0; i < num_rows; ++i) {
@@ -193,7 +193,7 @@ StatusOr<ChunkPtr> ReduceSourceOperator::pull_chunk(starrocks::RuntimeState* sta
     auto& data = dynamic_cast<DoubleColumn*>(column.get())->get_data();
     data.assign(num_rows, _reducer->result());
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(1));
+    chunk->append_column(std::move(column), SlotId(1));
     if (_current_output_num_rows == _reducer->output_num_rows()) {
         _reducer->set_source_finished();
     }

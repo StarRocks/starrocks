@@ -25,13 +25,41 @@ namespace starrocks {
 class Chunk;
 class Column;
 
+// MemTableSink defines the interface for flushing memtable data to persistent storage
 class MemTableSink {
 public:
     virtual ~MemTableSink() = default;
 
-    virtual Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* seg_info = nullptr) = 0;
-    virtual Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
-                                            SegmentPB* seg_info = nullptr) = 0;
+    // Flush a chunk of data to the sink
+    // @param chunk: data to be flushed
+    // @param seg_info: output segment metadata
+    // @param eos: whether this is the end of the stream
+    // @param flush_data_size: output parameter for the size of flushed data
+    // @param slot_idx: slot index for tracking flush order in parallel flush scenarios.
+    //                  Used to ensure correct ordering when merging spilled blocks.
+    //                  Default -1 means slot tracking is not needed.
+    virtual Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* seg_info = nullptr, bool eos = false,
+                               int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) = 0;
+    // Flush a chunk with delete operations for primary key tables
+    // @param slot_idx: see flush_chunk() for details
+    virtual Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info = nullptr,
+                                            bool eos = false, int64_t* flush_data_size = nullptr,
+                                            int64_t slot_idx = -1) = 0;
+
+    // If true, the memtable does NOT split upserts/deletes; it keeps the trailing __op column in the
+    // flushed chunk and hands the whole chunk to flush_chunk_with_op(). The sink then resolves the
+    // upsert/delete order across flushes during its (spill) merge. Only the spill sink overrides this.
+    virtual bool keep_op_column() const { return false; }
+
+    // Flush a chunk whose last column is __op (TINYINT, REPLACE-aggregated). Only called when
+    // keep_op_column() is true. Default: not supported.
+    virtual Status flush_chunk_with_op(const Chunk& chunk_with_op, starrocks::SegmentPB* seg_info = nullptr,
+                                       bool eos = false, int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) {
+        return Status::NotSupported("flush_chunk_with_op not supported");
+    }
+
+    virtual int64_t txn_id() = 0;
+    virtual int64_t tablet_id() = 0;
 };
 
 } // namespace starrocks

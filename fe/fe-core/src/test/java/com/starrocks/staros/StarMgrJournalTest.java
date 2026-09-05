@@ -20,8 +20,8 @@ import com.starrocks.persist.EditLog;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataOutput;
 import java.io.IOException;
@@ -52,7 +52,7 @@ public class StarMgrJournalTest {
         } catch (IOException e) {
         }
 
-        Assert.assertEquals(journal, starMgrJournal.getJournal());
+        Assertions.assertEquals(journal, starMgrJournal.getJournal());
 
         editLog.logStarMgrOperation(starMgrJournal);
     }

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算一组 Bitmap 值的并集。"
 ---
 
 # bitmap_union
 
-## 功能
+
 
 输入一组 bitmap 值，求这一组 bitmap 值的并集。
 

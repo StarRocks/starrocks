@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回字符串的字符数，支持多字节字符和 UTF-8 编码。"
 ---
 
 # char_length
 
-## 功能
+
 
 返回字符串的长度。
 对于多字节字符，返回 **字符** 数，目前仅支持 UTF-8 编码，该函数还有一个别名 `character_length`。

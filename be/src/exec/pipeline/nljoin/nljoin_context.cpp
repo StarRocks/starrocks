@@ -18,16 +18,16 @@
 #include <memory>
 #include <numeric>
 
+#include "compute_env/spill/input_stream.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spill_components.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/cross_join_node.h"
-#include "exec/pipeline/runtime_filter_types.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/input_stream.h"
-#include "exec/spill/spill_components.h"
-#include "exec/spill/spiller.hpp"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
 #include "exprs/expr.h"
 #include "fmt/format.h"
+#include "runtime/chunk_accumulator.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -40,8 +40,7 @@ Status NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
     return Status::OK();
 }
 
-Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
-                                                          spill::IOTaskExecutor& executor) {
+Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk) {
     if (build_chunk == nullptr || build_chunk->is_empty()) {
         return Status::OK();
     }
@@ -49,7 +48,7 @@ Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, C
     _num_rows += build_chunk->num_rows();
     RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
     if (auto chunk = _accumulator.pull()) {
-        RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+        RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     }
 
     return Status::OK();
@@ -68,16 +67,16 @@ void NJJoinBuildInputChannel::close() {
     _spiller.reset();
 }
 
-Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state, spill::IOTaskExecutor& executor) {
-    return _reader->trigger_restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state) {
+    return _reader->trigger_restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
 }
 
 bool SpillableNLJoinChunkStream::has_output() {
     return _reader && _reader->has_output_data();
 }
 
-StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state, spill::IOTaskExecutor& executor) {
-    return _reader->restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state) {
+    return _reader->restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
 }
 
 Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* dummy_spiller) {
@@ -174,22 +173,23 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
         auto* pool = state->obj_pool();
         ASSIGN_OR_RETURN(auto rfs, CrossJoinNode::rewrite_runtime_filter(pool, _rf_descs, one_row_chunk.get(),
                                                                          _rf_conjuncts_ctx));
+        RETURN_IF_ERROR(RuntimeFilterCollector::prepare_runtime_in_filters(state, rfs));
         _rf_hub->set_collector(_plan_node_id,
-                               std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeBloomFilterList{}));
+                               std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeMembershipFilterList{}));
     } else {
         // notify cross join left child
         _rf_hub->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{},
-                                                                                       RuntimeBloomFilterList{}));
+                                                                                       RuntimeMembershipFilterList{}));
     }
     return Status::OK();
 }
 
 void NLJoinContext::_notify_runtime_filter_collector(RuntimeState* state) {
-    _rf_hub->set_collector(_plan_node_id,
-                           std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, RuntimeBloomFilterList{}));
+    _rf_hub->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{},
+                                                                                   RuntimeMembershipFilterList{}));
 }
 
-bool NLJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {
+bool NLJoinContext::finish_probe(int32_t driver_seq, const Filter& build_match_flags) {
     std::lock_guard guard(_join_stage_mutex);
 
     ++_num_post_probers;
@@ -211,7 +211,7 @@ bool NLJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>&
     return is_last;
 }
 
-const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
+const Filter NLJoinContext::get_shared_build_match_flag() const {
     DCHECK_EQ(_num_post_probers, _num_left_probers) << "all probers should share their states";
     std::lock_guard guard(_join_stage_mutex);
     return _shared_build_match_flag;

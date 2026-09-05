@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回字符串的字节长度。"
 ---
 
 # length
 
-## 功能
+
 
 返回字符串的 **字节** 长度。
 

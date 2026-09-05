@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TNestLoopJoinNode;
 import com.starrocks.thrift.TNormalNestLoopJoinNode;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -34,6 +35,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -46,7 +48,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
     private static final Logger LOG = LogManager.getLogger(NestLoopJoinNode.class);
 
-    public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
+    public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner,
                             JoinOperator joinOp, List<Expr> eqJoinConjuncts, List<Expr> joinConjuncts) {
         super("NESTLOOP JOIN", id, outer, inner, joinOp, eqJoinConjuncts, joinConjuncts);
     }
@@ -55,7 +57,8 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
      * Build the filter if inner table contains only one row, which is a common case for scalar subquery
      */
     @Override
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl) {
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
+                                    ExecGroupSets execGroupSets) {
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
@@ -78,7 +81,10 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
 
-                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
+                RuntimeFilterPushDownContext rfPushDownCtx =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCtx, left, probePartitionByExprs)) {
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
@@ -102,10 +108,10 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         if (joinExpr instanceof BinaryPredicate && ((BinaryPredicate) joinExpr).getOp().isUnequivalence()) {
             return false;
         }
-        if (!leftExpr.isBoundByTupleIds(leftChild.getTupleIds())) {
+        if (!ExprUtils.isBoundByTupleIds(leftExpr, leftChild.getTupleIds())) {
             return false;
         }
-        return rightExpr.isBoundByTupleIds(rightChild.getTupleIds());
+        return ExprUtils.isBoundByTupleIds(rightExpr, rightChild.getTupleIds());
     }
 
     @Override
@@ -114,27 +120,46 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         Preconditions.checkState(!joinOp.isRightSemiAntiJoin());
         msg.node_type = TPlanNodeType.NESTLOOP_JOIN_NODE;
         msg.nestloop_join_node = new TNestLoopJoinNode();
-        msg.nestloop_join_node.join_op = joinOp.toThrift();
+        msg.nestloop_join_node.join_op = ExprToThrift.joinOperatorToThrift(joinOp);
 
         if (CollectionUtils.isNotEmpty(otherJoinConjuncts)) {
             for (Expr e : otherJoinConjuncts) {
-                msg.nestloop_join_node.addToJoin_conjuncts(e.treeToThrift());
+                msg.nestloop_join_node.addToJoin_conjuncts(ExprToThrift.treeToThrift(e));
             }
-            String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
+            String sqlJoinPredicate = otherJoinConjuncts.stream().map(ExprToSql::toSql).collect(Collectors.joining(","));
             msg.nestloop_join_node.setSql_join_conjuncts(sqlJoinPredicate);
         }
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        if (getCanLocalShuffle()) {
+            msg.nestloop_join_node.setInterpolate_passthrough(sv.isHashJoinInterpolatePassthrough());
+        }
+
 
         if (!buildRuntimeFilters.isEmpty()) {
             msg.nestloop_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
+        }
+        if (commonSlotMap != null) {
+            commonSlotMap.forEach((key, value) ->
+                    msg.nestloop_join_node.putToCommon_slot_map(key.asInt(), ExprToThrift.treeToThrift(value)));
         }
     }
 
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalNestLoopJoinNode nlJoinNode = new TNormalNestLoopJoinNode();
-        nlJoinNode.setJoin_op(getJoinOp().toThrift());
+        nlJoinNode.setJoin_op(ExprToThrift.joinOperatorToThrift(getJoinOp()));
         nlJoinNode.setJoin_conjuncts(normalizer.normalizeExprs(otherJoinConjuncts));
+        // join_conjuncts above reference the predicate's common sub-expressions by slot id, so the
+        // definitions have to be normalized too -- otherwise `(t.ts % 7) > s.a and (t.ts % 7) < s.b`
+        // and the same predicate with % 9 produce the same digest, and since isTransformJoin() is
+        // unconditionally true for a NestLoopJoinNode this node sits inside the digested subtree and
+        // decides which rows the cached per-tablet aggregate is built from.
+        if (commonSlotMap != null) {
+            Pair<List<Integer>, List<ByteBuffer>> cse = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
+            nlJoinNode.setCse_slot_ids(cse.first);
+            nlJoinNode.setCse_exprs(cse.second);
+        }
         planNode.setNestloop_join_node(nlJoinNode);
         planNode.setNode_type(TPlanNodeType.NESTLOOP_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);

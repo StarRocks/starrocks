@@ -1,0 +1,93 @@
+-- name: test_materialized_views_columns @native
+create database db_${uuid0};
+use db_${uuid0};
+
+create table ss (event_day date, pv bigint) duplicate key(event_day)
+distributed by hash(event_day) buckets 2 properties("replication_num" = "1");
+insert into ss values ('2020-01-14', 1), ('2020-01-15', 2);
+
+-- Manual refresh: REFRESH_TRIGGER/REFRESH_POLICY = MANUAL
+create materialized view mv_manual distributed by hash(event_day)
+refresh deferred manual
+as select event_day, sum(pv) as sum_pv from ss group by event_day;
+
+-- Bare async refresh: load triggered, REFRESH_TRIGGER/REFRESH_POLICY = ON_BASE_TABLE_CHANGE
+create materialized view mv_onchange distributed by hash(event_day)
+refresh deferred async
+as select event_day, sum(pv) as sum_pv from ss group by event_day;
+
+-- Scheduled async refresh: REFRESH_TRIGGER = SCHEDULED, REFRESH_POLICY = START(...) EVERY(...)
+create materialized view mv_sched distributed by hash(event_day)
+refresh deferred async start('2024-01-01 00:00:00') every(interval 1 hour)
+as select event_day, sum(pv) as sum_pv from ss group by event_day;
+
+-- REFRESH_TYPE=ASYNC, REFRESH_MODE=PCT, RESOURCE_GROUP=default_mv_wg for all;
+-- WAREHOUSE is empty in shared-nothing mode.
+select TABLE_NAME, REFRESH_TYPE, REFRESH_MODE, REFRESH_TRIGGER, REFRESH_POLICY, RESOURCE_GROUP, WAREHOUSE
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' order by TABLE_NAME;
+
+-- LAST_FRESHNESS_CONFIRMED_AT: NULL before any refresh, a datetime after a successful refresh.
+select if(LAST_FRESHNESS_CONFIRMED_AT is null, 'OK', concat('FAILED: ', LAST_FRESHNESS_CONFIRMED_AT))
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+refresh materialized view mv_manual with sync mode;
+select if(LAST_FRESHNESS_CONFIRMED_AT is not null, 'OK', 'FAILED')
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+
+-- Skip path: a no-change refresh is SKIPPED yet still confirms freshness and advances LAST_FRESHNESS_CONFIRMED_AT.
+[UC]t1=select LAST_FRESHNESS_CONFIRMED_AT from information_schema.materialized_views where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+select sleep(2);
+refresh materialized view mv_manual with sync mode;
+select if(LAST_FRESHNESS_CONFIRMED_AT > '${t1}', 'OK', 'FAILED')
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+
+-- BASE_TABLE_REFRESH_VERSION_TIMES: an OLAP base table reports its visible-version commit time, keyed by
+-- catalog.db.table. The timestamp is non-deterministic, so assert the key resolves to a datetime.
+select get_json_string(BASE_TABLE_REFRESH_VERSION_TIMES, '$."default_catalog.db_${uuid0}.ss"')
+       regexp '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+
+-- SHOW ... WHERE is rewritten to a SELECT over information_schema; the row ends with the freshness datetime
+-- (column 35) followed by the version-times map (column 36).
+show materialized views where name = 'mv_manual';
+
+-- FE-evaluated scan returns the column as well
+set enable_evaluate_schema_scan_rule=true;
+select if(LAST_FRESHNESS_CONFIRMED_AT is not null, 'OK', 'FAILED')
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+set enable_evaluate_schema_scan_rule=false;
+
+-- A partition-scoped (partial) refresh must NOT confirm whole-MV freshness.
+create table pt (dt date, v int) duplicate key(dt)
+partition by range(dt) (partition p1 values [('2024-01-01'),('2024-01-02')), partition p2 values [('2024-01-02'),('2024-01-03')))
+distributed by hash(dt) buckets 2 properties('replication_num'='1');
+insert into pt values ('2024-01-01',1),('2024-01-02',2);
+create materialized view mv_part partition by dt distributed by hash(dt)
+refresh deferred manual
+as select dt, sum(v) sv from pt group by dt;
+REFRESH MATERIALIZED VIEW mv_part PARTITION START ("2024-01-01") END ("2024-01-02") WITH SYNC MODE;
+select if(LAST_FRESHNESS_CONFIRMED_AT is null, 'OK', concat('FAILED: ', LAST_FRESHNESS_CONFIRMED_AT))
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_part';
+refresh materialized view mv_part with sync mode;
+select if(LAST_FRESHNESS_CONFIRMED_AT is not null, 'OK', 'FAILED')
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_part';
+
+-- RESOURCE_GROUP reflects the resource_group table property the refresh tasks use
+create resource group rg_${uuid0} to (user = 'rguser_${uuid0}') with ('cpu_core_limit' = '1', 'mem_limit' = '10%');
+create materialized view mv_rg distributed by hash(event_day)
+refresh deferred manual properties('resource_group' = 'rg_${uuid0}')
+as select event_day, sum(pv) as sum_pv from ss group by event_day;
+select if(RESOURCE_GROUP = 'rg_${uuid0}', 'OK', concat('FAILED: ', RESOURCE_GROUP))
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_rg';
+
+drop materialized view mv_rg;
+drop resource group rg_${uuid0};
+drop database db_${uuid0};

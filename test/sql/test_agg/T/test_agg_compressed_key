@@ -1,0 +1,476 @@
+-- name: test_agg_compressed_key
+
+create table all_t0 (
+    c1 tinyint,
+    c2 smallint,
+    c3 int,
+    c4 bigint,
+    c5 largeint,
+    c6 date,
+    c7 datetime,
+    c8 string,
+    c9 string,
+    c10 char(100),
+    c11 float,
+    c12 double,
+    c13 tinyint NOT NULL,
+    c14 smallint NOT NULL,
+    c15 int NOT NULL,
+    c16 bigint NOT NULL,
+    c17 largeint NOT NULL,
+    c18 date NOT NULL,
+    c19 datetime NOT NULL,
+    c20 string NOT NULL,
+    c21 string NOT NULL,
+    c22 char(100) NOT NULL,
+    c23 float NOT NULL,
+    c24 double NOT NULL
+) DUPLICATE KEY(c1) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+
+insert into all_t0 SELECT x%200, x%200, x%200, x%200, x%200, x, x, x%200, x, x, x, x, x % 8, x % 8, x % 16, x %200, x%200, '2020-02-02', '2020-02-02', x%200, x, x, x, x FROM TABLE(generate_series(1,  30000)) as g(x);
+insert into all_t0 values (null, null, null, null, null, null, null, null, null, null, null, null, -1,-2,-3,-4,-5, '2000-01-28', '2000-01-28', 'literal', 'literal', 'literal', -1, -1);
+insert into all_t0 values (-1, -2, -3, null, null, null, null, null, null, null, null, null, -1,-2,-3,-4,-5, '2000-01-28', '2000-01-28', 'literal', 'literal', 'literal', -1, -1);
+
+set pipeline_dop=2;
+
+select distinct c1,c2,c3,c4,c5,c6,c7,c8 from all_t0 order by 1,2,3,4,5,6,7,8 limit 100,3;
+function: wait_global_dict_ready('c8', 'all_t0')
+function: wait_min_max_stat_ready('c1', 'all_t0')
+function: wait_min_max_stat_ready('c2', 'all_t0')
+function: wait_min_max_stat_ready('c3', 'all_t0')
+function: wait_min_max_stat_ready('c4', 'all_t0')
+function: wait_min_max_stat_ready('c5', 'all_t0')
+function: wait_min_max_stat_ready('c6', 'all_t0')
+function: wait_min_max_stat_ready('c8', 'all_t0')
+
+select distinct c9,c10,c11,c12,c13,c14,c15,c16 from all_t0 order by 1,2,3,4,5,6,7,8 limit 100,3;
+function: wait_min_max_stat_ready('c11', 'all_t0')
+function: wait_min_max_stat_ready('c12', 'all_t0')
+function: wait_min_max_stat_ready('c13', 'all_t0')
+function: wait_min_max_stat_ready('c14', 'all_t0')
+function: wait_min_max_stat_ready('c15', 'all_t0')
+function: wait_min_max_stat_ready('c16', 'all_t0')
+
+select distinct c17,c18,c19,c20,c21,c22,c23,c24 from all_t0 order by 1,2,3,4,5,6,7,8 limit 100,3;
+function: wait_global_dict_ready('c20', 'all_t0')
+function: wait_min_max_stat_ready('c17', 'all_t0')
+function: wait_min_max_stat_ready('c18', 'all_t0')
+function: wait_min_max_stat_ready('c20', 'all_t0')
+function: wait_min_max_stat_ready('c14', 'all_t0')
+function: wait_min_max_stat_ready('c23', 'all_t0')
+function: wait_min_max_stat_ready('c24', 'all_t0')
+
+select c1, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3;
+select c1, c2, sum(c1) from all_t0 group by 1,2 order by 1,2,3 limit 3;
+
+-- any types
+select c2, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c3, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c4, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c5, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c6, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c7, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c8, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c9, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c13, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c14, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c14, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c16, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c17, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c18, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+select c19, sum(c1) from all_t0 group by 1 order by 1, 2 limit 3, 1;
+
+select c2, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c3, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c4, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c5, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c6, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c7, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c8, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c9, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c13, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c14, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c14, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c16, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c17, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c18, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+select c19, sum(c1) from all_t0 group by 1 order by 1 desc, 2 desc limit 1;
+
+select c3, c4, sum(c1) from all_t0 group by 1,2 order by 1, 2, 3 limit 30,1;
+select c3, c5, sum(c1) from all_t0 group by 1,2 order by 1, 2, 3 limit 30,1;
+select c3, c7, sum(c1) from all_t0 group by 1,2 order by 1, 2, 3 limit 30,1;
+
+select c1,c2,c3,c4,c5,c6,c8,sum(c1) from all_t0 group by 1,2,3,4,5,6,7 order by 1,2,3,4,5,6,7,8 limit 30, 1;
+select c1,c2,c3,c4,c5,c6,c8,c13,c14,c15,c16, sum(c1) from all_t0 group by 1,2,3,4,5,6,7,8,9,10,11 order by 1,2,3,4,5,6,7,8,9,10,11 limit 30, 1;
+select c1,c2,c3,c4,c5,c6,c8,c11,c12,c13,c14,c15,c16, sum(c1) from all_t0 group by 1,2,3,4,5,6,7,8,9,10,11,12,13 order by 1,2,3,4,5,6,7,8,9,10,11,12,13 limit 30,1;
+
+-- projection
+select c1,c2,c3,c4,c5,c6,c8, sum(c1) from all_t0 where c10 > 0 group by 1,2,3,4,5,6,7 order by 1,2,3,4,5,6,7,8 limit 1;
+
+-- decimals
+create table all_decimal (
+    c1 decimal(4,2),
+    c2 decimal(10,2),
+    c3 decimal(27,9),
+    c4 decimal(38,5)
+) DUPLICATE KEY(c1) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+insert into all_decimal SELECT x%100, x%200, x%200, x%200 FROM TABLE(generate_series(1,  30000)) as g(x);
+select distinct c1,c2,c3,c4 from all_decimal order by 1,2,3,4 limit 100,3;
+
+function: wait_min_max_stat_ready('c1', 'all_decimal')
+function: wait_min_max_stat_ready('c2', 'all_decimal')
+function: wait_min_max_stat_ready('c3', 'all_decimal')
+function: wait_min_max_stat_ready('c4', 'all_decimal')
+
+select c1, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
+select c2, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
+select c3, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
+select c4, sum(c1) from all_decimal group by 1 order by 1, 2 limit 1;
+
+select c1, c2, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c1, c3, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c1, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c2, c3, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c2, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c3, c4, sum(c1) from all_decimal group by 1,2 order by 1,2,3 limit 1;
+select c1, c2, c3, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+select c1, c2, c4, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+select c2, c3, c4, sum(c1) from all_decimal group by 1,2,3 order by 1,2,3,4 limit 1;
+select c1, c2, c3, c4, sum(c1) from all_decimal group by 1,2,3,4 order by 1,2,3,4,5 limit 1;
+
+-- int overflow
+create table all_numbers_t0 (
+    c1 tinyint,
+    c2 smallint,
+    c3 int,
+    c4 bigint,
+    c5 largeint,
+    c13 tinyint NOT NULL,
+    c14 smallint NOT NULL,
+    c15 int NOT NULL,
+    c16 bigint NOT NULL,
+    c17 largeint NOT NULL
+) DUPLICATE KEY(c1) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+
+insert into all_numbers_t0 (c1, c2, c3, c4, c5, c13, c14, c15, c16, c17) values (-128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728, -128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728);
+insert into all_numbers_t0 (c1, c2, c3, c4, c5, c13, c14, c15, c16, c17) values (0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+insert into all_numbers_t0 (c1, c2, c3, c4, c5, c13, c14, c15, c16, c17) values (null, null, null, null, null, 0, 0, 0, 0, 0);
+insert into all_numbers_t0 SELECT x%128, x%200, x%200, x%200, x%200, x%128, x%200, x%200, x%200, x%200 FROM TABLE(generate_series(1,  30000)) as g(x);
+select distinct c17,c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9,10 limit 30,1;
+
+function: wait_min_max_stat_ready('c1', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c2', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c3', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c4', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c5', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c13', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c14', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c15', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c16', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c17', 'all_numbers_t0')
+
+-- set enable_group_by_compressed_key = false;
+
+select distinct c1 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c2 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c3 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c4 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c5 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c13 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c14 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c15 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c16 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c17 from all_numbers_t0 order by 1 limit 30,1;
+
+select distinct c1 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c2,c1 from all_numbers_t0 order by 1,2 limit 30,1;
+select distinct c3,c2,c1 from all_numbers_t0 order by 1,2,3 limit 30,1;
+select distinct c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4 limit 30,1;
+select distinct c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5 limit 30,1;
+select distinct c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6 limit 30,1;
+select distinct c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7 limit 30,1;
+select distinct c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8 limit 30,1;
+select distinct c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9 limit 30,1;
+select distinct c17,c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9,10 limit 30,1;
+
+insert into all_numbers_t0 (c1, c2, c3, c4, c5, c13, c14, c15, c16, c17) values (127, 32767, 2147483647, 9223372036854775807, 170141183460469231731687303715884105727, 127, 32767, 2147483647, 9223372036854775807, 170141183460469231731687303715884105727);
+select distinct c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5 limit 30,1;
+function: wait_min_max_stat_ready('c1', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c2', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c3', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c4', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c5', 'all_numbers_t0')
+
+select distinct c17,c16,c15,c14,c13 from all_numbers_t0 order by 1,2,3,4,5 limit 30,1;
+function: wait_min_max_stat_ready('c13', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c14', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c15', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c16', 'all_numbers_t0') 
+function: wait_min_max_stat_ready('c17', 'all_numbers_t0')
+
+select distinct c1 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c2 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c3 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c4 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c5 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c13 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c14 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c15 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c16 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c17 from all_numbers_t0 order by 1 limit 30,1;
+
+select distinct c1 from all_numbers_t0 order by 1 limit 30,1;
+select distinct c2,c1 from all_numbers_t0 order by 1,2 limit 30,1;
+select distinct c3,c2,c1 from all_numbers_t0 order by 1,2,3 limit 30,1;
+select distinct c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4 limit 30,1;
+select distinct c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5 limit 30,1;
+select distinct c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6 limit 30,1;
+select distinct c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7 limit 30,1;
+select distinct c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8 limit 30,1;
+select distinct c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9 limit 30,1;
+select distinct c17,c16,c15,c14,c13,c5,c4,c3,c2,c1 from all_numbers_t0 order by 1,2,3,4,5,6,7,8,9,10 limit 30,1;
+
+select distinct c2,c1 from all_numbers_t0 where c2 = 7 order by 1,2 limit 1;
+
+-- test aggregate table
+CREATE TABLE agged_table (
+    k1 int,
+    k2 int sum 
+) 
+AGGREGATE KEY(k1)
+DISTRIBUTED BY HASH(k1)
+properties (
+    "replication_num" = "1"
+);
+insert into agged_table values(1,1);
+insert into agged_table values(1,2);
+insert into agged_table values(1,3);
+insert into agged_table values(1,4);
+select distinct k2 from agged_table;
+
+-- test random table insert
+
+CREATE TABLE trand (
+    k1 int,
+    k2 int
+) DUPLICATE KEY(k1)
+properties (
+    "replication_num" = "1"
+);
+insert into trand values(1,1);
+function: wait_min_max_stat_ready('k1', 'trand') 
+select k1 from trand group by k1;
+insert into trand values(2,2);
+function: wait_min_max_stat_ready('k1', 'trand') 
+select k1 from trand group by k1;
+
+create table all_t1 (
+    c1 tinyint,
+    c2 tinyint,
+    c3 tinyint,
+    c4 tinyint,
+    c5 smallint,
+    c6 smallint,
+    c7 smallint,
+    c8 smallint,
+    c9 int,
+    c10 int,
+    c11 int,
+    c12 int,
+    c13 bigint,
+    c14 bigint,
+    c15 bigint,
+    c16 bigint,
+    c17 largeint,
+    c18 largeint,
+    c19 largeint,
+    c20 largeint,
+    c21 date,
+    c22 date,
+    c23 date,
+    c24 date
+) DUPLICATE KEY(c1) DISTRIBUTED BY RANDOM PROPERTIES('replication_num' = '1');
+insert into all_t1 SELECT x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x FROM TABLE(generate_series(1,  300000)) as g(x);
+
+select distinct c1, c2, c3, c4, c5, c6, c7, c8 from all_t1 order by 1,2,3,4,5,6,7,8 desc limit 1;
+function: wait_min_max_stat_ready('c1','all_t1')
+function: wait_min_max_stat_ready('c2','all_t1')
+function: wait_min_max_stat_ready('c3','all_t1')
+function: wait_min_max_stat_ready('c4','all_t1')
+function: wait_min_max_stat_ready('c5','all_t1')
+function: wait_min_max_stat_ready('c6','all_t1')
+function: wait_min_max_stat_ready('c7','all_t1')
+function: wait_min_max_stat_ready('c8','all_t1')
+
+select distinct c9, c10, c11, c12, c13, c14, c15, c16 from all_t1 order by 1,2,3,4,5,6,7,8 desc limit 1;
+function: wait_min_max_stat_ready('c9','all_t1')
+function: wait_min_max_stat_ready('c10','all_t1')
+function: wait_min_max_stat_ready('c11','all_t1')
+function: wait_min_max_stat_ready('c12','all_t1')
+function: wait_min_max_stat_ready('c13','all_t1')
+function: wait_min_max_stat_ready('c14','all_t1')
+function: wait_min_max_stat_ready('c15','all_t1')
+function: wait_min_max_stat_ready('c16','all_t1')
+
+select distinct c17, c18, c19, c20, c21, c22, c23, c24 from all_t1 order by 1,2,3,4,5,6,7,8 desc limit 1;
+function: wait_min_max_stat_ready('c17','all_t1')
+function: wait_min_max_stat_ready('c18','all_t1')
+function: wait_min_max_stat_ready('c19','all_t1')
+function: wait_min_max_stat_ready('c20','all_t1')
+function: wait_min_max_stat_ready('c21','all_t1')
+function: wait_min_max_stat_ready('c22','all_t1')
+function: wait_min_max_stat_ready('c23','all_t1')
+function: wait_min_max_stat_ready('c24','all_t1')
+
+
+-- Test Case generated by AI
+
+set group_concat_max_len=65535;
+
+-- Test Case 1-24: GROUP BY on each column in all_t0
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_t0 GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 1' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+WITH result AS (
+    SELECT c2, COUNT(*) AS cnt FROM all_t0 GROUP BY c2 ORDER BY c2 LIMIT 100
+) SELECT 'Test Case 2' AS test_name, MD5(GROUP_CONCAT(CAST(c2 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Repeat for c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21, c22, c23, c24
+
+-- Test Case 25-28: GROUP BY on each column in all_decimal
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_decimal GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 25' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Repeat for c2, c3, c4
+
+-- Test Case 29-38: GROUP BY on each column in all_numbers_t0
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 29' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Repeat for c2, c3, c4, c5, c13, c14, c15, c16, c17
+
+-- Test Case 39: TINYINT, SMALLINT, INT
+WITH result AS (
+    SELECT c1, c2, c3, COUNT(*) AS cnt FROM all_t0 GROUP BY c1, c2, c3 ORDER BY c1, c2, c3 LIMIT 100
+) SELECT 'Test Case 39' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c2 AS STRING) || ':' || CAST(c3 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 40: DATE, DATETIME, STRING
+WITH result AS (
+    SELECT c6, c7, c8, COUNT(*) AS cnt FROM all_t0 GROUP BY c6, c7, c8 ORDER BY c6, c7, c8 LIMIT 100
+) SELECT 'Test Case 40' AS test_name, MD5(GROUP_CONCAT(CAST(c6 AS STRING) || ':' || CAST(c7 AS STRING) || ':' || c8 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 41: FLOAT, DOUBLE, CHAR
+-- unstable result
+-- WITH result AS (
+--     SELECT c11, c12, c22, COUNT(*) AS cnt FROM all_t0 GROUP BY c11, c12, c22 ORDER BY c11, c12, c22 LIMIT 100
+-- ) SELECT 'Test Case 41' AS test_name, MD5(GROUP_CONCAT(CAST(c11 AS STRING) || ':' || CAST(c12 AS STRING) || ':' || c22 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 42: NOT NULL columns
+WITH result AS (
+    SELECT c13, c14, c15, COUNT(*) AS cnt FROM all_t0 GROUP BY c13, c14, c15 ORDER BY c13, c14, c15 LIMIT 100
+) SELECT 'Test Case 42' AS test_name, MD5(GROUP_CONCAT(CAST(c13 AS STRING) || ':' || CAST(c14 AS STRING) || ':' || CAST(c15 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 51: High-cardinality STRING (all_t0)
+WITH result AS (
+    SELECT c9, COUNT(*) AS cnt FROM all_t0 GROUP BY c9 ORDER BY c9 LIMIT 100
+) SELECT 'Test Case 51' AS test_name, MD5(GROUP_CONCAT(c9 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 52: High-cardinality INT (all_t1)
+WITH result AS (
+    SELECT c9, COUNT(*) AS cnt FROM all_t1 GROUP BY c9 ORDER BY c9 LIMIT 1000
+) SELECT 'Test Case 52' AS test_name, MD5(GROUP_CONCAT(CAST(c9 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 53: Low-cardinality DATE NOT NULL (all_t0)
+WITH result AS (
+    SELECT c18, COUNT(*) AS cnt FROM all_t0 GROUP BY c18 ORDER BY c18 LIMIT 100
+) SELECT 'Test Case 53' AS test_name, MD5(GROUP_CONCAT(CAST(c18 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 54: Low-cardinality TINYINT NOT NULL (all_t0)
+WITH result AS (
+    SELECT c13, COUNT(*) AS cnt FROM all_t0 GROUP BY c13 ORDER BY c13 LIMIT 100
+) SELECT 'Test Case 54' AS test_name, MD5(GROUP_CONCAT(CAST(c13 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 55: Nullable TINYINT
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_t0 GROUP BY c1 ORDER BY c1 NULLS FIRST LIMIT 100
+) SELECT 'Test Case 55' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 56: Nullable LARGEINT
+WITH result AS (
+    SELECT c5, COUNT(*) AS cnt FROM all_t0 GROUP BY c5 ORDER BY c5 NULLS FIRST LIMIT 100
+) SELECT 'Test Case 56' AS test_name, MD5(GROUP_CONCAT(CAST(c5 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 57: Nullable columns in all_numbers_t0
+WITH result AS (
+    SELECT c1, c5, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY c1, c5 ORDER BY c1, c5 NULLS FIRST LIMIT 100
+) SELECT 'Test Case 57' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c5 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 58: Mixed nullable and NOT NULL
+WITH result AS (
+    SELECT c1, c13, COUNT(*) AS cnt FROM all_t0 GROUP BY c1, c13 ORDER BY c1, c13 NULLS FIRST LIMIT 100
+) SELECT 'Test Case 58' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c13 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+
+-- Test Case 59: ROLLUP on TINYINT, SMALLINT
+WITH result AS (
+    SELECT c1, c2, COUNT(*) AS cnt FROM all_t0 GROUP BY ROLLUP (c1, c2) ORDER BY 1,2,3 LIMIT 100
+) SELECT 'Test Case 59' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c2 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 60: CUBE on INT, DATE
+WITH result AS (
+    SELECT c3, c6, COUNT(*) AS cnt FROM all_t0 GROUP BY CUBE(c3, c6) ORDER BY 1,2,3 LIMIT 100
+) SELECT 'Test Case 60' AS test_name, MD5(GROUP_CONCAT(CAST(c3 AS STRING) || ':' || CAST(c6 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 61: ROLLUP on all_numbers_t0
+WITH result AS (
+    SELECT c13, c14, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY ROLLUP (c13, c14) ORDER BY 1,2,3 LIMIT 100
+) SELECT 'Test Case 61' AS test_name, MD5(GROUP_CONCAT(CAST(c13 AS STRING) || ':' || CAST(c14 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 62-85: Repeat Test Cases 1-24 with compressed key disabled
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_t0 GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 62' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Repeat for c2, c3, ..., c24 (Test Cases 63-85)
+
+
+-- Test Case 89: Empty groups
+WITH result AS (
+    SELECT c1, COUNT(*) AS cnt FROM all_t0 WHERE c1 > 200 GROUP BY c1 ORDER BY c1 LIMIT 100
+) SELECT 'Test Case 89' AS test_name, MD5('empty') AS result_hash FROM result LIMIT 1;
+
+-- Test Case 90: Small dataset (trand)
+WITH result AS (
+    SELECT k1, COUNT(*) AS cnt FROM trand GROUP BY k1 ORDER BY k1
+) SELECT 'Test Case 90' AS test_name, MD5(GROUP_CONCAT(CAST(k1 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 91: Colocate single column
+-- Test Case 92: Colocate multi-column
+
+-- Test Case 93: STRING with dictionary
+WITH result AS (
+    SELECT c8, COUNT(*) AS cnt FROM all_t0 GROUP BY c8 ORDER BY c8 LIMIT 100
+) SELECT 'Test Case 93' AS test_name, MD5(GROUP_CONCAT(c8 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 94: STRING NOT NULL with dictionary
+WITH result AS (
+    SELECT c20, COUNT(*) AS cnt FROM all_t0 GROUP BY c20 ORDER BY c20 LIMIT 100
+) SELECT 'Test Case 94' AS test_name, MD5(GROUP_CONCAT(c20 || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 95: all_t1 multi-column
+WITH result AS (
+    SELECT c1, c5, c9, c13, c17, COUNT(*) AS cnt FROM all_t1 GROUP BY c1, c5, c9, c13, c17 ORDER BY c1, c5, c9, c13, c17 LIMIT 1000
+) SELECT 'Test Case 95' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c5 AS STRING) || ':' || CAST(c9 AS STRING) || ':' || CAST(c13 AS STRING) || ':' || CAST(c17 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 96: all_numbers_t0 multi-column
+WITH result AS (
+    SELECT c1, c2, c3, c4, c5, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY c1, c2, c3, c4, c5 ORDER BY c1, c2, c3, c4, c5 LIMIT 100
+) SELECT 'Test Case 96' AS test_name, MD5(GROUP_CONCAT(CAST(c1 AS STRING) || ':' || CAST(c2 AS STRING) || ':' || CAST(c3 AS STRING) || ':' || CAST(c4 AS STRING) || ':' || CAST(c5 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;
+
+-- Test Case 97-100: Additional combinations
+WITH result AS (
+    SELECT c13, c14, c15, c16, c17, COUNT(*) AS cnt FROM all_numbers_t0 GROUP BY c13, c14, c15, c16, c17 ORDER BY c13, c14, c15, c16, c17 LIMIT 100
+) SELECT 'Test Case 97' AS test_name, MD5(GROUP_CONCAT(CAST(c13 AS STRING) || ':' || CAST(c14 AS STRING) || ':' || CAST(c15 AS STRING) || ':' || CAST(c16 AS STRING) || ':' || CAST(c17 AS STRING) || ':' || CAST(cnt AS STRING))) AS result_hash FROM result;

@@ -17,19 +17,24 @@ package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
+import com.starrocks.persist.AlterTaskInfo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -38,38 +43,47 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.history.TaskRunHistory;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
+import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.type.TypeFactory;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Iterator;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
-public class TaskManager {
+public class TaskManager implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(TaskManager.class);
 
@@ -78,21 +92,30 @@ public class TaskManager {
     private final Map<Long, Task> idToTaskMap;
     // taskName -> Task, include Manual Task, Periodical Task
     private final Map<String, Task> nameToTaskMap;
-    private final Map<Long, ScheduledFuture<?>> periodFutureMap;
+    // Package-private so same-package tests can assert the cleared-on-stop contract without
+    // reflection.
+    final Map<Long, ScheduledFuture<?>> periodFutureMap;
 
     // include PENDING/RUNNING taskRun;
     private final TaskRunManager taskRunManager;
+    private final TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
 
     // The periodScheduler is used to generate the corresponding TaskRun on time for the Periodical Task.
     // This scheduler can use the time wheel to optimize later.
-    private final ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
+    //
+    // Not final: rebuilt by start() if a previous stop() shut it down so this manager is
+    // reusable across leader demotion / re-election cycles.
+    // Package-private so same-package tests can assert / swap pool state without reflection.
+    volatile ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
 
     // The dispatchTaskScheduler is responsible for periodically checking whether the running TaskRun is completed
     // and updating the status. It is also responsible for placing pending TaskRun in the running TaskRun queue.
     // This operation need to consider concurrency.
     // This scheduler can use notify/wait to optimize later.
-    private final ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
-
+    //
+    // Not final: same rebuild-on-restart contract as periodScheduler.
+    // Package-private for same reasons as periodScheduler above.
+    volatile ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
     // Use to concurrency control
     private final QueryableReentrantLock taskLock;
 
@@ -102,16 +125,32 @@ public class TaskManager {
         idToTaskMap = Maps.newConcurrentMap();
         nameToTaskMap = Maps.newConcurrentMap();
         periodFutureMap = Maps.newConcurrentMap();
-        taskRunManager = new TaskRunManager();
+        taskRunManager = new TaskRunManager(taskRunScheduler);
         taskLock = new QueryableReentrantLock(true);
     }
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
+            // The re-activation cleanliness gate (GlobalStateMgr.assertLeaderSessionQuiescedOrExit)
+            // verifies both schedulers terminated before start() runs, so there is no restart guard
+            // here. Rebuild both schedulers if a previous stop() shut them down. periodScheduler also
+            // needs a fresh pool so the futures kept by periodFutureMap (which we cleared in
+            // stop()) cannot reference cancelled futures from the previous leader session.
+            if (periodScheduler.isShutdown()) {
+                periodScheduler = Executors.newScheduledThreadPool(1);
+            }
+            if (dispatchScheduler.isShutdown()) {
+                dispatchScheduler = Executors.newScheduledThreadPool(1);
+            }
+            taskRunManager.getTaskRunExecutor().rebuildIfShutdown();
             clearUnfinishedTaskRun();
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
+                if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                    return;
+                }
                 if (!taskRunManager.tryTaskRunLock()) {
+                    LOG.warn("TaskRun scheduler cannot acquire the lock");
                     return;
                 }
                 try {
@@ -126,8 +165,92 @@ public class TaskManager {
         }
     }
 
+    /**
+     * Non-blocking equivalent of {@link #stop(long)}: shuts down both schedulers without
+     * waiting for in-flight TaskRun checks to actually exit. Prefer {@link #stop(long)} on
+     * the leader demotion drain path so a re-elected leader does not race the old
+     * scheduler generation.
+     */
+    public void stop() {
+        stop(0L);
+    }
+
+    /**
+     * Fire-and-forget stop for leader demotion. TaskManager owns two ScheduledExecutorService
+     * instances and is not a LeaderDaemon (its dispatch loop runs inside the executor with an
+     * embedded leader check), so it has no worker to self-clean; demotion calls {@code stop(0)}
+     * as the equivalent of a daemon's {@link LeaderDaemon#stopBestEffort()}.
+     *
+     * shutdownNow() interrupts in-flight TaskRun checks so they exit promptly even if blocked in
+     * metadata locks. Demotion does not wait for the pools to drain; if a straggler dispatch
+     * iteration outlives demotion, {@link #schedulersStoppedButNotTerminated()} reports it to the
+     * re-activation cleanliness gate, which restarts the process on re-election rather than let a
+     * fresh scheduler from the next {@link #start()} overlap the still-running old generation. The
+     * {@code timeoutMs > 0} path performs a bounded synchronous drain for callers that want one.
+     *
+     * @param timeoutMs maximum time to wait for both schedulers to drain, in milliseconds. Zero
+     *                  or negative means do not wait (the demotion path). The budget is split
+     *                  across the three pools.
+     */
+    public void stop(long timeoutMs) {
+        if (!isStart.compareAndSet(true, false)) {
+            return;
+        }
+        // Cancel periodic futures so a re-registered task on the next leader does not race
+        // a still-firing future against the new periodScheduler.
+        for (ScheduledFuture<?> future : periodFutureMap.values()) {
+            try {
+                future.cancel(true);
+            } catch (Throwable t) {
+                LOG.warn("cancel periodic task future failed", t);
+            }
+        }
+        periodFutureMap.clear();
+        periodScheduler.shutdownNow();
+        dispatchScheduler.shutdownNow();
+        // Stop the task-run pool like every other leader-session pool: shutdownNow interrupts in-flight
+        // MV-refresh / INSERT task runs (their transactions abort) so a previous term's run cannot race
+        // the next leader's re-driven run of the same task or rewrite the archived status object that
+        // clearUnfinishedTaskRun journals as FAILED on re-election.
+        taskRunManager.getTaskRunExecutor().shutdownNow();
+        if (timeoutMs > 0L) {
+            long deadline = System.currentTimeMillis() + timeoutMs;
+            try {
+                long remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!periodScheduler.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("TaskManager periodScheduler did not terminate within drain timeout");
+                }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!dispatchScheduler.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("TaskManager dispatchScheduler did not terminate within drain timeout");
+                }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!taskRunManager.getTaskRunExecutor().awaitTermination(remaining)) {
+                    LOG.warn("TaskManager taskRunPool did not terminate within drain timeout");
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for TaskManager schedulers to terminate");
+            }
+        }
+    }
+
+    /**
+     * Whether any leader-session pool was shut down by a previous demotion but has not finished
+     * terminating - i.e. a straggler from the previous leader session is still running. Read by the
+     * re-activation cleanliness gate (TaskManager is not a LeaderDaemon, so it has no isRunning to
+     * cover its pools); a fresh/running pool is not shut down and so is not a straggler. Covers the
+     * two schedulers AND the task-run pool: an MV-refresh / INSERT task run surviving demotion would
+     * race the next leader's re-driven run of the same task and mutate the archived status object
+     * that clearUnfinishedTaskRun already journaled as FAILED.
+     */
+    public boolean schedulersStoppedButNotTerminated() {
+        return (periodScheduler.isShutdown() && !periodScheduler.isTerminated())
+                || (dispatchScheduler.isShutdown() && !dispatchScheduler.isTerminated())
+                || taskRunManager.getTaskRunExecutor().stoppedButNotTerminated();
+    }
+
     private void registerPeriodicalTask() {
-        LocalDateTime scheduleTime = LocalDateTime.now();
         for (Task task : nameToTaskMap.values()) {
             if (task.getType() != Constants.TaskType.PERIODICAL) {
                 continue;
@@ -141,112 +264,122 @@ public class TaskManager {
             if (taskSchedule == null) {
                 continue;
             }
-            long period = TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
-                    taskSchedule.getTimeUnit());
-            LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
-            long initialDelay = getInitialDelayTime(period, startTime, scheduleTime);
-            // Tasks that run automatically have the lowest priority,
-            // but are automatically merged if they are found to be merge-able.
-            ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
-                    true, task.getProperties());
-            ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                            executeTask(task.getName(), option), initialDelay,
-                    period, TimeUnit.SECONDS);
-            periodFutureMap.put(task.getId(), future);
-            scheduleTime = scheduleTime.plusSeconds(5);
+            registerScheduler(task);
         }
     }
 
-    @VisibleForTesting
-    static long getInitialDelayTime(long period, LocalDateTime startTime, LocalDateTime scheduleTime) {
-        Duration duration = Duration.between(scheduleTime, startTime);
-        long initialDelay = duration.getSeconds();
-        // if startTime < now, start scheduling from the next period
-        if (initialDelay < 0) {
-            return ((initialDelay % period) + period) % period;
-        } else {
-            return initialDelay;
-        }
-    }
-
-    private void clearUnfinishedTaskRun() {
+    protected void clearUnfinishedTaskRun() {
         if (!taskRunManager.tryTaskRunLock()) {
             return;
         }
         try {
-            Iterator<Long> pendingIter = taskRunManager.getPendingTaskRunMap().keySet().iterator();
-            while (pendingIter.hasNext()) {
-                Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().get(pendingIter.next());
-                while (!taskRuns.isEmpty()) {
-                    TaskRun taskRun = taskRuns.poll();
-                    taskRun.getStatus().setErrorMessage("Fe abort the task");
-                    taskRun.getStatus().setErrorCode(-1);
+            // clear pending task runs
+            List<TaskRun> taskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
+            for (TaskRun taskRun : taskRuns) {
+                final String errorMsg = "Fe abort the task";
+                final int errorCode = -1;
+
+                TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
+                        Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
+                statusChange.setErrorMessage(errorMsg);
+                statusChange.setErrorCode(errorCode);
+
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+                    taskRun.getStatus().setErrorMessage(errorMsg);
+                    taskRun.getStatus().setErrorCode(errorCode);
                     taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
+
                     taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
-                            Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
-                }
-                pendingIter.remove();
+                    // remove pending task run
+                    taskRunScheduler.removePendingTaskRun(taskRun, Constants.TaskRunState.FAILED);
+                });
             }
-            Iterator<Long> runningIter = taskRunManager.getRunningTaskRunMap().keySet().iterator();
-            while (runningIter.hasNext()) {
-                TaskRun taskRun = taskRunManager.getRunningTaskRunMap().get(runningIter.next());
-                taskRun.getStatus().setErrorMessage("Fe abort the task");
-                taskRun.getStatus().setErrorCode(-1);
-                taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
-                taskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                runningIter.remove();
-                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+
+            // clear running task runs
+            Set<Long> runningTaskIds = taskRunScheduler.getCopiedRunningTaskIds();
+            for (Long taskId : runningTaskIds) {
+                final String errorMsg = "Fe abort the task";
+                final int errorCode = -1;
+                final long finishTime = System.currentTimeMillis();
+
+                TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                statusChange.setErrorCode(errorCode);
+                statusChange.setErrorMessage(errorMsg);
+                statusChange.setFinishTime(finishTime);
+
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+                    taskRun.getStatus().setErrorMessage(errorMsg);
+                    taskRun.getStatus().setErrorCode(errorCode);
+                    taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
+                    taskRun.getStatus().setFinishTime(finishTime);
+
+                    taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+                    // remove running task run
+                    taskRunScheduler.removeRunningTask(taskId);
+                });
+
             }
         } finally {
             taskRunManager.taskRunUnlock();
         }
     }
 
-    public void createTask(Task task, boolean isReplay) throws DdlException {
-        if (!tryTaskLock()) {
-            throw new DdlException("Failed to get task lock when create Task [" + task.getName() + "]");
-        }
+    public void createTask(Task task) throws DdlException {
+        takeTaskLock();
         try {
             if (nameToTaskMap.containsKey(task.getName())) {
                 throw new DdlException("Task [" + task.getName() + "] already exists");
             }
-            if (!isReplay) {
-                // TaskId should be assigned by the framework
-                Preconditions.checkArgument(task.getId() == 0);
-                task.setId(GlobalStateMgr.getCurrentState().getNextId());
-            }
+
+            // TaskId should be assigned by the framework
+            Preconditions.checkArgument(task.getId() == 0, "TaskId should be assigned by the framework");
+            task.setId(GlobalStateMgr.getCurrentState().getNextId());
+
             if (task.getType() == Constants.TaskType.PERIODICAL) {
                 task.setState(Constants.TaskState.ACTIVE);
-                if (!isReplay) {
-                    TaskSchedule schedule = task.getSchedule();
-                    if (schedule == null) {
-                        throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
-                    }
-                    registerScheduler(task);
+                TaskSchedule schedule = task.getSchedule();
+                if (schedule == null) {
+                    throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
                 }
             }
-            nameToTaskMap.put(task.getName(), task);
-            idToTaskMap.put(task.getId(), task);
-            if (!isReplay) {
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateTask(task);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateTask(task, wal -> addTask((Task) wal));
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                registerScheduler(task);
             }
         } finally {
             taskUnlock();
         }
     }
 
+    private void addTask(Task task) {
+        nameToTaskMap.put(task.getName(), task);
+        idToTaskMap.put(task.getId(), task);
+    }
+
+    public void replayCreateTask(Task task) {
+        if (task.getType() == Constants.TaskType.PERIODICAL) {
+            TaskSchedule taskSchedule = task.getSchedule();
+            Preconditions.checkState(taskSchedule != null,
+                    "TaskSchedule cannot be null for periodical task");
+        }
+        if (task.getExpireTime() > 0 && System.currentTimeMillis() > task.getExpireTime()) {
+            return;
+        }
+        takeTaskLock();
+        try {
+            addTask(task);
+        } finally {
+            taskUnlock();
+        }
+    }
+
     private boolean stopScheduler(String taskName) {
+        LOG.info("stop scheduler for task [{}]", taskName);
         Task task = nameToTaskMap.get(taskName);
         if (task.getType() != Constants.TaskType.PERIODICAL) {
             return false;
-        }
-        if (task.getState() == Constants.TaskState.PAUSE) {
-            return true;
         }
         TaskSchedule taskSchedule = task.getSchedule();
         // this will not happen
@@ -266,28 +399,35 @@ public class TaskManager {
         return isCancel;
     }
 
-    public boolean killTask(String taskName, boolean clearPending) {
+    public boolean killTask(String taskName, boolean force) {
         Task task = nameToTaskMap.get(taskName);
         if (task == null) {
             return false;
         }
-        if (clearPending) {
-            if (!taskRunManager.tryTaskRunLock()) {
-                return false;
-            }
+        if (!taskRunManager.tryTaskRunLock()) {
+            return false;
+        }
+        try {
             try {
-                taskRunManager.getPendingTaskRunMap().remove(task.getId());
+                taskRunScheduler.removePendingTask(task);
             } catch (Exception ex) {
                 LOG.warn("failed to kill task.", ex);
-            } finally {
-                taskRunManager.taskRunUnlock();
             }
+            taskRunManager.killTaskRun(task.getId(), force, "killed by DROP TASK or manual cancel");
+        } finally {
+            taskRunManager.taskRunUnlock();
         }
-        return taskRunManager.killTaskRun(task.getId());
+        return true;
     }
 
     public SubmitResult executeTask(String taskName) {
-        return executeTask(taskName, new ExecuteOption());
+        Task task = getTask(taskName);
+        if (task == null) {
+            return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
+        }
+        ExecuteOption option = new ExecuteOption(task);
+        option.setManual(true);
+        return executeTask(taskName, option);
     }
 
     public SubmitResult executeTask(String taskName, ExecuteOption option) {
@@ -295,6 +435,8 @@ public class TaskManager {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
+        // set the last schedule time
+        task.setLastScheduleTime(TimeUtils.getEpochSeconds());
         if (option.getIsSync()) {
             return executeTaskSync(task, option);
         } else {
@@ -302,9 +444,8 @@ public class TaskManager {
         }
     }
 
-    // for test
     public SubmitResult executeTaskSync(Task task) {
-        return executeTaskSync(task, new ExecuteOption());
+        return executeTaskSync(task, new ExecuteOption(task));
     }
 
     public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
@@ -316,7 +457,7 @@ public class TaskManager {
         try {
             taskRun = TaskRunBuilder.newBuilder(task)
                     .properties(option.getTaskRunProperties())
-                    .type(option)
+                    .setExecuteOption(option)
                     .setConnectContext(ConnectContext.get()).build();
             submitResult = taskRunManager.submitTaskRun(taskRun, option);
             if (submitResult.getStatus() != SUBMITTED) {
@@ -325,29 +466,293 @@ public class TaskManager {
         } finally {
             taskUnlock();
         }
+
         try {
+            taskRunScheduler.addSyncRunningTaskRun(taskRun);
             Constants.TaskRunState taskRunState = taskRun.getFuture().get();
-            if (taskRunState != Constants.TaskRunState.SUCCESS) {
-                throw new DmlException("execute task: %s failed. task source:%s, task run state:%s",
-                        task.getName(), task.getSource(), taskRunState);
+            if (!taskRunState.isSuccessState()) {
+                String msg = taskRun.getStatus().getErrorMessage();
+                throw new DmlException("execute task %s failed: %s", task.getName(), msg);
             }
             return submitResult;
+        } catch (InterruptedException | ExecutionException e) {
+            Throwable rootCause = e.getCause();
+            throw new DmlException("execute task %s failed: %s", rootCause, task.getName(), rootCause.getMessage());
         } catch (Exception e) {
-            throw new DmlException("execute task: %s failed.", e, task.getName());
+            throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
+        } finally {
+            taskRunScheduler.removeSyncRunningTaskRun(taskRun);
+        }
+    }
+
+    /**
+     * Get the MV refresh plan explain result for the given task.
+     */
+    public String getMVRefreshExplain(Task task, ExecuteOption option, StatementBase statement) {
+        if (statement == null || !statement.isExplain()) {
+            return null;
+        }
+        TaskRun taskRun = buildTaskRun(task, option);
+        MVRefreshProcessor.ProcessExecPlan processExecPlan =
+                getMVRefreshProcessExecPlan(taskRun, task, option, statement);
+        ExecPlan execPlan = processExecPlan == null ? null : processExecPlan.execPlan();
+        String explainString = StmtExecutor.buildExplainString(execPlan, statement,
+                ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
+        if (execPlan == null) {
+            // A planning failure never lands here -- it propagates as DmlException.
+            if (!explainString.endsWith("\n")) {
+                // TRACE TIMES/LOGS output ends without a trailing newline.
+                explainString += "\n";
+            }
+            explainString += noRefreshPlanMessage(processExecPlan) + "\n";
+        }
+        // add extra info
+        String extraInfo = getExtraExplainInfo(taskRun, statement);
+        if (!Strings.isNullOrEmpty(extraInfo)) {
+            explainString += "\n" + extraInfo;
+        }
+        return explainString;
+    }
+
+    private static String noRefreshPlanMessage(MVRefreshProcessor.ProcessExecPlan processExecPlan) {
+        MVRefreshProcessor.ProcessExecPlan.SkipReason skipReason =
+                processExecPlan == null ? null : processExecPlan.skipReason();
+        if (skipReason == null) {
+            return "REFRESH SKIPPED: no refresh plan was produced";
+        }
+        // Exhaustive on purpose: a new SkipReason must not silently inherit an "up to date" claim.
+        return switch (skipReason) {
+            case MV_UP_TO_DATE -> "NO REFRESH NEEDED: the materialized view is already up to date";
+            case SCOPE_UP_TO_DATE -> "NO REFRESH NEEDED: the requested partitions are already up to date, "
+                    + "other partitions of the materialized view may still be stale";
+            case STALE_PINNED_BATCH -> "REFRESH SKIPPED: another refresh job owns the pinned partition ranges";
+        };
+    }
+
+    public TaskRun buildTaskRun(Task task, ExecuteOption option) {
+        return TaskRunBuilder.newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .setConnectContext(ConnectContext.get()).build();
+    }
+
+    private String getExtraExplainInfo(TaskRun taskRun,
+                                       StatementBase statement) {
+        TaskRunProcessor taskRunProcessor = taskRun.getProcessor();
+        if (taskRunProcessor == null) {
+            return "";
+        }
+        try {
+            if (taskRunProcessor instanceof MVTaskRunProcessor) {
+                MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+                return mvRefreshProcessor.getExtraExplainInfo(statement);
+            } else {
+                return "";
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to get getExtraExplainInfo:", e);
+            return "";
+        }
+    }
+
+    /**
+     * Get the MV refresh execution plan for the given task.
+     */
+    public MVRefreshProcessor.ProcessExecPlan getMVRefreshProcessExecPlan(TaskRun taskRun, Task task,
+                                                                          ExecuteOption option,
+                                                                          StatementBase statement) {
+        if (statement == null || !statement.isExplain()) {
+            return null;
+        }
+        // init task run
+        String queryId = UUIDUtil.genUUID().toString();
+        TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
+        status.setPriority(option.getPriority());
+        status.setMergeRedundant(option.isMergeRedundant());
+        status.setProperties(option.getTaskRunProperties());
+
+        TaskRunProcessor processor = taskRun.getProcessor();
+        if (processor == null || !(processor instanceof MVTaskRunProcessor)) {
+            throw new DmlException("Explain can only support MVTaskRunProcessor: " + task.getName());
+        }
+        MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) processor;
+        TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
+        try {
+            // prepare the task run context
+            taskRunContext = mvRefreshProcessor.prepare(taskRunContext);
+            // execute the task run
+            return mvRefreshProcessor.getMVRefreshProcessExecPlan();
+        } catch (Exception e) {
+            LOG.warn("Failed to get MV refresh explain for task: {}", task.getName(), e);
+            throw new DmlException("Failed to get MV refresh explain for task: %s, error: %s", e,
+                    task.getName(), e.getMessage());
         }
     }
 
     public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
-        return taskRunManager
-                .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).type(option).
-                        build(), option);
+        TaskRun taskRun = TaskRunBuilder
+                .newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .build();
+        return taskRunManager.submitTaskRun(taskRun, option);
     }
 
-    public void dropTasks(List<Long> taskIdList, boolean isReplay) {
-        // keep nameToTaskMap and manualTaskMap consist
-        if (!tryTaskLock()) {
+    /**
+     * Suspend a task, which will stop the task scheduler and kill the running task run.
+     * NOTE: this method will write edit log.
+     */
+    public void suspendTask(Task task, boolean isReplay) {
+        if (task == null) {
             return;
         }
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE),
+                    wal -> task.setState(Constants.TaskState.PAUSE)
+            );
+        }
+        suspendTaskInternal(task);
+    }
+
+    /**
+     * Internal method to suspend a task without writing edit log.
+     */
+    private void suspendTaskInternal(Task task) {
+        if (task == null) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when suspend Task sync[" + task.getName() + "]");
+        }
+        try {
+            task.setState(Constants.TaskState.PAUSE);
+            // stop task scheduler
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                boolean isCancel = stopScheduler(task.getName());
+                if (!isCancel) {
+                    LOG.warn("stop scheduler failed for task [{}]", task.getName());
+                }
+            }
+
+            // kill running task run
+            if (!killTask(task.getName(), true)) {
+                LOG.warn("kill task failed: {}", task.getName());
+            }
+            // remove task from scheduler
+            periodFutureMap.remove(task.getId());
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Resume a task, which will restart the task scheduler if the task is periodical.
+     * NOTE: this method will write edit log.
+     */
+    public void resumeTask(Task task, boolean isReplay) {
+        if (task == null) {
+            return;
+        }
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.ACTIVE),
+                    wal -> task.setState(Constants.TaskState.ACTIVE)
+            );
+        }
+        resumeTaskInternal(task);
+    }
+
+    /**
+     * Internal method to resume a task without writing edit log.
+     */
+    private void resumeTaskInternal(Task task) {
+        if (task == null) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when resume Task sync[" + task.getName() + "]");
+        }
+        try {
+            task.setState(Constants.TaskState.ACTIVE);
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                TaskSchedule schedule = task.getSchedule();
+                if (schedule != null) {
+                    registerScheduler(task);
+                }
+            }
+            // reset consecutive failure number
+            task.resetConsecutiveFailCount();
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Update task properties for subsequent executions.
+     * NOTE: this method will write edit log.
+     */
+    public void updateTaskProperties(Task task, Map<String, String> properties) {
+        if (task == null || properties == null || properties.isEmpty()) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                new AlterTaskInfo(task.getName(), properties),
+                wal -> {
+                    Map<String, String> current = task.getProperties();
+                    if (current == null) {
+                        current = Maps.newHashMap();
+                        task.setProperties(current);
+                    }
+                    current.putAll(properties);
+                }
+        );
+        updateTaskPropertiesInternal(task, properties);
+    }
+
+    /**
+     * Internal method to update task properties without writing edit log.
+     */
+    private void updateTaskPropertiesInternal(Task task, Map<String, String> properties) {
+        if (task == null || properties == null || properties.isEmpty()) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when update Task properties[" + task.getName() + "]");
+        }
+        try {
+            Map<String, String> current = task.getProperties();
+            if (current == null) {
+                current = Maps.newHashMap();
+                task.setProperties(current);
+            }
+            current.putAll(properties);
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Remove a property from the task's properties map.
+     * This method is thread-safe and acquires the task lock before modifying the properties.
+     */
+    public void removeTaskProperty(Task task, String propertyKey) {
+        if (task == null || propertyKey == null) {
+            return;
+        }
+        takeTaskLock();
+        try {
+            Map<String, String> current = task.getProperties();
+            if (current != null) {
+                current.remove(propertyKey);
+            }
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    public void dropTasks(List<Long> taskIdList) {
+        takeTaskLock();
         try {
             for (long taskId : taskIdList) {
                 Task task = idToTaskMap.get(taskId);
@@ -355,46 +760,72 @@ public class TaskManager {
                     LOG.warn("drop taskId {} failed because task is null", taskId);
                     continue;
                 }
-                if (task.getType() == Constants.TaskType.PERIODICAL && !isReplay) {
+                if (task.getType() == Constants.TaskType.PERIODICAL) {
                     boolean isCancel = stopScheduler(task.getName());
                     if (!isCancel) {
                         continue;
                     }
                     periodFutureMap.remove(task.getId());
                 }
-                if (!killTask(task.getName(), true)) {
-                    LOG.error("kill task failed: " + task.getName());
-                }
-                idToTaskMap.remove(task.getId());
-                nameToTaskMap.remove(task.getName());
             }
 
-            if (!isReplay) {
-                GlobalStateMgr.getCurrentState().getEditLog().logDropTasks(taskIdList);
-            }
+            GlobalStateMgr.getCurrentState().getEditLog().logDropTasks(new DropTasksLog(taskIdList),
+                    wal -> killAndDeleteTasks(((DropTasksLog) wal).getTaskIdList()));
         } finally {
             taskUnlock();
         }
         LOG.info("drop tasks:{}", taskIdList);
     }
 
-    public List<Task> showTasks(String dbName) {
-        List<Task> taskList = Lists.newArrayList();
-        if (dbName == null) {
-            taskList.addAll(nameToTaskMap.values());
-        } else {
-            for (Map.Entry<String, Task> entry : nameToTaskMap.entrySet()) {
-                Task task = entry.getValue();
-
-                if (task.getDbName() != null && task.getDbName().equals(dbName)) {
-                    taskList.add(task);
-                }
+    private void killAndDeleteTasks(List<Long> taskIdList) {
+        for (long taskId : taskIdList) {
+            Task task = idToTaskMap.get(taskId);
+            if (task == null) {
+                LOG.warn("delete taskId {} failed because task is null", taskId);
+                continue;
             }
+
+            if (!killTask(task.getName(), true)) {
+                LOG.warn("kill task failed: {}", task.getName());
+            }
+            idToTaskMap.remove(task.getId());
+            nameToTaskMap.remove(task.getName());
         }
+    }
+
+    public void replayDropTasks(List<Long> taskIdList) {
+        takeTaskLock();
+        try {
+            killAndDeleteTasks(taskIdList);
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    private boolean isTaskMatched(Task task, TGetTasksParams params) {
+        if (params == null) {
+            return true;
+        }
+        String dbName = params.db;
+        if (dbName != null && !dbName.equals(task.getDbName())) {
+            return false;
+        }
+        String taskName = params.task_name;
+        if (taskName != null && !taskName.equalsIgnoreCase(task.getName())) {
+            return false;
+        }
+        return true;
+    }
+
+    public List<Task> filterTasks(TGetTasksParams params) {
+        List<Task> taskList = Lists.newArrayList();
+        nameToTaskMap.values().stream()
+                .filter(t -> isTaskMatched(t, params))
+                .forEach(taskList::add);
         return taskList;
     }
 
-    public void alterTask(Task currentTask, Task changedTask, boolean isReplay) {
+    public void alterTask(Task currentTask, Task changedTask) {
         Constants.TaskType currentType = currentTask.getType();
         Constants.TaskType changedType = changedTask.getType();
         boolean hasChanged = false;
@@ -407,52 +838,154 @@ public class TaskManager {
                 hasChanged = true;
             }
         } else if (currentTask.getType() == Constants.TaskType.PERIODICAL) {
-            if (!isReplay) {
-                boolean isCancel = stopScheduler(currentTask.getName());
-                if (!isCancel) {
-                    throw new RuntimeException("stop scheduler failed");
-                }
+            boolean isCancel = stopScheduler(currentTask.getName());
+            if (!isCancel) {
+                throw new RuntimeException("stop scheduler failed");
             }
-            periodFutureMap.remove(currentTask.getId());
-            currentTask.setState(Constants.TaskState.UNKNOWN);
-            currentTask.setSchedule(null);
             hasChanged = true;
         }
 
         if (changedType == Constants.TaskType.PERIODICAL) {
-            currentTask.setState(Constants.TaskState.ACTIVE);
-            TaskSchedule schedule = changedTask.getSchedule();
-            currentTask.setSchedule(schedule);
-            if (!isReplay) {
-                registerScheduler(currentTask);
-            }
             hasChanged = true;
         }
 
         if (hasChanged) {
-            currentTask.setType(changedTask.getType());
-            if (!isReplay) {
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(changedTask);
+            // Log first to ensure durability, then apply in-memory changes.
+            // The WAL callback applies the same change on followers during replay.
+            // This ensures atomicity: if logging fails, no in-memory changes are made.
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(currentTask.getName(), changedType, changedTask.getSchedule()),
+                    wal -> {
+                        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) wal;
+                        changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+                    }
+            );
+            // Apply in-memory change after successful logging
+            changeTask(currentTask, changedType, changedTask.getSchedule());
+            if (changedType == Constants.TaskType.PERIODICAL) {
+                registerScheduler(currentTask);
             }
         }
     }
 
-    private void registerScheduler(Task task) {
-        TaskSchedule schedule = task.getSchedule();
-        LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
-        long initialDelay = getInitialDelayTime(schedule.getPeriod(), startTime, LocalDateTime.now());
-        // this operation should only run in master
-        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
-        ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                        executeTask(task.getName(), option), initialDelay,
-                TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
-                TimeUnit.SECONDS);
-        periodFutureMap.put(task.getId(), future);
+    private void changeTask(Task currentTask, Constants.TaskType changedType, TaskSchedule changedSchedule) {
+        if (currentTask.getType() == Constants.TaskType.PERIODICAL) {
+            periodFutureMap.remove(currentTask.getId());
+            currentTask.setState(Constants.TaskState.UNKNOWN);
+            currentTask.setSchedule(null);
+        }
+        if (changedType == Constants.TaskType.PERIODICAL) {
+            currentTask.setState(Constants.TaskState.ACTIVE);
+            currentTask.setSchedule(changedSchedule);
+        }
+        currentTask.setType(changedType);
     }
 
-    public void replayAlterTask(Task task) {
-        Task currentTask = getTask(task.getName());
-        alterTask(currentTask, task, true);
+    public void replayAlterTask(AlterTaskInfo alterTaskInfo) {
+        Task currentTask = getTask(alterTaskInfo.getName());
+        // Handle task type change (existing logic)
+        if (alterTaskInfo.getType() != null) {
+            changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+        }
+        // Handle task state change (suspend/resume)
+        if (alterTaskInfo.getState() != null) {
+            currentTask.setState(alterTaskInfo.getState());
+        }
+        // Handle properties update
+        if (alterTaskInfo.getProperties() != null) {
+            Map<String, String> current = currentTask.getProperties();
+            if (current == null) {
+                current = Maps.newHashMap();
+                currentTask.setProperties(current);
+            }
+            current.putAll(alterTaskInfo.getProperties());
+        }
+    }
+
+    @VisibleForTesting
+    static long getInitialDelayTime(long periodSeconds,
+                                    LocalDateTime taskStartTime,
+                                    LocalDateTime currentDateTime) {
+        if  (currentDateTime == null || taskStartTime == null) {
+            return 0;
+        }
+        Duration duration = Duration.between(currentDateTime, taskStartTime);
+        long initialDelay = duration.getSeconds();
+        // if startTime < now, start scheduling from the next period
+        if (initialDelay < 0) {
+            // if schedule time is not a complete second, add extra 1 second to avoid less than expect scheduler time.
+            // eg:
+            //  Register scheduler, task:mv-271809, initialDay:22, periodSeconds:60, startTime:2023-12-29T17:50,
+            //  scheduleTime:2024-01-30T15:27:37.342356010
+            // Before:schedule at : Hour:MINUTE:59
+            // After: schedule at : HOUR:MINUTE:00
+            int extra = currentDateTime.getNano() > 0 ? 1 : 0;
+            return ((initialDelay % periodSeconds) + periodSeconds + extra) % periodSeconds;
+        } else {
+            return initialDelay;
+        }
+    }
+
+    @VisibleForTesting
+    void registerScheduler(Task task) {
+        if (task.getType() != Constants.TaskType.PERIODICAL) {
+            return;
+        }
+
+        TaskSchedule schedule = task.getSchedule();
+        LocalDateTime taskStartTime = Utils.getDatetimeFromLong(schedule.getStartTime());
+        LocalDateTime currentDateTime = LocalDateTime.now();
+
+        LocalDateTime lastScheduleTime = null;
+        if (task.getLastScheduleTime() > 0) {
+            try {
+                lastScheduleTime = Utils.getDatetimeFromLong(task.getLastScheduleTime());
+            } catch (Exception e) {
+                LOG.warn("failed to parse last schedule time: {}", task.getLastScheduleTime(), e);
+            }
+        }
+        long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit());
+        // if fe restarts frequently, use currentDateTime and taskStartTime can always generate a time of the future
+        // which can cause the task never to be scheduled.
+        // so use lastScheduleTime to check if the last schedule + period is before current time to avoid this.
+        if (lastScheduleTime != null
+                && Constants.TaskSource.MV.equals(task.getSource())
+                && lastScheduleTime.isAfter(taskStartTime)
+                && lastScheduleTime.plusSeconds(periodSeconds).isBefore(currentDateTime)) {
+            // if the last schedule time + period is before current time, trigger immediately
+            LOG.info("After FE restarts, trigger periodical task immediately, task:{}, lastScheduleTime:{}, " +
+                            "periodSeconds:{}, taskStartTime:{}, currentTime:{}", task.getName(),
+                    lastScheduleTime, periodSeconds, taskStartTime, currentDateTime);
+            try {
+                task.setLastScheduleTime(TimeUtils.getEpochSeconds());
+                SubmitResult submitResult = executeTask(task.getName());
+                LOG.info("trigger periodical task immediately result: {}, task: {}", submitResult, task);
+            } catch (Exception e) {
+                LOG.warn("failed to execute periodical task immediately: {}", task, e);
+            }
+        }
+
+        long initialDelay = getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
+        LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, scheduleTime:{}",
+                task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime);
+        // set task's next schedule time
+        task.setNextScheduleTime(currentDateTime.plusSeconds(initialDelay).toEpochSecond(ZoneOffset.UTC));
+        ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> {
+            if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                return;
+            }
+            // ensure an execute task will not throw exception
+            try {
+                task.setLastScheduleTime(TimeUtils.getEpochSeconds());
+                task.setNextScheduleTime(TimeUtils.getEpochSeconds() + periodSeconds);
+                ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true,
+                        task.getProperties());
+                executeTask(task.getName(), option);
+            } catch (Throwable e) {
+                LOG.warn("failed to execute periodical task: {}", task, e);
+            }
+        }, initialDelay, periodSeconds, TimeUnit.SECONDS);
+        periodFutureMap.put(task.getId(), future);
     }
 
     private boolean tryTaskLock() {
@@ -460,7 +993,7 @@ public class TaskManager {
             if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskLock.getOwner();
                 if (owner != null) {
-                    LOG.warn("task lock is held by: {}", Util.dumpThread(owner, 50));
+                    LOG.warn("task lock is held by: {}", LogUtil.dumpThread(owner, 50));
                 } else {
                     LOG.warn("task lock owner is null");
                 }
@@ -473,34 +1006,28 @@ public class TaskManager {
         return false;
     }
 
+    /**
+     * Keep trying to get the lock until succeed
+     */
+    private void takeTaskLock() {
+        int i = 1;
+        while (!tryTaskLock()) {
+            LOG.warn("fail to get TaskManager lock after retry {} times", i);
+            i++;
+        }
+    }
+
     public void taskUnlock() {
         this.taskLock.unlock();
     }
 
-    public void replayCreateTask(Task task) {
-        if (task.getType() == Constants.TaskType.PERIODICAL) {
-            TaskSchedule taskSchedule = task.getSchedule();
-            if (taskSchedule == null) {
-                LOG.warn("replay a null schedule period Task [{}]", task.getName());
-                return;
-            }
-        }
-        if (task.getExpireTime() > 0 && System.currentTimeMillis() > task.getExpireTime()) {
-            return;
-        }
-        try {
-            createTask(task, true);
-        } catch (DdlException e) {
-            LOG.warn("failed to replay create task [{}]", task.getName(), e);
-        }
-    }
-
-    public void replayDropTasks(List<Long> taskIdList) {
-        dropTasks(taskIdList, true);
-    }
 
     public TaskRunManager getTaskRunManager() {
         return taskRunManager;
+    }
+
+    public TaskRunScheduler getTaskRunScheduler() {
+        return taskRunScheduler;
     }
 
     public TaskRunHistory getTaskRunHistory() {
@@ -512,8 +1039,12 @@ public class TaskManager {
         String taskName = task.getName();
         SubmitResult submitResult;
         try {
-            createTask(task, false);
-            submitResult = executeTask(taskName);
+            createTask(task);
+            if (task.getType() == Constants.TaskType.MANUAL) {
+                submitResult = executeTask(task.getName());
+            } else {
+                submitResult = new SubmitResult(null, SUBMITTED);
+            }
         } catch (DdlException ex) {
             if (ex.getMessage().contains("Failed to get task lock")) {
                 submitResult = new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
@@ -524,86 +1055,32 @@ public class TaskManager {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("TaskName", ScalarType.createVarchar(40)));
-        builder.addColumn(new Column("Status", ScalarType.createVarchar(10)));
+        builder.addColumn(new Column("TaskName", TypeFactory.createVarcharType(40)));
+        builder.addColumn(new Column("Status", TypeFactory.createVarcharType(10)));
         List<String> item = ImmutableList.of(taskName, submitResult.getStatus().toString());
         List<List<String>> result = ImmutableList.of(item);
         return new ShowResultSet(builder.build(), result);
     }
 
-    public long loadTasks(DataInputStream dis, long checksum) throws IOException {
-        int taskCount = 0;
-        try {
-            String s = Text.readString(dis);
-            SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-            if (data != null) {
-                if (data.tasks != null) {
-                    for (Task task : data.tasks) {
-                        replayCreateTask(task);
-                    }
-                    taskCount = data.tasks.size();
-                }
-
-                if (data.runStatus != null) {
-                    for (TaskRunStatus runStatus : data.runStatus) {
-                        replayCreateTaskRun(runStatus);
-                    }
-                }
-            }
-            checksum ^= taskCount;
-            LOG.info("finished replaying TaskManager from image");
-        } catch (EOFException e) {
-            LOG.info("no TaskManager to replay.");
-        }
-        return checksum;
-    }
-
     public void loadTasksV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
-        while (size-- > 0) {
-            Task task = reader.readJson(Task.class);
-            replayCreateTask(task);
-        }
+        reader.readCollection(Task.class, this::replayCreateTask);
 
-        size = reader.readInt();
-        while (size-- > 0) {
-            TaskRunStatus status = reader.readJson(TaskRunStatus.class);
-            replayCreateTaskRun(status);
-        }
+        reader.readCollection(TaskRunStatus.class, this::replayCreateTaskRun);
     }
 
-    public long saveTasks(DataOutputStream dos, long checksum) throws IOException {
-        SerializeData data = new SerializeData();
-        data.tasks = new ArrayList<>(nameToTaskMap.values());
-        checksum ^= data.tasks.size();
-        data.runStatus = showTaskRunStatus(null);
-        int beforeSize = data.runStatus.size();
-        if (beforeSize >= Config.task_runs_max_history_number) {
-            taskRunManager.getTaskRunHistory().forceGC();
-            data.runStatus = showTaskRunStatus(null);
-            String s = GsonUtils.GSON.toJson(data);
-            LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                    "size before GC:{}, size after GC:{}.", beforeSize, data.runStatus.size());
-            Text.writeString(dos, s);
-        } else {
-            String s = GsonUtils.GSON.toJson(data);
-            Text.writeString(dos, s);
-        }
-        return checksum;
-    }
-
-    public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveTasksV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         taskRunManager.getTaskRunHistory().forceGC();
-        List<TaskRunStatus> runStatusList = showTaskRunStatus(null);
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.TASK_MGR,
+        List<TaskRunStatus> runStatusList = getMatchedTaskRunStatus(null);
+        LOG.info("saveTasksV2, nameToTaskMap size:{}, runStatusList size: {}", nameToTaskMap.size(), runStatusList.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.TASK_MGR,
                 2 + nameToTaskMap.size() + runStatusList.size());
-        writer.writeJson(nameToTaskMap.size());
+        writer.writeInt(nameToTaskMap.size());
         for (Task task : nameToTaskMap.values()) {
             writer.writeJson(task);
         }
 
-        writer.writeJson(runStatusList.size());
+        writer.writeInt(runStatusList.size());
         for (TaskRunStatus status : runStatusList) {
             writer.writeJson(status);
         }
@@ -611,26 +1088,25 @@ public class TaskManager {
         writer.close();
     }
 
-    public List<TaskRunStatus> showTaskRunStatus(String dbName) {
+    public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
         List<TaskRunStatus> taskRunList = Lists.newArrayList();
-        if (dbName == null) {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
-                taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus).collect(Collectors.toList()));
-            }
-            taskRunList.addAll(taskRunManager.getRunningTaskRunMap().values().stream().map(TaskRun::getStatus)
-                    .collect(Collectors.toList()));
-            taskRunList.addAll(taskRunManager.getTaskRunHistory().getAllHistory());
-        } else {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
-                taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus)
-                        .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
-            }
-            taskRunList.addAll(taskRunManager.getRunningTaskRunMap().values().stream().map(TaskRun::getStatus)
-                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
-            taskRunList.addAll(taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+        // pending task runs
+        List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
+        pendingTaskRuns.stream()
+                .map(TaskRun::getStatus)
+                .filter(t -> t.match(params))
+                .forEach(taskRunList::add);
 
-        }
+        // running task runs
+        Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
+        runningTaskRuns.stream()
+                .map(TaskRun::getStatus)
+                .filter(t -> t.match(params))
+                .forEach(taskRunList::add);
+
+        // history task runs
+        taskRunList.addAll(taskRunManager.getTaskRunHistory().lookupHistory(params));
+
         return taskRunList;
     }
 
@@ -640,56 +1116,85 @@ public class TaskManager {
      * PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
      * TODO: Maybe only return needed MVs rather than all MVs.
      */
-    public Map<String, TaskRunStatus> showMVLastRefreshTaskRunStatus(String dbName) {
-        Map<String, TaskRunStatus> mvNameRunStatusMap = Maps.newHashMap();
-        if (dbName == null) {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
-                pTaskRunQueue.stream()
-                        .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                        .map(TaskRun::getStatus)
-                        .filter(Objects::nonNull)
-                        .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+    public Map<String, List<TaskRunStatus>> listMVRefreshedTaskRunStatus(String dbName,
+                                                                         Set<String> taskNames) {
+        Map<String, List<TaskRunStatus>> mvNameRunStatusMap = Maps.newHashMap();
+        Predicate<TaskRunStatus> taskRunFilter = (task) ->
+                Objects.nonNull(task)
+                        && task.getSource() == Constants.TaskSource.MV
+                        && task.getState() != Constants.TaskRunState.MERGED
+                        && (dbName == null || task.getDbName().equals(dbName))
+                        && (CollectionUtils.isEmpty(taskNames) || taskNames.contains(task.getTaskName()));
+        Consumer<TaskRunStatus> addResult = task -> {
+            // Keep only the first one of duplicated task runs
+            if (isSameTaskRunJob(task, mvNameRunStatusMap)) {
+                mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task);
             }
-            taskRunManager.getTaskRunHistory().getAllHistory()
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            // use Map::put to make running task status overwrite the pending task
-            taskRunManager.getRunningTaskRunMap().values().stream()
-                    .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                    .map(TaskRun::getStatus)
-                    .filter(Objects::nonNull)
-                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
-        } else {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
-                pTaskRunQueue.stream()
-                        .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                        .map(TaskRun::getStatus)
-                        .filter(Objects::nonNull)
-                        .filter(u -> u.getDbName().equals(dbName))
-                        .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            }
-            taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                    .filter(u -> u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            taskRunManager.getRunningTaskRunMap().values().stream()
-                    .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                    .map(TaskRun::getStatus)
-                    .filter(u -> u != null && u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
-        }
+        };
+
+        // running
+        taskRunScheduler.getCopiedRunningTaskRuns().stream()
+                .map(TaskRun::getStatus)
+                .filter(taskRunFilter)
+                .forEach(addResult);
+
+        // pending task runs
+        List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
+        pendingTaskRuns.stream()
+                .map(TaskRun::getStatus)
+                .filter(taskRunFilter)
+                .forEach(addResult);
+
+        // history
+        taskRunManager.getTaskRunHistory().lookupLastJobOfTasks(dbName, taskNames)
+                .stream()
+                .filter(taskRunFilter)
+                .forEach(addResult);
+
         return mvNameRunStatusMap;
     }
 
-    public void replayCreateTaskRun(TaskRunStatus status) {
-
-        if (status.getState() == Constants.TaskRunState.SUCCESS ||
-                status.getState() == Constants.TaskRunState.FAILED) {
-            if (System.currentTimeMillis() > status.getExpireTime()) {
-                return;
-            }
+    private boolean isSameTaskRunJob(TaskRunStatus taskRunStatus,
+                                     Map<String, List<TaskRunStatus>> mvNameRunStatusMap) {
+        // 1. if task status has already existed, existed task run status's job id is not null, find the same job id.
+        // 2. otherwise, add it to the result.
+        if (!mvNameRunStatusMap.containsKey(taskRunStatus.getTaskName())) {
+            return true;
         }
-        LOG.info("replayCreateTaskRun:" + status);
+        List<TaskRunStatus> existedTaskRuns = mvNameRunStatusMap.get(taskRunStatus.getTaskName());
+        if (existedTaskRuns == null || existedTaskRuns.isEmpty()) {
+            return true;
+        }
+        if (!Config.enable_show_materialized_views_include_all_task_runs) {
+            return false;
+        }
+        String jobId = taskRunStatus.getStartTaskRunId();
+        return !Strings.isNullOrEmpty(jobId) && jobId.equals(existedTaskRuns.get(0).getStartTaskRunId());
+    }
 
-        switch (status.getState()) {
+    public void replayCreateTaskRun(TaskRunStatus status) {
+        try {
+            doReplayCreateTaskRun(status);
+        } catch (Exception e) {
+            LOG.warn("replay create task run failed, status: {}, error: {}", status, e.getMessage());
+            // The task run will be replayed in FE restart, If the replay fails, it will cause FE restart failed.
+            // It's fine to discard the task run since it's only task's history records and can be retried later.
+        }
+    }
+
+    private void doReplayCreateTaskRun(TaskRunStatus status) {
+        // NOTE: If current FE is downgraded from a higher version and TaskRunStatus#State is new added which is not defined
+        // in current version, status.getState() will be null.
+        if (status == null || status.getState() == null || Strings.isNullOrEmpty(status.getTaskName())) {
+            LOG.warn("replayCreateTaskRun: status is null or taskId is invalid, status: {}", status);
+            return;
+        }
+        if (status.getState().isFinishState() && System.currentTimeMillis() > status.getExpireTime()) {
+            return;
+        }
+        LOG.debug("replayCreateTaskRun:" + status);
+        final Constants.TaskRunState taskRunState = status.getState();
+        switch (taskRunState) {
             case PENDING:
                 String taskName = status.getTaskName();
                 Task task = nameToTaskMap.get(taskName);
@@ -697,82 +1202,89 @@ public class TaskManager {
                     LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
-                TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                ExecuteOption executeOption = new ExecuteOption(task);
+                executeOption.setReplay(true);
+                TaskRun taskRun = TaskRunBuilder
+                        .newBuilder(task)
+                        .setExecuteOption(executeOption)
+                        .build();
+                // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                taskRunManager.arrangeTaskRun(taskRun, status.isMergeRedundant());
+                // The rebuilt run has no submitter context; keep the persisted submitter when present.
+                // Runs persisted before this field existed have none, so initStatus's "system" fallback stands.
+                if (!Strings.isNullOrEmpty(status.getSubmitUser())) {
+                    taskRun.getStatus().setSubmitUser(status.getSubmitUser());
+                }
+                if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
+                    LOG.warn("Submit task run to pending queue failed in follower, reject the submit:{}", taskRun);
+                }
                 break;
             // this will happen in build image
             case RUNNING:
                 status.setState(Constants.TaskRunState.FAILED);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
-            case FAILED:
+            case SKIPPED:
+                status.setProgress(0);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
-            case SUCCESS:
-                status.setProgress(100);
+            default: {
+                if (taskRunState.isSuccessState()) {
+                    status.setProgress(100);
+                }
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
+            }
         }
     }
 
     public void replayUpdateTaskRun(TaskRunStatusChange statusChange) {
+        LOG.debug("replayUpdateTaskRun:" + statusChange);
         Constants.TaskRunState fromStatus = statusChange.getFromStatus();
         Constants.TaskRunState toStatus = statusChange.getToStatus();
         Long taskId = statusChange.getTaskId();
-        LOG.info("replayUpdateTaskRun:" + statusChange);
+
         if (fromStatus == Constants.TaskRunState.PENDING) {
-            Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
-            if (taskRunQueue == null) {
-                return;
-            }
-            if (taskRunQueue.size() == 0) {
-                taskRunManager.getPendingTaskRunMap().remove(taskId);
-                return;
-            }
-
             // It is possible to update out of order for priority queue.
-            TaskRun pendingTaskRun = null;
-            List<TaskRun> tempQueue = Lists.newArrayList();
-            while (!taskRunQueue.isEmpty()) {
-                TaskRun taskRun = taskRunQueue.poll();
-                if (taskRun.getStatus().getQueryId().equals(statusChange.getQueryId())) {
-                    pendingTaskRun = taskRun;
-                    break;
-                } else {
-                    tempQueue.add(taskRun);
-                }
-            }
-            taskRunQueue.addAll(tempQueue);
-
+            TaskRun pendingTaskRun = taskRunScheduler.getTaskRunByQueryId(taskId, statusChange.getQueryId());
             if (pendingTaskRun == null) {
                 LOG.warn("could not find query_id:{}, taskId:{}, when replay update pendingTaskRun",
                         statusChange.getQueryId(), taskId);
                 return;
             }
-            TaskRunStatus status = pendingTaskRun.getStatus();
+            // remove it from pending task queue
+            taskRunScheduler.removePendingTaskRun(pendingTaskRun, toStatus);
 
+            TaskRunStatus status = pendingTaskRun.getStatus();
             if (toStatus == Constants.TaskRunState.RUNNING) {
                 if (status.getQueryId().equals(statusChange.getQueryId())) {
                     status.setState(Constants.TaskRunState.RUNNING);
-                    taskRunManager.getRunningTaskRunMap().put(taskId, pendingTaskRun);
+                    taskRunScheduler.addRunningTaskRun(pendingTaskRun);
                 }
-                // for fe restart, should keep logic same as clearUnfinishedTaskRun
-            } else if (toStatus == Constants.TaskRunState.FAILED) {
+            } else if (toStatus == Constants.TaskRunState.MERGED) {
+                // This only happened when the task run is merged by others and no run ever.
+                LOG.info("Replay update pendingTaskRun which is merged by others, query_id:{}, taskId:{}",
+                        statusChange.getQueryId(), taskId);
                 status.setErrorMessage(statusChange.getErrorMessage());
                 status.setErrorCode(statusChange.getErrorCode());
-                status.setState(Constants.TaskRunState.FAILED);
+                status.setState(Constants.TaskRunState.MERGED);
+                status.setProgress(100);
+                status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
+            } else if (toStatus.isFinishState()) {
+                status.setErrorMessage(statusChange.getErrorMessage());
+                status.setErrorCode(statusChange.getErrorCode());
+                status.setState(toStatus);
+                taskRunManager.getTaskRunHistory().addHistory(status);
+            } else {
+                LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
+                        statusChange.getQueryId(), fromStatus, toStatus);
             }
-            if (taskRunQueue.size() == 0) {
-                taskRunManager.getPendingTaskRunMap().remove(taskId);
-            }
-        } else if (fromStatus == Constants.TaskRunState.RUNNING &&
-                (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
+        } else if (fromStatus == Constants.TaskRunState.RUNNING && toStatus.isFinishState()) {
             // NOTE: TaskRuns before the fe restart will be replayed in `replayCreateTaskRun` which
             // will not be rerun because `InsertOverwriteJobRunner.replayStateChange` will replay, so
             // the taskRun's may be PENDING/RUNNING/SUCCESS.
-            TaskRun runningTaskRun = taskRunManager.getRunningTaskRunMap().remove(taskId);
+            TaskRun runningTaskRun = taskRunScheduler.removeRunningTask(taskId);
             if (runningTaskRun != null) {
                 TaskRunStatus status = runningTaskRun.getStatus();
                 if (status.getQueryId().equals(statusChange.getQueryId())) {
@@ -793,6 +1305,14 @@ public class TaskManager {
                 if (status == null) {
                     return;
                 }
+                // TaskRun has been in the history but its status is not in the finish state,
+                // this should not happen just protect against the future.
+                if (!status.getState().isFinishState()) {
+                    LOG.warn("replayUpdateTaskRun, queryId:{}, taskId:{}, fromStatus:{}, toStatus:{}",
+                            queryId, taskId, fromStatus, toStatus);
+                    status.setState(toStatus);
+                    status.setProgress(100);
+                }
                 // Do update extra message from change status.
                 status.setExtraMessage(statusChange.getExtraMessage());
             }
@@ -803,23 +1323,24 @@ public class TaskManager {
     }
 
     public void replayDropTaskRuns(List<String> queryIdList) {
-        Map<String, String> index = Maps.newHashMapWithExpectedSize(queryIdList.size());
-        for (String queryId : queryIdList) {
-            index.put(queryId, null);
+        for (String queryId : ListUtils.emptyIfNull(queryIdList)) {
+            taskRunManager.getTaskRunHistory().removeTaskByQueryId(queryId);
         }
-        taskRunManager.getTaskRunHistory().getAllHistory()
-                .removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
     }
 
     public void replayAlterRunningTaskRunProgress(Map<Long, Integer> taskRunProgresMap) {
-        Map<Long, TaskRun> runningTaskRunMap = taskRunManager.getRunningTaskRunMap();
         for (Map.Entry<Long, Integer> entry : taskRunProgresMap.entrySet()) {
             // When replaying the log, the task run may have ended
             // and the status has changed to success or failed
-            if (runningTaskRunMap.containsKey(entry.getKey())) {
-                runningTaskRunMap.get(entry.getKey()).getStatus().setProgress(entry.getValue());
+            TaskRun taskRun = taskRunScheduler.getRunningTaskRun(entry.getKey());
+            if (taskRun != null) {
+                taskRun.getStatus().setProgress(entry.getValue());
             }
         }
+    }
+
+    public void replayArchiveTaskRuns(ArchiveTaskRunsLog log) {
+        taskRunManager.getTaskRunHistory().replay(log);
     }
 
     public void removeExpiredTasks() {
@@ -830,7 +1351,7 @@ public class TaskManager {
             return;
         }
         try {
-            List<Task> currentTask = showTasks(null);
+            List<Task> currentTask = filterTasks(null);
             for (Task task : currentTask) {
                 if (task.getType() == Constants.TaskType.PERIODICAL) {
                     TaskSchedule taskSchedule = task.getSchedule();
@@ -853,48 +1374,67 @@ public class TaskManager {
             taskUnlock();
         }
         // this will do in checkpoint thread and does not need write log
-        dropTasks(taskIdToDelete, true);
+        replayDropTasks(taskIdToDelete);
     }
 
-    public void removeExpiredTaskRuns() {
-        long currentTimeMs = System.currentTimeMillis();
+    public void removeExpiredTaskRuns(boolean archiveHistory) {
+        // remove expired task run records
+        taskRunManager.getTaskRunHistory().vacuum(archiveHistory);
 
-        List<String> historyToDelete = Lists.newArrayList();
+        // remove timeout task runs
+        removeTimeoutTaskRuns();
+    }
 
-        if (!taskRunManager.tryTaskRunLock()) {
+    private void removeTimeoutTaskRuns() {
+        // timeout cleanup is a leader responsibility; followers obtain the FAILED record via replay
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
-        try {
-            // only SUCCESS and FAILED in taskRunHistory
-            List<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
-            Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
-            while (iterator.hasNext()) {
-                TaskRunStatus taskRunStatus = iterator.next();
-                long expireTime = taskRunStatus.getExpireTime();
-                if (currentTimeMs > expireTime) {
-                    historyToDelete.add(taskRunStatus.getQueryId());
-                    taskRunManager.getTaskRunHistory().removeTask(taskRunStatus.getQueryId());
-                    iterator.remove();
-                }
+        // cancel long-running task runs to avoid resource waste
+        long currentTimeMs = System.currentTimeMillis();
+        Set<TaskRun> runningTaskRuns = taskRunManager.getTaskRunScheduler().getCopiedRunningTaskRuns();
+        for (TaskRun taskRun : runningTaskRuns) {
+            int taskRunTimeout = taskRun.getExecuteTimeoutS();
+            if (taskRunTimeout <= 0) {
+                continue;
             }
-        } finally {
-            taskRunManager.taskRunUnlock();
+            if (taskRun.getStatus() == null) {
+                continue;
+            }
+            TaskRunStatus taskRunStatus = taskRun.getStatus();
+            long taskRunCreatedTime = taskRunStatus.getCreateTime();
+            if (currentTimeMs - taskRunCreatedTime < taskRunTimeout * 1000L) {
+                continue;
+            }
+            // if the task run has been running for a long time, cancel it directly
+            LOG.warn("task run [{}] has been running for a long time, cancel it," +
+                    " created(ms):{}, timeout(s):{}", taskRun, taskRunCreatedTime, taskRunTimeout);
+
+            if (!taskRunManager.tryTaskRunLock()) {
+                continue;
+            }
+            try {
+                taskRunManager.killRunningTaskRun(taskRun, true, "killed by TaskCleaner due to timeout");
+            } catch (Exception e) {
+                LOG.warn("failed to cancel long-running task run: {}", taskRun, e);
+            } finally {
+                taskRunManager.taskRunUnlock();
+            }
         }
-        LOG.info("remove run history:{}", historyToDelete);
     }
 
-    private static class SerializeData {
-        @SerializedName("tasks")
-        public List<Task> tasks;
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("Task", (long) idToTaskMap.size());
+    }
 
-        @SerializedName("runStatus")
-        public List<TaskRunStatus> runStatus;
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(idToTaskMap, 20);
     }
 
     public boolean containTask(String taskName) {
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when check Task [" + taskName + "]");
-        }
+        takeTaskLock();
         try {
             return nameToTaskMap.containsKey(taskName);
         } finally {
@@ -903,9 +1443,7 @@ public class TaskManager {
     }
 
     public Task getTask(String taskName) {
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when get Task [" + taskName + "]");
-        }
+        takeTaskLock();
         try {
             return nameToTaskMap.get(taskName);
         } finally {
@@ -913,7 +1451,20 @@ public class TaskManager {
         }
     }
 
-    public long getTaskCount() {
-        return this.idToTaskMap.size();
+    public Task getTaskWithoutLock(String taskName) {
+        return nameToTaskMap.get(taskName);
+    }
+
+    @VisibleForTesting
+    public Map<Long, ScheduledFuture<?>> getPeriodFutureMap() {
+        return periodFutureMap;
+    }
+
+    public Task getTask(MaterializedView mv) {
+        if (mv == null) {
+            return null;
+        }
+        String taskName = TaskBuilder.getMvTaskName(mv.getId());
+        return getTask(taskName);
     }
 }

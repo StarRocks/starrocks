@@ -18,10 +18,10 @@ package com.starrocks.lake;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.manager.StarManagerServer;
+import com.staros.proto.CacheEnableState;
 import com.staros.proto.CreateMetaGroupInfo;
 import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
@@ -35,26 +35,36 @@ import com.staros.proto.PlacementPreference;
 import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
-import com.staros.proto.ReplicaRole;
+import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.UpdateShardGroupInfo;
+import com.staros.proto.UpdateShardInfo;
+import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,35 +77,55 @@ import javax.validation.constraints.NotNull;
 /**
  * StarOSAgent is responsible for
  * 1. Encapsulation of StarClient api.
- * 2. Maintenance of StarOS worker to StarRocks backend map.
+ * 2. Maintenance of StarOS worker to StarRocks node map.
  */
 public class StarOSAgent {
     private static final Logger LOG = LogManager.getLogger(StarOSAgent.class);
 
     public static final String SERVICE_NAME = "starrocks";
 
+    // warehouse -> worker_group
+    //  index -> worker_group_id
     public static final long DEFAULT_WORKER_GROUP_ID = 0L;
 
-    private StarClient client;
-    private String serviceId;
-    private Map<String, Long> workerToId;
-    private Map<Long, Long> workerToBackend;
-    private ReentrantReadWriteLock rwLock;
+    protected StarClient client;
+    protected String serviceId;
+    protected Map<String, Long> workerToId;
+    // The value of this map is the id of backends or compute nodes
+    protected Map<Long, Long> workerToNode;
+    protected ReentrantReadWriteLock rwLock;
+
+    // NOTE: a simple record to return shard group infos and next shard group id when listing shard groups.
+    // This is used to avoid the difficulty of mocking an interface with returned type of `Pair`, throwing
+    // java.util.Map$Entry is not mockable.
+    public record ListShardGroupResult(List<ShardGroupInfo> shardGroupInfos, long nextShardGroupId) {
+    }
 
     public StarOSAgent() {
         serviceId = "";
         workerToId = Maps.newHashMap();
-        workerToBackend = Maps.newHashMap();
+        workerToNode = Maps.newHashMap();
         rwLock = new ReentrantReadWriteLock();
     }
 
     public boolean init(StarManagerServer server) {
         client = new StarClient(server);
         client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            client.setClientReadTimeoutSec(Config.star_client_read_timeout_seconds);
+            client.setClientListTimeoutSec(Config.star_client_list_timeout_seconds);
+            client.setClientWriteTimeoutSec(Config.star_client_write_timeout_seconds);
+        });
         return true;
     }
 
-    private void prepare() {
+    public StarClient initForTest() {
+        client = new StarClient(null);
+        client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
+        return client;
+    }
+
+    protected void prepare() {
         if (!serviceId.isEmpty()) {
             return;
         }
@@ -118,13 +148,18 @@ public class StarOSAgent {
             ServiceInfo serviceInfo = client.getServiceInfoByName(SERVICE_NAME);
             serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
-            LOG.warn("Failed to get serviceId from starMgr. Error:", e);
+            LOG.warn("Failed to get serviceId from starMgr. Error: {}", e.getMessage());
             return;
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
+    public String getRawServiceId() {
+        return serviceId;
+    }
+
     public String addFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
         try {
             return client.addFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
@@ -133,6 +168,7 @@ public class StarOSAgent {
     }
 
     public void removeFileStoreByName(String fsName) throws DdlException {
+        prepare();
         try {
             client.removeFileStoreByName(fsName, serviceId);
         } catch (StarClientException e) {
@@ -141,6 +177,7 @@ public class StarOSAgent {
     }
 
     public void updateFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
         try {
             client.updateFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
@@ -148,7 +185,17 @@ public class StarOSAgent {
         }
     }
 
+    public void replaceFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
+        try {
+            client.replaceFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to update file store, error: " + e.getMessage());
+        }
+    }
+
     public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
+        prepare();
         try {
             return client.getFileStoreByName(fsName, serviceId);
         } catch (StarClientException e) {
@@ -160,6 +207,7 @@ public class StarOSAgent {
     }
 
     public FileStoreInfo getFileStore(String fsKey) throws DdlException {
+        prepare();
         try {
             return client.getFileStore(fsKey, serviceId);
         } catch (StarClientException e) {
@@ -171,6 +219,7 @@ public class StarOSAgent {
     }
 
     public List<FileStoreInfo> listFileStore() throws DdlException {
+        prepare();
         try {
             return client.listFileStore(serviceId);
         } catch (StarClientException e) {
@@ -190,13 +239,19 @@ public class StarOSAgent {
         return null;
     }
 
-    public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+    private static String constructTablePath(long dbId, long tableId) {
+        return String.format("db%d/%d", dbId, tableId);
+    }
+
+    public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
+        prepare();
         try {
             FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
             if (fsType == null || fsType == FileStoreType.INVALID) {
                 throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
             }
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, suffix);
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
@@ -204,11 +259,42 @@ public class StarOSAgent {
         }
     }
 
-    public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) throws DdlException {
+    /**
+     * Currently this method is used for cluster migration, where we need to build source cluster's file path with
+     * their service id
+     * @param otherServiceId the source cluster's service id
+     * @throws DdlException
+     */
+    public FilePathInfo allocateFilePathFromOtherService(String storageVolumeId, long dbId,
+                                                         long tableId, String otherServiceId) throws DdlException {
+        prepare();
         try {
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId,
-                     storageVolumeId, Long.toString(tableId));
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix, otherServiceId);
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
+            return pathInfo;
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
+        }
+    }
+
+    public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
+        prepare();
+        try {
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix);
+            LOG.debug("Allocate file path from starmgr: {}", pathInfo);
+            return pathInfo;
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
+        }
+    }
+
+    public FilePathInfo allocateFilePath(String storageVolumeId, String rootDir) throws DdlException {
+        prepare();
+        try {
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, "", rootDir);
+            LOG.info("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
             throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
@@ -274,6 +360,24 @@ public class StarOSAgent {
         return workerId;
     }
 
+    public long getWorkerTabletNum(String workerIpPort) {
+        prepare();
+        try {
+            WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+            return workerInfo.getTabletNum();
+        } catch (StarClientException e) {
+            LOG.info("Failed to get worker tablet num from starMgr, Error: {}.", e.getMessage());
+        }
+        return 0;
+    }
+
+    /**
+     * create a worker to represent the node in StarMgr
+     *
+     * @param nodeId can be backend id or compute node id
+     * @param workerIpPort
+     * @param workerGroupId
+     */
     public void addWorker(long nodeId, String workerIpPort, long workerGroupId) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -291,7 +395,7 @@ public class StarOSAgent {
                 workerId = client.addWorker(serviceId, workerIpPort, workerGroupId);
             } catch (StarClientException e) {
                 if (e.getCode() != StatusCode.ALREADY_EXIST) {
-                    LOG.warn("Failed to addWorker. Error: {}", e);
+                    LOG.warn("Failed to addWorker. Error: {}", e.getMessage());
                     return;
                 } else {
                     // get workerId from starMgr
@@ -299,7 +403,7 @@ public class StarOSAgent {
                         WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                         workerId = workerInfo.getWorkerId();
                     } catch (StarClientException e2) {
-                        LOG.warn("Failed to get getWorkerInfo. Error: {}", e2);
+                        LOG.warn("Failed to get getWorkerInfo. Error: {}", e2.getMessage());
                         return;
                     }
                     LOG.info("worker {} already added in starMgr", workerId);
@@ -307,14 +411,14 @@ public class StarOSAgent {
             }
             tryRemovePreviousWorker(nodeId);
             workerToId.put(workerIpPort, workerId);
-            workerToBackend.put(workerId, nodeId);
-            LOG.info("add worker {} success, backendId is {}", workerId, nodeId);
+            workerToNode.put(workerId, nodeId);
+            LOG.info("add worker {} success, nodeId is {}", workerId, nodeId);
         }
     }
 
-    // remove previous worker with same backend id
-    private void tryRemovePreviousWorker(long backendId) {
-        long prevWorkerId = getWorkerIdByBackendIdInternal(backendId);
+    // remove previous worker with same node id
+    private void tryRemovePreviousWorker(long nodeId) {
+        long prevWorkerId = getWorkerIdByNodeIdInternal(nodeId);
         if (prevWorkerId < 0) {
             return;
         }
@@ -322,19 +426,19 @@ public class StarOSAgent {
             client.removeWorker(serviceId, prevWorkerId);
         } catch (StarClientException e) {
             // TODO: fix this corner case later in star mgr
-            LOG.error("Failed to remove worker {} with backend id {}. error: {}", prevWorkerId, backendId, e.getMessage());
+            LOG.error("Failed to remove worker {} with node id {}. error: {}", prevWorkerId, nodeId, e.getMessage());
         }
-        workerToBackend.remove(prevWorkerId);
+        workerToNode.remove(prevWorkerId);
         workerToId.entrySet().removeIf(e -> e.getValue() == prevWorkerId);
     }
 
-    public void removeWorker(String workerIpPort) throws DdlException {
+    public void removeWorker(String workerIpPort, long workerGroupId) throws DdlException {
         prepare();
 
         long workerId = getWorker(workerIpPort);
 
         try {
-            client.removeWorker(serviceId, workerId);
+            client.removeWorker(serviceId, workerId, workerGroupId);
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception
@@ -349,7 +453,7 @@ public class StarOSAgent {
 
     public void removeWorkerFromMap(long workerId, String workerIpPort) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            workerToBackend.remove(workerId);
+            workerToNode.remove(workerId);
             workerToId.remove(workerIpPort);
         }
 
@@ -360,22 +464,28 @@ public class StarOSAgent {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Long workerId = workerToId.remove(workerIpPort);
             if (workerId != null) {
-                workerToBackend.remove(workerId);
+                workerToNode.remove(workerId);
             }
         }
         LOG.info("remove worker {} success from StarMgr", workerIpPort);
     }
 
-    public long getWorkerIdByBackendId(long backendId) {
+    /**
+     * get the worker id by node id
+     *
+     * @param nodeId can be backend id or compute node id
+     */
+    public long getWorkerIdByNodeId(long nodeId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return getWorkerIdByBackendIdInternal(backendId);
+            return getWorkerIdByNodeIdInternal(nodeId);
         }
     }
 
-    private long getWorkerIdByBackendIdInternal(long backendId) {
+    // nodeId can be backend id or compute node id
+    private long getWorkerIdByNodeIdInternal(long nodeId) {
         long workerId = -1;
-        for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
-            if (entry.getValue() == backendId) {
+        for (Map.Entry<Long, Long> entry : workerToNode.entrySet()) {
+            if (entry.getValue() == nodeId) {
                 workerId = entry.getKey();
                 break;
             }
@@ -383,16 +493,22 @@ public class StarOSAgent {
         return workerId;
     }
 
-    public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+    public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
+        return createShardGroup(dbId, tableId, partitionId, indexId, PlacementPolicy.SPREAD);
+    }
+
+    public long createShardGroup(long dbId, long tableId, long partitionId, long indexId,
+                                  PlacementPolicy placementPolicy) throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
             createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
-                    .setPolicy(PlacementPolicy.SPREAD)
+                    .setPolicy(placementPolicy)
                     .putLabels("dbId", String.valueOf(dbId))
                     .putLabels("tableId", String.valueOf(tableId))
                     .putLabels("partitionId", String.valueOf(partitionId))
+                    .putLabels("indexId", String.valueOf(indexId))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                     .build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
@@ -401,7 +517,25 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shard group. error: " + e.getMessage());
         }
-        return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList()).get(0);
+        return shardGroupInfos.get(0).getGroupId();
+    }
+
+    // Used only for shared-data cluster replication
+    public long createShardGroupForVirtualTablet() throws DdlException {
+        prepare();
+        List<ShardGroupInfo> shardGroupInfos;
+        try {
+            List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
+            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
+                    .setPolicy(PlacementPolicy.SPREAD)
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .build());
+            shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
+            Preconditions.checkState(shardGroupInfos.size() == 1);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create shard group. error: " + e.getMessage());
+        }
+        return shardGroupInfos.get(0).getGroupId();
     }
 
     public void deleteShardGroup(List<Long> groupIds) {
@@ -413,33 +547,103 @@ public class StarOSAgent {
         }
     }
 
-    public List<ShardGroupInfo> listShardGroup() {
+    /**
+     * Moves a shard between shard groups by applying an add/remove group-id delta through the
+     * StarOS UpdateShard RPC, leaving the shard's other group memberships (e.g. its SPREAD group)
+     * untouched. Used to migrate a range-colocate tablet into its expected PACK shard group after
+     * a split's post-publish range reclassification. A no-op (no RPC) when both deltas are empty.
+     */
+    public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds)
+            throws DdlException {
+        boolean noAdd = addGroupIds == null || addGroupIds.isEmpty();
+        boolean noRemove = removeGroupIds == null || removeGroupIds.isEmpty();
+        if (noAdd && noRemove) {
+            return;
+        }
+        prepare();
+        UpdateShardInfo.Builder builder = UpdateShardInfo.newBuilder().setShardId(shardId);
+        if (!noAdd) {
+            builder.addAllAddGroupIds(addGroupIds);
+        }
+        if (!noRemove) {
+            builder.addAllRemoveGroupIds(removeGroupIds);
+        }
+        try {
+            client.updateShard(serviceId, List.of(builder.build()));
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to reassign shard " + shardId + " groups (add=" + addGroupIds
+                    + ", remove=" + removeGroupIds + "). error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Dissolve the anonymous PACK groups StarOS created from creation-time placement preferences --
+     * the WITH_SHARD pin a tablet split/merge uses so the new shards reuse the source worker's warm
+     * cache. Until the pin is dropped the new shards cannot be spread across workers by the
+     * background balancer, and StarOS only drops it on its own when the superseded shards are
+     * deleted, which is tens of minutes later.
+     *
+     * <p>Each entry of {@code preferenceMembers} names the shards forming one preference group -- for
+     * a reshard, the superseded shard the pin targeted and the new shard created with it. Naming the
+     * members is what makes the request unambiguous: a shard can be the target of one preference and
+     * the owner of another, so "every group containing this shard" would dissolve pins that belong to
+     * a later reshard. Idempotent on the StarOS side.
+     */
+    public void clearPlacementPreference(List<List<Long>> preferenceMembers) throws DdlException {
+        if (preferenceMembers.isEmpty()) {
+            return;
+        }
+        prepare();
+        try {
+            client.clearPlacementPreference(serviceId, preferenceMembers);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to clear placement preference for " + preferenceMembers
+                    + ". error: " + e.getMessage());
+        }
+    }
+
+    public List<ShardGroupInfo> listShardGroup() throws DdlException {
         prepare();
         try {
             return client.listShardGroup(serviceId);
         } catch (StarClientException e) {
-            LOG.info("list shard group failed. Error: {}", e.getMessage());
-            return new ArrayList<>();
+            throw new DdlException("list shard group failed. Error: " + e.getMessage());
         }
     }
 
-    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
-        throws DdlException {
-        return createShards(numShards, pathInfo, cacheInfo, groupId, null, Collections.EMPTY_MAP);
+    public ListShardGroupResult listShardGroup(long startGroupId) throws DdlException {
+        prepare();
+        try {
+            Pair<List<ShardGroupInfo>, Long> result = client.listShardGroup(serviceId, startGroupId);
+            return new ListShardGroupResult(result.getKey(), result.getValue());
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to list shard group. Error: " + e.getMessage());
+        }
     }
 
+    // ATTN
+    // (https://github.com/StarRocks/starrocks/pull/60073)
+    // The partitionId in pathInfo of LakeRollup may be different in different version.
+    // The partitionId should be physical partitionId but LakeRollup use logical partitionId before this pr.
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
-                                   @NotNull Map<String, String> properties)
-            throws DdlException {
-        return createShards(numShards, pathInfo, cacheInfo, groupId, null, properties);
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
+                                   ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
+                computeResource);
     }
 
-    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
-                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties)
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                   List<Long> groupIds, @Nullable List<Long> matchShardIds,
+                                   @NotNull Map<String, String> properties,
+                                   ComputeResource computeResource)
         throws DdlException {
+        Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                "groupIds must not be null or empty");
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
         }
+        long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
@@ -447,10 +651,11 @@ public class StarOSAgent {
 
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
             builder.setReplicaCount(1)
-                    .addGroupIds(groupId)
+                    .addAllGroupIds(groupIds)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)
-                    .putAllShardProperties(properties);
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
 
             for (int i = 0; i < numShards; ++i) {
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
@@ -475,14 +680,191 @@ public class StarOSAgent {
         return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }
 
+    /**
+     * Create shards for a tablet split.
+     *
+     * <p>Each new shard joins its own list of group ids (PACK group per colocate range). Unless
+     * {@code unpinPlacement} is set, it also pins placement to its old shard via
+     * {@code PlacementRelationship.WITH_SHARD} so an online split reuses the source worker's warm
+     * cache. Callers pass {@code unpinPlacement == true} when there is no warm cache worth keeping:
+     * pre-split (the source tablet is empty) and an ORDER BY != PK online split of a still-small
+     * index (its new shards are rewritten wholesale by the following UNSHARE compaction, which would
+     * otherwise run entirely on the source worker). The WITH_SHARD pin is then dropped and StarOS
+     * spreads the new shards across workers via the SPREAD group, preventing every tablet's
+     * delta-writer / flush / spill-merge -- and that UNSHARE rewrite -- from funneling onto one node.
+     * The colocate PACK group, when present, is unaffected.
+     *
+     * <p>{@code newToOldShardId} maps each new shard id to its parent old shard id (used only for
+     * the WITH_SHARD pin; ignored when {@code unpinPlacement} is true).
+     * {@code newShardIdToGroupIds} maps each new shard id to its target group ids
+     * (typically {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must
+     * have the same key set; the call fails if a new shard has no group assignment.
+     */
+    public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                                 Map<Long, List<Long>> newShardIdToGroupIds,
+                                                 FilePathInfo pathInfo,
+                                                 FileCacheInfo cacheInfo,
+                                                 @NotNull Map<String, String> properties,
+                                                 ComputeResource computeResource,
+                                                 boolean unpinPlacement) throws DdlException {
+        long workerGroupId = computeResource.getWorkerGroupId();
+        prepare();
+        try {
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(1)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(newToOldShardId.size());
+            for (Map.Entry<Long, Long> entry : newToOldShardId.entrySet()) {
+                long newShardId = entry.getKey();
+                long oldShardId = entry.getValue();
+                List<Long> groupIds = newShardIdToGroupIds.get(newShardId);
+                Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                        "Missing group ids for new shard " + newShardId);
+                builder.clearPlacementPreferences();
+                builder.clearGroupIds();
+                builder.addAllGroupIds(groupIds);
+                if (!unpinPlacement) {
+                    builder.addPlacementPreferences(PlacementPreference.newBuilder()
+                            .setPlacementPolicy(PlacementPolicy.PACK)
+                            .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                            .setRelationshipTargetId(oldShardId)
+                            .build());
+                }
+                builder.setShardId(newShardId);
+                createShardInfoList.add(builder.build());
+            }
+            List<ShardInfo> shardInfos = client.createShard(serviceId, createShardInfoList);
+            Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
+            LOG.debug("Create per-new-shard split shards success. shard infos: {}", shardInfos);
+        } catch (Exception e) {
+            throw new DdlException("Failed to create per-new-shard split shards. error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Create shards for a tablet merge.
+     *
+     * <p>Each new shard joins its own list of group ids and pins placement to every source shard it
+     * merges via {@code PlacementRelationship.WITH_SHARD}, so the merged shard lands on a worker that
+     * already has some of the data cached.
+     *
+     * <p>{@code newToOldShardIds} maps each new shard id to the source shard ids it merges.
+     * {@code newShardIdToGroupIds} maps each new shard id to its target group ids (typically
+     * {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must have the same key set;
+     * the call fails if a new shard has no group assignment.
+     */
+    public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds,
+            Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+            FileCacheInfo cacheInfo, @NotNull Map<String, String> properties,
+            ComputeResource computeResource) throws DdlException {
+        long workerGroupId = computeResource.getWorkerGroupId();
+        prepare();
+        List<ShardInfo> shardInfos = null;
+        try {
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(1)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(newToOldShardIds.size());
+            for (Map.Entry<Long, List<Long>> entry : newToOldShardIds.entrySet()) {
+                long newShardId = entry.getKey();
+                List<Long> oldShardIds = entry.getValue();
+                Preconditions.checkState(oldShardIds != null && !oldShardIds.isEmpty(),
+                        "Empty old shard ids for new shard " + newShardId);
+                List<Long> groupIds = newShardIdToGroupIds.get(newShardId);
+                Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                        "Missing group ids for new shard " + newShardId);
+
+                builder.clearGroupIds();
+                builder.addAllGroupIds(groupIds);
+                builder.clearPlacementPreferences();
+                for (Long oldShardId : oldShardIds) {
+                    PlacementPreference preference = PlacementPreference.newBuilder()
+                            .setPlacementPolicy(PlacementPolicy.PACK)
+                            .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                            .setRelationshipTargetId(oldShardId)
+                            .build();
+                    builder.addPlacementPreferences(preference);
+                }
+
+                builder.setShardId(newShardId);
+                createShardInfoList.add(builder.build());
+            }
+            shardInfos = client.createShard(serviceId, createShardInfoList);
+            Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
+            LOG.debug("Create shards success. shard infos: {}", shardInfos);
+        } catch (Exception e) {
+            throw new DdlException("Failed to create shards. error: " + e.getMessage());
+        }
+    }
+
+    // Used only for shared-data cluster replication
+    public void createShardWithVirtualTabletId(FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                      @NotNull Map<String, String> properties, long vTabletId,
+                                      ComputeResource computeResource) throws DdlException {
+        Preconditions.checkState(vTabletId != 0);
+        long workerGroupId = computeResource.getWorkerGroupId();
+        prepare();
+        List<ShardInfo> shardInfos = null;
+        try {
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(1);
+
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(1)
+                    .addGroupIds(groupId)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+
+            builder.setShardId(vTabletId);
+            createShardInfoList.add(builder.build());
+            shardInfos = client.createShard(serviceId, createShardInfoList);
+            Preconditions.checkState(shardInfos != null && shardInfos.size() == 1);
+            LOG.debug("Create virtual shards success. shard infos: {}", shardInfos);
+        } catch (Exception e) {
+            throw new DdlException("Failed to create virtual shard. error: " + e.getMessage());
+        }
+    }
+
+    public void updateShardGroup(List<Partition> partitionsList, boolean enableCache) throws DdlException {
+        try {
+            prepare();
+            List<UpdateShardGroupInfo> updateShardGroupInfoList = new ArrayList<>(partitionsList.size());
+            for (Partition partition : partitionsList) {
+                updateShardGroupInfoList.add(
+                        UpdateShardGroupInfo.newBuilder()
+                                .setGroupId(partition.getDefaultPhysicalPartition().getShardGroupId())
+                                .setEnableCache(enableCache ? CacheEnableState.ENABLED : CacheEnableState.DISABLED)
+                                .build());
+            }
+            client.updateShardGroup(serviceId, updateShardGroupInfoList);
+        } catch (StarClientException e) {
+            StringBuilder partitionNamesBuilder = new StringBuilder();
+            for (Partition partition : partitionsList) {
+                partitionNamesBuilder.append(partition.getName()).append(" ");
+            }
+            throw new DdlException("Failed to alter partition shardGroups, PartitionNames: " +
+                    partitionNamesBuilder.toString().trim() + ", error: " + e.getMessage());
+        }
+    }
+
     public List<Long> listShard(long groupId) throws DdlException {
         prepare();
 
         List<List<ShardInfo>> shardInfo;
         try {
-            shardInfo = client.listShard(serviceId, Arrays.asList(groupId));
+            shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
+                                         true /* withoutReplicaInfo */);
         } catch (StarClientException e) {
-            throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
+            throw new DdlException(
+                    String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()), e);
         }
         return shardInfo.get(0).stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }
@@ -500,44 +882,31 @@ public class StarOSAgent {
         }
     }
 
-    private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
-        return getShardReplicas(shardId, DEFAULT_WORKER_GROUP_ID);
-    }
-
-    private List<ReplicaInfo> getShardReplicas(long shardId, long workerGroupId) throws UserException {
-        try {
-            ShardInfo info = getShardInfo(shardId, workerGroupId);
-            return info.getReplicaInfoList();
-        } catch (StarClientException e) {
-            throw new UserException(e);
-        }
-    }
-
-    private Optional<Long> getBackendIdByHostStarletPort(String host, int starletPort) {
-        long backendId = GlobalStateMgr.getCurrentSystemInfo()
+    private Optional<Long> getNodeIdByHostStarletPort(String host, int starletPort) {
+        long nodeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getBackendIdWithStarletPort(host, starletPort);
-        if (backendId == -1L) {
-            backendId = GlobalStateMgr.getCurrentSystemInfo().
-                    getComputeNodeIdWithStarletPort(host, starletPort);
+        if (nodeId == -1L) {
+            nodeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .getComputeNodeIdWithStarletPort(host, starletPort);
         }
-        return backendId == -1 ? Optional.empty() : Optional.of(backendId);
+        return nodeId == -1 ? Optional.empty() : Optional.of(nodeId);
     }
 
-    private Optional<Long> getBackendIdByHostHeartbeatPort(String host, int heartbeatPort) {
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo()
+    private Optional<Long> getNodeIdByHostHeartbeatPort(String host, int heartbeatPort) {
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getBackendWithHeartbeatPort(host, heartbeatPort);
         if (node == null) {
-            node = GlobalStateMgr.getCurrentSystemInfo().
+            node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                     getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         }
         return node == null ? Optional.empty() : Optional.of(node.getId());
     }
 
-    private Optional<Long> getOrUpdateBackendIdByWorkerInfo(WorkerInfo info) {
+    private Optional<Long> getOrUpdateNodeIdByWorkerInfo(WorkerInfo info) {
         long workerId = info.getWorkerId();
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             // get the backend id directly from workerToBackend
-            Long beId = workerToBackend.get(workerId);
+            Long beId = workerToNode.get(workerId);
             if (beId != null) {
                 return Optional.of(beId);
             }
@@ -552,7 +921,7 @@ public class StarOSAgent {
             LOG.warn("Malformed worker address info:" + workerAddr);
             return Optional.empty();
         }
-        Optional<Long> result = getBackendIdByHostStarletPort(host, starletPort);
+        Optional<Long> result = getNodeIdByHostStarletPort(host, starletPort);
         if (!result.isPresent()) {
             LOG.info("can't find backendId with starletPort for {}, try using be_heartbeat_port to search again",
                     workerAddr);
@@ -566,47 +935,77 @@ public class StarOSAgent {
                     LOG.warn("Malformed be_heartbeat_port for worker:" + workerAddr);
                     return Optional.empty();
                 }
-                result = getBackendIdByHostHeartbeatPort(host, heartbeatPort);
+                result = getNodeIdByHostHeartbeatPort(host, heartbeatPort);
             }
         }
         if (result.isPresent()) {
             try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
                 workerToId.put(workerAddr, workerId);
-                workerToBackend.put(workerId, result.get());
+                workerToNode.put(workerId, result.get());
             }
         }
         return result;
     }
 
-    public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
-        return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
-    }
-
-    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
-        Set<Long> backendIds = getAllBackendIdsByShard(shardId, workerGroupId, true);
+    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+        List<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId);
         if (backendIds.isEmpty()) {
-            throw new UserException("Failed to get primary backend. shard id: " + shardId);
+            // If BE stops, routine load task may catch UserException during load plan,
+            // and the job state will changed to PAUSED.
+            // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
+            // when all BEs become alive.
+            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
+                    "Failed to get primary backend. shard id: " + shardId);
         }
         return backendIds.iterator().next();
     }
 
-    public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
-        return getAllBackendIdsByShard(shardId, workerGroupId, false);
+    public long getPrimaryComputeNodeIdByShard(ShardInfo shardInfo) throws StarRocksException {
+        List<Long> ids = getAllNodeIdsByShard(shardInfo);
+        if (ids.isEmpty()) {
+            // If BE stops, routine load task may catch UserException during load plan,
+            // and the job state will changed to PAUSED.
+            // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
+            // when all BEs become alive.
+            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
+                    "Failed to get primary backend. shard id: " + shardInfo.getShardId());
+        }
+        return ids.iterator().next();
     }
 
-    private Set<Long> getAllBackendIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
-            throws UserException {
-        List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
-        if (onlyPrimary) {
-            replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
-                    .collect(Collectors.toList());
+    public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
+            throws StarRocksException {
+        try {
+            ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
+            return getAllNodeIdsByShard(shardInfo);
+        } catch (StarClientException e) {
+            throw new StarRocksException(e);
         }
-        Set<Long> backendIds = Sets.newHashSet();
-        replicas.stream()
-                .map(x -> getOrUpdateBackendIdByWorkerInfo(x.getWorkerInfo()))
-                .forEach(x -> x.ifPresent(backendIds::add));
+    }
 
-        return backendIds;
+    public Map<Long, List<Long>> getAllNodeIdsByShards(List<Long> shardIds, long workerGroupId)
+            throws StarRocksException {
+        try {
+            List<ShardInfo> shardInfos = getShardInfo(shardIds, workerGroupId);
+            Map<Long, List<Long>> result = new HashMap<>();
+            for (ShardInfo shardInfo : shardInfos) {
+                List<Long> nodeIds = getAllNodeIdsByShard(shardInfo);
+                result.put(shardInfo.getShardId(), nodeIds);
+            }
+            return result;
+        } catch (StarClientException e) {
+            throw new StarRocksException(e);
+        }
+    }
+
+    private List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {
+        List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
+        List<Long> nodeIds = new ArrayList<>();
+        replicas.stream()
+                .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))
+                .forEach(x -> x.ifPresent(nodeIds::add));
+
+        return nodeIds;
     }
 
     public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
@@ -625,6 +1024,10 @@ public class StarOSAgent {
     }
 
     public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) throws DdlException {
+        if (shardGroupIds == null || shardGroupIds.isEmpty()) {
+            return;
+        }
+
         prepare();
 
         try {
@@ -662,7 +1065,7 @@ public class StarOSAgent {
         return false; // return false if any error happens
     }
 
-    public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+    public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
         List<Long> nodeIds = new ArrayList<>();
         prepare();
         try {
@@ -670,20 +1073,20 @@ public class StarOSAgent {
                     listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
             for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
                 detailInfo.getWorkersInfoList()
-                        .forEach(x -> getOrUpdateBackendIdByWorkerInfo(x).ifPresent(nodeIds::add));
+                        .forEach(x -> getOrUpdateNodeIdByWorkerInfo(x).ifPresent(nodeIds::add));
             }
             return nodeIds;
         } catch (StarClientException e) {
-            throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
+            throw new StarRocksException("Failed to get workers by group id. error: " + e.getMessage());
         }
     }
 
-    public List<String> listDefaultWorkerGroupIpPort() throws UserException {
+    public List<String> listWorkerGroupIpPort(long workerGroupId) throws StarRocksException {
         List<String> addresses = new ArrayList<>();
         prepare();
         try {
             List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
-                    listWorkerGroup(serviceId, Collections.singletonList(DEFAULT_WORKER_GROUP_ID), true);
+                    listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
             Preconditions.checkState(1 == workerGroupDetailInfos.size());
             WorkerGroupDetailInfo workerGroupInfo = workerGroupDetailInfos.get(0);
             for (WorkerInfo workerInfo : workerGroupInfo.getWorkersInfoList()) {
@@ -691,8 +1094,122 @@ public class StarOSAgent {
             }
             return addresses;
         } catch (StarClientException e) {
-            throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
+            throw new StarRocksException("Fail to get workers by default group id, error: " + e.getMessage());
         }
+    }
+
+    // remove previous worker with same backend id
+    private void tryRemovePreviousWorkerGroup(long workerGroupId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Iterator<Map.Entry<Long, Long>> iterator = workerToNode.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<Long, Long> entry = iterator.next();
+                long nodeId = entry.getValue();
+                long workerId = entry.getKey();
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node == null) {
+                    iterator.remove();
+                    continue;
+                }
+                if (node.getWorkerGroupId() == workerGroupId) {
+                    iterator.remove();
+                    workerToId.entrySet().removeIf(e -> e.getValue() == workerId);
+                }
+            }
+        }
+    }
+
+    public long createWorkerGroup(String size) throws DdlException {
+        return createWorkerGroup(size, 1);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
+        return createWorkerGroup(size, replicaNumber, ReplicationType.NO_REPLICATION);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType) throws DdlException {
+        return createWorkerGroup(size, replicaNumber, replicationType, WarmupLevel.WARMUP_NOTHING);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel)
+            throws DdlException {
+        return createWorkerGroup(size, replicaNumber, replicationType, warmupLevel, Collections.emptyMap());
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel, Map<String, String> properties) throws DdlException {
+        prepare();
+
+        // size should be x0, x1, x2, x4...
+        WorkerGroupSpec spec = WorkerGroupSpec.newBuilder().setSize(size).build();
+        // owner means tenant, now there is only one tenant, so pass "Starrocks" to starMgr
+        String owner = "Starrocks";
+        WorkerGroupDetailInfo result = null;
+        try {
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(), properties, replicaNumber,
+                    replicationType, warmupLevel);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to create worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to create worker group. error: " + e.getMessage());
+        }
+        return result.getGroupId();
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+        updateWorkerGroup(workerGroupId, replicaNumber, ReplicationType.NO_SET);
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType)
+            throws DdlException {
+        updateWorkerGroup(workerGroupId, replicaNumber, replicationType, WarmupLevel.WARMUP_NOT_SET);
+    }
+
+    public void updateWorkerGroup(long workerGroupId, Map<String, String> properties) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, properties, 0, ReplicationType.NO_SET,
+                    WarmupLevel.WARMUP_NOT_SET);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group properties. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType, warmupLevel);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
+    public WorkerGroupDetailInfo getWorkerGroupInfo(long workerGroupId) throws DdlException {
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> info =
+                    client.listWorkerGroup(serviceId, Lists.newArrayList(workerGroupId), false);
+            return info.get(0);
+        } catch (StarClientException e) {
+            String errMsg = "Failed to get worker group info (id=" + workerGroupId + "). error: " + e.getMessage();
+            LOG.warn(errMsg);
+            throw new DdlException(errMsg);
+        }
+    }
+
+    public void deleteWorkerGroup(long groupId) throws DdlException {
+        prepare();
+        try {
+            client.deleteWorkerGroup(serviceId, groupId);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete worker group {}. error: {}", groupId, e.getMessage());
+            throw new DdlException("Failed to delete worker group. error: " + e.getMessage());
+        }
+
+        tryRemovePreviousWorkerGroup(groupId);
     }
 
     // dump all starmgr meta, for DEBUG purpose
@@ -712,5 +1229,33 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId), workerGroupId);
         Preconditions.checkState(shardInfos.size() == 1);
         return shardInfos.get(0);
+    }
+
+    @NotNull
+    public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) throws StarClientException {
+        prepare();
+        List<ShardInfo> shardInfos = client.getShardInfo(serviceId, shardIds, workerGroupId);
+        return shardInfos;
+    }
+
+    /**
+     * Best-effort placement-convergence query for PACK shard groups. Returns, positionally aligned
+     * with {@code shardGroupIds}, whether each PACK shard group has converged onto co-resident workers
+     * in {@code workerGroupId} — every member shard has >=1 replica there and all member shards share
+     * the same replica worker set; an empty PACK group is vacuously stable. Eventually-consistent:
+     * callers must poll rather than treat a single {@code true} as durable. A non-PACK or non-existent
+     * id, or an empty {@code shardGroupIds}, fails the whole RPC with {@link StarClientException}, so
+     * callers must pass only existing PACK shard-group ids and never an empty list.
+     */
+    @NotNull
+    public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId)
+            throws StarClientException {
+        prepare();
+        return client.queryShardGroupStable(serviceId, shardGroupIds, workerGroupId);
+    }
+
+    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {
+        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(physicalPartitionId));
+        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, physicalPartitionId)).build();
     }
 }

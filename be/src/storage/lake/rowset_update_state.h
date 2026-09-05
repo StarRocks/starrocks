@@ -14,118 +14,241 @@
 
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <unordered_map>
 
+#include "gutil/macros.h"
+#include "storage/lake/cross_publish_context.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks::lake {
 
-class MetaFileBuilder;
+using CrossPublishRowSelectorPtr = std::unique_ptr<CrossPublishRowSelector>;
+
+class RssidFileInfoContainer;
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
-    std::vector<std::unique_ptr<Column>> write_columns;
+    MutableColumns write_columns;
+    void reset() {
+        src_rss_rowids.clear();
+        write_columns.clear();
+    }
+    size_t memory_usage() const {
+        size_t memory_usage = 0;
+        for (const auto& col : write_columns) {
+            if (col != nullptr) {
+                memory_usage += col->memory_usage();
+            }
+        }
+        return memory_usage;
+    }
 };
 
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
-    std::unique_ptr<Column> write_column;
+    // Container used to store the values of auto increment columns
+    MutableColumnPtr write_column;
+    // Schema of modified columns
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id{0};
+    uint32_t segment_id{0};
     std::vector<uint32_t> rowids;
-    bool skip_rewrite;
+    bool skip_rewrite{false};
 
-    AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    AutoIncrementPartialUpdateState() : schema(nullptr) {}
 
-    void init(std::shared_ptr<TabletSchema>& schema, uint32_t id, uint32_t segment_id) {
-        this->schema = schema;
+    void init(std::shared_ptr<TabletSchema> modified_schema, uint32_t id, uint32_t segment_id) {
+        this->schema = std::move(modified_schema);
         this->id = id;
         this->segment_id = segment_id;
     }
+    void reset() {
+        src_rss_rowids.clear();
+        write_column.reset();
+        schema.reset();
+        rowids.clear();
+    }
+    size_t memory_usage() const { return write_column ? write_column->memory_usage() : 0; }
+};
+
+struct RowsetUpdateStateParams {
+    const TxnLogPB_OpWrite& op_write;
+    const TabletSchemaPtr& tablet_schema;
+    const TabletMetadataPtr& metadata;
+    const Tablet* tablet;
+    const RssidFileInfoContainer& container;
 };
 
 class RowsetUpdateState {
 public:
-    using ColumnUniquePtr = std::unique_ptr<Column>;
-
     RowsetUpdateState();
     ~RowsetUpdateState();
 
-    Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet,
-                const MetaFileBuilder* builder, bool need_check_conflict);
+    DISALLOW_COPY_AND_MOVE(RowsetUpdateState);
 
-    Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
-                           std::map<int, std::string>* replace_segments, std::vector<std::string>* orphan_files);
+    // How to use `RowsetUpdateState` when publish:
+    //
+    // init()
+    // prepare()
+    //
+    // for each segment:
+    //      load_segment()
+    //      rewrite_segment()
+    //      ...
+    //      release_segment()
+    //
+    // for each del file:
+    //      load_delete()
+    //      ...
+    //      release_delete()
 
-    const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
-    const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
+    // init params in RowsetUpdateState.
+    void init(const RowsetUpdateStateParams& params);
 
-    std::size_t memory_usage() const { return _memory_usage; }
+    // Initialize shared state (rowset, segment iterators, per-segment vectors, column expr values).
+    // Must be called once before any load_segment call, for both serial and parallel paths.
+    Status prepare(const RowsetUpdateStateParams& params);
+
+    // Load `segment_id`-th segment file's state. Requires prepare() called first.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values.
+    Status load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
+                        bool need_resolve_conflict, bool need_lock);
+
+    // Handle `segment_id`-th segment file's partial update request.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values,
+    // provided each call uses its own replace_segments/orphan_files containers.
+    Status rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
+                           std::map<int, SegmentFileInfo>* replace_segments, std::vector<FileMetaPB>* orphan_files);
+
+    // Release `segment_id`-th segment file's state (upserts + partial state).
+    void release_segment(uint32_t segment_id);
+
+    // Release partial update state (write_columns) for a segment, but keep upserts for Phase 2.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values.
+    void release_segment_partial_state(uint32_t segment_id);
+
+    // Load `del_id`-th delete file's state.
+    Status load_delete(uint32_t del_id, const RowsetUpdateStateParams& params);
+
+    // Release `del_id`-th delete file's state.
+    void release_delete(uint32_t del_id);
+
+    const SegmentPKIteratorPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
+    const MutableColumnPtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
+
+    std::size_t memory_usage() const { return _memory_usage.load(std::memory_order_relaxed); }
 
     std::string to_string() const;
 
-    const std::vector<PartialUpdateState>& parital_update_states() { return _partial_update_states; }
+    const PartialUpdateState& parital_update_states(uint32_t segment_id) { return _partial_update_states[segment_id]; }
 
     static void plan_read_by_rssid(const std::vector<uint64_t>& rowids, size_t* num_default,
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid,
                                    std::vector<uint32_t>* idxes);
 
-    const std::vector<std::unique_ptr<Column>>& auto_increment_deletes() const;
+    // Blank out the index answers for the rows a sibling owns, leaving them at the "no old row"
+    // sentinel. |owned| is SegmentPKChunkRef::owned / SegmentPKIterator::standalone_owned(), one byte
+    // per entry of |rss_rowids|; empty means "own every row" and this is then a no-op, which is every
+    // publish but a SPLIT child's cross publish.
+    //
+    // Why any of this: cross publish hands each child the parent's whole op_write, siblings' rows
+    // included. A sibling's key still resolves -- against the sstables this child inherited from the
+    // parent -- and the location it returns can name a rowset the split pruned away, which
+    // plan_read_by_rssid would route to get_column_values and fail the publish for good on an unknown
+    // rssid. That is the failure #77744 fixed for del files, reached from the upsert side.
+    //
+    // A mask and not a filter on purpose: the vector keeps one entry per row of the source segment, so
+    // every caller's row i still names segment rowid i and no rowid derived from it has to be
+    // remapped -- and rewrite_segment needs one entry per row regardless. This only makes the ANSWER
+    // harmless; a caller that would act on "no old row" (insert the row, let it win a comparison,
+    // allocate an id for it) must still skip the row itself.
+    static void mask_unowned_rowids(const Filter& owned, std::vector<uint64_t>* rss_rowids);
+
+    const MutableColumnPtr& auto_increment_deletes(uint32_t segment_id) const;
+
+    static StatusOr<bool> file_exist(const std::string& full_path);
+
+    const OlapReaderStatistics& stats() const { return _stats; }
 
 private:
-    Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
+    // Load segment state
+    Status _do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params);
 
-    Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
-                                    Tablet* tablet, Rowset* rowset_ptr);
+    Status _prepare_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params, bool need_lock);
 
-    Status _prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                          Tablet* tablet, const TabletSchemaCSPtr& tablet_schema);
+    Status _prepare_auto_increment_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params,
+                                                         bool need_lock);
 
-    Status _resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
-                             Tablet* tablet, const MetaFileBuilder* builder);
+    // Widen the merged columns of segment |segment_id| to one value per row of the SOURCE segment, which
+    // is what the rewriters demand and what a cross publish's narrowed publish iterator does not give.
+    // A no-op on every tablet that was never resharded -- see the definition.
+    //
+    // Widens COPIES: |widened_write_columns| receives them, empty meaning nothing needed widening and the
+    // caller should hand the rewriter the state's own columns. The auto-increment column is the exception
+    // -- the rewriter reads it out of the state and moves it -- so the widened copy is swapped in here and
+    // the original handed back through |unwidened_auto_increment_column|; the caller owns putting it back,
+    // and must do so after the rewrite.
+    Status _widen_rewrite_columns_for_cross_publish(const RowsetUpdateStateParams& params, uint32_t segment_id,
+                                                    const FileInfo& src,
+                                                    const std::vector<ColumnId>& unmodified_column_ids,
+                                                    MutableColumns* widened_write_columns,
+                                                    MutableColumnPtr* unwidened_auto_increment_column);
 
-    Status _resolve_conflict_partial_update(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                            Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
+    // resolve conflict when publish transaction
+    Status _resolve_conflict(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version);
+
+    Status _resolve_conflict_partial_update(const RowsetUpdateStateParams& params,
+                                            const std::vector<uint64_t>& new_rss_rowids,
                                             std::vector<uint32_t>& read_column_ids, uint32_t segment_id,
-                                            size_t& total_conflicts, const TabletSchemaCSPtr& tablet_schema);
+                                            size_t& total_conflicts);
 
-    Status _resolve_conflict_auto_increment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                            Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
-                                            uint32_t segment_id, size_t& total_conflicts,
-                                            const TabletSchemaCSPtr& tablet_schema);
+    Status _resolve_conflict_auto_increment(const RowsetUpdateStateParams& params,
+                                            const std::vector<uint64_t>& new_rss_rowids, uint32_t segment_id,
+                                            size_t& total_conflicts);
 
-    Status _prepare_auto_increment_partial_update_states(const TxnLogPB_OpWrite& op_write,
-                                                         const TabletMetadata& metadata, Tablet* tablet,
-                                                         const TabletSchemaCSPtr& tablet_schema);
+    void _reset();
 
-    std::once_flag _load_once_flag;
-    Status _status;
     // one for each segment file
-    std::vector<ColumnUniquePtr> _upserts;
+    // Built once per rowset by prepare(); nullptr unless this is a SPLIT child cross-publishing a
+    // rowset whose segments the split marked shared. Outlives every _upserts iterator, which only
+    // borrows it.
+    CrossPublishRowSelectorPtr _row_selector;
+    std::vector<SegmentPKIteratorPtr> _upserts;
     // one for each delete file
-    std::vector<ColumnUniquePtr> _deletes;
-    size_t _memory_usage = 0;
+    MutableColumns _deletes;
+    std::atomic<size_t> _memory_usage{0};
     int64_t _tablet_id = 0;
+    // Because we can load partial segments when preload, so need vector to track their version.
+    std::vector<int64_t> _base_versions;
+    int64_t _schema_version = 0;
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 
-    std::vector<std::unique_ptr<Column>> _auto_increment_delete_pks;
+    MutableColumns _auto_increment_delete_pks;
 
-    int64_t _base_version;
-    const MetaFileBuilder* _builder;
+    // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
+    RowsetMetadataUniquePtr _rowset_meta_ptr;
+    std::unique_ptr<Rowset> _rowset_ptr;
 
-    RowsetUpdateState(const RowsetUpdateState&) = delete;
-    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
+    // Initialized by prepare(), reused by _do_load_upserts for each segment.
+    Schema _pkey_schema;
+    // to be destructed after segment iters
+    OlapReaderStatistics _stats;
+    std::vector<ChunkIteratorPtr> _segment_iters;
+    std::map<string, string> _column_to_expr_value;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

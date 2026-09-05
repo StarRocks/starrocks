@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回大于或等于输入参数的最小整数。"
 ---
 
 # ceil, dceil
 
-## 功能
+
 
 返回大于或等于 `x` 的最小整数。
 

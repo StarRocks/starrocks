@@ -17,8 +17,9 @@
 #include <optional>
 
 #include "column/binary_column.h"
+#include "column/global_dict/types.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/global_dict/types.h"
+#include "common/status.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {
@@ -53,6 +54,15 @@ public:
     }
 
     int16_t* code_convert_data() { return _code_convert_map.has_value() ? _code_convert_map->data() + 1 : nullptr; }
+
+    int32_t dict_convert_size() const { return _code_convert_map.has_value() ? _code_convert_map->size() - 1 : 0; }
+
+    void reserve_col(size_t n, Column* column) { _iter->reserve_col(n, column); }
+
+private:
+    Status _encode_string_to_global_id(Column* datas, Column* codes);
+
+    Status _encode_array_to_global_id(Column* datas, Column* codes);
 
 private:
     std::optional<std::vector<int16_t>> _code_convert_map;

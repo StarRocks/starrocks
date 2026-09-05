@@ -1,0 +1,93 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <map>
+
+#include "storage/rowset/column_writer.h"
+#include "storage/rowset/object_column_writer.h"
+
+namespace starrocks {
+class BloomFilter;
+
+StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
+                                                                  TypeInfoPtr type_info, WritableFile* wfile,
+                                                                  std::unique_ptr<ObjectColumnWriter> json_writer);
+
+class FlatJsonColumnWriter : public ColumnWriter {
+public:
+    FlatJsonColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
+                         std::unique_ptr<ObjectColumnWriter> json_writer);
+
+    ~FlatJsonColumnWriter() override = default;
+
+    Status init() override;
+
+    Status append(const Column& column) override;
+
+    Status finish_current_page() override;
+
+    uint64_t estimate_buffer_size() override;
+
+    Status finish() override;
+
+    Status write_data() override;
+    Status write_ordinal_index() override;
+    Status write_zone_map() override;
+    Status write_bitmap_index() override;
+    Status write_bloom_filter_index() override;
+    ordinal_t get_next_rowid() const override;
+
+    bool is_global_dict_valid() override;
+
+    // Get global dict validity status for each sub-column
+    const std::map<std::string, bool>& get_subcolumn_dict_valid() const;
+
+    uint64_t total_mem_footprint() const override;
+
+protected:
+    Status _init_flat_writers();
+    Status _write_flat_column();
+
+private:
+    Status _flat_column(MutableColumns& json_datas);
+
+protected:
+    ColumnMetaPB* _json_meta;
+    WritableFile* _wfile;
+    std::unique_ptr<ObjectColumnWriter> _json_writer;
+
+    std::vector<std::unique_ptr<ColumnWriter>> _flat_writers;
+    std::vector<std::string> _flat_paths;
+    std::vector<LogicalType> _flat_types;
+    MutableColumns _flat_columns;
+
+    MutableColumns _json_datas;
+    size_t _estimate_size = 0;
+
+    bool _has_remain = false;
+    std::shared_ptr<BloomFilter> _remain_filter;
+    bool _is_flat = false;
+    const FlatJsonConfig* _flat_json_config = nullptr;
+
+    // Store original options for sub-column global dict setup
+    // FIXME: avoid copy the map
+    const std::unordered_map<std::string, const GlobalDictMap> _global_dict;
+    std::string _column_name;
+
+    // Track global dict validity for each sub-column
+    std::map<std::string, bool> _subcolumn_dict_valid;
+};
+} // namespace starrocks

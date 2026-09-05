@@ -38,14 +38,16 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 public class FsBroker implements Writable, Comparable<FsBroker> {
     @SerializedName(value = "ip")
@@ -131,7 +133,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
         if (port != that.port) {
             return false;
         }
-        return ip.equals(that.ip);
+        return NetUtils.isSameIP(ip, that.ip);
 
     }
 
@@ -144,22 +146,26 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
 
     @Override
     public int compareTo(FsBroker o) {
-        int ret = ip.compareTo(o.ip);
+        int ret;
+        try {
+            InetAddress thisAddress = InetAddress.getByName(ip);
+            InetAddress otherAddress = InetAddress.getByName(ip);
+            
+            ret = thisAddress.getHostAddress().compareTo(otherAddress.getHostAddress());
+        } catch (UnknownHostException e) {
+            ret = ip.compareTo(o.ip);
+        }
         if (ret != 0) {
             return ret;
         }
         return port - o.port;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     @Override
     public String toString() {
-        return ip + ":" + port;
+        return NetUtils.getHostPortInAccessibleFormat(ip, port);
     }
 
     public static FsBroker readIn(DataInput in) throws IOException {

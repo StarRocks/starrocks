@@ -14,43 +14,10 @@
 
 #pragma once
 
-#include "column/column.h"
-#include "exprs/binary_function.h"
-#include "exprs/unary_function.h"
+#include "exprs/function_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
-
-#define VECTORIZED_BIT_BINARY_IMPL(NAME, OP) \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(NAME##Impl, l, r) { return l OP r; }
-
-VECTORIZED_BIT_BINARY_IMPL(bitAnd, &);
-VECTORIZED_BIT_BINARY_IMPL(bitOr, |);
-VECTORIZED_BIT_BINARY_IMPL(bitXor, ^);
-VECTORIZED_BIT_BINARY_IMPL(bitShiftLeft, <<);
-VECTORIZED_BIT_BINARY_IMPL(bitShiftRight, >>);
-
-#undef VECTORIZED_BIT_BINARY_IMPL
-
-DEFINE_BINARY_FUNCTION_WITH_IMPL(bitShiftRightLogicalImpl, v, shift) {
-    if constexpr (std::is_same_v<LType, int8_t>) {
-        return uint8_t(v) >> shift;
-    } else if constexpr (std::is_same_v<LType, int16_t>) {
-        return uint16_t(v) >> shift;
-    } else if constexpr (std::is_same_v<LType, int32_t>) {
-        return uint32_t(v) >> shift;
-    } else if constexpr (std::is_same_v<LType, int64_t>) {
-        return uint64_t(v) >> shift;
-    } else if constexpr (std::is_same_v<LType, __int128_t>) {
-        return uint128_t(v) >> shift;
-    } else {
-        return v >> shift;
-    }
-}
-
-DEFINE_UNARY_FN_WITH_IMPL(bitNotImpl, v) {
-    return ~v;
-}
 
 class BitFunctions {
 public:
@@ -60,11 +27,7 @@ public:
      * @return: TypeColumn
      */
     template <LogicalType Type>
-    DEFINE_VECTORIZED_FN(bitAnd) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
-        return VectorizedStrictBinaryFunction<bitAndImpl>::evaluate<Type>(l, r);
-    }
+    DEFINE_VECTORIZED_FN(bitAnd);
 
     /**
      * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
@@ -72,11 +35,7 @@ public:
      * @return: TypeColumn
      */
     template <LogicalType Type>
-    DEFINE_VECTORIZED_FN(bitOr) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
-        return VectorizedStrictBinaryFunction<bitOrImpl>::evaluate<Type>(l, r);
-    }
+    DEFINE_VECTORIZED_FN(bitOr);
 
     /**
      * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
@@ -84,11 +43,7 @@ public:
      * @return: TypeColumn
      */
     template <LogicalType Type>
-    DEFINE_VECTORIZED_FN(bitXor) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
-        return VectorizedStrictBinaryFunction<bitXorImpl>::evaluate<Type>(l, r);
-    }
+    DEFINE_VECTORIZED_FN(bitXor);
 
     /**
      * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
@@ -96,11 +51,7 @@ public:
      * @return: TypeColumn
      */
     template <LogicalType Type>
-    DEFINE_VECTORIZED_FN(bitShiftLeft) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
-        return VectorizedStrictBinaryFunction<bitShiftLeftImpl>::evaluate<Type>(l, r);
-    }
+    DEFINE_VECTORIZED_FN(bitShiftLeft);
 
     /**
      * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
@@ -108,11 +59,7 @@ public:
      * @return: TypeColumn
      */
     template <LogicalType Type>
-    DEFINE_VECTORIZED_FN(bitShiftRight) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
-        return VectorizedStrictBinaryFunction<bitShiftRightImpl>::evaluate<Type>(l, r);
-    }
+    DEFINE_VECTORIZED_FN(bitShiftRight);
 
     /**
      * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
@@ -120,11 +67,7 @@ public:
      * @return: TypeColumn
      */
     template <LogicalType Type>
-    DEFINE_VECTORIZED_FN(bitShiftRightLogical) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
-        return VectorizedStrictBinaryFunction<bitShiftRightLogicalImpl>::evaluate<Type>(l, r);
-    }
+    DEFINE_VECTORIZED_FN(bitShiftRightLogical);
 
     /**
      * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
@@ -132,9 +75,6 @@ public:
      * @return: TypeColumn
      */
     template <LogicalType Type>
-    DEFINE_VECTORIZED_FN(bitNot) {
-        auto v = VECTORIZED_FN_ARGS(0);
-        return VectorizedStrictUnaryFunction<bitNotImpl>::evaluate<Type>(v);
-    }
+    DEFINE_VECTORIZED_FN(bitNot);
 };
 } // namespace starrocks

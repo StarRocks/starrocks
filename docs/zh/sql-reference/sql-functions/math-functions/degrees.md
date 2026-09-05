@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将以弧度表示的角度x转换为度数。"
 ---
 
 # degrees
 
-## 功能
+
 
 将参数 `x` 转成角度，`x` 是弧度。
 

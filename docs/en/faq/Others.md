@@ -1,8 +1,10 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 120
+displayed_sidebar: docs
+description: "General FAQ for miscellaneous StarRocks questions."
 ---
 
-# Other FAQs
+# Other FAQ
 
 This topic provides answers to some general questions.
 
@@ -192,7 +194,7 @@ Run the `select current_version();` command or the CLI command `./bin/show_fe_ve
 
 ## How to set the memory size of an FE?
 
-The metadata is stored in the memory used by the FE. You can set the memory size of the FE according to the number of tablets as shown in the table below. For example, if the number of tablets is below 1 million, you should allocate a minimum of 16 GB memory to the FE. You can configure the values of the parameters `-Xms` 和 `-Xmx` in the **JAVA_OPTS** configuration item in the **fe.conf** file, and the values of the parameters `-Xms` 和 `-Xmx` should be consistent. Note that the configuration should be same across all FEs because any of the FEs can be elected as a Leader.
+The metadata is stored in the memory used by the FE. You can set the memory size of the FE according to the number of tablets as shown in the table below. For example, if the number of tablets is below 1 million, you should allocate a minimum of 16 GB memory to the FE. You can configure the values of the parameters `-Xms` and `-Xmx` in the **JAVA_OPTS** configuration item in the **fe.conf** file, and the values of the parameters `-Xms` and `-Xmx` should be consistent. Note that the configuration should be same across all FEs because any of the FEs can be elected as a Leader.
 
 | Number of tablets    | Memory size of each FE |
 | -------------- | ----------- |
@@ -244,3 +246,24 @@ You can remove the directory `trash` using `rm -rf` command. If you have already
 ## Can add extra disks to BE nodes?
 
 Yes. You can add the disks to the directory specified by the BE configuration item `storage_root_path`.
+
+## How can I prevent expression partition conflicts caused by concurrent execution of loading tasks and partition creation tasks?
+
+Currently, for tables with the expression partitioning strategy, partitions created during loading tasks can conflict with those created during ALTER TABLE tasks. Since loading tasks take priority, a conflicting ALTER task is cancelled or fails. This applies only to alter operations that rewrite data or table-level metadata, such as a full schema change, rollup, or `OPTIMIZE`. Metadata-only alter operations no longer conflict: when the FE configuration `enable_concurrent_add_partition_during_alter` is set to `true` (the default), partition creation proceeds concurrently with the shared-data ADD/DROP INDEX fast-path jobs and with the transient metadata-update state of fast schema evolution. To prevent conflicts for the still-affected alter types, consider the following workarounds:
+
+- If you use coarse time-based partitions (or example, partitioning by day or month), you can prevent ALTER operations from crossing time boundaries, reducing the risk of partition creation failures.
+- If you use fine-grained time-based partitions (or example, partitioning by hour), you can manually create partitions for a future time range to ensure that ALTER operations are not disrupted by new partition created by loading tasks. You can use the [EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) feature to trigger partition creation by executing an INSERT statement without committing the transaction. This allows you to create the necessary partitions without affecting actual data. The following example demonstrates how to create partitions for the next 8 hours:
+
+```SQL
+CREATE TABLE t(
+    event_time DATETIME
+)
+PARTITION BY date_trunc('hour', event_time);
+
+EXPLAIN ANALYZE
+INSERT INTO t (event_time)
+SELECT DATE_ADD(NOW(), INTERVAL d hour)
+FROM table(generate_series(0, 8)) AS g(d);
+
+SHOW PARTITIONS FROM t;
+```

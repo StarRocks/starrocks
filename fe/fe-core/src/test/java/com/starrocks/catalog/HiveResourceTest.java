@@ -12,35 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Injectable;
+import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 public class HiveResourceTest {
     private static ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
 
     @Test
-    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
         String name = "hive0";
         String type = "hive";
         String metastoreURIs = "thrift://127.0.0.1:9380";
@@ -48,11 +47,20 @@ public class HiveResourceTest {
         properties.put("type", type);
         properties.put("hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        // drop repo
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+
+        Analyzer.analyze(stmt, connectContext);
         HiveResource resource = (HiveResource) Resource.fromStmt(stmt);
-        Assert.assertEquals("hive0", resource.getName());
-        Assert.assertEquals(type, resource.getType().name().toLowerCase());
-        Assert.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
+        Assertions.assertEquals("hive0", resource.getName());
+        Assertions.assertEquals(type, resource.getType().name().toLowerCase());
+        Assertions.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
     }
 
     @Test
@@ -65,7 +73,7 @@ public class HiveResourceTest {
 
         String json = GsonUtils.GSON.toJson(resource);
         Resource resource2 = GsonUtils.GSON.fromJson(json, Resource.class);
-        Assert.assertTrue(resource2 instanceof HiveResource);
-        Assert.assertEquals(metastoreURIs, ((HiveResource) resource2).getHiveMetastoreURIs());
+        Assertions.assertTrue(resource2 instanceof HiveResource);
+        Assertions.assertEquals(metastoreURIs, ((HiveResource) resource2).getHiveMetastoreURIs());
     }
 }

@@ -35,19 +35,20 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.estimate.ShallowMemory;
+import com.starrocks.sql.ast.ReplicaStatus;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Comparator;
 
 /**
  * This class represents the olap replica related metadata.
  */
+@ShallowMemory
 public class Replica implements Writable {
     private static final Logger LOG = LogManager.getLogger(Replica.class);
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();
@@ -74,15 +75,6 @@ public class Replica implements Writable {
         }
     }
 
-    public enum ReplicaStatus {
-        OK, // health
-        DEAD, // backend is not available
-        VERSION_ERROR, // missing version
-        MISSING, // replica does not exist
-        SCHEMA_ERROR, // replica's schema hash does not equal to index's schema hash
-        BAD // replica is broken.
-    }
-
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "backendId")
@@ -98,7 +90,7 @@ public class Replica implements Writable {
     //   1. tablet has 2 replica A has version[7,8,9,10], B: [7,8,9,10]
     //   2. a newly cloned replica C full clone from replica A, then has version [10]
     //   3. current partition visible version is still 9
-    //   4. A query read this tablet at version 9, and picks replica C, but replica C doesn't have version 10,
+    //   4. A query read this tablet at version 9, and picks replica C, but replica C only have version 10,
     //      causing `version not found` error
     @SerializedName(value = "minReadableVersion")
     private volatile long minReadableVersion = 0;
@@ -107,6 +99,13 @@ public class Replica implements Writable {
     // Use this version to detect data lose on BE.
     // This version is only accessed by ReportHandler, so lock is unnecessary when updating.
     private volatile long lastReportVersion = 0;
+
+    // The continuous version of the previous tablet report that carried version_miss=true while the replica
+    // was behind the visible version, or -1 otherwise. Used by ReportHandler to require a permanent version
+    // hole to persist across two consecutive reports before triggering recovery, so a transient out-of-order
+    // publish that fills quickly is not mistaken for a stuck hole. Not serialized; leader-local, reset after a
+    // failover (which only delays detection by one report, never compromises safety).
+    private volatile long versionMissBaselineVersion = -1L;
 
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
@@ -127,6 +126,19 @@ public class Replica implements Writable {
 
     private volatile long versionCount = -1;
 
+    // The tablet version the BE computed this replica's rowCount from, or 0 when that is unknown.
+    // Deliberately NOT persisted and NOT journal-replicated: it describes what THIS FE managed to
+    // collect, and every FE collects independently. Unknown means either nothing has been collected
+    // yet, or the BE is too old to report it, or rowCount was last overwritten by a path that
+    // carries no version with it -- in all three cases a caller needing an exact row count must not
+    // trust rowCount. A version rather than a timestamp so it stays comparable across machines; see
+    // Tablet#getRowCountAtVersion.
+    //
+    // Only ever read through getRowCountAtVersion(), which hands out the count and the version it
+    // was proven at together, so a count can never be read next to a version that does not describe
+    // it.
+    private volatile long statsVersion = 0;
+
     private long pathHash = -1;
 
     // If bad and setBadForce are both true, it means this Replica is unrecoverable and we will delete it
@@ -134,14 +146,14 @@ public class Replica implements Writable {
     private boolean bad = false;
     private boolean setBadForce = false;
 
-    /*
+    /**
      * If set to true, which means this replica need to be repaired explicitly.
      * This can happen when this replica is created by a balance clone task, and
      * when task finished, the version of this replica is behind the partition's visible version.
      * So this replica need a further repair.
      * If we do not do this, this replica will be treated as version stale, and will be removed,
      * so that the balance task is failed, which is unexpected.
-     *
+     * <p>
      * furtherRepairSetTime set alone with needFurtherRepair.
      * This is an insurance, in case that further repair task always fail. If 20 min passed
      * since we set needFurtherRepair to true, the 'needFurtherRepair' will be set to false.
@@ -185,6 +197,9 @@ public class Replica implements Writable {
     // This variable will be used in Primary Key table only. It is the max rowset creation time for
     // the corresponding replica. This variable is in-memory only.
     private long maxRowsetCreationTime = -1L;
+
+    // The data checksum of this replica
+    private long checksum = -1L;
 
     public Replica() {
     }
@@ -294,6 +309,10 @@ public class Replica implements Writable {
         return maxRowsetCreationTime;
     }
 
+    public long getChecksum() {
+        return checksum;
+    }
+
     public long getPathHash() {
         return pathHash;
     }
@@ -348,6 +367,10 @@ public class Replica implements Writable {
         return true;
     }
 
+    public void setChecksum(long checksum) {
+        this.checksum = checksum;
+    }
+
     public boolean needFurtherRepair() {
         if (needFurtherRepair && System.currentTimeMillis() - this.furtherRepairSetTime < FURTHER_REPAIR_TIMEOUT_MS) {
             return true;
@@ -369,10 +392,14 @@ public class Replica implements Writable {
     }
 
     // only update data size and row num
-    public synchronized void updateStat(long dataSize, long rowNum, long versionCount) {
+    // statsVersion is the tablet version the BE computed rowNum from (0 = unknown); it is written
+    // here, together with the count it describes, and read back the same way -- see
+    // getRowCountAtVersion.
+    public synchronized void updateStat(long dataSize, long rowNum, long versionCount, long statsVersion) {
         this.dataSize = dataSize;
         this.rowCount = rowNum;
         this.versionCount = versionCount;
+        this.statsVersion = statsVersion;
     }
 
     public synchronized void updateRowCount(long newVersion, long minReadableVersion, long newDataSize,
@@ -406,6 +433,10 @@ public class Replica implements Writable {
         this.lastSuccessVersion = newVersion;
         this.dataSize = newDataSize;
         this.rowCount = newRowCount;
+        // This count did not come from a stat collection, so nothing vouches for which version it
+        // covers. See getRowCountAtVersion.
+        this.statsVersion = 0;
+        this.minReadableVersion = newVersion;
     }
 
     /* last failed version:  LFV
@@ -459,6 +490,12 @@ public class Replica implements Writable {
 
         this.version = newVersion;
         this.dataSize = newDataSize;
+        if (this.rowCount != newRowCount) {
+            // Overwritten by a path that carries no proof of which version it covers (publish, a
+            // tablet report, ...), so drop the stat collection's proof rather than let it vouch for
+            // a number it never saw. See getRowCountAtVersion.
+            this.statsVersion = 0;
+        }
         this.rowCount = newRowCount;
 
         // just check it
@@ -551,6 +588,19 @@ public class Replica implements Writable {
         return versionCount;
     }
 
+    /**
+     * The row count this replica reports, but only if a stat collection proved it was computed from
+     * exactly {@code version}; -1 otherwise ("this replica cannot vouch for that version").
+     * <p>
+     * Synchronized against {@link #updateStat}, so the count and the version proving it are always
+     * read as one pair. Exact equality, not {@code >=}: a count computed from a version the FE has
+     * not made visible yet includes rows the query must not see, so it is no more usable than a
+     * stale one.
+     */
+    public synchronized long getRowCountAtVersion(long version) {
+        return statsVersion > 0 && statsVersion == version ? rowCount : -1L;
+    }
+
     public void setVersionCount(long versionCount) {
         this.versionCount = versionCount;
     }
@@ -594,42 +644,6 @@ public class Replica implements Writable {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(id);
-        out.writeLong(backendId);
-        out.writeLong(version);
-        out.writeLong(0); // write a version_hash for compatibility
-        out.writeLong(dataSize);
-        out.writeLong(rowCount);
-        Text.writeString(out, state.name());
-
-        out.writeLong(lastFailedVersion);
-        out.writeLong(minReadableVersion); // originally used as version_hash, now reused as minReadableVersion
-        out.writeLong(lastSuccessVersion);
-        out.writeLong(0); // write a version_hash for compatibility
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        id = in.readLong();
-        backendId = in.readLong();
-        version = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-        dataSize = in.readLong();
-        rowCount = in.readLong();
-        state = ReplicaState.valueOf(Text.readString(in));
-        lastFailedVersion = in.readLong();
-        minReadableVersion = in.readLong(); // originally used as version_hash, now reused as minReadableVersion
-        lastSuccessVersion = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-    }
-
-    public static Replica read(DataInput in) throws IOException {
-        Replica replica = new Replica();
-        replica.readFields(in);
-        return replica;
-    }
-
-    @Override
     public int hashCode() {
         return Long.hashCode(id);
     }
@@ -653,6 +667,19 @@ public class Replica implements Writable {
                 && (lastFailedVersion == replica.lastFailedVersion)
                 && (lastSuccessVersion == replica.lastSuccessVersion)
                 && (minReadableVersion == replica.minReadableVersion);
+    }
+
+    public ReplicaStatus computeReplicaStatus(SystemInfoService infoService, long visibleVersion, int schemaHash) {
+        ReplicaStatus status = ReplicaStatus.OK;
+        Backend be = infoService.getBackend(this.backendId);
+        if (be == null || !be.isAvailable() || this.bad) {
+            status = ReplicaStatus.DEAD;
+        } else if (this.version < visibleVersion || this.lastFailedVersion > 0) {
+            status = ReplicaStatus.VERSION_ERROR;
+        } else if (this.schemaHash != -1 && this.schemaHash != schemaHash) {
+            status = ReplicaStatus.SCHEMA_ERROR;
+        }
+        return status;
     }
 
     private static class VersionComparator<T extends Replica> implements Comparator<T> {
@@ -685,5 +712,13 @@ public class Replica implements Writable {
 
     public long getLastReportVersion() {
         return this.lastReportVersion;
+    }
+
+    public void setVersionMissBaselineVersion(long versionMissBaselineVersion) {
+        this.versionMissBaselineVersion = versionMissBaselineVersion;
+    }
+
+    public long getVersionMissBaselineVersion() {
+        return this.versionMissBaselineVersion;
     }
 }

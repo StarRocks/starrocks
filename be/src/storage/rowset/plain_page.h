@@ -34,16 +34,17 @@
 
 #pragma once
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
 #include "column/column.h"
+#include "column/container_resource.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/coding.h"
-#include "util/faststring.h"
+#include "storage_primitive/range.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -58,6 +59,11 @@ public:
         _buffer.reserve(_options.data_page_size + 1024);
         _max_count = _options.data_page_size / SIZE_OF_TYPE;
         reset();
+    }
+
+    void reserve_head(uint8_t head_size) override {
+        CHECK(_reserved_head_size == 0);
+        _reserved_head_size = head_size;
     }
 
     bool is_page_full() override { return _buffer.size() > _options.data_page_size; }
@@ -80,7 +86,13 @@ public:
             _first_value.assign_copy(&_buffer[PLAIN_PAGE_HEADER_SIZE], SIZE_OF_TYPE);
             _last_value.assign_copy(&_buffer[PLAIN_PAGE_HEADER_SIZE + (_count - 1) * SIZE_OF_TYPE], SIZE_OF_TYPE);
         }
-        return &_buffer;
+        if (_reserved_head_size == 0) {
+            return &_buffer;
+        } else {
+            _plus_header_buffer.resize(_reserved_head_size + _buffer.size());
+            memcpy(&_plus_header_buffer[_reserved_head_size], _buffer.data(), _buffer.size());
+            return &_plus_header_buffer;
+        }
     }
 
     void reset() override {
@@ -115,18 +127,22 @@ private:
     PageBuilderOptions _options;
     uint32_t _count;
     uint32_t _max_count;
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     faststring _first_value;
     faststring _last_value;
+    uint8_t _reserved_head_size{0};
+    faststring _plus_header_buffer;
 };
 
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
+    using ValueType = StorageCppType<Type>;
+
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
 
-    [[nodiscard]] Status init() override {
+    Status init() override {
         CHECK(!_parsed);
 
         if (_data.size < PLAIN_PAGE_HEADER_SIZE) {
@@ -151,7 +167,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         CHECK(_parsed) << "Must call init()";
 
         if (PREDICT_FALSE(_num_elems == 0)) {
@@ -165,7 +181,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
         DCHECK(_parsed) << "Must call init() firstly";
 
         if (_num_elems == 0) {
@@ -203,7 +219,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* count, Column* dst) override {
+    Status next_batch(size_t* count, Column* dst) override {
         SparseRange<> read_range;
         uint32_t begin = current_index();
         read_range.add(Range<>(begin, begin + *count));
@@ -212,7 +228,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed);
 
         size_t to_read = range.span_size();
@@ -225,8 +241,9 @@ public:
             _cur_idx = iter.begin();
             Range<> r = iter.next(to_read);
             uint32_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
-            int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
-                                        max_fetch * SIZE_OF_TYPE);
+            const void* data = &_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE];
+            ContainerResource container(_page_handle, data, max_fetch * SIZE_OF_TYPE);
+            int n = dst->append_numbers(container);
             DCHECK_EQ(max_fetch, n);
             _cur_idx += max_fetch;
         }
@@ -243,6 +260,10 @@ public:
         return _cur_idx;
     }
 
+    void at_index(uint32_t idx, ValueType* out) const {
+        memcpy(out, &_data[PLAIN_PAGE_HEADER_SIZE + idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
+    }
+
     EncodingTypePB encoding_type() const override { return PLAIN_ENCODING; }
 
 private:
@@ -250,8 +271,8 @@ private:
     bool _parsed{false};
     uint32_t _num_elems{0};
     uint32_t _cur_idx{0};
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 };
 
 } // namespace starrocks

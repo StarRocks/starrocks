@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回最近一次执行的查询的 ID。"
 ---
 
 # last_query_id
 
-## 功能
+
 
 返回最近一次执行的查询的 ID。
 

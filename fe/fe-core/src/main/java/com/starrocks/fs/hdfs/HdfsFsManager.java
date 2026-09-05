@@ -17,17 +17,17 @@
 
 package com.starrocks.fs.hdfs;
 
-import com.amazonaws.util.AwsHostNameUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -39,24 +39,35 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import software.amazon.awssdk.awscore.util.AwsHostNameUtils;
+import software.amazon.awssdk.regions.Region;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 class ConfigurationWrap extends Configuration {
@@ -64,7 +75,13 @@ class ConfigurationWrap extends Configuration {
 
     public String parseRegionFromEndpoint(TObjectStoreType tObjectStoreType, String endPoint) {
         if (tObjectStoreType == TObjectStoreType.S3) {
-            return AwsHostNameUtils.parseRegionFromAwsPartitionPattern(endPoint);
+            Optional<Region> region = AwsHostNameUtils.parseSigningRegion(endPoint, null);
+            if (region.isPresent()) {
+                return region.get().toString();
+            } else {
+                // default region
+                return CloudConfigurationConstants.DEFAULT_AWS_REGION;
+            }
         } else if (tObjectStoreType == TObjectStoreType.OSS) {
             String[] hostSplit = endPoint.split("\\.");
             String regionId = hostSplit[0];
@@ -257,12 +274,16 @@ public class HdfsFsManager {
     private static final String OBS_SCHEME = "obs";
     private static final String TOS_SCHEME = "tos";
 
-    private static final String ABFS_SCHEMA = "abfs";
-    private static final String ABFSS_SCHEMA = "abfss";
-    private static final String ADL_SCHEMA = "adl";
-    private static final String WASB_SCHEMA = "wasb";
-    private static final String WASBS_SCHEMA = "wasbs";
-    private static final String GCS_SCHEMA = "gs";
+    private static final String ABFS_SCHEME = "abfs";
+    private static final String ABFSS_SCHEME = "abfss";
+    private static final String ADL_SCHEME = "adl";
+    public static final String WASB_SCHEME = "wasb";
+    public static final String WASBS_SCHEME = "wasbs";
+    private static final String AZBLOB_SCHEME = "azblob";
+    private static final String ADLS2_SCHEME = "adls2";
+    private static final String HTTP_PREFIX = "http://";
+    private static final String HTTPS_PREFIX = "https://";
+    private static final String GCS_SCHEME = "gs";
     private static final String USER_NAME_KEY = "username";
     private static final String PASSWORD_KEY = "password";
     // arguments for ha hdfs
@@ -275,8 +296,8 @@ public class HdfsFsManager {
     // is closed by other thread.
 
     // arguments for s3a
-    protected static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
-    protected static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
+    public static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
+    public static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
     protected static final String FS_S3A_ENDPOINT = "fs.s3a.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
@@ -286,8 +307,8 @@ public class HdfsFsManager {
     protected static final String FS_S3A_AWS_CRED_PROVIDER = "fs.s3a.aws.credentials.provider";
 
     // arguments for ks3
-    protected static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
-    protected static final String FS_KS3_SECRET_KEY = "fs.ks3.AccessSecret";
+    public static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
+    public static final String FS_KS3_SECRET_KEY = "fs.ks3.AccessSecret";
     protected static final String FS_KS3_ENDPOINT = "fs.ks3.endpoint";
     protected static final String FS_KS3_IMPL = "fs.ks3.impl";
     // This property is used like 'fs.ks3.impl.disable.cache'
@@ -295,8 +316,8 @@ public class HdfsFsManager {
     protected static final String FS_KS3_IMPL_DISABLE_CACHE = "fs.ks3.impl.disable.cache";
 
     // arguments for oss
-    protected static final String FS_OSS_ACCESS_KEY = "fs.oss.accessKeyId";
-    protected static final String FS_OSS_SECRET_KEY = "fs.oss.accessKeySecret";
+    public static final String FS_OSS_ACCESS_KEY = "fs.oss.accessKeyId";
+    public static final String FS_OSS_SECRET_KEY = "fs.oss.accessKeySecret";
     protected static final String FS_OSS_ENDPOINT = "fs.oss.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_OSS_IMPL_DISABLE_CACHE = "fs.oss.impl.disable.cache";
@@ -304,16 +325,18 @@ public class HdfsFsManager {
     protected static final String FS_OSS_IMPL = "fs.oss.impl";
 
     // arguments for cos
-    protected static final String FS_COS_ACCESS_KEY = "fs.cosn.userinfo.secretId";
-    protected static final String FS_COS_SECRET_KEY = "fs.cosn.userinfo.secretKey";
+    public static final String FS_COS_ACCESS_KEY = "fs.cosn.userinfo.secretId";
+    public static final String FS_COS_SECRET_KEY = "fs.cosn.userinfo.secretKey";
     protected static final String FS_COS_ENDPOINT = "fs.cosn.bucket.endpoint_suffix";
     protected static final String FS_COS_IMPL_DISABLE_CACHE = "fs.cosn.impl.disable.cache";
     protected static final String FS_COS_CONNECTION_SSL_ENABLED = "fs.cos.connection.ssl.enabled";
     protected static final String FS_COS_IMPL = "fs.cosn.impl";
 
     // arguments for obs
-    protected static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
-    protected static final String FS_OBS_SECRET_KEY = "fs.obs.secret.key";
+    public static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
+    public static final String FS_OBS_SECRET_KEY = "fs.obs.secret.key";
+    public static final String FS_OBS_ACCESS_KEY_UNDERSCORE = "fs.obs.access_key";
+    public static final String FS_OBS_SECRET_KEY_UNDERSCORE = "fs.obs.secret_key";
     protected static final String FS_OBS_ENDPOINT = "fs.obs.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
@@ -327,8 +350,8 @@ public class HdfsFsManager {
     protected static final String FS_GS_IMPL_DISABLE_CACHE = "fs.gs.impl.disable.cache";
 
     // arguments for tos
-    protected static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
-    protected static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
+    public static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
+    public static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
     protected static final String FS_TOS_ENDPOINT = "fs.tos.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_TOS_IMPL_DISABLE_CACHE = "fs.tos.impl.disable.cache";
@@ -337,6 +360,24 @@ public class HdfsFsManager {
     protected static final String FS_TOS_REGION = "fs.tos.region";
 
     private final ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(1);
+
+    // Timeout in seconds for closing a single filesystem.
+    // If close takes longer the task is cancelled via interrupt.
+    private long fileSystemCloseTimeoutSecs = 60L;
+
+    // Dedicated thread pool for asynchronous filesystem close.
+    // Keeps the management/checker thread free and allows a watchdog timeout per close.
+    private final ExecutorService fileSystemClosePool = createFileSystemClosePool();
+
+    private static ThreadPoolExecutor createFileSystemClosePool() {
+        ThreadPoolExecutor pool = ThreadPoolManager.newDaemonThreadPool(
+                5, 5, 60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(1024),
+                new ThreadPoolExecutor.AbortPolicy(),
+                "hdfs-fs-close", true);
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
+    }
 
     private int readBufferSize = 128 << 10; // 128k
     private int writeBufferSize = 128 << 10; // 128k
@@ -350,6 +391,34 @@ public class HdfsFsManager {
         readBufferSize = Config.hdfs_read_buffer_size_kb << 10;
         writeBufferSize = Config.hdfs_write_buffer_size_kb << 10;
         handleManagementPool.schedule(new FileSystemExpirationChecker(), 0, TimeUnit.SECONDS);
+    }
+
+    private static final int MAX_CACHE_ACQUIRE_RETRIES = 3;
+
+    /**
+     * Retrieves or creates a cached HdfsFs for the given identity, retrying if the entry is
+     * concurrently evicted by the expiration checker.
+     * <p>
+     * On success the returned HdfsFs has its lock held — the caller MUST release it in a
+     * finally block.
+     */
+    private HdfsFs acquireCachedFileSystem(HdfsFsIdentity identity) throws StarRocksException {
+        for (int attempt = 0; attempt < MAX_CACHE_ACQUIRE_RETRIES; attempt++) {
+            cachedFileSystem.putIfAbsent(identity, new HdfsFs(identity));
+            HdfsFs fileSystem = cachedFileSystem.get(identity);
+            if (fileSystem == null) {
+                // Entry was removed by checker between putIfAbsent and get — retry.
+                continue;
+            }
+            fileSystem.getLock().lock();
+            if (cachedFileSystem.containsKey(identity)) {
+                return fileSystem; // lock held
+            }
+            // Entry was evicted while we waited for the lock — unlock and retry.
+            fileSystem.getLock().unlock();
+        }
+        throw new StarRocksException(
+                "Failed to acquire cached file system for " + identity + " after " + MAX_CACHE_ACQUIRE_RETRIES + " retries");
     }
 
     private static void convertHDFSConfToProperties(Configuration conf, THdfsProperties tProperties) {
@@ -367,11 +436,11 @@ public class HdfsFsManager {
      * @return BrokerFileSystem with different FileSystem based on scheme
      */
     public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         String scheme = pathUri.getUri().getScheme();
         if (Strings.isNullOrEmpty(scheme)) {
-            throw new UserException("invalid path. scheme is null");
+            throw new StarRocksException("invalid path. scheme is null");
         }
         switch (scheme) {
             case HDFS_SCHEME:
@@ -391,13 +460,19 @@ public class HdfsFsManager {
                 return getOBSFileSystem(path, loadProperties, tProperties);
             case TOS_SCHEME:
                 return getTOSFileSystem(path, loadProperties, tProperties);
-            case ABFS_SCHEMA:
-            case ABFSS_SCHEMA:
-            case ADL_SCHEMA:
-            case WASB_SCHEMA:
-            case WASBS_SCHEMA:
+            case ABFS_SCHEME:
+            case ABFSS_SCHEME:
+            case ADL_SCHEME:
+            case WASB_SCHEME:
+            case WASBS_SCHEME:
                 return getAzureFileSystem(path, loadProperties, tProperties);
-            case GCS_SCHEMA:
+            case AZBLOB_SCHEME:
+                // Translate storage-volume azblob path to Hadoop wasb/wasbs path with endpoint embedded.
+                return getAzureFileSystem(buildAzureBlobHadoopPath(pathUri, loadProperties), loadProperties, tProperties);
+            case ADLS2_SCHEME:
+                // Translate storage-volume adls2 path to Hadoop abfs/abfss path with endpoint embedded.
+                return getAzureFileSystem(buildAdls2HadoopPath(pathUri, loadProperties), loadProperties, tProperties);
+            case GCS_SCHEME:
                 return getGoogleFileSystem(path, loadProperties, tProperties);
             default:
                 // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
@@ -405,6 +480,53 @@ public class HdfsFsManager {
                 // SDK is compatible with nearly all file/object storage system
                 return getUniversalFileSystem(path, loadProperties, tProperties);
         }
+    }
+
+    private String buildAzureBlobHadoopPath(WildcardURI pathUri, Map<String, String> loadProperties)
+            throws StarRocksException {
+        String endpoint = loadProperties.get(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT);
+        if (Strings.isNullOrEmpty(endpoint)) {
+            throw new StarRocksException("missing property azure.blob.endpoint for path: " + pathUri.getPath());
+        }
+        String newScheme = endpoint.toLowerCase().startsWith(HTTPS_PREFIX) ? WASBS_SCHEME : WASB_SCHEME;
+        // Hadoop Azure FS expects wasb[s]://<container>@<endpoint-without-scheme>/...
+        String endpointWithoutScheme = stripEndpointScheme(endpoint);
+        String container = pathUri.getUri().getAuthority();
+        if (Strings.isNullOrEmpty(container)) {
+            throw new StarRocksException("invalid azure path, container is empty: " + pathUri.getPath());
+        }
+        String rawPath = pathUri.getUri().getRawPath();
+        String normalizedPath = rawPath == null ? "" : rawPath;
+        return newScheme + "://" + container + "@" + endpointWithoutScheme + normalizedPath;
+    }
+
+    private String buildAdls2HadoopPath(WildcardURI pathUri, Map<String, String> loadProperties)
+            throws StarRocksException {
+        String endpoint = loadProperties.get(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT);
+        if (Strings.isNullOrEmpty(endpoint)) {
+            throw new StarRocksException("missing property azure.adls2.endpoint for path: " + pathUri.getPath());
+        }
+        String newScheme = endpoint.toLowerCase().startsWith(HTTPS_PREFIX) ? ABFSS_SCHEME : ABFS_SCHEME;
+        // Hadoop Azure FS expects abfs[s]://<container>@<endpoint-without-scheme>/...
+        String endpointWithoutScheme = stripEndpointScheme(endpoint);
+        String container = pathUri.getUri().getAuthority();
+        if (Strings.isNullOrEmpty(container)) {
+            throw new StarRocksException("invalid azure path, container is empty: " + pathUri.getPath());
+        }
+        String rawPath = pathUri.getUri().getRawPath();
+        String normalizedPath = rawPath == null ? "" : rawPath;
+        return newScheme + "://" + container + "@" + endpointWithoutScheme + normalizedPath;
+    }
+
+    private String stripEndpointScheme(String endpoint) throws StarRocksException {
+        String lowerEndpoint = endpoint.toLowerCase();
+        if (lowerEndpoint.startsWith(HTTPS_PREFIX)) {
+            return endpoint.substring(HTTPS_PREFIX.length());
+        }
+        if (lowerEndpoint.startsWith(HTTP_PREFIX)) {
+            return endpoint.substring(HTTP_PREFIX.length());
+        }
+        throw new StarRocksException("invalid azure endpoint, must start with http or https. endpoint: " + endpoint);
     }
 
     /**
@@ -420,7 +542,7 @@ public class HdfsFsManager {
      * to the broker conf directory.
      */
     public HdfsFs getDistributedFileSystem(String scheme, String path, Map<String, String> loadProperties,
-                                           THdfsProperties tProperties) throws UserException {
+                                           THdfsProperties tProperties) throws StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         String host = scheme + "://" + pathUri.getAuthority();
         if (Strings.isNullOrEmpty(pathUri.getAuthority())) {
@@ -429,7 +551,7 @@ public class HdfsFsManager {
                 LOG.info("no schema and authority in path. use fs.defaultFs");
             } else {
                 LOG.warn("invalid hdfs path. authority is null,path:" + path);
-                throw new UserException("invalid hdfs path. authority is null");
+                throw new StarRocksException("invalid hdfs path. authority is null");
             }
         }
         String username = loadProperties.getOrDefault(USER_NAME_KEY, "");
@@ -441,37 +563,26 @@ public class HdfsFsManager {
         String disableCacheLowerCase = disableCache.toLowerCase();
         if (!(disableCacheLowerCase.equals("true") || disableCacheLowerCase.equals("false"))) {
             LOG.warn("invalid disable cache: " + disableCache);
-            throw new UserException("invalid disable cache: " + disableCache);
+            throw new StarRocksException("invalid disable cache: " + disableCache);
         }
         if (!dfsNameServices.equals("")) {
             LOG.warn("Invalid load_properties, namenode HA should be set in hdfs/core-site.xml for" +
                     "broker load without broke. For broker load with broker, you can set namenode HA in the load_properties");
-            throw new UserException("invalid load_properties, namenode HA should be set in hdfs/core-site.xml" +
+            throw new StarRocksException("invalid load_properties, namenode HA should be set in hdfs/core-site.xml" +
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
         if (!authentication.equals("") && !authentication.equals("simple")) {
             LOG.warn("Invalid load_properties, kerberos should be set in hdfs/core-site.xml for broker " +
                     "load without broker. For broker load with broker, you can set namenode HA in the load_properties");
-            throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " +
+            throw new StarRocksException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " +
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
         String hdfsUgi = username + "," + password;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, hdfsUgi);
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -510,7 +621,7 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
-            throw new UserException(e.getMessage());
+            throw new StarRocksException(e.getMessage());
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -523,7 +634,7 @@ public class HdfsFsManager {
      * accessKey_secretKey
      */
     public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -547,19 +658,8 @@ public class HdfsFsManager {
         String s3aUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, s3aUgi);
 
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -595,14 +695,14 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
+            throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
         }
     }
 
     public HdfsFs getS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
@@ -613,9 +713,9 @@ public class HdfsFsManager {
      * Support abfs://, abfs://, adl://, wasb://, wasbs://
      */
     public HdfsFs getAzureFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
-        loadProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
+        loadProperties.put(CloudConfigurationConstants.AZURE_PATH_KEY, path);
 
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
@@ -627,7 +727,7 @@ public class HdfsFsManager {
      * Support gs://
      */
     public HdfsFs getGoogleFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
@@ -640,26 +740,19 @@ public class HdfsFsManager {
      */
     private HdfsFs getFileSystemByCloudConfiguration(CloudConfiguration cloudConfiguration, String path,
                                                      THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         Preconditions.checkArgument(cloudConfiguration != null);
         WildcardURI pathUri = new WildcardURI(path);
 
-        String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toConfString());
+        String scheme = pathUri.getUri().getScheme();
+        String authority = pathUri.getUri().getAuthority();
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(scheme), "URI scheme must not be null or empty: %s", path);
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(authority), "URI authority must not be null or empty: %s", path);
+        String uriIdentity = scheme + "://" + authority;
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(uriIdentity, cloudConfiguration.toConfString());
 
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -688,6 +781,12 @@ public class HdfsFsManager {
                 // Disable cache for KS3
                 conf.set(FS_KS3_IMPL_DISABLE_CACHE, "true");
 
+                // select * from files("path" = "s3://bucket/file", "format" = "parquet"),
+                // CloudConfigurationFactory.buildCloudConfigurationForStorage() returns CloudConfiguration,
+                // and FileSystem.getFileSystemClass() returns "No FileSystem for scheme s3" error.
+                // Set fs.s3.impl to report error explicitly.
+                conf.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+
                 FileSystem innerFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(innerFileSystem);
                 fileSystem.setConfiguration(conf);
@@ -700,7 +799,7 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
+            throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -713,7 +812,7 @@ public class HdfsFsManager {
      * accessKey_secretKey
      */
     public HdfsFs getKS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -734,19 +833,8 @@ public class HdfsFsManager {
         String host = KS3_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
         String ks3aUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, ks3aUgi);
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -777,7 +865,7 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
+            throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -790,7 +878,7 @@ public class HdfsFsManager {
      * accessKey_secretKey
      */
     public HdfsFs getOBSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -810,21 +898,8 @@ public class HdfsFsManager {
         String obsUgi = accessKey + "," + secretKey;
 
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, obsUgi);
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
-
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -855,7 +930,7 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
+            throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -867,19 +942,19 @@ public class HdfsFsManager {
      * file system handle is cached, the identity is endpoint + bucket + accessKey_secretKey
      */
     public HdfsFs getUniversalFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
 
         String disableCacheHDFS = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
         String disableCacheHDFSLowerCase = disableCacheHDFS.toLowerCase();
         if (!(disableCacheHDFSLowerCase.equals("true") || disableCacheHDFSLowerCase.equals("false"))) {
             LOG.warn("invalid disable cache: " + disableCacheHDFS);
-            throw new UserException("invalid disable cache: " + disableCacheHDFS);
+            throw new StarRocksException("invalid disable cache: " + disableCacheHDFS);
         }
         String disableCacheS3 = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
         String disableCacheS3LowerCase = disableCacheS3.toLowerCase();
         if (!(disableCacheS3LowerCase.equals("true") || disableCacheS3LowerCase.equals("false"))) {
             LOG.warn("invalid disable cache: " + disableCacheS3);
-            throw new UserException("invalid disable cache: " + disableCacheS3);
+            throw new StarRocksException("invalid disable cache: " + disableCacheS3);
         }
 
         // skip xxx:// first
@@ -895,21 +970,8 @@ public class HdfsFsManager {
         }
 
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, "");
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
-
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -931,7 +993,7 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
+            throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -944,7 +1006,7 @@ public class HdfsFsManager {
      * accessKey_secretKey
      */
     public HdfsFs getOSSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -964,19 +1026,8 @@ public class HdfsFsManager {
         String host = OSS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
         String ossUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, ossUgi);
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -1009,7 +1060,7 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
+            throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -1021,7 +1072,7 @@ public class HdfsFsManager {
      * for cos
      */
     public HdfsFs getCOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -1041,19 +1092,8 @@ public class HdfsFsManager {
         String host = COS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
         String cosUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cosUgi);
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -1085,7 +1125,7 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
+            throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -1097,7 +1137,7 @@ public class HdfsFsManager {
      * for tos
      */
     public HdfsFs getTOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -1115,15 +1155,15 @@ public class HdfsFsManager {
         String region = loadProperties.getOrDefault(FS_TOS_REGION, "");
         if (accessKey.equals("")) {
             LOG.warn("Invalid load_properties, TOS must provide access_key");
-            throw new UserException("Invalid load_properties, TOS must provide access_key");
+            throw new StarRocksException("Invalid load_properties, TOS must provide access_key");
         }
         if (secretKey.equals("")) {
             LOG.warn("Invalid load_properties, TOS must provide secret_key");
-            throw new UserException("Invalid load_properties, TOS must provide secret_key");
+            throw new StarRocksException("Invalid load_properties, TOS must provide secret_key");
         }
         if (endpoint.equals("")) {
             LOG.warn("Invalid load_properties, TOS must provide endpoint");
-            throw new UserException("Invalid load_properties, TOS must provide endpoint");
+            throw new StarRocksException("Invalid load_properties, TOS must provide endpoint");
         }
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
@@ -1131,19 +1171,8 @@ public class HdfsFsManager {
         String host = TOS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
         String tosUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, tosUgi);
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
+        HdfsFs fileSystem = acquireCachedFileSystem(fileSystemIdentity);
         try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
             if (fileSystem.getDFSFileSystem() == null) {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -1169,36 +1198,71 @@ public class HdfsFsManager {
             }
             return fileSystem;
         } catch (Exception e) {
-            LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
+            LOG.error("error while connecting to {}", path, e);
+            throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
         }
     }
 
     public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         getFileSystem(path, loadProperties, tProperties);
     }
 
-    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
+    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+        HdfsFs fileSystem = getFileSystem(srcPath, properties, null);
+        try {
+            fileSystem.getDFSFileSystem().copyToLocalFile(false, new Path(new WildcardURI(srcPath).getPath()),
+                    new Path(destPath), true);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while copy {} to local {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy " + srcPath + " to local " + destPath + ": " + e.getMessage(), e);
+        } catch (Exception e) {
+            LOG.error("Exception while copy {} to local {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy " + srcPath + " to local " + destPath + ": " + e.getMessage(), e);
+        }
+    }
+
+    public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+        HdfsFs fileSystem = getFileSystem(destPath, properties, null);
+        try {
+            WildcardURI destPathUri = new WildcardURI(destPath);
+            File srcFile = new File(srcPath);
+            FileUtil.copy(srcFile, fileSystem.getDFSFileSystem(), new Path(destPathUri.getPath()), false, new Configuration());
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while copy local {} to {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy local " + srcPath + " to " + destPath + ": " + e.getMessage(), e);
+        } catch (Exception e) {
+            LOG.error("Exception while copy local {} to {} ", srcPath, destPath, e);
+            throw new StarRocksException("Failed to copy local " + srcPath + " to " + destPath + ": " + e.getMessage(), e);
+        }
+    }
+
+    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, properties, null);
         Path pathPattern = new Path(pathUri.getPath());
         try {
             FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
-            return Lists.newArrayList(files);
+            return files != null ? Lists.newArrayList(files) : Lists.newArrayList();
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
-            throw new UserException("file not found: " + path, e);
+            throw new StarRocksException("file not found: " + path, e);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while get file status: " + path, e);
+            throw new StarRocksException("Failed to get file status: " + path, e); // throw unified user exception
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            throw new UserException("Fail to get file status: " + e.getMessage(), e);
+            throw new StarRocksException("Fail to get file status: " + e.getMessage(), e);
         }
     }
 
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
-            throws UserException {
+            throws StarRocksException {
         List<TBrokerFileStatus> resultFileStatus = null;
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -1231,43 +1295,52 @@ public class HdfsFsManager {
             }
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
-            throw new UserException("file not found: " + path, e);
+            throw new StarRocksException("file not found: " + path, e);
         } catch (IllegalArgumentException e) {
             LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
                     "the arguments like region, IAM, instance profile and so on.");
-            throw new UserException("The arguments of blob store(S3/Azure) may be wrong. " +
+            throw new StarRocksException("The arguments of blob store(S3/Azure) may be wrong. " +
                     "You can check the arguments like region, IAM, instance profile and so on.", e);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while list path: " + path, e);
+            throw new StarRocksException("Failed to list path: " + path, e); // throw unified user exception
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            throw new UserException("Fail to get file status: " + e.getMessage(), e);
+            throw new StarRocksException("Fail to get file status: " + e.getMessage(), e);
         }
         return resultFileStatus;
     }
 
-    public void deletePath(String path, Map<String, String> loadProperties) throws UserException {
+    public void deletePath(String path, Map<String, String> loadProperties) throws StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
         try {
             fileSystem.getDFSFileSystem().delete(filePath, true);
-        } catch (IOException e) {
-            LOG.error("errors while delete path " + path);
-            throw new UserException("delete path " + path + "error");
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while delete path: " + path, e);
+            throw new StarRocksException("Failed to delete path: " + path, e); // throw unified user exception
+        } catch (Exception e) {
+            LOG.error("errors while delete path " + path, e);
+            throw new StarRocksException("delete path " + path + "error", e);
         }
     }
 
-    public void renamePath(String srcPath, String destPath, Map<String, String> loadProperties) throws UserException {
+    public void renamePath(String srcPath, String destPath, Map<String, String> loadProperties) throws
+            StarRocksException {
         WildcardURI srcPathUri = new WildcardURI(srcPath);
         WildcardURI destPathUri = new WildcardURI(destPath);
 
         boolean srcAuthorityNull = (srcPathUri.getAuthority() == null);
         boolean destAuthorityNull = (destPathUri.getAuthority() == null);
         if (srcAuthorityNull != destAuthorityNull) {
-            throw new UserException("Different authority info between srcPath: " + srcPath + " and destPath: " + destPath);
+            throw new StarRocksException("Different authority info between srcPath: " + srcPath + " and destPath: " + destPath);
         }
         if (!srcAuthorityNull && !destAuthorityNull &&
                 !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
-            throw new UserException("only allow rename in same file system");
+            throw new StarRocksException("only allow rename in same file system");
 
         }
 
@@ -1277,27 +1350,37 @@ public class HdfsFsManager {
         try {
             boolean isRenameSuccess = fileSystem.getDFSFileSystem().rename(srcfilePath, destfilePath);
             if (!isRenameSuccess) {
-                throw new UserException("failed to rename path from " + srcPath + " to " + destPath);
+                throw new StarRocksException("failed to rename path from " + srcPath + " to " + destPath);
             }
-        } catch (IOException e) {
-            LOG.error("errors while rename path from " + srcPath + " to " + destPath);
-            throw new UserException("errors while rename " + srcPath + "to " + destPath);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while rename path from " + srcPath + " to " + destPath, e);
+            // throw unified user exception
+            throw new StarRocksException("Failed to rename path from " + srcPath + " to " + destPath, e);
+        } catch (Exception e) {
+            LOG.error("errors while rename path from " + srcPath + " to " + destPath, e);
+            throw new StarRocksException("errors while rename " + srcPath + "to " + destPath, e);
         }
     }
 
-    public boolean checkPathExist(String path, Map<String, String> loadProperties) throws UserException {
+    public boolean checkPathExist(String path, Map<String, String> loadProperties) throws StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
         try {
             return fileSystem.getDFSFileSystem().exists(filePath);
-        } catch (IOException e) {
-            LOG.error("errors while check path exist: " + path);
-            throw new UserException("errors while check if path " + path + " exist");
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while check path exist: " + path, e);
+            throw new StarRocksException("Failed to check path exist: " + path, e); // throw unified user exception
+        } catch (Exception e) {
+            LOG.error("errors while check path exist: " + path, e);
+            throw new StarRocksException("errors while check if path " + path + " exist", e);
         }
     }
 
-    public TBrokerFD openReader(String path, long startOffset, Map<String, String> loadProperties) throws UserException {
+    public TBrokerFD openReader(String path, long startOffset, Map<String, String> loadProperties) throws
+            StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         Path inputFilePath = new Path(pathUri.getPath());
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -1308,21 +1391,30 @@ public class HdfsFsManager {
             TBrokerFD fd = parseUUIDToFD(uuid);
             ioStreamManager.putNewInputStream(fd, fsDataInputStream, fileSystem);
             return fd;
-        } catch (IOException e) {
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while open file " + path, e);
+            throw new StarRocksException("Failed to open file " + path, e); // throw unified user exception
+        } catch (Exception e) {
             LOG.error("errors while open path", e);
-            throw new UserException("could not open file " + path);
+            throw new StarRocksException("could not open file " + path, e);
         }
     }
 
-    public byte[] pread(TBrokerFD fd, long offset, long length) throws UserException {
+    public byte[] pread(TBrokerFD fd, long offset, long length) throws StarRocksException {
         FSDataInputStream fsDataInputStream = ioStreamManager.getFsDataInputStream(fd);
         synchronized (fsDataInputStream) {
             long currentStreamOffset;
             try {
                 currentStreamOffset = fsDataInputStream.getPos();
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while get file pos from output stream", e);
+                // throw unified user exception
+                throw new StarRocksException("Failed to get file pos from output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while get file pos from output stream", e);
-                throw new UserException("errors while get file pos from output stream");
+                throw new StarRocksException("errors while get file pos from output stream");
             }
             if (currentStreamOffset != offset) {
                 // it's ok, when reading some format like parquet, it is not a sequential read
@@ -1331,8 +1423,13 @@ public class HdfsFsManager {
                         + offset + " seek to it");
                 try {
                     fsDataInputStream.seek(offset);
+                } catch (InterruptedIOException e) {
+                    Thread.interrupted(); // clear interrupted flag
+                    LOG.error("Interrupted while seek file pos from output stream", e);
+                    // throw unified user exception
+                    throw new StarRocksException("Failed to seek file pos from output stream", e);
                 } catch (IOException e) {
-                    throw new UserException("current read offset " + currentStreamOffset + " is not equal to "
+                    throw new StarRocksException("current read offset " + currentStreamOffset + " is not equal to "
                             + offset + ", and could not seek to it");
                 }
             }
@@ -1345,7 +1442,7 @@ public class HdfsFsManager {
             try {
                 int readLength = readByteArrayFully(fsDataInputStream, buf);
                 if (readLength < 0) {
-                    throw new UserException("end of file reached");
+                    throw new StarRocksException("end of file reached");
                 }
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(
@@ -1358,9 +1455,13 @@ public class HdfsFsManager {
                     System.arraycopy(buf, 0, smallerBuf, 0, readLength);
                     return smallerBuf;
                 }
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while read data from stream", e);
+                throw new StarRocksException("Failed to read data from stream", e); // throw unified user exception
             } catch (IOException e) {
                 LOG.error("errors while read data from stream", e);
-                throw new UserException("errors while read data from stream");
+                throw new StarRocksException("errors while read data from stream", e);
             }
         }
     }
@@ -1369,21 +1470,25 @@ public class HdfsFsManager {
         throw new NotImplementedException("seek this method is not supported");
     }
 
-    public void closeReader(TBrokerFD fd) throws UserException {
+    public void closeReader(TBrokerFD fd) throws StarRocksException {
         FSDataInputStream fsDataInputStream = ioStreamManager.getFsDataInputStream(fd);
         synchronized (fsDataInputStream) {
             try {
                 fsDataInputStream.close();
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while close file input stream", e);
+                throw new StarRocksException("Failed to close file input stream", e); // throw unified user exception
             } catch (IOException e) {
                 LOG.error("errors while close file input stream", e);
-                throw new UserException("errors while close file input stream");
+                throw new StarRocksException("errors while close file input stream", e);
             } finally {
                 ioStreamManager.removeInputStream(fd);
             }
         }
     }
 
-    public TBrokerFD openWriter(String path, Map<String, String> loadProperties) throws UserException {
+    public TBrokerFD openWriter(String path, Map<String, String> loadProperties) throws StarRocksException {
         WildcardURI pathUri = new WildcardURI(path);
         Path inputFilePath = new Path(pathUri.getPath());
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -1395,38 +1500,52 @@ public class HdfsFsManager {
             LOG.info("finish a open writer request. fd: " + fd);
             ioStreamManager.putNewOutputStream(fd, fsDataOutputStream, fileSystem);
             return fd;
-        } catch (IOException e) {
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while open file " + path, e);
+            throw new StarRocksException("Failed to open file " + path, e); // throw unified user exception
+        } catch (Exception e) {
             LOG.error("errors while open path", e);
-            throw new UserException("could not open file " + path);
+            throw new StarRocksException("could not open file " + path, e);
         }
     }
 
-    public void pwrite(TBrokerFD fd, long offset, byte[] data) throws UserException {
+    public void pwrite(TBrokerFD fd, long offset, byte[] data) throws StarRocksException {
         FSDataOutputStream fsDataOutputStream = ioStreamManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
             long currentStreamOffset = fsDataOutputStream.getPos();
             if (currentStreamOffset != offset) {
-                throw new UserException("current outputstream offset is " + currentStreamOffset
+                throw new StarRocksException("current outputstream offset is " + currentStreamOffset
                         + " not equal to request " + offset);
             }
             try {
                 fsDataOutputStream.write(data);
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while write file " + fd + " to output stream", e);
+                // throw unified user exception
+                throw new StarRocksException("Failed to write file " + fd + " to output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while write file " + fd + " to output stream", e);
-                throw new UserException("errors while write data to output stream");
+                throw new StarRocksException("errors while write data to output stream", e);
             }
         }
     }
 
-    public void closeWriter(TBrokerFD fd) throws UserException {
+    public void closeWriter(TBrokerFD fd) throws StarRocksException {
         FSDataOutputStream fsDataOutputStream = ioStreamManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
             try {
                 fsDataOutputStream.hsync();
                 fsDataOutputStream.close();
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while close file " + fd + " output stream", e);
+                // throw unified user exception
+                throw new StarRocksException("Failed to close file " + fd + " output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while close file " + fd + " output stream", e);
-                throw new UserException("errors while close file output stream");
+                throw new StarRocksException("errors while close file output stream", e);
             } finally {
                 ioStreamManager.removeOutputStream(fd);
             }
@@ -1453,24 +1572,79 @@ public class HdfsFsManager {
         @Override
         public void run() {
             try {
+                int expireSeconds = Config.hdfs_file_system_expire_seconds;
                 for (HdfsFs fileSystem : cachedFileSystem.values()) {
-                    if (fileSystem.isExpired(Config.hdfs_file_system_expire_seconds)) {
-                        LOG.info("file system " + fileSystem + " is expired, close and remove it");
-                        fileSystem.getLock().lock();
-                        try {
-                            fileSystem.closeFileSystem();
-                        } catch (Throwable t) {
-                            LOG.error("errors while close file system", t);
-                        } finally {
-                            cachedFileSystem.remove(fileSystem.getIdentity());
-                            fileSystem.getLock().unlock();
+                    if (fileSystem.isExpired(expireSeconds)) {
+                        // Atomically remove this exact instance so that:
+                        // 1. New requests immediately see a missing entry and create a fresh instance
+                        //    without waiting for the (potentially hung) close — eliminating lock contention.
+                        // 2. Only one thread ever submits a close for this instance, even if two
+                        //    checker runs overlap.
+                        if (cachedFileSystem.remove(fileSystem.getIdentity(), fileSystem)) {
+                            LOG.info("file system {} is expired, removing from cache and closing asynchronously",
+                                    fileSystem);
+                            closeAsync(fileSystem);
                         }
                     }
                 }
             } finally {
-                HdfsFsManager.this.handleManagementPool.schedule(this, 60, TimeUnit.SECONDS);
+                if (!HdfsFsManager.this.handleManagementPool.isShutdown()) {
+                    HdfsFsManager.this.handleManagementPool.schedule(this, 60, TimeUnit.SECONDS);
+                }
             }
         }
+    }
 
+    private void closeAsync(HdfsFs fileSystem) {
+        Future<?> future;
+        try {
+            future = fileSystemClosePool.submit(() -> {
+                try {
+                    fileSystem.closeFileSystem();
+                } catch (Throwable t) {
+                    LOG.error("errors while closing file system {}", fileSystem, t);
+                } finally {
+                    // Clear the interrupt flag so it does not leak to the next task run on this thread.
+                    Thread.interrupted();
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // Pool is saturated; spawn a one-off daemon thread instead of closing on the
+            // caller (checker) thread, so the checker is never blocked by a hung close.
+            LOG.warn("close pool is full, spawning daemon thread to close file system {}", fileSystem);
+            Thread t = new Thread(() -> {
+                try {
+                    fileSystem.closeFileSystem();
+                } catch (Throwable ex) {
+                    LOG.error("errors while closing file system {}", fileSystem, ex);
+                }
+            }, "hdfs-fs-close-fallback");
+            t.setDaemon(true);
+            t.start();
+            // Schedule a watchdog for the fallback thread too — interrupt it if close hangs
+            // so we don't accumulate stuck threads when the pool is already saturated.
+            if (!handleManagementPool.isShutdown()) {
+                handleManagementPool.schedule(() -> {
+                    if (t.isAlive()) {
+                        LOG.warn("fallback close of file system {} timed out after {}s, interrupting",
+                                fileSystem, fileSystemCloseTimeoutSecs);
+                        t.interrupt();
+                    }
+                }, fileSystemCloseTimeoutSecs, TimeUnit.SECONDS);
+            }
+            return;
+        }
+
+        // Schedule a watchdog: if close is still running after the timeout,
+        // send an interrupt to unblock any interrupt-sensitive I/O inside the close path.
+        if (!handleManagementPool.isShutdown()) {
+            handleManagementPool.schedule(() -> {
+                if (!future.isDone()) {
+                    LOG.warn("closing file system {} timed out after {}s, cancelling",
+                            fileSystem, fileSystemCloseTimeoutSecs);
+                    future.cancel(true);
+                }
+            }, fileSystemCloseTimeoutSecs, TimeUnit.SECONDS);
+        }
     }
 }

@@ -14,9 +14,11 @@
 
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/array_union_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "exprs/agg/sum_map.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -36,10 +38,40 @@ struct ArrayAggDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
-            auto func = std::make_shared<ArrayAggAggregateFunction<lt, false>>();
+            auto func = new ArrayAggAggregateFunction<lt, false>();
             using AggState = ArrayAggAggregateState<lt, false>;
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", false,
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", true,
                                                                                                    func);
+        }
+    }
+};
+
+struct ArrayUniqueAggDispatcher {
+    template <LogicalType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_aggregate<pt>) {
+            using CppType = RunTimeCppType<pt>;
+            if constexpr (lt_is_largeint<pt>) {
+                using MyHashSet = phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>;
+                auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
+                using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
+                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
+                        "array_unique_agg", false, func);
+            } else if constexpr (lt_is_fixedlength<pt>) {
+                using MyHashSet = phmap::flat_hash_set<CppType, StdHash<CppType>>;
+                auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
+                using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
+                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
+                        "array_unique_agg", false, func);
+            } else if constexpr (lt_is_string<pt>) {
+                using MyHashSet = SliceHashSet;
+                auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
+                using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
+                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
+                        "array_unique_agg", false, func);
+            } else {
+                throw std::runtime_error("array_unique_agg does not support " + type_to_string(pt));
+            }
         }
     }
 };
@@ -49,26 +81,48 @@ struct ArrayAggDistinctDispatcher {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_aggregate<pt>) {
             using CppType = RunTimeCppType<pt>;
-            if constexpr (lt_is_largeint<pt>) {
-                using MyHashSet = phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>;
-                auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_agg_distinct", false, func);
-            } else if constexpr (lt_is_fixedlength<pt>) {
-                using MyHashSet = phmap::flat_hash_set<CppType, StdHash<CppType>>;
-                auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_agg_distinct", false, func);
-            } else if constexpr (lt_is_string<pt>) {
-                using MyHashSet = SliceHashSet;
-                auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_agg_distinct", false, func);
-            } else {
+
+            using MyHashSet = std::conditional_t<
+                    lt_is_largeint<pt>, phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>,
+                    std::conditional_t<lt_is_fixedlength<pt>, phmap::flat_hash_set<CppType, StdHash<CppType>>,
+                                       std::conditional_t<lt_is_string<pt>, SliceHashSet, void // default fallback
+                                                          >>>;
+            if constexpr (std::is_same_v<void, MyHashSet>) {
                 throw std::runtime_error("array_agg_distinct does not support " + type_to_string(pt));
+            }
+            auto func = new ArrayAggAggregateFunction<pt, true, MyHashSet>();
+            using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
+            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg_distinct",
+                                                                                                   false, func);
+
+            using WindowAggState = ArrayAggWindowState<pt, true, MyHashSet>;
+            auto window_func = new ArrayAggAggregateWindowFunction<pt, true, MyHashSet>();
+            resolver->add_window_mapping<pt, TYPE_ARRAY, WindowAggState, AggregateFunctionPtr, false>(
+                    "array_agg_distinct", window_func);
+        }
+    }
+};
+
+struct MapAggDispatcher {
+    template <LogicalType kt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_aggregate<kt>) {
+            using KeyCppType = RunTimeCppType<kt>;
+            if constexpr (lt_is_largeint<kt>) {
+                using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, Hash128WithSeed<PhmapSeed1>>;
+                auto func = new MapAggAggregateFunction<kt, MyHashMap>();
+                resolver->add_aggregate_mapping_notnull<kt, TYPE_MAP>("map_agg", false, func);
+            } else if constexpr (lt_is_fixedlength<kt>) {
+                using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, StdHash<KeyCppType>>;
+                auto func = new MapAggAggregateFunction<kt, MyHashMap>();
+                resolver->add_aggregate_mapping_notnull<kt, TYPE_MAP>("map_agg", false, func);
+            } else if constexpr (lt_is_string<kt>) {
+                using MyHashMap =
+                        phmap::flat_hash_map<SliceWithHash, size_t, HashOnSliceWithHash, EqualOnSliceWithHash>;
+                auto func = new MapAggAggregateFunction<kt, MyHashMap>();
+                resolver->add_aggregate_mapping_notnull<kt, TYPE_MAP>("map_agg", false, func);
+            } else {
+                throw std::runtime_error("map_agg does not support key type " + type_to_string(kt));
             }
         }
     }
@@ -77,13 +131,18 @@ struct ArrayAggDistinctDispatcher {
 void AggregateFuncResolver::register_avg() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, AvgDispatcher(), this);
-        type_dispatch_all(type, ArrayAggDispatcher(), this);
-        type_dispatch_all(type, ArrayAggDistinctDispatcher(), this);
+        if (type != TYPE_DECIMAL256) {
+            type_dispatch_all(type, ArrayAggDispatcher(), this);
+            type_dispatch_all(type, ArrayAggDistinctDispatcher(), this);
+            type_dispatch_all(type, ArrayUniqueAggDispatcher(), this);
+            type_dispatch_all(type, MapAggDispatcher(), this);
+        }
     }
     type_dispatch_all(TYPE_JSON, ArrayAggDispatcher(), this);
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_avg");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128, true>("decimal_avg");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, true>("decimal_avg");
+    add_decimal_mapping<TYPE_DECIMAL256, TYPE_DECIMAL256, true>("decimal_avg");
 }
 
 } // namespace starrocks

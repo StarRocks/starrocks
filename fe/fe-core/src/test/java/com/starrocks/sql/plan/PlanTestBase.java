@@ -14,39 +14,28 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.Tablet;
+import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.common.FeConstants;
-import com.starrocks.qe.StmtExecutor;
+import com.starrocks.planner.TpchSQL;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.utframe.StarRocksAssert;
-import mockit.Mock;
-import mockit.MockUp;
-import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.StringUtils;
+import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class PlanTestBase extends PlanTestNoneDBBase {
 
     private static final Logger LOG = LogManager.getLogger(PlanTestBase.class);
 
     // use a unique dir so that it won't be conflict with other unit test which
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // disable checking tablets
         PlanTestNoneDBBase.beforeClass();
@@ -72,6 +61,17 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `part_t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY list(v4) ( partition p1 values in ('1'), partition p2 values in ('2')) \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
@@ -133,6 +133,26 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t7` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t8` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
@@ -290,147 +310,25 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        starRocksAssert.withTable("CREATE TABLE region ( R_REGIONKEY  INTEGER NOT NULL,\n" +
-                "                            R_NAME       CHAR(25) NOT NULL,\n" +
-                "                            R_COMMENT    VARCHAR(152),\n" +
-                "                            PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`r_regionkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
+        starRocksAssert.withTable("CREATE TABLE test_using (" +
+                "v1 bigint," +
+                "v2 array<int>," +
+                "v3 int," +
+                "v5 int," +
+                "v6 bigint," +
+                "v4 json) " +
+                "DUPLICATE KEY (`v1`) " +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\");");
 
-        starRocksAssert.withTable("CREATE TABLE supplier ( S_SUPPKEY     INTEGER NOT NULL,\n" +
-                "                             S_NAME        CHAR(25) NOT NULL,\n" +
-                "                             S_ADDRESS     VARCHAR(40) NOT NULL, \n" +
-                "                             S_NATIONKEY   INTEGER NOT NULL,\n" +
-                "                             S_PHONE       CHAR(15) NOT NULL,\n" +
-                "                             S_ACCTBAL     double NOT NULL,\n" +
-                "                             S_COMMENT     VARCHAR(101) NOT NULL,\n" +
-                "                             PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`s_suppkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE partsupp ( PS_PARTKEY     INTEGER NOT NULL,\n" +
-                "                             PS_SUPPKEY     INTEGER NOT NULL,\n" +
-                "                             PS_AVAILQTY    INTEGER NOT NULL,\n" +
-                "                             PS_SUPPLYCOST  double  NOT NULL,\n" +
-                "                             PS_COMMENT     VARCHAR(199) NOT NULL,\n" +
-                "                             PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`ps_partkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`ps_partkey`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE orders  ( O_ORDERKEY       INTEGER NOT NULL,\n" +
-                "                           O_CUSTKEY        INTEGER NOT NULL,\n" +
-                "                           O_ORDERSTATUS    CHAR(1) NOT NULL,\n" +
-                "                           O_TOTALPRICE     double NOT NULL,\n" +
-                "                           O_ORDERDATE      DATE NOT NULL,\n" +
-                "                           O_ORDERPRIORITY  CHAR(15) NOT NULL,  \n" +
-                "                           O_CLERK          CHAR(15) NOT NULL, \n" +
-                "                           O_SHIPPRIORITY   INTEGER NOT NULL,\n" +
-                "                           O_COMMENT        VARCHAR(79) NOT NULL,\n" +
-                "                           PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`o_orderkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE customer ( C_CUSTKEY     INTEGER NOT NULL,\n" +
-                "                             C_NAME        VARCHAR(25) NOT NULL,\n" +
-                "                             C_ADDRESS     VARCHAR(40) NOT NULL,\n" +
-                "                             C_NATIONKEY   INTEGER NOT NULL,\n" +
-                "                             C_PHONE       CHAR(15) NOT NULL,\n" +
-                "                             C_ACCTBAL     double   NOT NULL,\n" +
-                "                             C_MKTSEGMENT  CHAR(10) NOT NULL,\n" +
-                "                             C_COMMENT     VARCHAR(117) NOT NULL,\n" +
-                "                             PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`c_custkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE `nation` (\n" +
-                "  `N_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n" +
-                "  `N_NAME` char(25) NOT NULL COMMENT \"\",\n" +
-                "  `N_REGIONKEY` int(11) NOT NULL COMMENT \"\",\n" +
-                "  `N_COMMENT` varchar(152) NULL COMMENT \"\",\n" +
-                "  `PAD` char(1) NOT NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`N_NATIONKEY`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE part  ( P_PARTKEY     INTEGER NOT NULL,\n" +
-                "                          P_NAME        VARCHAR(55) NOT NULL,\n" +
-                "                          P_MFGR        CHAR(25) NOT NULL,\n" +
-                "                          P_BRAND       CHAR(10) NOT NULL,\n" +
-                "                          P_TYPE        VARCHAR(25) NOT NULL,\n" +
-                "                          P_SIZE        INTEGER NOT NULL,\n" +
-                "                          P_CONTAINER   CHAR(10) NOT NULL,\n" +
-                "                          P_RETAILPRICE double NOT NULL,\n" +
-                "                          P_COMMENT     VARCHAR(23) NOT NULL,\n" +
-                "                          PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`p_partkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE lineitem ( L_ORDERKEY    INTEGER NOT NULL,\n" +
-                "                             L_PARTKEY     INTEGER NOT NULL,\n" +
-                "                             L_SUPPKEY     INTEGER NOT NULL,\n" +
-                "                             L_LINENUMBER  INTEGER NOT NULL,\n" +
-                "                             L_QUANTITY    double NOT NULL,\n" +
-                "                             L_EXTENDEDPRICE  double NOT NULL,\n" +
-                "                             L_DISCOUNT    double NOT NULL,\n" +
-                "                             L_TAX         double NOT NULL,\n" +
-                "                             L_RETURNFLAG  CHAR(1) NOT NULL,\n" +
-                "                             L_LINESTATUS  CHAR(1) NOT NULL,\n" +
-                "                             L_SHIPDATE    DATE NOT NULL,\n" +
-                "                             L_COMMITDATE  DATE NOT NULL,\n" +
-                "                             L_RECEIPTDATE DATE NOT NULL,\n" +
-                "                             L_SHIPINSTRUCT CHAR(25) NOT NULL,\n" +
-                "                             L_SHIPMODE     CHAR(10) NOT NULL,\n" +
-                "                             L_COMMENT      VARCHAR(44) NOT NULL,\n" +
-                "                             PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`l_orderkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 20\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
+        starRocksAssert.withTable(TpchSQL.REGION);
+        starRocksAssert.withTable(TpchSQL.SUPPLIER);
+        starRocksAssert.withTable(TpchSQL.PARTSUPP);
+        starRocksAssert.withTable(TpchSQL.ORDERS);
+        starRocksAssert.withTable(TpchSQL.CUSTOMER);
+        starRocksAssert.withTable(TpchSQL.NATION);
+        starRocksAssert.withTable(TpchSQL.PART);
+        starRocksAssert.withTable(TpchSQL.LINEITEM);
 
         starRocksAssert.withTable("CREATE TABLE `lineorder_flat_for_mv` (\n" +
                 "  `LO_ORDERDATE` date NOT NULL COMMENT \"\",\n" +
@@ -499,7 +397,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "  `L_TAX` double NOT NULL COMMENT \"\",\n" +
                 "  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n" +
                 "  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n" +
-                "  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `L_SHIPDATE` date NULL COMMENT \"\",\n" +
                 "  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n" +
                 "  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n" +
                 "  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n" +
@@ -828,7 +726,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                         "\"password\"=\"test_passwd\",\n" +
                         "\"driver_url\"=\"test_driver_url\",\n" +
                         "\"driver_class\"=\"test.driver.class\",\n" +
-                        "\"jdbc_uri\"=\"test_uri\"\n" +
+                        "\"jdbc_uri\"=\"jdbc:mariadb://127.0.0.1:3306\"\n" +
                         ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
@@ -1004,6 +902,23 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tprimary_multi_cols` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL COMMENT \"\",\n" +
+                "  `v3` int NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL COMMENT \"\",\n" +
+                "  `v5` int NOT NULL COMMENT \"\",\n" +
+                "  `v6` int NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"false\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tprimary_auto_increment` (\n" +
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` bigint NOT NULL COMMENT \"\",\n" +
@@ -1029,6 +944,19 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tprimary_bool` (\n" +
+                "  `pk1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `pk2` BOOLEAN NOT NULL COMMENT \"\",\n" +
+                "  `v3` string NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(pk1, pk2)\n" +
+                "DISTRIBUTED BY HASH(pk1, pk2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
                 "  `v_int`  bigint NULL COMMENT \"\",\n" +
                 "  `v_json` json NULL COMMENT \"\" \n" +
@@ -1040,71 +968,90 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `test_agg_group_single_unique_key` (\n" +
+                "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `big_value` bigint(20) NULL COMMENT \"\",\n" +
+                "  `double_value` double NULL COMMENT \"\",\n" +
+                "  `decimal_value` decimal(10, 5) NULL COMMENT \"\",\n" +
+                "  `varchar_value` varchar(255) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_agg_group_multi_unique_key` (\n" +
+                "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `big_value` bigint(20) NULL COMMENT \"\",\n" +
+                "  `double_value` double NULL COMMENT \"\",\n" +
+                "  `decimal_value` decimal(10, 5) NULL COMMENT \"\",\n" +
+                "  `varchar_value` varchar(255) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`, `big_value`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE test_laglead (\n" +
+                "  `ta` int(11) NULL COMMENT \"\",\n" +
+                "  `tb` int(11) NULL COMMENT \"\",\n" +
+                "  `tc` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`ta`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`ta`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
-        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
+        ColocateTableBalancer.getInstance().setStop();
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        connectContext.getSessionVariable().setCboEnableSingleNodePreferTwoStageAggregate(false);
+        connectContext.getSessionVariable().setCboRewriteMonotonicMinmax(false);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
     }
 
-    private static void setPartitionVersion(Partition partition, long version) {
-        partition.setVisibleVersion(version, System.currentTimeMillis());
-        MaterializedIndex baseIndex = partition.getBaseIndex();
-        List<Tablet> tablets = baseIndex.getTablets();
-        for (Tablet tablet : tablets) {
-            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-            for (Replica replica : replicas) {
-                replica.updateVersionInfo(version, -1, version);
+    // NOTE: remove beforeAll after junit5 migration
+    public static void beforeAll() throws Exception {
+        beforeClass();
+    }
+
+    // NOTE: beforeAll afterAll junit5 migration
+    public static void afterAll() throws Exception {
+        afterClass();
+    }
+
+    public static List<TScanRangeParams> collectAllScanRangeParams(DefaultCoordinator coordinator) {
+        List<TScanRangeParams> scanRangeParams = new ArrayList<>();
+        for (FragmentInstance instance : coordinator.getExecutionDAG().getInstances()) {
+            for (List<TScanRangeParams> x : instance.getNode2ScanRanges().values()) {
+                scanRangeParams.addAll(x);
             }
         }
-    }
-
-    public static void mockDml() {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    if (tbl != null) {
-                        for (Partition partition : tbl.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    }
-                } else {
-                    return;
-                }
-            }
-        };
-    }
-
-    public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
-        String currentDb = starRocksAssert.getCtx().getDatabase();
-        if (StringUtils.isNotEmpty(currentDb)) {
-            Database testDb = GlobalStateMgr.getCurrentState().getDb(currentDb);
-            for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
-                if (startTime > 0 && mv.getCreateTime() > startTime) {
-                    starRocksAssert.dropMaterializedView(mv.getName());
-                    LOG.warn("cleanup mv after test case: {}", mv.getName());
-                }
-            }
-            if (CollectionUtils.isNotEmpty(testDb.getMaterializedViews())) {
-                LOG.warn("database [{}] still contains {} materialized views",
-                        testDb.getFullName(), testDb.getMaterializedViews().size());
-            }
-        }
+        // remove empty scan range introduced in incremental scan ranges feature.
+        return scanRangeParams.stream().filter(x -> !(x.isSetEmpty() && x.isEmpty())).collect(Collectors.toList());
     }
 }

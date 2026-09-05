@@ -1,0 +1,174 @@
+-- name: test_parquet_lazy_materialization
+create external catalog iceberg_lazy_test_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/warehouse/"
+);
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/warehouse/zya > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_lazy_test_${uuid0}.zya;
+-- result:
+-- !result
+CREATE TABLE test_shredding (
+    data VARIANT,
+    id BIGINT,
+    age INT,
+    city VARCHAR
+) properties(
+  'format-version' = '3',
+  'iceberg.enableVariantShredding' = 'true'
+);
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding.parquet oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/data/shredding.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table test_shredding execute add_files(location='oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/data/shredding.parquet', file_format='parquet');
+-- result:
+-- !result
+CREATE TABLE test_noshredding (
+    data VARIANT,
+    id BIGINT,
+    age INT,
+    city VARCHAR
+) properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_noshredding.parquet oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/data/noshredding.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table test_noshredding execute add_files(location='oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/data/noshredding.parquet', file_format='parquet');
+-- result:
+-- !result
+SELECT get_variant_int(data, '$.id') as vid
+FROM test_shredding
+WHERE get_variant_int(data, '$.id') > 1000
+ORDER BY vid;
+-- result:
+1001
+1002
+1003
+1004
+-- !result
+SELECT get_variant_int(data, '$.id') as vid,
+       get_variant_int(data, '$.age') as vage
+FROM test_shredding
+WHERE get_variant_int(data, '$.age') BETWEEN 20 AND 25
+ORDER BY vid;
+-- result:
+1000	20
+1001	21
+1002	22
+1003	23
+1004	24
+-- !result
+SELECT city,
+       get_variant_int(data, '$.profile.metrics.views') as views
+FROM test_shredding
+WHERE city IN ('city_1', 'city_2', 'city_3')
+  AND get_variant_int(data, '$.profile.metrics.views') > 100
+ORDER BY city;
+-- result:
+city_1	110
+city_2	120
+city_3	130
+-- !result
+SELECT get_variant_int(data, '$.id') as vid,
+       cast(variant_query(data, '$.score') as int) as score
+FROM test_shredding
+WHERE get_variant_int(data, '$.score') IS NOT NULL
+ORDER BY vid;
+-- result:
+1000	80
+1002	82
+1004	84
+-- !result
+SELECT get_variant_int(data, '$.id') as vid,
+       get_variant_string(data, '$.name') as vname,
+       get_variant_string(data, '$.email') as vemail
+FROM test_shredding
+WHERE get_variant_int(data, '$.id') > 1000
+ORDER BY vid;
+-- result:
+1001	name_1	user1@example.com
+1002	name_2	user2@example.com
+1003	name_3	user3@example.com
+1004	name_4	user4@example.com
+-- !result
+SELECT get_variant_int(data, '$.id') as vid,
+       get_variant_string(data, '$.events[0].type') as event_type,
+       get_variant_int(data, '$.groups[0].scores[0]') as group_score
+FROM test_shredding
+WHERE get_variant_int(data, '$.id') > 1000
+ORDER BY vid;
+-- result:
+1001	view	11
+1002	view	12
+1003	view	13
+1004	view	14
+-- !result
+set enable_profile=true;
+-- result:
+-- !result
+set enable_async_profile=false;
+-- result:
+-- !result
+SELECT id, age
+FROM test_shredding
+WHERE id > 1000 AND id > age
+ORDER BY id;
+-- result:
+1001	21
+1002	22
+1003	23
+1004	24
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%ParquetLazySlotTriggered%';
+-- result:
+               - ParquetLazySlotTriggered: 1
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%ParquetLazyReadCount%';
+-- result:
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%ParquetLazyReadTime%';
+-- result:
+-- !result
+SELECT get_variant_int(data, '$.id') as vid
+FROM test_noshredding
+WHERE get_variant_int(data, '$.id') > 1000
+ORDER BY vid;
+-- result:
+1001
+1002
+1003
+1004
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
+drop table test_shredding force;
+-- result:
+-- !result
+drop table test_noshredding force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_lazy_test_${uuid0};
+-- result:
+-- !result

@@ -1,0 +1,159 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.catalog.mv;
+
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.common.PCellSetMapping;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.RangePartitionDiffer;
+import com.starrocks.sql.common.SyncPartitionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
+
+/**
+ * A lot of methods in this class have the same syntax as the methods in {@code MVPCTRefreshRangePartitioner}, we may
+ * unify them in the future.
+ */
+public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter {
+    private static final Logger LOG = LogManager.getLogger(MVTimelinessRangePartitionArbiter.class);
+
+    public MVTimelinessRangePartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
+        this.differ = new RangePartitionDiffer(mv, queryRewriteParams, null);
+    }
+
+    @Override
+    protected MvUpdateInfo getMVTimelinessUpdateInfoInChecked() throws AnalysisException {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        Preconditions.checkState(partitionInfo.isExprRangePartitioned());
+        // If non-partition-by table has changed, should refresh all mv partitions
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (refBaseTablePartitionColumns.isEmpty()) {
+            mv.setInactiveAndReason("partition configuration changed");
+            LOG.warn("mark mv:{} inactive for get partition info failed", mv.getName());
+            throw new RuntimeException(String.format("getting partition info failed for mv: %s", mv.getName()));
+        }
+
+        // if it needs to refresh based on non-ref base tables, return full refresh directly.
+        boolean isRefreshBasedOnNonRefTables = needsRefreshOnNonRefBaseTables(refBaseTablePartitionColumns);
+        logMVPrepare(mv, "MV refresh based on non-ref base table:{}", isRefreshBasedOnNonRefTables);
+        if (isRefreshBasedOnNonRefTables) {
+            return MvUpdateInfo.fullRefresh(mv);
+        }
+
+        // record the relation of partitions between materialized view and base partition table
+        MvUpdateInfo mvTimelinessInfo = MvUpdateInfo.partialRefresh(mv,
+                TableProperty.QueryRewriteConsistencyMode.CHECKED);
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        Map<Table, PCellSortedSet> baseChangedPartitionNames;
+        try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
+            baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
+                    mvTimelinessInfo);
+            if (baseChangedPartitionNames == null) {
+                return MvUpdateInfo.fullRefresh(mv);
+            }
+        }
+
+        // collect all ref base table's partition range map
+        Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+        Preconditions.checkArgument(partitionExprOpt.isPresent(),
+                "Materialized view %s has no partition expr.", mv.getName());
+        Expr partitionExpr = partitionExprOpt.get();
+        Map<Table, PCellSortedSet> basePartitionNameToRangeMap;
+
+        try (Timer ignored = Tracers.watchScope("SyncBaseTablePartitions")) {
+            basePartitionNameToRangeMap = syncBaseTablePartitions(mvTimelinessInfo);
+            if (basePartitionNameToRangeMap == null) {
+                logMVPrepare(mv, "Sync base table partition infos failed");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
+        }
+
+        // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
+        // otherwise base table(mv) may lose partition names of the real base table changed partitions.
+        try (Timer ignored = Tracers.watchScope("CollectExtraBaseTableChangedPartitions")) {
+            collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), basePartitionNameToRangeMap);
+        }
+
+        // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
+        PartitionDiff diff;
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
+            diff = getChangedPartitionDiff(mv, basePartitionNameToRangeMap);
+            if (diff == null) {
+                throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
+                        mv.getName()));
+            }
+        }
+
+        // no needs to refresh the deleted partitions, because the deleted partitions are not in the mv's partition map.
+        PCellSortedSet mvToRefreshPartitionNames = PCellSortedSet.of();
+        PCellSortedSet mvPartitionToCells = mv.getPartitionCells(Optional.empty());
+
+        // remove ref base table's deleted partitions from `mvPartitionMap`
+        mvToRefreshPartitionNames.addAll(diff.getDeletes());
+        mvToRefreshPartitionNames.addAll(diff.getAdds());
+
+        diff.getDeletes().forEach(mvPartitionToCells::remove);
+        // add all ref base table's added partitions to `mvPartitionMap`
+        mvPartitionToCells.addAll(diff.getAdds());
+        // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
+        mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionToCells);
+
+        Map<Table, PCellSetMapping> baseToMvNameRef;
+        try (Timer ignored = Tracers.watchScope("GenerateBaseRefMap")) {
+            baseToMvNameRef = differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionToCells);
+        }
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef;
+        try (Timer ignored = Tracers.watchScope("GenerateMvRefMap")) {
+            mvToBaseNameRef = differ.generateMvRefMap(mvPartitionToCells, basePartitionNameToRangeMap);
+        }
+        mvTimelinessInfo.getBasePartNameToMVPCells().putAll(baseToMvNameRef);
+        mvTimelinessInfo.getMVPartNameToBasePCells().putAll(mvToBaseNameRef);
+
+        mvToRefreshPartitionNames.addAll(getMVToRefreshPartitionNames(baseChangedPartitionNames, baseToMvNameRef));
+
+        // handle mv's partition expr is function call expr
+        if (partitionExpr instanceof FunctionCallExpr) {
+            if (SyncPartitionUtils.isCalcPotentialRefreshPartition(baseChangedPartitionNames,
+                    mvPartitionToCells)) {
+                // because the relation of partitions between materialized view and base partition table is n: m,
+                // should calculate the candidate partitions recursively.
+                SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshPartitionNames, baseChangedPartitionNames,
+                        baseToMvNameRef, mvToBaseNameRef, PCellSortedSet.of());
+            }
+        }
+        // update mv's to refresh partitions
+        mvTimelinessInfo.addMVToRefreshPartitionNames(mvToRefreshPartitionNames);
+        return mvTimelinessInfo;
+    }
+}

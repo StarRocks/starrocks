@@ -24,11 +24,10 @@
 
 #include "gutil/atomicops-internals-x86.h"
 
-#include <common/logging.h>
-
 #include <cstring>
 
 #include "gutil/integral_types.h"
+#include "gutil/logging.h"
 
 // This file only makes sense with atomicops-internals-x86.h -- it
 // depends on structs that are defined in that file.  If atomicops.h
@@ -96,7 +95,7 @@ static void AtomicOps_Internalx86CPUFeaturesInit() {
     // ecx bit 13 indicates whether the cmpxchg16b instruction is supported
     GutilAtomicOps_Internalx86CPUFeatures.has_cmpxchg16b = ((ecx >> 13) & 1);
 
-    VLOG(1) << "vendor " << vendor << "  family " << family << "  model " << model << "  sse2 "
+    VLOG(2) << "vendor " << vendor << "  family " << family << "  model " << model << "  sse2 "
             << GutilAtomicOps_Internalx86CPUFeatures.has_sse2 << "  cmpxchg16b "
             << GutilAtomicOps_Internalx86CPUFeatures.has_cmpxchg16b;
 }

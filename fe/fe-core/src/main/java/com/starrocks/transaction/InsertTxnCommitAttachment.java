@@ -15,16 +15,24 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
     private long loadedRows;
+
+    @SerializedName("isVersionOverwrite")
+    private boolean isVersionOverwrite = false;
+
+    @SerializedName("partitionVersion")
+    private long partitionVersion;
+
+    // For a shadow-rewrite transaction: the watershed txn id the converted
+    // op_schema_change log must be keyed by, and the alter version it is anchored at.
+    @SerializedName("shadowRewriteWatershedTxnId")
+    private long shadowRewriteWatershedTxnId = 0;
+
+    @SerializedName("shadowRewriteAlterVersion")
+    private long shadowRewriteAlterVersion = 0;
 
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
@@ -35,22 +43,37 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         this.loadedRows = loadedRows;
     }
 
+    public InsertTxnCommitAttachment(long loadedRows, long partitionVersion) {
+        this(loadedRows);
+        this.isVersionOverwrite = true;
+        this.partitionVersion = partitionVersion;
+    }
+
     public long getLoadedRows() {
         return loadedRows;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
+    public boolean getIsVersionOverwrite() {
+        return isVersionOverwrite;
     }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String s = Text.readString(in);
-        InsertTxnCommitAttachment insertTxnCommitAttachment =
-                GsonUtils.GSON.fromJson(s, InsertTxnCommitAttachment.class);
-        this.loadedRows = insertTxnCommitAttachment.getLoadedRows();
+    public long getPartitionVersion() {
+        return partitionVersion;
+    }
+
+    public void setShadowRewriteWatershedTxnId(long shadowRewriteWatershedTxnId) {
+        this.shadowRewriteWatershedTxnId = shadowRewriteWatershedTxnId;
+    }
+
+    public long getShadowRewriteWatershedTxnId() {
+        return shadowRewriteWatershedTxnId;
+    }
+
+    public void setShadowRewriteAlterVersion(long shadowRewriteAlterVersion) {
+        this.shadowRewriteAlterVersion = shadowRewriteAlterVersion;
+    }
+
+    public long getShadowRewriteAlterVersion() {
+        return shadowRewriteAlterVersion;
     }
 }

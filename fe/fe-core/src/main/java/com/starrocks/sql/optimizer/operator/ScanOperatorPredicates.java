@@ -15,12 +15,15 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -44,6 +47,8 @@ public class ScanOperatorPredicates {
     private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
     // Map of columnRefOperator to column which column in minMaxConjuncts
     private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+    // flag to indicate whether if has pruned partition
+    private boolean hasPrunedPartition = false;
 
     public Map<Long, PartitionKey> getIdToPartitionKey() {
         return idToPartitionKey;
@@ -62,6 +67,7 @@ public class ScanOperatorPredicates {
     }
 
     public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
+        this.hasPrunedPartition = true;
         this.selectedPartitionIds = selectedPartitionIds;
     }
 
@@ -73,9 +79,13 @@ public class ScanOperatorPredicates {
         return noEvalPartitionConjuncts;
     }
 
+    /**
+     * TODO: it's better to record pruned partition predicates directly.
+     * @return: Return pruned partition conjuncts after OptPartitionPruner.
+     */
     public List<ScalarOperator> getPrunedPartitionConjuncts() {
         return partitionConjuncts.stream()
-                .filter(x -> !nonPartitionConjuncts.contains(x)).collect(Collectors.toList());
+                .filter(x -> !noEvalPartitionConjuncts.contains(x)).collect(Collectors.toList());
     }
 
     public List<ScalarOperator> getNonPartitionConjuncts() {
@@ -90,6 +100,10 @@ public class ScanOperatorPredicates {
         return minMaxColumnRefMap;
     }
 
+    public boolean hasPrunedPartition() {
+        return hasPrunedPartition;
+    }
+
     public void clear() {
         idToPartitionKey.clear();
         selectedPartitionIds.clear();
@@ -98,6 +112,16 @@ public class ScanOperatorPredicates {
         nonPartitionConjuncts.clear();
         minMaxConjuncts.clear();
         minMaxColumnRefMap.clear();
+    }
+
+    public ColumnRefSet getUsedColumns() {
+        ColumnRefSet refs = new ColumnRefSet();
+        noEvalPartitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        nonPartitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        partitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        minMaxConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        getMinMaxColumnRefMap().keySet().forEach(refs::union);
+        return refs;
     }
 
     @Override
@@ -110,6 +134,7 @@ public class ScanOperatorPredicates {
         other.nonPartitionConjuncts.addAll(this.nonPartitionConjuncts);
         other.minMaxConjuncts.addAll(this.minMaxConjuncts);
         other.minMaxColumnRefMap.putAll(this.minMaxColumnRefMap);
+        other.hasPrunedPartition = this.hasPrunedPartition;
 
         return other;
     }
@@ -136,5 +161,42 @@ public class ScanOperatorPredicates {
     public int hashCode() {
         return Objects.hash(idToPartitionKey, selectedPartitionIds, partitionConjuncts, noEvalPartitionConjuncts,
                 nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
+    }
+
+    @Override
+    public String toString() {
+        List<String> strings = Lists.newArrayList();
+        if (!selectedPartitionIds.isEmpty()) {
+            strings.add(String.format("selectedPartitionIds=%s", selectedPartitionIds));
+        }
+        if (!partitionConjuncts.isEmpty()) {
+            strings.add(String.format("partitionConjuncts=%s", partitionConjuncts));
+        }
+        if (!noEvalPartitionConjuncts.isEmpty()) {
+            strings.add(String.format("noEvalPartitionConjuncts=%s", noEvalPartitionConjuncts));
+        }
+        if (!nonPartitionConjuncts.isEmpty()) {
+            strings.add(String.format("nonPartitionConjuncts=%s", nonPartitionConjuncts));
+        }
+        if (!minMaxConjuncts.isEmpty()) {
+            strings.add(String.format("minMaxConjuncts=%s", minMaxConjuncts));
+        }
+        return Joiner.on(", ").join(strings);
+    }
+
+    /**
+     * Duplicate and rewrite all columnRefOperator in predicates by rewriter.
+     */
+    public void duplicate(ReplaceColumnRefRewriter rewriter) {
+        this.partitionConjuncts = this.partitionConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.noEvalPartitionConjuncts = this.noEvalPartitionConjuncts.stream()
+                .map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.nonPartitionConjuncts = nonPartitionConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.minMaxConjuncts = minMaxConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        Map<ColumnRefOperator, Column> newMinMaxColumnRefMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, Column> e : this.minMaxColumnRefMap.entrySet()) {
+            newMinMaxColumnRefMap.put((ColumnRefOperator) rewriter.rewrite(e.getKey()), e.getValue());
+        }
+        this.minMaxColumnRefMap = newMinMaxColumnRefMap;
     }
 }

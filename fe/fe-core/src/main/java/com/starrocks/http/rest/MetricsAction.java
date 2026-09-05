@@ -35,6 +35,10 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -45,11 +49,11 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.metric.SimpleCoreMetricVisitor;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Set;
 
 //fehost:port/metrics
 //fehost:port/metrics?type=core
@@ -62,8 +66,11 @@ public class MetricsAction extends RestBaseAction {
     // `with_table_metrics=all` : with all table metrics
     protected static final String WITH_TABLE_METRICS_PARAM = "with_table_metrics";
     protected static final String WITH_MATERIALIZED_VIEW_METRICS_PARAM = "with_materialized_view_metrics";
+    protected static final String WITH_USER_CONNECTIONS_PARAM = "with_user_connections";
     protected static final String COLLECT_MODE_METRICS_MINIFIED = "minified";
     protected static final String COLLECT_MODE_METRICS_ALL = "all";
+    protected static final Set<String> SUPPORTED_COLLECT_METRIC_MODES =
+            ImmutableSet.of(COLLECT_MODE_METRICS_ALL, COLLECT_MODE_METRICS_MINIFIED);
     public static final String API_PATH = "/metrics";
 
     public MetricsAction(ActionController controller) {
@@ -79,13 +86,17 @@ public class MetricsAction extends RestBaseAction {
         private final boolean collectMVMetrics;
         // Whether to collect per materialized view metrics in minified mode, Ignore some heavy metrics if true
         private final boolean minifyMVMetrics;
+        // Whether to collect user connection metrics
+        private final boolean collectUserConnMetrics;
 
         public RequestParams(boolean collectTableMetrics, boolean minifyTableMetrics,
-                      boolean collectMVMetrics, boolean minifyMVMetrics) {
+                      boolean collectMVMetrics, boolean minifyMVMetrics,
+                      boolean collectUserConnMetrics) {
             this.collectTableMetrics = collectTableMetrics;
             this.minifyTableMetrics = minifyTableMetrics;
             this.collectMVMetrics = collectMVMetrics;
             this.minifyMVMetrics = minifyMVMetrics;
+            this.collectUserConnMetrics = collectUserConnMetrics;
         }
 
         public boolean isCollectTableMetrics() {
@@ -103,14 +114,28 @@ public class MetricsAction extends RestBaseAction {
         public boolean isMinifyMVMetrics() {
             return minifyMVMetrics;
         }
+
+        public boolean isCollectUserConnMetrics() {
+            return collectUserConnMetrics;
+        }
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
         controller.registerHandler(HttpMethod.GET, API_PATH, new MetricsAction(controller));
     }
 
+    // Prometheus-style metrics. Historically anonymous; gated for backward compatibility
+    // so it requires Basic auth (AuthN-only, no privilege check) only when the operator
+    // opts in via `enable_http_auth`. The per-table / per-MV / per-user-connection
+    // breakdowns still do their own admin check inside parseRequestParams() and
+    // gracefully fall back when the caller lacks admin.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         // parse visitor type
         String type = request.getSingleParameter(TYPE_PARAM);
         MetricVisitor visitor = null;
@@ -130,20 +155,27 @@ public class MetricsAction extends RestBaseAction {
         sendResult(request, response);
     }
 
+    private boolean isCollectTableOrMVMetrics(String collectMode) {
+        if (Strings.isNullOrEmpty(collectMode)) {
+            return false;
+        }
+        return SUPPORTED_COLLECT_METRIC_MODES.stream().anyMatch(m -> m.equalsIgnoreCase(collectMode));
+    }
+
+    private boolean isCollectTableOrMVMetricsMinifiedMode(String collectMode) {
+        return COLLECT_MODE_METRICS_MINIFIED.equalsIgnoreCase(collectMode);
+    }
+
     protected RequestParams parseRequestParams(BaseRequest request) {
         String withTableMetrics = request.getSingleParameter(WITH_TABLE_METRICS_PARAM);
         String withMaterializedViewsMetrics = request.getSingleParameter(WITH_MATERIALIZED_VIEW_METRICS_PARAM);
-        /*
-         * Collect tableMetrics and MVMetrics in minified way by default.
-         * Full metrics collection is only enabled when the following conditions are all satisfied
-         * - explicitly has `?with_table_metrics=all` or `?with_materialized_view_metrics=all`
-         * - the user must have sufficient privileges by checking the request auth info
-         */
-        boolean collectTableMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withTableMetrics);
-        boolean collectMVMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withMaterializedViewsMetrics);
+        String withUserConnections = request.getSingleParameter(WITH_USER_CONNECTIONS_PARAM);
+        boolean isCollectTableMetrics = isCollectTableOrMVMetrics(withTableMetrics);
+        boolean isCollectMVMetrics = isCollectTableOrMVMetrics(withMaterializedViewsMetrics);
+        boolean isCollectUserConnMetrics = isCollectTableOrMVMetrics(withUserConnections);
 
         // check request authorization
-        if (collectTableMetrics || collectMVMetrics) {
+        if (isCollectTableMetrics || isCollectMVMetrics || isCollectUserConnMetrics) {
             UserIdentity currentUser = null;
             try {
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
@@ -151,15 +183,24 @@ public class MetricsAction extends RestBaseAction {
                 checkUserOwnsAdminRole(currentUser);
             } catch (AccessDeniedException e) {
                 // disable Table related metrics collection due to AccessDenied
-                collectTableMetrics = false;
-                collectMVMetrics = false;
-                LOG.warn("Auth failure when getting table level metrics, current user: {}, error msg: {}",
+                isCollectTableMetrics = false;
+                isCollectMVMetrics = false;
+                isCollectUserConnMetrics = false;
+                LOG.warn("Auth failure when getting metrics, current user: {}, error msg: {}",
                         currentUser, e.getMessage());
             }
         }
 
-        boolean minifyMVMetrics = !collectMVMetrics;
-        boolean minifyTableMetrics = !collectTableMetrics;
-        return new RequestParams(collectTableMetrics, minifyTableMetrics, collectMVMetrics, minifyMVMetrics);
+        /*
+         * Collect tableMetrics and MVMetrics in minified way by default.
+         * Full metrics collection is only enabled when the following conditions are all satisfied
+         * - explicitly has `?with_table_metrics=all` or `?with_materialized_view_metrics=all`
+         * - the user must have sufficient privileges by checking the request auth info
+         */
+        boolean isCollectTableMetricsMinifiedMode = isCollectTableOrMVMetricsMinifiedMode(withTableMetrics);
+        boolean isCollectMVMetricsMinifiedMode = isCollectTableOrMVMetricsMinifiedMode(withMaterializedViewsMetrics);
+        return new RequestParams(isCollectTableMetrics, isCollectTableMetricsMinifiedMode,
+                isCollectMVMetrics, isCollectMVMetricsMinifiedMode,
+                isCollectUserConnMetrics);
     }
 }

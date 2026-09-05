@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "根据距离 0000-01-01 的天数计算对应的日期。"
 ---
 
 # from_days
 
-## 功能
+
 
 通过计算当前时间距离 `0000-01-01` 的天数计算出是哪一天。
 

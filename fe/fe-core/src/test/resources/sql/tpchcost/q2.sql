@@ -1,47 +1,3 @@
-[sql]
-select
-    s_acctbal,
-    s_name,
-    n_name,
-    p_partkey,
-    p_mfgr,
-    s_address,
-    s_phone,
-    s_comment
-from
-    part,
-    supplier,
-    partsupp,
-    nation,
-    region
-where
-        p_partkey = ps_partkey
-  and s_suppkey = ps_suppkey
-  and p_size = 12
-  and p_type like '%COPPER'
-  and s_nationkey = n_nationkey
-  and n_regionkey = r_regionkey
-  and r_name = 'AMERICA'
-  and ps_supplycost = (
-    select
-        min(ps_supplycost)
-    from
-        partsupp,
-        supplier,
-        nation,
-        region
-    where
-            p_partkey = ps_partkey
-      and s_suppkey = ps_suppkey
-      and s_nationkey = n_nationkey
-      and n_regionkey = r_regionkey
-      and r_name = 'AMERICA'
-)
-order by
-    s_acctbal desc,
-    n_name,
-    s_name,
-    p_partkey limit 100;
 [fragment statistics]
 PLAN FRAGMENT 0(F10)
 Output Exprs:16: S_ACCTBAL | 12: S_NAME | 26: N_NAME | 1: P_PARTKEY | 3: P_MFGR | 13: S_ADDRESS | 15: S_PHONE | 17: S_COMMENT
@@ -149,6 +105,7 @@ OutPut Exchange Id: 25
 |
 20:SORT
 |  order by: [1, INT, false] ASC
+|  analytic partition by: [1: P_PARTKEY, INT, false]
 |  offset: 0
 |  cardinality: 80000
 |  column statistics:
@@ -351,7 +308,7 @@ OutPut Exchange Id: 13
 11:OlapScanNode
 table: part, rollup: part
 preAggregation: on
-Predicates: [6: P_SIZE, INT, false] = 12, 5: P_TYPE LIKE '%COPPER'
+Predicates: [6: P_SIZE, INT, false] = 12, [5: P_TYPE, VARCHAR, false] LIKE '%COPPER'
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=62.0
 cardinality: 100000
@@ -430,3 +387,4 @@ column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 [end]
+

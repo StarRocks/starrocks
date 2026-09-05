@@ -83,6 +83,13 @@ enum TExprNodeType {
   BINARY_LITERAL,
   MAP_EXPR,
   DICT_QUERY_EXPR,
+
+  // query DICTIONARY object
+  DICTIONARY_GET_EXPR,
+
+  JIT_EXPR,
+
+  MATCH_EXPR,
 }
 
 struct TAggregateExpr {
@@ -181,6 +188,13 @@ struct TDictQueryExpr {
   6: required bool strict_mode
 }
 
+struct TDictionaryGetExpr {
+  1: optional i64 dict_id
+  2: optional i64 txn_id
+  3: optional i32 key_size
+  4: optional bool null_if_not_exist
+}
+
 // This is essentially a union over the subclasses of Expr.
 struct TExprNode {
   1: required TExprNodeType node_type
@@ -222,6 +236,10 @@ struct TExprNode {
   // Used for SubfieldExpr
   30: optional list<string> used_subfield_names;
   31: optional TBinaryLiteral binary_literal;
+  32: optional bool copy_flag;
+
+  // used for CollectionElementAt
+  35: optional bool check_is_out_of_bounds
 
   // For vector query engine
   50: optional bool use_vectorized  // Deprecated
@@ -231,6 +249,20 @@ struct TExprNode {
   54: optional bool is_monotonic
 
   55: optional TDictQueryExpr dict_query_expr
+
+  56: optional TDictionaryGetExpr dictionary_get_expr
+  // whether this expr is only used in index
+  57: optional bool is_index_only_filter
+
+  // lambda function contain non-deterministic sub-exprs
+  58: optional bool is_nondeterministic
+
+  // When true, STRUCT cast matches fields by name instead of by position.
+  // Set by the FE when SQLMode contains STRUCT_CAST_BY_NAME.
+  59: optional bool cast_struct_by_name
+
+  // Identifies the endpoint configuration owned by the enclosing AI project.
+  60: optional string ai_model_config_id
 }
 
 struct TPartitionLiteral {
@@ -244,4 +276,14 @@ struct TPartitionLiteral {
 // traversal.
 struct TExpr {
   1: required list<TExprNode> nodes
+}
+
+struct TExprMinMaxValue {
+  1: required TExprNodeType type
+  2: required bool has_null
+  3: required bool all_null
+  4: optional i64 min_int_value
+  5: optional i64 max_int_value
+  6: optional double min_float_value
+  7: optional double max_float_value
 }

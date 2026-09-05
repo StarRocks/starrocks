@@ -16,13 +16,17 @@
 
 #include <bthread/mutex.h>
 #include <butil/containers/linked_list.h>
+#include <gtest/gtest_prod.h>
 
+#include <algorithm>
 #include <memory>
 
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/time/time.h"
 #include "common/status.h"
+#include "common/util/stack_trace_mutex.h"
+#include "compaction_task_context.h"
 #include "gutil/macros.h"
-#include "storage/lake/compaction_task.h"
-#include "util/blocking_queue.hpp"
 
 namespace google::protobuf {
 class RpcController;
@@ -30,16 +34,17 @@ class Closure;
 } // namespace google::protobuf
 
 namespace starrocks {
+class CompactRequest;
+class CompactResponse;
 class ThreadPool;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
-class CompactRequest;
-class CompactResponse;
 class CompactionScheduler;
-struct CompactionTaskContext;
+class CompactionTask;
 class TabletManager;
+class TabletParallelCompactionManager;
 
 // For every `CompactRequest` a new `CompactionTaskCallback` instance will be created.
 // A single `CompactRequest` may have multiple tablets to be compacted, each time a tablet compaction
@@ -48,8 +53,8 @@ class TabletManager;
 // `CompactResponse` will be sent to the FE.
 class CompactionTaskCallback {
 public:
-    explicit CompactionTaskCallback(CompactionScheduler* scheduler, const lake::CompactRequest* request,
-                                    lake::CompactResponse* response, ::google::protobuf::Closure* done);
+    explicit CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
+                                    CompactResponse* response, ::google::protobuf::Closure* done);
 
     ~CompactionTaskCallback();
 
@@ -57,48 +62,58 @@ public:
 
     void finish_task(std::unique_ptr<CompactionTaskContext>&& context);
 
-    bool has_error() const {
-        std::lock_guard l(_mtx);
-        return !_status.ok();
-    }
+    // used to check if compaction should be aborted early
+    Status has_error() const;
 
     void update_status(const Status& st) {
         std::lock_guard l(_mtx);
         _status.update(st);
     }
 
+    int64_t timeout_ms() const;
+
+    bool allow_partial_success() const;
+
+    // Whether the originating FE request asked the CN to skip persisting the txn log to object
+    // storage and instead return it inline via the RPC response. Only the aggregate/file-bundling
+    // path sets this; on the regular path it is false, meaning the CN must persist the txn log
+    // itself. The parallel compaction manager consults this to decide how to deliver the merged log.
+    bool skip_write_txnlog() const;
+
+    void set_last_check_time(int64_t now) {
+        std::lock_guard l(_txn_valid_check_mutex);
+        _last_check_time = now;
+    }
+
+    int64_t TEST_get_last_check_time() const {
+        std::lock_guard l(_txn_valid_check_mutex);
+        return _last_check_time;
+    }
+
+    // check if txn in FE still valid while compaction task (specified by `context`) is running
+    Status is_txn_still_valid();
+
 private:
+    const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
+
+    // Cache a txn log that this node produced but handed to the aggregator to persist, so that the
+    // following publish does not have to read the combined txn log back from object storage.
+    void cache_txn_log(const CompactionTaskContext& context);
+
     CompactionScheduler* _scheduler;
-    mutable bthread::Mutex _mtx;
-    const lake::CompactRequest* _request;
-    lake::CompactResponse* _response;
+    mutable StackTraceMutex<bthread::Mutex> _mtx;
+    const CompactRequest* _request;
+    CompactResponse* _response;
     ::google::protobuf::Closure* _done;
     Status _status;
+    int64_t _timeout_deadline_ms;
+    // compaction's last check time in second, initialized when first put into task queue,
+    // used to help check whether it's valid periodically, task's in queue time is considered
+    int64_t _last_check_time{INT64_MAX};
+    // use lock to protect _last_check_time and prevent multiple rpc called
+    mutable std::mutex _txn_valid_check_mutex;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
-};
-
-// Context of a single tablet compaction task.
-struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
-    explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_,
-                                   std::shared_ptr<CompactionTaskCallback> cb_)
-            : txn_id(txn_id_), tablet_id(tablet_id_), version(version_), callback(std::move(cb_)) {}
-
-#ifndef NDEBUG
-    ~CompactionTaskContext() {
-        CHECK(next() == this && previous() == this) << "Must remove CompactionTaskContext from list before destructor";
-    }
-#endif
-
-    const int64_t txn_id;
-    const int64_t tablet_id;
-    const int64_t version;
-    std::atomic<int64_t> start_time{0};
-    std::atomic<int64_t> finish_time{0};
-    std::atomic<bool> skipped{false};
-    std::atomic<int> runs{0};
-    Status status;
-    lake::CompactionTask::Progress progress;
-    std::shared_ptr<CompactionTaskCallback> callback;
+    int64_t _success_compaction_input_file_size = 0;
 };
 
 struct CompactionTaskInfo {
@@ -111,6 +126,9 @@ struct CompactionTaskInfo {
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
+    // Parallel subtask identifier. -1 means a regular, non-parallel task.
+    int32_t subtask_id = -1;
+    std::string profile; // detailed execution info, such as io stats
 };
 
 class CompactionScheduler {
@@ -119,13 +137,13 @@ class CompactionScheduler {
     //  - Once Status::MemoryLimitExceeded is encountered, reduce the maximum concurrency by one until the
     //    concurrency is reduced to 1
     //  - If no Status::MemoryLimitExceeded is encountered for "kConcurrencyRestoreTimes" consecutive time,
-    //    increase the maximum concurrency by one until config::compact_threads is reached or
-    //    Status::MemoryLimitExceeded is encountered again.
+    //    increase the maximum concurrency by one until config::compact_threads is reached
+    //    or Status::MemoryLimitExceeded is encountered again.
     class Limiter {
     public:
         constexpr const static int16_t kConcurrencyRestoreTimes = 2;
 
-        explicit Limiter(int16_t total) : _total(total), _free(total), _reserved(0), _success(0) {}
+        explicit Limiter(int16_t total) : _total(total), _free(total) {}
 
         // Acquire a token for doing compaction task. returns true on success and false otherwise.
         // No new compaction task should be scheduled to run if the method returned false.
@@ -139,15 +157,67 @@ class CompactionScheduler {
 
         int16_t concurrency() const;
 
+        void adapt_to_task_queue_size(int16_t new_val);
+
     private:
         mutable std::mutex _mtx;
-        const int16_t _total;
+        int16_t _total;
         // The number of tokens can be assigned to compaction tasks.
         int64_t _free;
         // The number of reserved tokens. reserved tokens cannot be assigned to compaction task.
-        int16_t _reserved;
+        int16_t _reserved{0};
         // The number of tasks that didn't encounter the Status::MemoryLimitExceeded error.
-        int64_t _success;
+        int64_t _success{0};
+    };
+
+    using CompactionContextPtr = std::unique_ptr<CompactionTaskContext>;
+
+    // Using unbounded queue for simplicity and rely on the FE to limit the number of compaction tasks.
+    //
+    // To developers: if you change this queue to bounded queue, normally you should replace std::mutex
+    // with bthread::Mutex and replace std::condition_variable with bthread::ConditionVariable:
+    // ```
+    // using TaskQueue = BlockingQueue<CompactionStatePtr,
+    //                                 std::deque<CompactionStatePtr>,
+    //                                 bthread::Mutex,
+    //                                 bthread::ConditionVariable>;
+    // ```
+    using TaskQueue = UnboundedBlockingQueue<CompactionContextPtr>;
+
+    class WrapTaskQueues {
+    public:
+        explicit WrapTaskQueues(int max_concurrency) : _target_size(max_concurrency) {
+            _task_queues_mutex.lock();
+            resize(max_concurrency);
+            _task_queues_mutex.unlock();
+        }
+
+        int task_queue_size();
+
+        void set_target_size(int32_t target_size);
+
+        int32_t target_size();
+
+        void put_by_txn_id(int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts);
+        void put_by_txn_id(int64_t txn_id, std::unique_ptr<CompactionTaskContext>& context);
+
+        bool try_get(int idx, std::unique_ptr<CompactionTaskContext>* context);
+
+        void resize(int new_val);
+
+        bool modifying();
+
+        void steal_task(int start_index, std::unique_ptr<CompactionTaskContext>* context);
+
+        void resize_if_needed(Limiter& limiter);
+
+    private:
+        // mutex must be held
+        int _task_queue_safe_index(int64_t txn_id);
+
+        std::mutex _task_queues_mutex;
+        std::vector<std::shared_ptr<TaskQueue>> _internal_task_queues;
+        int16_t _target_size;
     };
 
 public:
@@ -171,22 +241,20 @@ public:
 
     int16_t concurrency() const { return _limiter.concurrency(); }
 
+    // update at runtime
+    void update_compact_threads(int32_t new_val);
+
+    void stop();
+
 private:
     friend class CompactionTaskCallback;
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_with_reserved);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_preserves_inflight_tokens);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_keeps_one_token);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_grow);
 
-    using CompactionContextPtr = std::unique_ptr<CompactionTaskContext>;
-
-    // Using unbounded queue for simplicity and rely on the FE to limit the number of compaction tasks.
-    //
-    // To developers: if you change this queue to bounded queue, normally you should replace std::mutex
-    // with bthread::Mutex and replace std::condition_variable with bthread::ConditionVariable:
-    // ```
-    // using TaskQueue = BlockingQueue<CompactionStatePtr,
-    //                                 std::deque<CompactionStatePtr>,
-    //                                 bthread::Mutex,
-    //                                 bthread::ConditionVariable>;
-    // ```
-    using TaskQueue = UnboundedBlockingQueue<CompactionContextPtr>;
+    // abort all the compaction tasks in the task queue. Only expected to be invoked during stop()
+    void abort_all();
 
     void remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& contexes);
 
@@ -194,20 +262,25 @@ private:
 
     Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
 
-    void steal_task(int start_index, std::unique_ptr<CompactionTaskContext>* context);
+    void abort_compaction(std::unique_ptr<CompactionTaskContext> context);
 
-    int choose_task_queue_by_txn_id(int64_t txn_id) const { return txn_id % _task_queue_count; }
-
-    bool txn_log_exists(int64_t tablet_id, int64_t txn_id) const;
+    bool reschedule_task_if_needed(int id);
 
     TabletManager* _tablet_mgr;
     Limiter _limiter;
-    bthread::Mutex _contexts_lock;
+    StackTraceMutex<bthread::Mutex> _contexts_lock;
     butil::LinkedList<CompactionTaskContext> _contexts;
-    int _task_queue_count;
-    TaskQueue* _task_queues;
     std::unique_ptr<ThreadPool> _threads;
     std::atomic<bool> _stopped{false};
+    std::mutex _mutex;
+    WrapTaskQueues _task_queues;
+
+    // Per-tablet parallel compaction manager
+    std::unique_ptr<TabletParallelCompactionManager> _parallel_mgr;
+
+    // Process compaction request with parallel mode
+    void process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
+                                     const std::shared_ptr<CompactionTaskCallback>& callback);
 };
 
 inline bool CompactionScheduler::Limiter::acquire() {
@@ -246,5 +319,118 @@ inline int16_t CompactionScheduler::Limiter::concurrency() const {
     std::lock_guard l(_mtx);
     return _total - _reserved;
 }
+
+inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_val) {
+    std::lock_guard l(_mtx);
+    if (new_val <= 0 || new_val == _total) {
+        return;
+    }
+    // Tokens currently held by running compaction tasks. They will be returned via
+    // no_memory_limit_exceeded()/memory_limit_exceeded() when those tasks finish, so
+    // they must be carried over to the new accounting.
+    const int64_t in_use = _total - _reserved - _free;
+    if (new_val < _total) {
+        // Scale down the reserved tokens proportionally to the new total, and keep at
+        // least one grantable token so that the concurrency cannot be reduced to zero.
+        const double percentage = static_cast<double>(new_val) / _total;
+        _reserved = std::min<int16_t>(static_cast<int16_t>(static_cast<double>(_reserved) * percentage), new_val - 1);
+    }
+    _total = new_val;
+    // _free may become negative when the tasks in flight exceed the new concurrency: no
+    // new token can be acquired until enough running tasks have returned theirs.
+    _free = _total - _reserved - in_use;
+    LOG(INFO) << "Update Limiter's _total value to " << _total << ", _free value to " << _free
+              << ", and _reserved value to " << _reserved;
+}
+
+inline int CompactionScheduler::WrapTaskQueues::task_queue_size() {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    return _internal_task_queues.size();
+}
+
+// mutex must be held
+inline int CompactionScheduler::WrapTaskQueues::_task_queue_safe_index(int64_t txn_id) {
+    if (_target_size < _internal_task_queues.size()) {
+        // Shrinking, It can prevent tasks from being placed on queues with IDs greater than it.
+        return txn_id % _target_size;
+    } else {
+        // Expanding or normal state, if _internal_task_queues is expanding, it can prevent tasks
+        // from being placed to the areas that have not expanded yet.
+        return txn_id % _internal_task_queues.size();
+    }
+}
+
+inline void CompactionScheduler::WrapTaskQueues::set_target_size(int32_t target_size) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    _target_size = target_size;
+}
+
+inline int32_t CompactionScheduler::WrapTaskQueues::target_size() {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    return _target_size;
+}
+
+inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
+                                                               std::unique_ptr<CompactionTaskContext>& context) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    int idx = _task_queue_safe_index(txn_id);
+    context->enqueue_time_sec = ::time(nullptr);
+    context->enqueue_time_ns = MonotonicNanos();
+    _internal_task_queues[idx]->put(std::move(context));
+}
+
+inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
+        int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    int idx = _task_queue_safe_index(txn_id);
+    int64_t now = ::time(nullptr);
+    int64_t now_ns = MonotonicNanos();
+    for (auto& context : contexts) {
+        context->enqueue_time_sec = now;
+        context->enqueue_time_ns = now_ns;
+        _internal_task_queues[idx]->put(std::move(context));
+    }
+}
+
+inline bool CompactionScheduler::WrapTaskQueues::try_get(int idx, std::unique_ptr<CompactionTaskContext>* context) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    if (idx >= _internal_task_queues.size()) { // idx might be invalid
+        return false;
+    }
+    return _internal_task_queues[idx]->try_get(context);
+}
+
+inline void CompactionScheduler::WrapTaskQueues::resize(int new_val) {
+    // Require external lock holding
+    auto old_val = _internal_task_queues.size();
+    if (old_val < new_val) {
+        // Memory needs to be allocated
+        for (auto i = old_val; i < new_val; i++) {
+            _internal_task_queues.push_back(std::make_shared<TaskQueue>());
+        }
+    } else if (old_val > new_val) {
+        // There is no need to clean up the memory, shared_ptr will manage its memory
+        _internal_task_queues.resize(new_val);
+    }
+}
+
+inline bool CompactionScheduler::WrapTaskQueues::modifying() {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    return !(_internal_task_queues.size() == _target_size);
+}
+
+inline void CompactionScheduler::WrapTaskQueues::steal_task(int start_index,
+                                                            std::unique_ptr<CompactionTaskContext>* context) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    auto queue_count = _internal_task_queues.size();
+    for (int i = 0; i < queue_count; i++) {
+        if (_internal_task_queues[(start_index + i) % queue_count]->try_get(context)) {
+            return;
+        }
+    }
+    DCHECK(*context == nullptr);
+}
+
+Status compaction_should_cancel(CompactionTaskContext* context);
 
 } // namespace starrocks::lake

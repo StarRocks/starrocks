@@ -1,0 +1,19 @@
+[base]
+name=CentOS-$releasever - Base
+mirrorlist=file:///etc/yum-mirrorlist/$basearch/yum-base-mirrorlist.txt
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+[updates]
+name=CentOS-$releasever - Updates
+mirrorlist=file:///etc/yum-mirrorlist/$basearch/yum-updates-mirrorlist.txt
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+[extras]
+name=CentOS-$releasever - Extras
+mirrorlist=file:///etc/yum-mirrorlist/$basearch/yum-extras-mirrorlist.txt
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7

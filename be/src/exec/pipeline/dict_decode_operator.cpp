@@ -15,8 +15,11 @@
 #include "exec/pipeline/dict_decode_operator.h"
 
 #include "column/column_helper.h"
+#include "column/global_dict/decoder.h"
 #include "common/logging.h"
-#include "runtime/global_dict/decoder.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "exprs/expr_executor.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -35,14 +38,22 @@ StatusOr<ChunkPtr> DictDecodeOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status DictDecodeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    Columns decode_columns(_encode_column_cids.size());
+    MutableColumns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         const ColumnPtr& encode_column = chunk->get_column_by_slot_id(_encode_column_cids[i]);
-        TypeDescriptor desc;
-        desc.type = TYPE_VARCHAR;
+        const TypeDescriptor* desc = _decode_column_types[i];
+        decode_columns[i] = ColumnHelper::create_column(*desc, encode_column->is_nullable());
+        if (encode_column->only_null()) {
+            bool res = decode_columns[i]->append_nulls(encode_column->size());
+            DCHECK(res);
+            continue;
+        }
 
-        decode_columns[i] = ColumnHelper::create_column(desc, encode_column->is_nullable());
-        RETURN_IF_ERROR(_decoders[i]->decode(encode_column.get(), decode_columns[i].get()));
+        if (desc->is_array_type()) {
+            RETURN_IF_ERROR(_decoders[i]->decode_array(encode_column.get(), decode_columns[i].get()));
+        } else {
+            RETURN_IF_ERROR(_decoders[i]->decode_string(encode_column.get(), decode_columns[i].get()));
+        }
     }
 
     _cur_chunk = std::make_shared<Chunk>();
@@ -82,24 +93,26 @@ Status DictDecodeOperator::reset_state(RuntimeState* state, const std::vector<Ch
 Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
 
-    const auto& global_dict = state->get_query_global_dict_map();
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict = fragment_dict_state->query_global_dicts();
+    auto* dict_optimize_parser = fragment_dict_state->mutable_dict_optimize_parser();
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
         if (dict_not_contains_cid) {
             auto& [expr_ctx, dict_ctx] = v;
-            _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+            dict_optimize_parser->check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
             if (!dict_ctx.could_apply_dict_optimize) {
                 return Status::InternalError(fmt::format(
                         "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
             }
 
-            RETURN_IF_ERROR(_dict_optimize_parser.eval_expression(expr_ctx, &dict_ctx, slot_id));
+            RETURN_IF_ERROR(dict_optimize_parser->eval_expression(state, expr_ctx, &dict_ctx, slot_id));
             auto dict_iter = global_dict.find(slot_id);
             DCHECK(dict_iter != global_dict.end());
             if (dict_iter == global_dict.end()) {
@@ -116,6 +129,13 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
         auto dict_not_contains_cid = dict_iter == global_dict.end();
 
         if (dict_not_contains_cid) {
+            if (dict_optimize_parser->eval_dict_expr(state, need_encode_cid).ok()) {
+                dict_iter = global_dict.find(need_encode_cid);
+                dict_not_contains_cid = dict_iter == global_dict.end();
+            }
+        }
+
+        if (dict_not_contains_cid) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
         // TODO : avoid copy dict
@@ -128,7 +148,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void DictDecodeOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_expr_ctxs, state);
+    ExprExecutor::close(_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

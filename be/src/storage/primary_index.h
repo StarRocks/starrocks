@@ -16,17 +16,20 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "common/status.h"
 #include "gen_cpp/persistent_index.pb.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 
 class Tablet;
 class HashIndex;
+class ParallelUpsertContext;
+struct ParallelPublishSlot;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -41,7 +44,7 @@ public:
 
     PrimaryIndex();
     PrimaryIndex(const Schema& pk_schema);
-    ~PrimaryIndex();
+    virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
@@ -53,6 +56,10 @@ public:
     //
     // [thread-safe]
     void unload();
+    void unload_without_lock();
+
+    // Whether index is normally loaded
+    bool is_loaded();
 
     // insert new primary keys into this index. caller need to make sure key doesn't exists
     // in index
@@ -69,6 +76,41 @@ public:
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
+
+    // Parallel-publish overload. The active-memtable write happens synchronously here; on a
+    // cloud-native index the SST / inactive-memtable lookup of the replaced old values is submitted
+    // to `ctx`'s runner, which is why `slot` -- whose `pk_column` owns the bytes `keys` points into
+    // -- must outlive the join.
+    //
+    // When `ctx->defers_lookup()` the lookup task appends the replaced rowids to the context and the
+    // caller must join the runner and call flush_memtable(); otherwise the lookup completes before
+    // this returns and the context is appended to synchronously. Either way the caller must not
+    // append them again.
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx, IOStat* stat = nullptr);
+
+    // Same, for an arbitrary subset of rows addressed by absolute rowid: pks[i] lands at
+    // (rssid, rowids[i]). Only supported on the cloud-native persistent index (returns NotSupported
+    // otherwise).
+    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx, IOStat* stat = nullptr);
+
+    // replace old values and insert when key not exist.
+    // Used in compaction apply & publish.
+    // [not thread-safe]
+    //
+    // |rssid| output segment's rssid
+    // |rowid_start| row id left open interval
+    // |replace_indexes| The index of the |pks| array that need to replace.
+    // |pks| each output segment row's *encoded* primary key
+    //
+    // E.g.
+    // pks : {a, b, c, d, e}
+    // replace_indexes : {2, 3}
+    // So we only need to replace {c : rssid + rowid_start + 2, d : rssid + rowid_start + 3}
+    //
+    Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                   const Column& pks);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
@@ -107,13 +149,12 @@ public:
 
     Status prepare(const EditVersion& version, size_t n);
 
-    Status commit(PersistentIndexMetaPB* index_meta);
+    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
 
     Status on_commited();
 
-    double get_write_amp_score();
-
-    Status major_compaction(Tablet* tablet);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                            IOStat* stat = nullptr);
 
     Status abort();
 
@@ -124,9 +165,6 @@ public:
     std::size_t size() const;
 
     // [not thread-safe]
-    std::size_t capacity() const;
-
-    // [not thread-safe]
     void reserve(size_t s);
 
     std::string to_string() const;
@@ -134,6 +172,26 @@ public:
     bool enable_persistent_index() { return _persistent_index != nullptr; }
 
     size_t key_size() { return _key_size; }
+
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
+
+    void reset_cancel_major_compaction();
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
+    Status get_load_status() { return _status; }
+
+    // only for ut
+    void set_status(bool loaded, Status st) {
+        _loaded = loaded;
+        _status = std::move(st);
+    }
+
+    // Return the pointer of specific position of slice array.
+    static StatusOr<const Slice*> build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin,
+                                                        uint32_t idx_end, Buffer<Slice>* key_slices);
+
+    bool need_rebuild() const;
 
 protected:
     void _set_schema(const Schema& pk_schema);
@@ -147,13 +205,14 @@ private:
     Status _build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
                                     uint32_t idx_end, std::vector<uint64_t>* values) const;
 
-    const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                                        std::vector<Slice>* key_slices) const;
-
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
                                          uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
+
+    Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
+                                         uint32_t idx_end, ParallelPublishSlot* slot, ParallelUpsertContext* ctx,
+                                         IOStat* stat);
 
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 
@@ -165,19 +224,25 @@ private:
     Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                      const uint32_t max_src_rssid, vector<uint32_t>* deletes);
 
+    Status _replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
+                                                const std::vector<uint32_t>& replace_indexes, const Column& pks);
+
+    void _calc_memory_usage();
+
 protected:
     std::mutex _lock;
     std::atomic<bool> _loaded{false};
     Status _status;
     int64_t _tablet_id = 0;
-    std::unique_ptr<PersistentIndex> _persistent_index;
+    std::shared_ptr<PersistentIndex> _persistent_index;
+    size_t _key_size = 0;
 
 private:
-    size_t _key_size = 0;
     int64_t _table_id = 0;
     Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
+    std::atomic<size_t> _memory_usage{0};
 };
 
 inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {

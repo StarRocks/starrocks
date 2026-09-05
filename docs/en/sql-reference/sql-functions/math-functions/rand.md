@@ -1,10 +1,9 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns a random floating-point number between 0 (inclusive) and 1 (exclusive)."
 ---
 
-# RAND, RANDOM
-
-## Description
+# rand, random
 
 Returns a random floating-point number between 0 (inclusive) and 1 (exclusive).
 
@@ -16,7 +15,7 @@ RAND(x);
 
 ## Parameters
 
-`x`: optional. The data type is BIGINT. If `x` is specified, this function returns a repeatable random number. If `x` is not specified, this function returns a completely random number.
+`x`: optional. The data type is BIGINT. Whether `x is specified or not, this function returns a completely random number.
 
 ## Return value
 

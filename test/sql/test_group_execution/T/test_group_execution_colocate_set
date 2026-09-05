@@ -1,0 +1,59 @@
+-- name: test_group_execution_colocate_set
+
+-- A colocate Set operator must never be placed inside a colocate exec group.
+-- On the BE its branches keep a plain LocalExchangeSink instead of a GroupedExecutionSink,
+-- so nothing ever advances ColocateExecutionGroup past its first wave of bucket groups and
+-- the query hangs forever. Reproduces as soon as bucket groups >= 2 * physical dop.
+set enable_group_execution = true;
+-- force logical dop > physical dop, so the exec group needs more than one wave on small data
+set group_execution_min_scan_rows = 1;
+set pipeline_dop = 2;
+
+CREATE TABLE `wid_info` (
+  `wid` varchar(64) NULL COMMENT "",
+  `a1` array<varchar(64)> NULL COMMENT "",
+  `a2` array<varchar(64)> NULL COMMENT "",
+  `st` varchar(8) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`wid`)
+DISTRIBUTED BY HASH(`wid`) BUCKETS 32
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `offline_uid` (
+  `user_id` varchar(200) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`user_id`)
+DISTRIBUTED BY HASH(`user_id`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into wid_info SELECT concat('w', generate_series), [concat('u', generate_series % 500)], [concat('u', generate_series % 300)], '1' FROM TABLE(generate_series(1, 20000));
+insert into offline_uid SELECT concat('u', generate_series) FROM TABLE(generate_series(1, 300));
+
+-- the Set operator itself must stay out of the colocate exec group
+function: assert_explain_not_contains('select wid, unnest as uid from wid_info, unnest(a1) union select wid, unnest as uid from wid_info, unnest(a2)', 'colocate exec groups')
+
+-- and the query must actually finish (it hung forever before the fix)
+select count(*) from (select a.wid from (select wid, unnest as uid from wid_info, unnest(a1) where st = 1 and unnest is not null union select wid, unnest as uid from wid_info, unnest(a2) where st = 1 and unnest is not null) a join (select trim(user_id) as uid from offline_uid group by 1) b on a.uid = b.uid group by a.wid) t;
+
+-- same shape behind an OLAP table sink: INSERT forces the sink fragment dop down, which is how
+-- this was originally hit in production (plain SELECT happened to get one wave and survived)
+CREATE TABLE `wid_profile` (
+  `seg_id` bigint(20) NULL COMMENT "",
+  `wid` varchar(64) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`seg_id`)
+DISTRIBUTED BY HASH(`seg_id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into wid_profile select 1, a.wid from (select wid, unnest as uid from wid_info, unnest(a1) where st = 1 and unnest is not null union select wid, unnest as uid from wid_info, unnest(a2) where st = 1 and unnest is not null) a join (select trim(user_id) as uid from offline_uid group by 1) b on a.uid = b.uid group by a.wid;
+select count(*) from wid_profile;
+
+-- intersect / except take the same colocate path
+select count(*) from (select wid, unnest as uid from wid_info, unnest(a1) where unnest is not null intersect select wid, unnest as uid from wid_info, unnest(a2) where unnest is not null) t;
+select count(*) from (select wid, unnest as uid from wid_info, unnest(a1) where unnest is not null except select wid, unnest as uid from wid_info, unnest(a2) where unnest is not null) t;

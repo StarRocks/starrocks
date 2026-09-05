@@ -34,38 +34,41 @@
 
 #pragma once
 
-#include <algorithm>
-#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <utility>
 
-#include "column/datum.h"
-#include "column/fixed_length_column.h"
-#include "column/vectorized_fwd.h"
+#include "base/concurrency/once.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
-#include "storage/range.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
-#include "storage/rowset/common.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
-#include "util/once.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
 class BlockCompressionCodec;
 class MemTracker;
 
+namespace compression {
+class ZstdDDict;
+} // namespace compression
+
 class ColumnPredicate;
 class Column;
 class ZoneMapDetail;
 
+class BloomFilter;
 class BitmapIndexIterator;
 class BitmapIndexReader;
 class ColumnIterator;
@@ -77,6 +80,7 @@ class ParsedPage;
 class ZoneMapIndexPB;
 class ZoneMapPB;
 class Segment;
+struct NgramBloomFilterReaderOptions;
 
 // There will be concurrent users to read the same column. So
 // we should do our best to reduce resource usage through share
@@ -84,14 +88,21 @@ class Segment;
 // This will cache data shared by all reader
 class ColumnReader {
     struct private_type;
+    struct SubReaderId;
 
 public:
     // Create and initialize a ColumnReader.
     // This method will not take the ownership of |meta|.
     // Note that |meta| is mutable, this method may change its internal state.
     //
+    // The primary purpose of the |column| currently is to obtain the name and unique ID of the sub_column
+    // to support the add/drop field functionality of the struct column.
+    // It is important that the |column| needs to be consistent with the tablet schema corresponding to the segment.
+    // If you can ensure that this column does not involve a struct column, the |column| can be set to nullptr.
+    //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment,
+                                                          const TabletColumn* column);
 
     ColumnReader(const private_type&, Segment* segment);
     ~ColumnReader();
@@ -101,8 +112,9 @@ public:
     ColumnReader(ColumnReader&&) = delete;
     void operator=(ColumnReader&&) = delete;
 
-    // create a new column iterator. Caller should free the returned iterator after unused.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
+    // create a new column iterator.
+    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr,
+                                                           const TabletColumn* column = nullptr);
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
@@ -111,6 +123,7 @@ public:
     // Seek to the first entry in the column.
     Status seek_to_first(OrdinalPageIndexIterator* iter);
     Status seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterator* iter);
+    Status seek_by_page_index(int page_index, OrdinalPageIndexIterator* iter);
 
     // read a page from file into a page handle
     Status read_page(const ColumnIteratorOptions& iter_opts, const PagePointer& pp, PageHandle* handle,
@@ -123,42 +136,101 @@ public:
     bool has_zone_map() const { return _zonemap_index != nullptr; }
     bool has_bitmap_index() const { return _bitmap_index != nullptr; }
     bool has_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
+    // If the column's bloom-filter index was tombstoned via a lake
+    // metadata-only DROP, the footer bloom is stale and must not be
+    // interpreted as either "original" or "ngram" bloom until compaction
+    // rewrites the segment. dropped_table_indices on the tablet schema
+    // carries that signal. Both flavors share the same footer storage
+    // (_bloom_filter_index), so either tombstone disqualifies the footer.
+    bool _bloom_filter_index_dropped() const {
+        return _segment->tablet_schema().has_dropped_index(_column_unique_id, NGRAMBF) ||
+               _segment->tablet_schema().has_dropped_index(_column_unique_id, BLOOM_FILTER);
+    }
+    bool has_original_bloom_filter_index() const {
+        return _bloom_filter_index != nullptr && !_bloom_filter_index_dropped() &&
+               (!_segment->tablet_schema().has_index(_column_unique_id, NGRAMBF));
+    }
+    bool has_ngram_bloom_filter_index() const {
+        return _bloom_filter_index != nullptr && !_bloom_filter_index_dropped() &&
+               _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
+    }
 
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     LogicalType column_type() const { return _column_type; }
+    int32_t column_length() const { return _column_length; }
     bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }
     bool all_dict_encoded() const { return _flags & kAllDictEncodedMask; }
 
     uint64_t total_mem_footprint() const { return _total_mem_footprint; }
 
-    int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
+    int32_t num_data_pages() const { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
+    // Return the total size of all data pages
+    int64_t data_page_footprint() const;
+
+    // Return the ordinal range of a page
+    std::pair<ordinal_t, ordinal_t> get_page_range(size_t page_index);
 
     // page-level zone map filter.
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
-                           const IndexReadOptions& opts);
+                           const IndexReadOptions& opts, CompoundNodeType pred_relation,
+                           const Range<>* src_range = nullptr);
+
+    // NOTE: RAW interface should be used carefully
+    // Return all page-level zonemap
+    StatusOr<std::vector<ZoneMapDetail>> get_raw_zone_map(const IndexReadOptions& opts);
 
     // segment-level zone map filter.
     // Return false to filter out this segment.
     // same as `match_condition`, used by vector engine.
     bool segment_zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& predicates) const;
 
-    // prerequisite: at least one predicate in |predicates| support bloom filter.
-    Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
-                        const IndexReadOptions& opts);
+    /// Treat the relationship between |predicates| as `(s_pred_1 OR s_pred_2 OR ... OR s_pred_n) AND (ns_pred_1 AND ns_pred_2 AND ... AND ns_pred_n)`,
+    /// where s_pred_i denotes a predicate which supports bloom filter, and ns_pred_i denotes a predicate which does not support bloom filter.
+    /// That is,
+    /// - only keep the rows in |row_ranges| which satisfy any predicate that supports bloom filter in |predicates|.
+    ///
+    /// prerequisite:
+    /// - if the original relationship between |predicates| is OR, all of them need to support bloom filter.
+    /// - if the original relationship between |predicates| is AND, at least one of them need to support bloom filter.
+    Status original_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
+                                 const IndexReadOptions& opts);
+
+    Status ngram_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
+                              const IndexReadOptions& opts);
 
     Status load_ordinal_index(const IndexReadOptions& opts);
 
+    Status new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedIndexIterator** iterator,
+                                       const SegmentReadOptions& opts, const IndexReadOptions& index_opt);
+
     uint32_t num_rows() const { return _segment->num_rows(); }
+
+    void print_debug_info() { _ordinal_index->print_debug_info(); }
 
     size_t mem_usage() const;
 
-private:
-    const std::string& file_name() const { return _segment->file_name(); }
+    const std::string& name() const { return _name; }
 
+    const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
+
+    bool is_flat_json() const { return _is_flat_json; }
+    bool has_remain_json() const { return _has_remain; }
+
+    // Return the pointer to the remain filter if it exists, otherwise return nullptr.
+    const BloomFilter* get_remain_filter() const { return _remain_filter ? _remain_filter.get() : nullptr; }
+
+private:
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_json_iterator(ColumnAccessPath* path = nullptr,
+                                                                 const TabletColumn* column = nullptr);
+
+    const std::string& file_name() const { return _segment->file_name(); }
+    template <bool is_original_bf>
+    Status bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
+                        const IndexReadOptions& opts);
     struct private_type {
         explicit private_type(int) {}
     };
@@ -167,25 +239,72 @@ private:
     constexpr static uint8_t kHasAllDictEncodedMask = 2;
     constexpr static uint8_t kAllDictEncodedMask = 4;
 
-    Status _init(ColumnMetaPB* meta);
+    Status _init(ColumnMetaPB* meta, const TabletColumn* column);
 
     Status _load_zonemap_index(const IndexReadOptions& opts);
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
-    Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
+    // true when this column carries a compression-dictionary page.
+    bool has_zstd_compression_dict() const { return _zstd_compression_dict_page_pointer.size > 0; }
+    // build the shared DDict once (per segment, per column) by bootstrap
+    // reading the compression-dict page directly through PageIO (NOT read_page, which
+    // would re-enter the OnceFlag on the same thread and deadlock).
+    Status _ensure_zstd_compression_ddict(const ColumnIteratorOptions& iter_opts);
+
+    // Build a fresh BitmapIndexReader backed by a standalone .idx file
+    // (Index Delta Group payload). Used when IndexReadOptions carries an
+    // IDG entry that supersedes the segment footer's bitmap meta. The
+    // returned iterator owns its file handle and reader; the cached
+    // _bitmap_index footer reader is left untouched.
+    // `encryption_meta` is the IDG entry's serialized EncryptionMetaPB
+    // (empty when encryption is off); when non-empty it is unwrapped and
+    // passed through RandomAccessFileOptions so that the .idx file is
+    // read as cleartext rather than ciphertext.
+    Status _new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts, const std::string& idx_filename,
+                                                 const std::string& encryption_meta, BitmapIndexIterator** iterator);
+
+    // Determines the logical type to use when parsing zone map values for predicate filtering,
+    // handling type mismatches between column and predicate types after fast schema evolution
+    LogicalType _get_zone_map_parse_type(const ColumnPredicate* predicate) const;
+    Status _parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
+    Status _parse_zone_map(const TypeInfoPtr& type_info, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
     Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges);
 
+    template <CompoundNodeType PredRelation>
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
-                            std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
+                            std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages,
+                            const Range<>* src_range);
+
+    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts,
+                                const IndexReadOptions& index_opt);
+
+    NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
+
+    bool _inverted_index_loaded() const { return invoked(_inverted_index_load_once); }
+
+    StatusOr<std::unique_ptr<ColumnIterator>> _create_merge_struct_iter(ColumnAccessPath* path,
+                                                                        const TabletColumn* column);
+
+    void _update_sub_reader_pos(const TabletColumn* column, int pos);
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
+    [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
+    int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
+    // Read side of the per-column ZSTD compression dictionary. Copied from
+    // ColumnMetaPB.zstd_compression_dict_page in _init (size 0 when the column has none).
+    // The DDict is built once per (segment, column) and then referenced on every
+    // data-page decompression.
+    PagePointer _zstd_compression_dict_page_pointer;
+    std::shared_ptr<compression::ZstdDDict> _zstd_compression_ddict;
+    OnceFlag _zstd_compression_ddict_once;
     uint64_t _total_mem_footprint = 0;
+    uint32 _column_unique_id = std::numeric_limits<uint32_t>::max();
 
     // initialized in init(), used for create PageDecoder
     const EncodingInfo* _encoding_info = nullptr;
@@ -195,16 +314,40 @@ private:
     std::unique_ptr<OrdinalIndexPB> _ordinal_index_meta;
     std::unique_ptr<BitmapIndexPB> _bitmap_index_meta;
     std::unique_ptr<BloomFilterIndexPB> _bloom_filter_index_meta;
+    std::unique_ptr<BuiltinInvertedIndexPB> _builtin_inverted_index_meta;
 
     std::unique_ptr<ZoneMapIndexReader> _zonemap_index;
     std::unique_ptr<OrdinalIndexReader> _ordinal_index;
     std::unique_ptr<BitmapIndexReader> _bitmap_index;
     std::unique_ptr<BloomFilterIndexReader> _bloom_filter_index;
+    std::unique_ptr<InvertedReader> _inverted_index;
 
     std::unique_ptr<ZoneMapPB> _segment_zone_map;
 
     using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
     std::unique_ptr<SubReaderList> _sub_readers;
+    // Only used for struct column right now
+    // Use column names and unique IDs to distinguish sub-columns.
+    // The unnique id is always -1 for historical data, so the column name is needed.
+    // After support add/drop field for struct column, the following scenarios might occur:
+    //   1. Drop field v1
+    //   2. Add field v1
+    // The field `v1` in step 2 is different from the `v1` in step 1 and needs to be distinguished,
+    // So we also need to unqiue id.
+    struct SubReaderId {
+        std::string name;
+        int32_t id;
+
+        bool operator==(const SubReaderId& other) const { return id == other.id && name == other.name; }
+
+        bool operator<(const SubReaderId& other) const {
+            if (id != other.id) {
+                return id < other.id;
+            }
+            return name < other.name;
+        }
+    };
+    std::map<SubReaderId, int> _sub_reader_pos;
 
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,
@@ -214,6 +357,15 @@ private:
     uint8_t _flags = 0;
     // counter to record the reader's mem usage, sub readers excluded.
     std::atomic<size_t> _meta_mem_usage = 0;
+
+    // only for json flat column
+    std::string _name;
+    bool _is_flat_json = false;
+    bool _has_remain = false;
+    std::unique_ptr<BloomFilter> _remain_filter;
+
+    // only used for inverted index load
+    OnceFlag _inverted_index_load_once;
 };
 
 } // namespace starrocks

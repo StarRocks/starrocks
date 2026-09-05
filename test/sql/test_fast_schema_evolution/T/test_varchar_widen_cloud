@@ -1,0 +1,262 @@
+-- name: test_varchar_widen_cloud_fast_paths @cloud
+create database test_varchar_widen_cloud_fast_${uuid0};
+use test_varchar_widen_cloud_fast_${uuid0};
+
+CREATE TABLE t_fast_v1 (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "false"
+);
+insert into t_fast_v1 values ("a", 1, 31);
+[UC]function: fast_v1_index_snapshot=get_index_identity_snapshot("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v1")
+ALTER TABLE t_fast_v1 MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL;
+function: wait_table_schema_change_finish("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v1")
+function: assert_schema_change_job_count("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v1", 1)
+function: assert_latest_schema_change_job_path("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v1", "fast_v1")
+function: assert_index_identity_snapshot("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v1", '${fast_v1_index_snapshot}')
+function: assert_index_schema_columns("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v1", "t_fast_v1", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+[ORDER]select * from t_fast_v1 order by k1, k2;
+
+CREATE TABLE t_fast_v2 (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+insert into t_fast_v2 values ("b", 2, 32);
+[UC]function: fast_v2_job_count=get_schema_change_job_count("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v2")
+[UC]function: fast_v2_index_snapshot=get_index_identity_snapshot("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v2")
+ALTER TABLE t_fast_v2 MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL;
+function: assert_sync_fast_path("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v2", ${fast_v2_job_count}, '${fast_v2_index_snapshot}')
+function: assert_index_schema_columns("test_varchar_widen_cloud_fast_${uuid0}", "t_fast_v2", "t_fast_v2", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+[ORDER]select * from t_fast_v2 order by k1, k2;
+
+CREATE TABLE t_rollup_v2 (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+ROLLUP (
+    r1(k2, k1)
+)
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+insert into t_rollup_v2 values ("c", 3, 33);
+[UC]function: rollup_v2_job_count=get_schema_change_job_count("test_varchar_widen_cloud_fast_${uuid0}", "t_rollup_v2")
+[UC]function: rollup_v2_index_snapshot=get_index_identity_snapshot("test_varchar_widen_cloud_fast_${uuid0}", "t_rollup_v2")
+ALTER TABLE t_rollup_v2 MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL;
+function: assert_sync_fast_path("test_varchar_widen_cloud_fast_${uuid0}", "t_rollup_v2", ${rollup_v2_job_count}, '${rollup_v2_index_snapshot}')
+function: assert_index_schema_columns("test_varchar_widen_cloud_fast_${uuid0}", "t_rollup_v2", "t_rollup_v2", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+function: assert_index_schema_columns("test_varchar_widen_cloud_fast_${uuid0}", "t_rollup_v2", "r1", "k2|int|NO|true", "k1|varchar(30)|NO|true")
+[ORDER]select * from t_rollup_v2 order by k1, k2;
+
+drop database test_varchar_widen_cloud_fast_${uuid0} force;
+
+
+-- name: test_varchar_widen_cloud_pk_fast_paths @cloud
+create database test_varchar_widen_cloud_pk_fast_${uuid0};
+use test_varchar_widen_cloud_pk_fast_${uuid0};
+
+CREATE TABLE t_pk_key_fast (
+    k1 VARCHAR(10) NOT NULL,
+    v1 INT
+)
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+insert into t_pk_key_fast values ("pk-a", 34);
+[UC]function: pk_key_fast_job_count=get_schema_change_job_count("test_varchar_widen_cloud_pk_fast_${uuid0}", "t_pk_key_fast")
+[UC]function: pk_key_fast_index_snapshot=get_index_identity_snapshot("test_varchar_widen_cloud_pk_fast_${uuid0}", "t_pk_key_fast")
+ALTER TABLE t_pk_key_fast MODIFY COLUMN k1 VARCHAR(30);
+function: assert_sync_fast_path("test_varchar_widen_cloud_pk_fast_${uuid0}", "t_pk_key_fast", ${pk_key_fast_job_count}, '${pk_key_fast_index_snapshot}')
+function: assert_index_schema_columns("test_varchar_widen_cloud_pk_fast_${uuid0}", "t_pk_key_fast", "t_pk_key_fast", "k1|varchar(30)|NO|true", "v1|int|YES|false")
+[ORDER]select * from t_pk_key_fast order by k1;
+
+CREATE TABLE t_pk_sort_fast (
+    k0 INT NOT NULL,
+    k1 VARCHAR(10),
+    v1 INT
+)
+PRIMARY KEY(k0)
+DISTRIBUTED BY HASH(k0) BUCKETS 1
+ORDER BY(k1)
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+insert into t_pk_sort_fast values (1, "sort-a", 35);
+[UC]function: pk_sort_fast_job_count=get_schema_change_job_count("test_varchar_widen_cloud_pk_fast_${uuid0}", "t_pk_sort_fast")
+[UC]function: pk_sort_fast_index_snapshot=get_index_identity_snapshot("test_varchar_widen_cloud_pk_fast_${uuid0}", "t_pk_sort_fast")
+ALTER TABLE t_pk_sort_fast MODIFY COLUMN k1 VARCHAR(30);
+function: assert_sync_fast_path("test_varchar_widen_cloud_pk_fast_${uuid0}", "t_pk_sort_fast", ${pk_sort_fast_job_count}, '${pk_sort_fast_index_snapshot}')
+function: assert_index_schema_columns("test_varchar_widen_cloud_pk_fast_${uuid0}", "t_pk_sort_fast", "t_pk_sort_fast", "k0|int|NO|true", "k1|varchar(30)|YES|false", "v1|int|YES|false")
+[ORDER]select * from t_pk_sort_fast order by k0;
+
+drop database test_varchar_widen_cloud_pk_fast_${uuid0} force;
+
+
+-- name: test_varchar_widen_cloud_pk_guard_paths @cloud
+create database test_varchar_widen_cloud_pk_${uuid0};
+use test_varchar_widen_cloud_pk_${uuid0};
+
+CREATE TABLE t_pk_key_reject (
+    k1 VARCHAR(10) NOT NULL,
+    v1 INT
+)
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+function: assert_query_error_contains("ALTER TABLE t_pk_key_reject MODIFY COLUMN k1 INT", "Can not modify key column: k1 for primary key table except for increasing varchar length")
+
+CREATE TABLE t_pk_sort_reject (
+    k0 INT NOT NULL,
+    k1 VARCHAR(10),
+    v1 INT
+)
+PRIMARY KEY(k0)
+DISTRIBUTED BY HASH(k0) BUCKETS 1
+ORDER BY(k1)
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+function: assert_query_error_contains("ALTER TABLE t_pk_sort_reject MODIFY COLUMN k1 BIGINT", "Can not modify sort column in primary data model table except for increasing varchar length")
+
+CREATE TABLE t_pk_reorder_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 VARCHAR(10) NOT NULL,
+    v1 INT
+)
+PRIMARY KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+function: assert_query_error_contains("ALTER TABLE t_pk_reorder_reject MODIFY COLUMN k2 VARCHAR(30) FIRST", "Can not reorder pk keys by modify column")
+
+CREATE TABLE t_rollup_base_non_widen_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+ROLLUP (
+    r1(k2, k1)
+)
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+function: assert_query_error_contains("ALTER TABLE t_rollup_base_non_widen_reject MODIFY COLUMN k1 INT KEY NOT NULL", "modify distribution column[k1]")
+
+drop database test_varchar_widen_cloud_pk_${uuid0} force;
+
+
+-- name: test_varchar_widen_cloud_slow_and_reject_paths @cloud
+create database test_varchar_widen_cloud_slow_${uuid0};
+use test_varchar_widen_cloud_slow_${uuid0};
+
+CREATE TABLE t_slow (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "false"
+);
+insert into t_slow values ("1", 1, 41);
+ALTER TABLE t_slow MODIFY COLUMN k1 INT KEY NOT NULL;
+function: wait_table_schema_change_finish("test_varchar_widen_cloud_slow_${uuid0}", "t_slow")
+function: assert_schema_change_job_count("test_varchar_widen_cloud_slow_${uuid0}", "t_slow", 1)
+function: assert_latest_schema_change_job_path("test_varchar_widen_cloud_slow_${uuid0}", "t_slow", "slow")
+function: assert_index_schema_columns("test_varchar_widen_cloud_slow_${uuid0}", "t_slow", "t_slow", "k1|int|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+[ORDER]select * from t_slow order by k1, k2;
+
+CREATE TABLE t_multi_same (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+function: assert_query_error_contains("ALTER TABLE t_multi_same MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL, MODIFY COLUMN k1 INT KEY NOT NULL", "Column[k1] does not exists")
+function: assert_schema_change_job_count("test_varchar_widen_cloud_slow_${uuid0}", "t_multi_same", 0)
+function: assert_index_schema_columns("test_varchar_widen_cloud_slow_${uuid0}", "t_multi_same", "t_multi_same", "k1|varchar(10)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+
+CREATE TABLE t_multi_cross (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+ROLLUP (
+    r1(k2, k1)
+)
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+function: assert_query_error_contains("ALTER TABLE t_multi_cross MODIFY COLUMN v1 BIGINT, MODIFY COLUMN k1 INT KEY NOT NULL FIRST FROM r1", "modify distribution column[k1]")
+function: assert_schema_change_job_count("test_varchar_widen_cloud_slow_${uuid0}", "t_multi_cross", 0)
+function: assert_index_schema_columns("test_varchar_widen_cloud_slow_${uuid0}", "t_multi_cross", "t_multi_cross", "k1|varchar(10)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+function: assert_index_schema_columns("test_varchar_widen_cloud_slow_${uuid0}", "t_multi_cross", "r1", "k2|int|NO|true", "k1|varchar(10)|NO|true")
+
+CREATE TABLE t_pseudo_widen_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+function: assert_query_error_contains("ALTER TABLE t_pseudo_widen_reject MODIFY COLUMN k1 VARCHAR(30) KEY", "modify distribution column[k1]")
+
+CREATE TABLE t_colocate_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true",
+    "colocate_with" = "cg_varchar_widen_${uuid0}"
+);
+function: assert_query_error_contains("ALTER TABLE t_colocate_reject MODIFY COLUMN k1 VARCHAR(20) KEY NOT NULL", "for colocate table")
+
+drop database test_varchar_widen_cloud_slow_${uuid0} force;

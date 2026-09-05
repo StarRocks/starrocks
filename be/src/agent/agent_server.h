@@ -38,11 +38,13 @@
 #include <string>
 #include <vector>
 
+#include "agent/agent_common.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
 
 class ExecEnv;
+class PublishVersionManager;
 class Status;
 class TAgentTaskRequest;
 class TAgentResult;
@@ -57,7 +59,7 @@ public:
 
     ~AgentServer();
 
-    void init_or_die();
+    Status start();
 
     void stop();
 
@@ -76,6 +78,16 @@ public:
     //
     // Returns nullptr if `type` is not a valid value of `TTaskType::type`.
     ThreadPool* get_thread_pool(int type) const;
+
+    PublishVersionManager* publish_version_manager() const;
+
+    // Dedicated pool for per-file copy in lake-to-lake replication. Returned pool is distinct
+    // from `get_thread_pool(TTaskType::REPLICATE_SNAPSHOT)` so that the outer agent task can
+    // submit per-file sub-tasks and call ThreadPoolToken::wait() on them without tripping the
+    // thread-pool self-deadlock guard.
+    ThreadPool* get_lake_replicate_file_thread_pool() const;
+
+    void stop_task_worker_pool(TaskWorkerType type) const;
 
     DISALLOW_COPY_AND_MOVE(AgentServer);
 

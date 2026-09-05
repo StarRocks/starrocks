@@ -1,0 +1,6 @@
+label: 'クエリチューニング'
+position: 200
+collapsed: true
+link:
+  type: doc
+  id: query_tuning

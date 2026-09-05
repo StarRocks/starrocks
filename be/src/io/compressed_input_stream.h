@@ -16,25 +16,26 @@
 
 #include <utility>
 
+#include "base/bit/bit_util.h"
+#include "base/container/raw_container.h"
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
-#include "util/bit_util.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
-class StreamCompression;
+class StreamDecompressor;
 } // namespace starrocks
 
 namespace starrocks::io {
 
 class CompressedInputStream final : public InputStream {
 public:
-    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<StreamCompression> decompressor,
+    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<StreamDecompressor> decompressor,
                           size_t compressed_data_cache_size = 8 * 1024 * 1024LU)
             : _source_stream(std::move(source_stream)),
               _decompressor(std::move(decompressor)),
-              _compressed_buff(BitUtil::round_up(compressed_data_cache_size, CACHELINE_SIZE)) {}
+              _compressed_buff(compressed_data_cache_size) {}
 
     StatusOr<int64_t> read(void* data, int64_t size) override;
 
@@ -45,57 +46,47 @@ public:
         return _source_stream->get_numeric_statistics();
     }
 
+    IoStatsSnapshot get_io_stats_snapshot() const override;
+
 private:
     // Used to store the compressed data read from |_source_stream|.
     class CompressedBuffer {
     public:
-        explicit CompressedBuffer(size_t buff_size) : _compressed_data(BitUtil::round_up(buff_size, CACHELINE_SIZE)) {}
+        static constexpr size_t MAX_BLOCK_HEADER_SIZE = 64;
+
+        explicit CompressedBuffer(size_t buff_size) : _compressed_data(aligned_size(buff_size)) {}
+
+        size_t aligned_size(size_t size) const { return BitUtil::round_up(size, CACHELINE_SIZE); }
 
         Slice read_buffer() const { return {&_compressed_data[_offset], _limit - _offset}; }
 
         Slice write_buffer() const { return {&_compressed_data[_limit], _compressed_data.size() - _limit}; }
+
+        size_t available() const { return _limit - _offset; }
 
         void skip(size_t n) {
             _offset += n;
             assert(_offset <= _limit);
         }
 
-        Status read(InputStream* f) {
-            if (_offset > 0) {
-                // Copy the bytes between the buffer's current offset and limit to the beginning of
-                // the buffer.
-                memmove(&_compressed_data[0], &_compressed_data[_offset], available());
-                _limit -= _offset;
-                _offset = 0;
-            }
-            if (_limit >= _compressed_data.size()) {
-                return Status::InternalError("reached the buffer limit");
-            }
-            Slice buff(write_buffer());
-            ASSIGN_OR_RETURN(buff.size, f->read(buff.data, buff.size));
-            if (buff.size == 0) return Status::EndOfFile("");
-            _limit += buff.size;
-            return Status::OK();
-        }
-
-        size_t available() const { return _limit - _offset; }
+        Status read_with_hint_size(InputStream* f, size_t hint_size);
 
     private:
         raw::RawVector<uint8_t> _compressed_data;
         size_t _offset{0};
         size_t _limit{0};
+        bool _eof = false;
     };
 
     std::shared_ptr<InputStream> _source_stream;
-    std::shared_ptr<StreamCompression> _decompressor;
+    std::shared_ptr<StreamDecompressor> _decompressor;
     CompressedBuffer _compressed_buff;
     bool _stream_end = false;
 };
 
 class CompressedSeekableInputStream final : public SeekableInputStream {
 public:
-    CompressedSeekableInputStream(std::shared_ptr<CompressedInputStream> source)
-            : _source(std::move(std::move(source))) {}
+    CompressedSeekableInputStream(std::shared_ptr<CompressedInputStream> source) : _source(std::move(source)) {}
 
     StatusOr<int64_t> read(void* data, int64_t size) override { return _source->read(data, size); }
 
@@ -104,6 +95,8 @@ public:
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source->get_numeric_statistics();
     }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override;
 
     Status seek(int64_t position) override { return Status::NotSupported(""); }
     StatusOr<int64_t> position() override { return Status::NotSupported(""); }

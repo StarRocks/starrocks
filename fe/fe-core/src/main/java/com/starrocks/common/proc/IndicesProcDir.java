@@ -41,12 +41,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,13 +59,14 @@ import java.util.List;
 public class IndicesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime")
+            .add("TabletBalanceStat").add("Tablets")
             .build();
 
     private Database db;
     private OlapTable olapTable;
-    private Partition partition;
+    private PhysicalPartition partition;
 
-    public IndicesProcDir(Database db, OlapTable olapTable, Partition partition) {
+    public IndicesProcDir(Database db, OlapTable olapTable, PhysicalPartition partition) {
         this.db = db;
         this.olapTable = olapTable;
         this.partition = partition;
@@ -80,21 +81,24 @@ public class IndicesProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> indexInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        long tableId = olapTable.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             result.setNames(TITLE_NAMES);
-            for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
+            for (MaterializedIndex materializedIndex : partition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 List<Comparable> indexInfo = new ArrayList<Comparable>();
                 indexInfo.add(materializedIndex.getId());
-                indexInfo.add(olapTable.getIndexNameById(materializedIndex.getId()));
+                indexInfo.add(olapTable.getIndexNameByMetaId(materializedIndex.getMetaId()));
                 indexInfo.add(materializedIndex.getState());
                 indexInfo.add(TimeUtils.longToTimeString(materializedIndex.getLastCheckTime()));
+                indexInfo.add(materializedIndex.getBalanceStat().toString());
+                indexInfo.add(materializedIndex.getTablets().size());
 
                 indexInfos.add(indexInfo);
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         // sort by index id
@@ -132,8 +136,13 @@ public class IndicesProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid index id format: " + indexIdStr);
         }
 
+        // Take per-table READ: partition.getIndex reads PhysicalPartition.idToVisibleIndex
+        // / idToShadowIndex, which are plain HashMaps. A concurrent schema change
+        // (IX + table WRITE) can race with this get, so the lock pins the table while
+        // we resolve the index reference.
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        long tableId = olapTable.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             MaterializedIndex materializedIndex = partition.getIndex(indexId);
             if (materializedIndex == null) {
@@ -145,7 +154,7 @@ public class IndicesProcDir implements ProcDirInterface {
                 return new LocalTabletsProcDir(db, olapTable, materializedIndex);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 

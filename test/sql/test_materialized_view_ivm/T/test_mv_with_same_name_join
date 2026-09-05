@@ -1,0 +1,282 @@
+-- name: test_ivm_with_iceberg_same_name_join
+-- Regression: an incremental MV joining two base tables that share the same unqualified name
+-- across databases used to fail every incremental refresh with a "Duplicate key" error.
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+
+create database mv_ice_db_a_${uuid0};
+create database mv_ice_db_b_${uuid0};
+
+create table mv_ice_db_a_${uuid0}.tj (
+  k int,
+  v bigint,
+  dt date
+) partition by(dt);
+
+create table mv_ice_db_b_${uuid0}.tj (
+  k int,
+  w bigint,
+  dt date
+) partition by(dt);
+
+insert into mv_ice_db_a_${uuid0}.tj values (1, 10, '2023-12-01'), (2, 20, '2023-12-02');
+insert into mv_ice_db_b_${uuid0}.tj values (1, 100, '2023-12-01'), (2, 200, '2023-12-02');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT a.dt, a.k, a.v, b.w
+FROM mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj a
+JOIN mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj b ON a.dt = b.dt;
+
+-- initial (PCT) refresh
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+
+-- append to both same-named bases; the first INCREMENTAL refresh used to throw "Duplicate key tj"
+insert into mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj values (3, 30, '2023-12-03');
+insert into mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj values (3, 300, '2023-12-03');
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+
+DROP MATERIALIZED VIEW test_mv1;
+drop table mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0} force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0} force;
+
+-- name: test_pct_mv_with_iceberg_same_name_join
+-- Regression: a partitioned, NON-incremental (PCT) MV joining two base tables that share the same
+-- unqualified name across databases used to fail refresh with a "Duplicate key" error in the PCT
+-- refresh-scope calculator. Mirrors the IVM case but exercises the pure PCT refresh path.
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+
+create database mv_ice_db_a_${uuid0};
+create database mv_ice_db_b_${uuid0};
+
+create table mv_ice_db_a_${uuid0}.tj (
+  k int,
+  v bigint,
+  dt date
+) partition by(dt);
+
+create table mv_ice_db_b_${uuid0}.tj (
+  k int,
+  w bigint,
+  dt date
+) partition by(dt);
+
+insert into mv_ice_db_a_${uuid0}.tj values (1, 10, '2023-12-01'), (2, 20, '2023-12-02');
+insert into mv_ice_db_b_${uuid0}.tj values (1, 100, '2023-12-01'), (2, 200, '2023-12-02');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+AS SELECT a.dt, a.k, a.v, b.w
+FROM mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj a
+JOIN mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj b ON a.dt = b.dt;
+
+-- full PCT refresh
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+
+-- append a new partition to both same-named bases; the PCT refresh used to throw "Duplicate key"
+insert into mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj values (3, 30, '2023-12-03');
+insert into mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj values (3, 300, '2023-12-03');
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+
+DROP MATERIALIZED VIEW test_mv1;
+drop table mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0} force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0} force;
+
+-- name: test_mv_with_iceberg_self_join
+-- Guards self-join after the same-name-join fix re-keyed relations by table identifier: the two
+-- aliases of a self-join share one identifier, so they must still be treated as one base table
+-- (one refresh-scope entry / a self-join), not mistaken for two distinct tables.
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+
+create database mv_ice_db_${uuid0};
+create table mv_ice_db_${uuid0}.tj (
+  k int,
+  v bigint,
+  dt date
+) partition by(dt);
+
+insert into mv_ice_db_${uuid0}.tj values (1, 10, '2023-12-01'), (2, 20, '2023-12-02');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+AS SELECT a.dt, a.k, a.v, b.k AS k2
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.tj a
+JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.tj b ON a.dt = b.dt;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, k2 FROM test_mv1 ORDER BY dt, k;
+
+-- append a new partition; partial PCT refresh of a self-join must still work
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.tj values (3, 30, '2023-12-03');
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, k2 FROM test_mv1 ORDER BY dt, k;
+
+DROP MATERIALIZED VIEW test_mv1;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.tj force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+
+-- name: test_pct_mv_with_olap_same_name_join
+-- Regression: a partitioned native MV joining two OLAP base tables that share an unqualified name
+-- across databases used to crash PCT refresh-scope calculation on a duplicate name key. OLAP tables
+-- are now keyed by table id (external tables by catalog+uuid), so each is tracked independently.
+create database mv_olap_db_a_${uuid0};
+create database mv_olap_db_b_${uuid0};
+
+create table mv_olap_db_a_${uuid0}.tj (
+  k int,
+  v bigint,
+  dt date
+)
+duplicate key(k)
+partition by (dt)
+distributed by hash(k) buckets 2;
+
+create table mv_olap_db_b_${uuid0}.tj (
+  k int,
+  w bigint,
+  dt date
+)
+duplicate key(k)
+partition by (dt)
+distributed by hash(k) buckets 2;
+
+insert into mv_olap_db_a_${uuid0}.tj values (1, 10, '2023-12-01'), (2, 20, '2023-12-02');
+insert into mv_olap_db_b_${uuid0}.tj values (1, 100, '2023-12-01'), (2, 200, '2023-12-02');
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+AS SELECT a.dt, a.k, a.v, b.w
+FROM mv_olap_db_a_${uuid0}.tj a
+JOIN mv_olap_db_b_${uuid0}.tj b ON a.dt = b.dt;
+
+-- full PCT refresh
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+
+-- append a new partition to both same-named bases; the PCT refresh used to throw "Duplicate key"
+insert into mv_olap_db_a_${uuid0}.tj values (3, 30, '2023-12-03');
+insert into mv_olap_db_b_${uuid0}.tj values (3, 300, '2023-12-03');
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+
+DROP MATERIALIZED VIEW test_mv1;
+drop table mv_olap_db_a_${uuid0}.tj force;
+drop table mv_olap_db_b_${uuid0}.tj force;
+drop database mv_olap_db_a_${uuid0} force;
+drop database mv_olap_db_b_${uuid0} force;
+
+-- name: test_pct_mv_with_hive_same_name_join
+-- Regression: a partitioned MV joining two Hive external base tables that share an unqualified name
+-- across databases. Hive tables are keyed by (catalog, db, name:createTime), so each is tracked
+-- independently and PCT refresh no longer collides on the duplicate name.
+create external catalog mv_hive_${uuid0}
+properties
+(
+    "type" = "hive",
+    "hive.catalog.type" = "hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}"
+);
+set catalog mv_hive_${uuid0};
+
+create database mv_hive_db_a_${uuid0};
+create database mv_hive_db_b_${uuid0};
+
+create table mv_hive_db_a_${uuid0}.tj (
+  k int,
+  v bigint,
+  dt date not null
+)
+partition by (dt);
+
+create table mv_hive_db_b_${uuid0}.tj (
+  k int,
+  w bigint,
+  dt date not null
+)
+partition by (dt);
+
+insert into mv_hive_db_a_${uuid0}.tj values (1, 10, '2023-12-01'), (2, 20, '2023-12-02');
+insert into mv_hive_db_b_${uuid0}.tj values (1, 100, '2023-12-01'), (2, 200, '2023-12-02');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+AS SELECT a.dt, a.k, a.v, b.w
+FROM mv_hive_${uuid0}.mv_hive_db_a_${uuid0}.tj a
+JOIN mv_hive_${uuid0}.mv_hive_db_b_${uuid0}.tj b ON a.dt = b.dt;
+
+-- full PCT refresh
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+
+-- append a new partition to both same-named bases; the PCT refresh used to throw "Duplicate key"
+insert into mv_hive_${uuid0}.mv_hive_db_a_${uuid0}.tj values (3, 30, '2023-12-03');
+insert into mv_hive_${uuid0}.mv_hive_db_b_${uuid0}.tj values (3, 300, '2023-12-03');
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+
+DROP MATERIALIZED VIEW test_mv1;
+drop table mv_hive_${uuid0}.mv_hive_db_a_${uuid0}.tj force;
+drop table mv_hive_${uuid0}.mv_hive_db_b_${uuid0}.tj force;
+drop database mv_hive_${uuid0}.mv_hive_db_a_${uuid0};
+drop database mv_hive_${uuid0}.mv_hive_db_b_${uuid0};

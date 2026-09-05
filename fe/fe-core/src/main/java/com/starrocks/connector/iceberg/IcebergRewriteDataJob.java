@@ -1,0 +1,352 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.connector.iceberg;
+
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra;
+import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.IcebergRewriteStmt;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.thrift.TUniqueId;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.Collectors;
+
+public class IcebergRewriteDataJob {
+    private static final Logger LOG = LogManager.getLogger(IcebergRewriteDataJob.class);
+    // Carries the partition filter, used only to decide which files are rewritten.
+    private final String planningSql;
+    // Same statement without the filter, used to read every live row of the selected files.
+    private final String executionSql;
+    private final boolean hasPartitionFilter;
+    private final boolean rewriteAll;
+    private final long minFileSizeBytes;
+    private final long batchSize;
+    private final boolean writeRowLineage;
+    private final ConnectContext context;
+    private final AlterTableStmt originAlterStmt;
+    private IcebergRewriteStmt rewriteStmt;
+    private ExecPlan execPlan;
+    private List<IcebergScanNode> scanNodes;
+    private IcebergRewriteData rewriteData;
+    // Snapshot the rewrite planned against, frozen in prepare(). Every batch rewrites the
+    // file set picked there, so this is the snapshot the commit must validate from -- see
+    // the comment on IcebergSinkExtra.baseSnapshotId.
+    private Long baseSnapshotId;
+    private long batchParallelism = 1;
+    private StatementBase parsedStmt;
+    private final ConcurrentLinkedQueue<FinishArgs> collected = new ConcurrentLinkedQueue<>();
+
+    public static class RewriteMetrics {
+        public static final RewriteMetrics EMPTY = new RewriteMetrics(0, 0, 0);
+
+        private final long rewrittenDataFilesCount;
+        private final long rewrittenDeleteFilesCount;
+        private final long addedDataFilesCount;
+
+        public RewriteMetrics(long rewrittenDataFilesCount, long rewrittenDeleteFilesCount,
+                              long addedDataFilesCount) {
+            this.rewrittenDataFilesCount = rewrittenDataFilesCount;
+            this.rewrittenDeleteFilesCount = rewrittenDeleteFilesCount;
+            this.addedDataFilesCount = addedDataFilesCount;
+        }
+
+        public long getRewrittenDataFilesCount() {
+            return rewrittenDataFilesCount;
+        }
+
+        public long getRewrittenDeleteFilesCount() {
+            return rewrittenDeleteFilesCount;
+        }
+
+        public long getAddedDataFilesCount() {
+            return addedDataFilesCount;
+        }
+    }
+
+    public interface FinishSinkHandler {
+        void finish(String catalog, String db, String table,
+                List<TSinkCommitInfo> commitInfos, String branch, Object extra) throws Exception;
+    }
+
+    public class FinishArgs {
+        private final String catalog;
+        private final String db;
+        private final String table;
+        private final List<TSinkCommitInfo> commitInfos;
+        private final String branch;
+        private final Object extra;
+    
+        public FinishArgs(String catalog, String db, String table,
+                          List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
+            this.catalog = catalog;
+            this.db = db;
+            this.table = table;
+            this.commitInfos = Objects.requireNonNull(commitInfos, "commitInfos");
+            this.branch = branch;
+            this.extra = extra;
+        }
+    
+        public String getCatalog() { 
+            return catalog; 
+        }
+        public String getDb() { 
+            return db; 
+        }
+        public String getTable() { 
+            return table; 
+        }
+        public List<TSinkCommitInfo> getCommitInfos() { 
+            return commitInfos; 
+        }
+        public String getBranch() { 
+            return branch; 
+        }
+        public Object getExtra() { 
+            return extra; 
+        }
+    
+        @Override public String toString() {
+            return "FinishArgs{" + catalog + "." + db + "." + table + ", commits=" + commitInfos.size() + "}";
+        }
+    }
+
+    public IcebergRewriteDataJob(String planningSql,
+                                 String executionSql,
+                                 boolean hasPartitionFilter,
+                                 boolean rewriteAll,
+                                 long minFileSizeBytes,
+                                 long batchSize,
+                                 long batchParallelism,
+                                 boolean writeRowLineage,
+                                 ConnectContext context,
+                                 AlterTableStmt stmt) {
+        this.planningSql = planningSql;
+        this.executionSql = executionSql;
+        this.hasPartitionFilter = hasPartitionFilter;
+        this.rewriteAll = rewriteAll;
+        this.minFileSizeBytes = minFileSizeBytes;
+        this.batchSize = batchSize;
+        this.batchParallelism = batchParallelism;
+        this.writeRowLineage = writeRowLineage;
+        this.context = context;
+        this.originAlterStmt = stmt;
+    }
+
+    public void prepare() throws Exception {
+        this.parsedStmt = com.starrocks.sql.parser.SqlParser
+                .parse(executionSql, context.getSessionVariable())
+                .get(0);
+        StatementBase planningParsedStmt = com.starrocks.sql.parser.SqlParser
+                .parse(planningSql, context.getSessionVariable())
+                .get(0);
+
+        this.rewriteStmt = new IcebergRewriteStmt(
+                (InsertStmt) planningParsedStmt, rewriteAll, writeRowLineage, hasPartitionFilter);
+        this.execPlan = StatementPlanner.plan(rewriteStmt, context);
+        // A merge-on-read plan splits the data scan into DATA_FILE_WITH_EQ_DELETE and DATA_FILE_WITHOUT_EQ_DELETE
+        // branches that carry the same plan node name. Both must contribute candidates, otherwise a whole branch
+        // is silently skipped. The EQ_DELETE branch is excluded on purpose: its queue holds the very same tasks as
+        // the WITH_EQ_DELETE branch, so including it would count those files twice.
+        this.scanNodes = execPlan.getFragments().stream()
+                .flatMap(fragment -> fragment.collectScanNodes().values().stream())
+                .filter(scan -> scan instanceof IcebergScanNode && "IcebergScanNode".equals(scan.getPlanNodeName()))
+                .map(scan -> (IcebergScanNode) scan)
+                .collect(Collectors.toList());
+
+        if (scanNodes.isEmpty()) {
+            TableRef tableRef = ((InsertStmt) parsedStmt).getTableRef();
+            TableName tableName = TableName.fromTableRef(tableRef);
+            LOG.info("No IcebergScanNode of table " + tableName +
+                        " found for rewrite, prepare becomes no-op.");
+            return;
+        }
+
+        // Every scan node of this plan reads the same table pinned to the same snapshot, so any of
+        // them reports the snapshot the rewrite was planned against.
+        this.baseSnapshotId = scanNodes.get(0).getBaseSnapshotId().orElse(null);
+        this.rewriteData = new IcebergRewriteData();
+        scanNodes.forEach(node -> rewriteData.addSource(node.getSourceRange()));
+        this.rewriteData.setBatchSize(batchSize);
+        this.rewriteData.buildNewScanNodeRange(minFileSizeBytes, rewriteAll);
+    }
+
+    public ConnectContext buildSubConnectContext(ConnectContext connectContext) {
+        // Create a new ConnectContext for the sub task of cache select.
+        final ConnectContext context = new ConnectContext(null);
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setDatabase(connectContext.getDatabase());
+        context.setQualifiedUser(connectContext.getQualifiedUser());
+        context.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        context.setCurrentRoleIds(connectContext.getCurrentRoleIds());
+        context.setAuditEventBuilder(connectContext.getAuditEventBuilder());
+        context.setResourceGroup(connectContext.getResourceGroup());
+        context.setSessionId(connectContext.getSessionId());
+        context.setRemoteIP(connectContext.getRemoteIP());
+        context.setQueryId(connectContext.getQueryId());
+        context.setFinishSinkHandler(
+                (FinishSinkHandler) (catalog, db, table, commitInfos, branch, extra) -> {
+                    collected.add(new FinishArgs(catalog, db, table, commitInfos, branch, extra));
+                });
+        context.getState().reset();
+        
+        TUniqueId queryId = UUIDUtil.toTUniqueId(connectContext.getQueryId());
+        TUniqueId executionId;
+        executionId = new TUniqueId(queryId.hi, UUIDUtil.genUUID().getLeastSignificantBits());
+        LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(executionId), DebugUtil.printId(queryId));
+        context.setExecutionId(executionId);
+
+        // clone an new session variable
+        SessionVariable sessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        sessionVariable.setQueryTimeoutS(SessionVariable.MAX_QUERY_TIMEOUT);
+        context.setSessionVariable(sessionVariable);
+
+        return context;
+    }
+
+    public RewriteMetrics execute() throws Exception {
+        if (scanNodes == null || scanNodes.isEmpty()) {
+            LOG.info("No IcebergScanNode for empty table, rewrite data job execute skipped.");
+            return RewriteMetrics.EMPTY;
+        }
+        if (rewriteStmt == null || execPlan == null || rewriteData == null) {
+            throw new IllegalStateException("Must call prepare() before execute()");
+        }
+        ExecutorService executorService = Executors.newFixedThreadPool((int) batchParallelism,
+                new ThreadFactoryBuilder().setNameFormat(
+                        originAlterStmt.getTableName() + "-sr-iceberg-compaction-worker-%d").build());
+        List<Future<?>> futures = Lists.newArrayList();
+        try {
+            while (rewriteData.hasMoreTaskGroup()) {
+                List<RemoteFileInfo> res = rewriteData.nextTaskGroup();
+                if (res.isEmpty()) {
+                    continue;
+                }
+                futures.add(executorService.submit(() -> {
+                    ConnectContext subCtx = buildSubConnectContext(context);
+                    try (var scope = subCtx.bindScope()) {
+                        IcebergRewriteStmt localStmt =
+                                new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage, hasPartitionFilter);
+                        ExecPlan localPlan = StatementPlanner.plan(localStmt, subCtx);
+        
+                        // Every iceberg scan node must be narrowed to this task group, including the
+                        // IcebergEqualityDeleteScanNode. rebuildScanRange() routes the task list through
+                        // IcebergRemoteSourceTrigger, so each node picks up only the files of its own MOR branch.
+                        // Leaving the equality-delete scan untouched would keep it at full-table range and apply
+                        // equality keys of other partitions to this group.
+                        List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
+                                .flatMap(f -> f.collectScanNodes().values().stream())
+                                .filter(s -> s instanceof IcebergScanNode)
+                                .map(s -> (IcebergScanNode) s)
+                                .collect(Collectors.toList());
+        
+                        if (localScanNodes.isEmpty()) {
+                            LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
+                            return null;
+                        }
+                        for (IcebergScanNode sn : localScanNodes) {
+                            sn.rebuildScanRange(res);
+                        }
+        
+                        StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
+                        if (context.getExecutor() != null) {
+                            context.getExecutor().registerSubStmtExecutor(exec);
+                        }
+                        try {
+                            exec.handleDMLStmt(localPlan, localStmt);
+                        } finally {
+                            exec.addFinishedQueryDetail();
+                        }
+                        return null;
+                    }
+                }));
+            }
+            
+            for (Future<?> future : futures) {
+                try {
+                    future.get();
+                } catch (Exception e) {
+                    LOG.error("Failed to compact files on [{}]", originAlterStmt.getTableName(), e);
+                    throw new StarRocksConnectorException("Failed to compact files", e);
+                }
+            }
+
+            if (collected.size() == 0) {
+                return RewriteMetrics.EMPTY;
+            }
+            IcebergSinkExtra extra = new IcebergSinkExtra();
+            extra.setBaseSnapshotId(baseSnapshotId);
+            List<TSinkCommitInfo> faList = Lists.newArrayList();
+            for (FinishArgs fa : collected) {
+                extra.addScannedDataFiles(((IcebergSinkExtra) fa.getExtra()).getScannedDataFiles());
+                extra.addAppliedDeleteFiles(((IcebergSinkExtra) fa.getExtra()).getAppliedDeleteFiles());
+                faList.addAll(fa.getCommitInfos());
+            }
+            try {
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(
+                        collected.peek().getCatalog(), collected.peek().getDb(), collected.peek().getTable(),
+                        faList, collected.peek().getBranch(), extra, context);
+                return buildMetrics(faList, extra);
+            } catch (Exception e) {
+                LOG.error("Failed to commit iceberg rewrite on [{}]", originAlterStmt.getTableName(), e);
+                throw new StarRocksConnectorException("Failed to commit iceberg rewrite", e);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to rewrite iceberg table: {}, catalog: {}, db: {}, table: {}",
+                    e.getMessage(), originAlterStmt.getCatalogName(),
+                    originAlterStmt.getDbName(), originAlterStmt.getTableName());
+            context.getState().setError(e.getMessage());
+            throw e;
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    private RewriteMetrics buildMetrics(List<TSinkCommitInfo> commitInfos, IcebergSinkExtra extra) {
+        long addedDataFilesCount = commitInfos.stream()
+                .map(TSinkCommitInfo::getIceberg_data_file)
+                .filter(Objects::nonNull)
+                .count();
+
+        long rewrittenDataFilesCount = extra.getScannedDataFiles().size();
+        long rewrittenDeleteFilesCount = extra.getAppliedDeleteFiles().size();
+
+        return new RewriteMetrics(rewrittenDataFilesCount, rewrittenDeleteFilesCount,
+                addedDataFilesCount);
+    }
+}

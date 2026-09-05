@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Converts a numeric or string value to its hexadecimal representation."
 ---
 
 # hex
 
-## Description
+
 
 If `x` is a numerical value, this function returns a hexadecimal string representation of the value.
 

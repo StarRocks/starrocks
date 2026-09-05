@@ -1,0 +1,65 @@
+-- name: test_iceberg_string_date_partition_cardinality
+create external catalog ice_cat_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
+create database ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+set catalog ice_cat_${uuid0};
+-- result:
+-- !result
+use ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+create table t_card (
+    c1 int,
+    c2 string
+) partition by (c2);
+-- result:
+-- !result
+insert into t_card select generate_series, '2020-06-14' from table(generate_series(1, 17));
+-- result:
+-- !result
+insert into t_card select generate_series, '2020-06-22' from table(generate_series(1, 23));
+-- result:
+-- !result
+insert into t_card select generate_series, '2020-01-02' from table(generate_series(1, 5));
+-- result:
+-- !result
+set enable_iceberg_column_statistics = false;
+-- result:
+-- !result
+set disable_table_stats_from_metadata_for_single_table = false;
+-- result:
+-- !result
+set enable_query_trigger_analyze = false;
+-- result:
+-- !result
+drop stats t_card;
+-- result:
+-- !result
+function: assert_explain_costs_contains("select * from t_card where c2 = cast('2020-06-15' as date) - interval 1 day", "cardinality=17")
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains("select * from t_card where c2 = cast('2020-06-21' as date) + interval 1 day", "cardinality=23")
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains("select * from t_card where c2 = date_sub(cast('2020-06-15' as date), interval 1 day)", "cardinality=17")
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains("select * from t_card where c2 = '2020-06-14'", "cardinality=17")
+-- result:
+None
+-- !result
+drop table t_card force;
+-- result:
+-- !result
+drop database ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result

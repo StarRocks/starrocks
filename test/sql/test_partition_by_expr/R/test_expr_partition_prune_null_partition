@@ -1,0 +1,182 @@
+-- name: test_expr_partition_prune_null_partition
+CREATE TABLE partition_unixtime_null (
+        id bigint,
+        ts bigint
+)
+PARTITION BY from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+-- result:
+-- !result
+insert into partition_unixtime_null values(1, 1196440219),(2, 1196440219),(3, 1500000000);
+-- result:
+-- !result
+insert into partition_unixtime_null values(-1, -1),(-2, -1);
+-- result:
+-- !result
+insert into partition_unixtime_null(id) values(9);
+-- result:
+-- !result
+select count(*) from partition_unixtime_null;
+-- result:
+6
+-- !result
+select id, ts from partition_unixtime_null where ts < 0 order by id;
+-- result:
+-2	-1
+-1	-1
+-- !result
+select id, ts from partition_unixtime_null where not (ts > 1196440219) order by id;
+-- result:
+-2	-1
+-1	-1
+1	1196440219
+2	1196440219
+-- !result
+select id, ts from partition_unixtime_null where ts = -1 order by id;
+-- result:
+-2	-1
+-1	-1
+-- !result
+select id, ts from partition_unixtime_null where ts > 1196440219 order by id;
+-- result:
+3	1500000000
+-- !result
+select id, ts from partition_unixtime_null where (ts > 1196440219) is null order by id;
+-- result:
+9	None
+-- !result
+select count(*) from (
+        (select * from partition_unixtime_null where ts > 1196440219)
+        union all (select * from partition_unixtime_null where not (ts > 1196440219))
+        union all (select * from partition_unixtime_null where (ts > 1196440219) is null)) t;
+-- result:
+6
+-- !result
+CREATE TABLE partition_years_add_null (
+        id bigint,
+        d date
+)
+PARTITION BY years_add(d, 1);
+-- result:
+-- !result
+insert into partition_years_add_null values(1, '2021-01-01'),(2, '2021-01-01'),(3, '2022-06-01');
+-- result:
+-- !result
+insert into partition_years_add_null values(-1, '9999-12-31'),(-2, '9999-12-31');
+-- result:
+-- !result
+insert into partition_years_add_null(id) values(9);
+-- result:
+-- !result
+select count(*) from partition_years_add_null;
+-- result:
+6
+-- !result
+select id, d from partition_years_add_null where d > '2022-01-01' order by id;
+-- result:
+-2	9999-12-31
+-1	9999-12-31
+3	2022-06-01
+-- !result
+select id, d from partition_years_add_null where not (d <= '2022-01-01') order by id;
+-- result:
+-2	9999-12-31
+-1	9999-12-31
+3	2022-06-01
+-- !result
+select id, d from partition_years_add_null where (d > '2022-01-01') is null order by id;
+-- result:
+9	None
+-- !result
+select count(*) from (
+        (select * from partition_years_add_null where d > '2022-01-01')
+        union all (select * from partition_years_add_null where not (d > '2022-01-01'))
+        union all (select * from partition_years_add_null where (d > '2022-01-01') is null)) t;
+-- result:
+6
+-- !result
+CREATE TABLE partition_str_to_date_null (
+        id bigint,
+        d varchar(64)
+)
+PARTITION BY str_to_date(d, '%Y-%m-%d');
+-- result:
+-- !result
+insert into partition_str_to_date_null values(1, '2021-01-01'),(2, '2021-01-01'),(3, '2022-06-01');
+-- result:
+-- !result
+insert into partition_str_to_date_null values(-1, 'not-a-date'),(-2, 'not-a-date');
+-- result:
+-- !result
+insert into partition_str_to_date_null(id) values(9);
+-- result:
+-- !result
+select count(*) from partition_str_to_date_null;
+-- result:
+6
+-- !result
+select id, d from partition_str_to_date_null where d > '2022-01-01' order by id;
+-- result:
+-2	not-a-date
+-1	not-a-date
+3	2022-06-01
+-- !result
+select id, d from partition_str_to_date_null where not (d <= '2022-01-01') order by id;
+-- result:
+-2	not-a-date
+-1	not-a-date
+3	2022-06-01
+-- !result
+select id, d from partition_str_to_date_null where (d > '2022-01-01') is null order by id;
+-- result:
+9	None
+-- !result
+select count(*) from (
+        (select * from partition_str_to_date_null where d > '2022-01-01')
+        union all (select * from partition_str_to_date_null where not (d > '2022-01-01'))
+        union all (select * from partition_str_to_date_null where (d > '2022-01-01') is null)) t;
+-- result:
+6
+-- !result
+CREATE TABLE partition_months_add_null (
+        id bigint,
+        d date
+)
+PARTITION BY months_add(d, 1);
+-- result:
+-- !result
+insert into partition_months_add_null values(1, '2021-01-01'),(2, '2021-01-01'),(3, '2022-06-01');
+-- result:
+-- !result
+insert into partition_months_add_null values(-1, '9999-12-31'),(-2, '9999-12-31');
+-- result:
+-- !result
+insert into partition_months_add_null(id) values(9);
+-- result:
+-- !result
+select count(*) from partition_months_add_null;
+-- result:
+6
+-- !result
+select id, d from partition_months_add_null where d > '2022-01-01' order by id;
+-- result:
+-2	9999-12-31
+-1	9999-12-31
+3	2022-06-01
+-- !result
+select id, d from partition_months_add_null where not (d <= '2022-01-01') order by id;
+-- result:
+-2	9999-12-31
+-1	9999-12-31
+3	2022-06-01
+-- !result
+select id, d from partition_months_add_null where (d > '2022-01-01') is null order by id;
+-- result:
+9	None
+-- !result
+select count(*) from (
+        (select * from partition_months_add_null where d > '2022-01-01')
+        union all (select * from partition_months_add_null where not (d > '2022-01-01'))
+        union all (select * from partition_months_add_null where (d > '2022-01-01') is null)) t;
+-- result:
+6
+-- !result

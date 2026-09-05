@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Calculates whether there are intersecting elements between two Bitmap columns, and the return value is Boolean value."
 ---
 
 # bitmap_has_any
 
-## Description
+
 
 Calculates whether there are intersecting elements between two Bitmap columns, and the return value is Boolean value.
 

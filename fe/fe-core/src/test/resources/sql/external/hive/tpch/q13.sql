@@ -1,24 +1,3 @@
-[sql]
-select
-    c_count,
-    count(*) as custdist
-from
-    (
-        select
-            c_custkey,
-            count(o_orderkey) as c_count
-        from
-            customer left outer join orders on
-                        c_custkey = o_custkey
-                    and o_comment not like '%unusual%deposits%'
-        group by
-            c_custkey
-    ) a
-group by
-    c_count
-order by
-    custdist desc,
-    c_count desc ;
 [fragment statistics]
 PLAN FRAGMENT 0(F06)
 Output Exprs:18: count | 19: count
@@ -136,6 +115,7 @@ OutPut Exchange Id: 04
 TABLE: customer
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -160,6 +140,7 @@ TABLE: orders
 NON-PARTITION PREDICATES: NOT (17: o_comment LIKE '%unusual%deposits%')
 partitions=1/1
 avgRowSize=95.0
+dataCacheOptions={populate: false}
 cardinality: 112500000
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)

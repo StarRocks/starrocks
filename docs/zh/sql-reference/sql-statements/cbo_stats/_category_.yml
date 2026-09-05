@@ -1,0 +1,7 @@
+position: 120 # float position is supported
+label: 'CBO 统计信息'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: cbo_stats

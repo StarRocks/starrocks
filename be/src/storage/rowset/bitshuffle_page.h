@@ -40,9 +40,15 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <ostream>
 
+#include "base/bit/bit_util.h"
+#include "base/coding.h"
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "column/fixed_length_column.h"
+#include "common/logging.h"
 #include "gutil/port.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
@@ -50,12 +56,9 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "types/date_value.hpp"
-#include "util/coding.h"
-#include "util/faststring.h"
-#include "util/slice.h"
+#include "types/date_value.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -98,6 +101,8 @@ std::string bitshuffle_error_msg(int64_t err);
 //
 template <LogicalType Type>
 class BitshufflePageBuilder final : public PageBuilder {
+    using CppType = StorageCppType<Type>;
+
 public:
     explicit BitshufflePageBuilder(const PageBuilderOptions& options)
             : _max_count(options.data_page_size / SIZE_OF_TYPE) {
@@ -126,7 +131,7 @@ public:
             return 0;
         }
         size_t old_sz = _data.size();
-        _data.resize(old_sz + sizeof(SIZE_OF_TYPE));
+        _data.resize(old_sz + SIZE_OF_TYPE);
         _count += 1;
         if constexpr (SIZE_OF_TYPE == 1) {
             *reinterpret_cast<uint8_t*>(&_data[old_sz]) = *elem;
@@ -186,9 +191,14 @@ public:
         return Status::OK();
     }
 
-private:
-    typedef typename TypeTraits<Type>::CppType CppType;
+    CppType cell(int idx) const {
+        DCHECK_GE(idx, 0);
+        CppType ret;
+        memcpy(&ret, &_data[idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
+        return ret;
+    }
 
+private:
     faststring* _finish() {
         // Do padding so that the input num of element is multiple of 8.
         int num_elems_after_padding = ALIGN_UP(_count, 8U);
@@ -218,14 +228,7 @@ private:
         return &_compressed_data;
     }
 
-    CppType cell(int idx) const {
-        DCHECK_GE(idx, 0);
-        CppType ret;
-        memcpy(&ret, &_data[idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
-        return ret;
-    }
-
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     uint8_t _reserved_head_size{0};
     uint32_t _max_count;
     uint32_t _count{0};
@@ -238,10 +241,12 @@ private:
 
 template <LogicalType Type>
 class BitShufflePageDecoder final : public PageDecoder {
+    using CppType = StorageCppType<Type>;
+
 public:
     BitShufflePageDecoder(Slice data) : _data(data) {}
 
-    [[nodiscard]] Status init() override {
+    Status init() override {
         CHECK(!_parsed);
         if (_data.size < BITSHUFFLE_PAGE_HEADER_SIZE) {
             std::stringstream ss;
@@ -253,7 +258,10 @@ public:
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _compressed_size = decode_fixed32_le((const uint8_t*)&_data[4]);
         _num_element_after_padding = decode_fixed32_le((const uint8_t*)&_data[8]);
-        if (_num_element_after_padding != ALIGN_UP(_num_elements, 8U)) {
+        // Not ALIGN_UP(): its mask is 32-bit, so ALIGN_UP(0xffffffff, 8U) wraps
+        // to 0 and would accept a corrupted page whose padded count is 0.
+        // RoundUpToPowerOf2() rounds at full 64-bit width instead.
+        if (_num_element_after_padding != static_cast<size_t>(BitUtil::RoundUpToPowerOf2(_num_elements, 8))) {
             std::stringstream ss;
             ss << "num of element information corrupted,"
                << " _num_element_after_padding:" << _num_element_after_padding << ", _num_elements:" << _num_elements;
@@ -268,6 +276,7 @@ public:
         case 8:
         case 12:
         case 16:
+        case 32:
             break;
         default:
             std::stringstream ss;
@@ -300,7 +309,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init()";
         DCHECK_LE(pos, _num_elements);
         if (pos > _num_elements) {
@@ -311,7 +320,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
         DCHECK(_parsed) << "Must call init() firstly";
 
         if (_num_elements == 0) {
@@ -343,9 +352,20 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* count, Column* dst) override;
+    void at_index(uint32_t idx, CppType* out) const {
+        memcpy(out, &_data[BITSHUFFLE_PAGE_HEADER_SIZE + idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
+    }
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    inline const void* get_data(size_t pos) {
+        return static_cast<const void*>(&_data[pos + BITSHUFFLE_PAGE_HEADER_SIZE]);
+    }
+
+    Status next_batch(size_t* count, Column* dst) override;
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                          Column* column) override;
 
     uint32_t count() const override { return _num_elements; }
 
@@ -353,18 +373,14 @@ public:
 
     EncodingTypePB encoding_type() const override { return BIT_SHUFFLE; }
 
-private:
-    inline const void* get_data(size_t pos) {
-        return static_cast<const void*>(&_data[pos + BITSHUFFLE_PAGE_HEADER_SIZE]);
-    }
+    bool supports_read_by_rowids() const override { return true; }
 
+private:
     void _copy_next_values(size_t n, void* data) {
         memcpy(data, get_data(_cur_index * SIZE_OF_TYPE), n * SIZE_OF_TYPE);
     }
 
-    typedef typename TypeTraits<Type>::CppType CppType;
-
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     Slice _data;
     uint32_t _num_elements{0};
@@ -398,11 +414,41 @@ inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange<>& range
     while (to_read > 0) {
         _cur_index = iter.begin();
         Range<> r = iter.next(to_read);
-        int n = dst->append_numbers(get_data(_cur_index * SIZE_OF_TYPE), r.span_size() * SIZE_OF_TYPE);
+        ContainerResource container(_page_handle, get_data(_cur_index * SIZE_OF_TYPE), r.span_size() * SIZE_OF_TYPE);
+        int n = dst->append_numbers(container);
         DCHECK_EQ(r.span_size(), n);
         _cur_index += r.span_size();
         to_read -= r.span_size();
     }
+    return Status::OK();
+}
+
+template <LogicalType Type>
+inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                                          size_t* count, Column* column) {
+    DCHECK(_parsed);
+    if (PREDICT_FALSE(*count == 0)) {
+        return Status::OK();
+    }
+    size_t total = *count;
+    size_t read_count = 0;
+    auto data = std::make_unique_for_overwrite<CppType[]>(total);
+    for (size_t i = 0; i < total; i++) {
+        ordinal_t ord = rowids[i] - first_ordinal_in_page;
+        if (UNLIKELY(ord >= _num_elements)) {
+            break;
+        }
+        data[read_count++] = *reinterpret_cast<const CppType*>(get_data(ord * SIZE_OF_TYPE));
+    }
+
+    if (read_count > 0) {
+        size_t nappend = column->append_numbers(data.get(), SIZE_OF_TYPE * read_count);
+        if (UNLIKELY(nappend != read_count)) {
+            return Status::InternalError(
+                    fmt::format("append_numbers failed, expected rows[{}], actual rows[{}]", read_count, nappend));
+        }
+    }
+    *count = read_count;
     return Status::OK();
 }
 

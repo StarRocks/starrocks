@@ -14,15 +14,51 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.lang.reflect.Field;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SetVarTest extends PlanTestBase {
+
+    @BeforeAll
+    public static void beforeAll() throws Exception {
+        PlanTestBase.beforeClass();
+    }
+
+    @AfterAll
+    public static void afterAll() throws Exception {
+        PlanTestBase.afterClass();
+    }
 
     @Test
     public void testInsertStmt() throws Exception {
@@ -35,7 +71,16 @@ public class SetVarTest extends PlanTestBase {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 SessionVariable variables = execPlan.getConnectContext().getSessionVariable();
-                Assert.assertEquals(10, variables.getQueryTimeoutS());
+                assertEquals(10, variables.getQueryTimeoutS());
+            }
+        };
+
+        new MockUp<DDLStmtExecutor>() {
+            @Mock
+            public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
+                SessionVariable variables = context.getSessionVariable();
+                assertFalse(variables.getEnableAdaptiveSinkDop());
+                return null;
             }
         };
 
@@ -43,24 +88,193 @@ public class SetVarTest extends PlanTestBase {
         {
             String sql = "insert /*+set_var(query_timeout=10) */ into tbl values(1) ";
             starRocksAssert.getCtx().executeSql(sql);
-            Assert.assertEquals(queryTimeout, variable.getQueryTimeoutS());
+            assertEquals(queryTimeout, variable.getQueryTimeoutS());
         }
 
         // update
         {
             String sql = "update /*+set_var(query_timeout=10) */ tbl set c1 = 2 where c1 = 1";
             starRocksAssert.getCtx().executeSql(sql);
-            Assert.assertEquals(queryTimeout, variable.getQueryTimeoutS());
+            assertEquals(queryTimeout, variable.getQueryTimeoutS());
         }
 
         // delete
         {
             String sql = "delete /*+set_var(query_timeout=10) */ from tbl where c1 = 1";
             starRocksAssert.getCtx().executeSql(sql);
-            Assert.assertEquals(queryTimeout, variable.getQueryTimeoutS());
+            assertEquals(queryTimeout, variable.getQueryTimeoutS());
+        }
+
+        // load
+        {
+            boolean enableAdaptiveSinkDop = variable.getEnableAdaptiveSinkDop();
+            String sql = "LOAD /*+set_var(enable_adaptive_sink_dop=false)*/ "
+                    + "LABEL label0 (DATA INFILE('/path1/file') INTO TABLE tbl)";
+            starRocksAssert.getCtx().executeSql(sql);
+            assertEquals(enableAdaptiveSinkDop, variable.getEnableAdaptiveSinkDop());
         }
 
         starRocksAssert.dropTable("tbl");
+    }
+
+    @ParameterizedTest
+    @MethodSource("genArguments")
+    public void testMultiQueryBlocks(String query, Map<String, String> hints) throws Exception {
+        starRocksAssert.withTable("create table if not exists tbl (c1 int) properties('replication_num'='1')");
+
+        assertEquals(hints, parseAndGetHints(query));
+    }
+
+    public static Stream<Arguments> genArguments() {
+        Map<String, String> hints1 = Map.of("query_timeout", "10");
+        Map<String, String> hints2 = Map.of("query_timeout", "1");
+        Map<String, String> hints3 = Map.of("query_timeout", "10", "query_mem_limit", "1");
+        Map<String, String> hints4 = Map.of("a", "1", "b", "abs(1)", "c", "(SELECT max(`c1`)\n" +
+                "FROM `tbl`)");
+
+        return Stream.of(
+                // multi-block select
+                Arguments.of("(select /*+set_var(query_timeout=1)*/avg(c1) from tbl) " +
+                        "union all (select /*+set_var(query_timeout=10)*/sum(c1) from tbl) ", hints1),
+                Arguments.of("(select /*+set_var(query_timeout=10)*/avg(c1) from tbl) " +
+                        "union all (select /*+set_var(query_mem_limit=1)*/sum(c1) from tbl) ", hints3),
+                Arguments.of("(select /*+set_var(query_timeout=10)*/ avg(c1) from tbl ) " +
+                        "union (" +
+                        "   select s1+1 from (" +
+                        "       select /*+set_var(query_mem_limit=1)*/ sum(c1) as s1 from tbl " +
+                        "   ) r1 " +
+                        ") ", hints3),
+                Arguments.of("insert /*+set_var(query_timeout=1) */ into tbl values(1) ", hints2),
+
+                // insert select
+                Arguments.of("insert into tbl select /*+set_var(query_timeout=1) */ * from tbl", hints2),
+                Arguments.of("insert /*+set_var(query_timeout=1)*/ into tbl " +
+                        "select /*+set_var(query_timeout=10) */ * from tbl", hints1),
+                Arguments.of("insert /*+set_var(query_timeout=10)*/ into tbl " +
+                        "select /*+set_var(query_mem_limit=1) */ * from tbl", hints3),
+                Arguments.of("select /*+ SET_USER_VARIABLE(@a= 1, @ b = abs(1), " +
+                        "@ c = (select max(c1) from tbl)) */ * from tbl", hints4)
+        );
+    }
+
+    private static Map<String, String> parseAndGetHints(String sql) {
+        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
+        Map<String, String> hints = Maps.newHashMap();
+        if (stmts.get(0).isExistQueryScopeHint()) {
+            for (HintNode hintNode : stmts.get(0).getAllQueryScopeHints()) {
+                hints.putAll(hintNode.getValue());
+            }
+        }
+        return hints;
+    }
+
+    @Test
+    public void testQueryHint() throws Exception {
+        String hintSql1 = "select /*+ SET_USER_VARIABLE(@aHint= 1, @bHint = 2) */ @aHint, @bHint";
+        StatementBase stmt = SqlParser.parse(hintSql1, starRocksAssert.getCtx().getSessionVariable()).get(0);
+        StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+        executor.processQueryScopeHint();
+        assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("aHint"));
+        assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("bHint"));
+    }
+
+    @Test
+    public void testQueryHintWithShorthandCastAppliesQueryTimeout() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        SessionVariable originalSessionVariable = ctx.getSessionVariable();
+        ctx.setSessionVariable(originalSessionVariable.clone());
+        try {
+            String sql = "select /*+ SET_VAR(query_timeout=10) */ x::int from t";
+            StatementBase stmt = SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+            assertTrue(stmt.isExistQueryScopeHint());
+            assertEquals("10", stmt.getAllQueryScopeHints().get(0).getValue().get("query_timeout"));
+
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+            executor.processQueryScopeSetVarHint();
+            assertEquals(10, ctx.getSessionVariable().getQueryTimeoutS());
+        } finally {
+            ctx.setSessionVariable(originalSessionVariable);
+        }
+    }
+
+    @Test
+    public void testSetAllSessionVariablesBySql() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        SessionVariable sessionVariable = new SessionVariable();
+        ctx.setSessionVariable(sessionVariable);
+
+        for (Field field : SessionVariable.class.getDeclaredFields()) {
+            VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
+            if (attr == null) {
+                continue;
+            }
+            field.setAccessible(true);
+            Object value = field.get(sessionVariable);
+
+            String literal;
+            if (value == null) {
+                continue;
+            } else if (value instanceof String) {
+                literal = "'" + ((String) value).replace("'", "''") + "'";
+            } else {
+                literal = String.valueOf(value);
+            }
+
+            String sql = "set " + attr.name() + " = " + literal;
+            StatementBase stmt = SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+            new StmtExecutor(ctx, stmt).execute();
+
+            assertEquals(value, field.get(sessionVariable));
+        }
+    }
+
+    @Test
+    public void testMissingWarehouse() throws Exception {
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+        try {
+            // Simulate that after setting the warehouse, this warehouse is deleted.
+            starRocksAssert.getCtx().getSessionVariable().setWarehouseName("no_exist_warehouse");
+
+            String sql = "set warehouse = default_warehouse";
+            StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
+            StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+            executor.execute();
+            assertEquals("default_warehouse", starRocksAssert.getCtx().getSessionVariable().getWarehouseName());
+        } finally {
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
+    }
+
+    @Test
+    public void testChangeWarehouse() throws Exception {
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+
+        try {
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "wh2"));
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(3, "wh3"));
+
+            {
+                String sql = "set warehouse = wh2";
+                StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
+                StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+                executor.execute();
+                Assertions.assertEquals(2, starRocksAssert.getCtx().getCurrentComputeResource().getWarehouseId());
+            }
+
+            {
+                String sql = "set warehouse = wh3";
+                StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
+                StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+                executor.execute();
+                Assertions.assertEquals(3, starRocksAssert.getCtx().getCurrentComputeResource().getWarehouseId());
+            }
+        } finally {
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
     }
 
 }

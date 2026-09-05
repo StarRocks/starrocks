@@ -57,6 +57,9 @@ public:
     virtual size_t capacity() const = 0;
     // The default capacity when there isn't chunk memory usage statistics.
     virtual size_t default_capacity() const = 0;
+    // Update mem limit of this chunk buffer
+    virtual void update_mem_limit(int64_t value) {}
+    virtual bool has_full_events() { return false; }
 };
 
 // The capacity of this limiter is unlimited.
@@ -98,15 +101,14 @@ class DynamicChunkBufferLimiter final : public ChunkBufferLimiter {
 public:
     class Token final : public ChunkBufferToken {
     public:
-        Token(std::atomic<int>& pinned_tokens_counter, int num_tokens)
-                : _pinned_tokens_counter(pinned_tokens_counter), _num_tokens(num_tokens) {}
+        Token(DynamicChunkBufferLimiter& limiter, int num_tokens) : _limiter(limiter), _num_tokens(num_tokens) {}
 
-        ~Token() override { _pinned_tokens_counter.fetch_sub(_num_tokens); }
+        ~Token() override { _limiter.unpin(_num_tokens); }
 
         DISALLOW_COPY_AND_MOVE(Token);
 
     private:
-        std::atomic<int>& _pinned_tokens_counter;
+        DynamicChunkBufferLimiter& _limiter;
         const int _num_tokens;
     };
 
@@ -122,15 +124,28 @@ public:
     void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows, size_t max_chunk_rows) override;
 
     ChunkBufferTokenPtr pin(int num_chunks) override;
+    void unpin(int num_chunks);
 
-    bool is_full() const override { return _pinned_chunks_counter >= _capacity; }
+    bool is_full() const override {
+        if (_pinned_chunks_counter >= _capacity) {
+            _returned_full_event.store(true, std::memory_order_release);
+            return true;
+        }
+        return false;
+    }
     size_t size() const override { return _pinned_chunks_counter; }
     size_t capacity() const override { return _capacity; }
     size_t default_capacity() const override { return _default_capacity; }
+    void update_mem_limit(int64_t value) override;
+    bool has_full_events() override {
+        if (!_has_full_event.load(std::memory_order_acquire)) {
+            return false;
+        }
+        bool val = true;
+        return _has_full_event.compare_exchange_strong(val, false);
+    }
 
 private:
-    void _unpin(int num_chunks);
-
 private:
     std::mutex _mutex;
     size_t _sum_row_bytes = 0;
@@ -140,9 +155,13 @@ private:
     const size_t _max_capacity;
     const size_t _default_capacity;
 
-    const int64_t _mem_limit;
+    std::atomic<int64_t> _mem_limit;
 
     std::atomic<int> _pinned_chunks_counter = 0;
+
+    std::atomic<bool> _has_full_event{};
+
+    mutable std::atomic<bool> _returned_full_event{};
 };
 
 } // namespace starrocks::pipeline

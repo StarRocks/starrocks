@@ -37,17 +37,18 @@
 #include <memory>
 #include <utility>
 
+#include "base/compression/block_compression.h"
+#include "base/string/slice.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/parsed_page.h"
-#include "util/compression/block_compression.h"
-#include "util/slice.h"
+#include "storage/types.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
@@ -86,7 +87,7 @@ public:
     Status next_batch(size_t* n, Column* column);
 
 private:
-    IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts);
+    IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts);
 
     Status _read_data_page(const PagePointer& pp);
 

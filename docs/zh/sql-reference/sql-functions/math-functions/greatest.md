@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回多个输入参数中的最大值。"
 ---
 
 # greatest
 
-## 功能
+
 
 返回多个输入参数中的最大值。
 

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算输入值的 32 位哈希值并返回包含该值的 Bitmap。"
 ---
 
 # bitmap_hash
 
-## 功能
+
 
 对任意类型的输入计算 32 位的哈希值，返回包含该哈希值的 bitmap。
 

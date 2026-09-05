@@ -14,34 +14,57 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.sample.ColumnSampleManager;
+import com.starrocks.statistic.sample.PrimitiveTypeColumnStats;
+import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.statistic.sample.TabletSampleManager;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class StatisticsSQLTest extends PlanTestBase {
     private static long t0StatsTableId = 0;
 
-    @BeforeClass
+    @TempDir
+    public static File temp;
+
+    @BeforeAll
     public static void beforeClass() throws Exception {
 
         PlanTestBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, newFolder(temp, "junit").toURI().toString());
 
         StatisticsMetaManager m = new StatisticsMetaManager();
         m.createStatisticsTablesForTest();
@@ -78,36 +101,74 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("stat0");
+        String createStructTableSql = "CREATE TABLE struct_a(\n" +
+                "a INT, \n" +
+                "b STRUCT<a INT, c INT> COMMENT 'smith',\n" +
+                "c STRUCT<a INT, b DOUBLE>,\n" +
+                "d STRUCT<a INT, b ARRAY<STRUCT<a INT, b DOUBLE>>, c STRUCT<a INT>>,\n" +
+                "struct_a STRUCT<struct_a STRUCT<struct_a INT>, other INT> COMMENT 'alias test'\n" +
+                ") DISTRIBUTED BY HASH(`a`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createStructTableSql);
+
+        starRocksAssert.withTable("CREATE TABLE `complex_table` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2.a2.b2['+']` bigint NULL COMMENT \"\",\n" +
+                "  `struct_a.c3.d3` STRUCT<struct_b int, " +
+                "                          `struct_c.e3` int, " +
+                "                          `struct_d.f4` struct<struct_e int, struct_f int, `struct_g.h` int>" +
+                "                          > COMMENT ''\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("stat0");
         t0StatsTableId = t0.getId();
     }
 
     @Test
     public void testSampleStatisticsSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("stat0");
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         List<String> columnNames = Lists.newArrayList("v3", "j1", "s1");
-        SampleStatisticsCollectJob job = new SampleStatisticsCollectJob(db, t0, columnNames,
-                StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+        List<Type> columnTypes = Lists.newArrayList(IntegerType.BIGINT, JsonType.JSON, StringType.STRING);
+        TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
 
-        String sql = job.buildSampleInsertSQL(db.getId(), t0StatsTableId, columnNames, 200);
-        starRocksAssert.useDatabase("_statistics_");
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, t0,
+                sampleInfo);
+
+        sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                columnSampleManager.getComplexTypeStats());
+        String complexSql = sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                columnSampleManager.getComplexTypeStats());
+        assertCContains(complexSql, "INSERT INTO _statistics_.table_statistic_v1(table_id, column_name, db_id, table_name," +
+                " db_name, row_count, data_size, distinct_count, null_count, max, min, update_time) VALUES");
+
+        String simpleSql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(),
+                db.getFullName(), columnSampleManager.splitPrimitiveTypeStats().get(0), tabletSampleManager);
         String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
                 t0.getId(), "v3", db.getId(), "test.stat0", "test");
-        assertCContains(sql, except);
+        assertCContains(simpleSql, except);
+        starRocksAssert.useDatabase("_statistics_");
 
-        String plan = getFragmentPlan(sql);
+        String plan = getFragmentPlan(simpleSql);
 
-        Assert.assertEquals(3, StringUtils.countMatches(plan, "OlapScanNode"));
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "OlapScanNode"));
         assertCContains(plan, "left(");
-        assertCContains(plan, "count * 1024");
     }
 
     @Test
     public void testFullStatisticsSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("stat0");
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = Lists.newArrayList("j1", "s1");
@@ -115,9 +176,9 @@ public class StatisticsSQLTest extends PlanTestBase {
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
-        Assert.assertEquals(2, sqls.size());
-        Assert.assertEquals(1, sqls.get(0).size());
-        Assert.assertEquals(1, sqls.get(1).size());
+        Assertions.assertEquals(2, sqls.size());
+        Assertions.assertEquals(1, sqls.get(0).size());
+        Assertions.assertEquals(1, sqls.get(1).size());
         starRocksAssert.useDatabase("_statistics_");
         String plan = getFragmentPlan(sqls.get(0).get(0));
         assertCContains(plan, "count * 1024");
@@ -129,9 +190,111 @@ public class StatisticsSQLTest extends PlanTestBase {
     }
 
     @Test
+    public void testFullStatisticsSQLWithStruct() throws Exception {
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("struct_a");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+
+        List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
+
+        FullStatisticsCollectJob job = new FullStatisticsCollectJob(db, t0, pids, columnNames, ImmutableList.of(IntegerType.INT,
+                IntegerType.INT, IntegerType.INT), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+
+        List<List<String>> sqls = job.buildCollectSQLList(1);
+        Assertions.assertEquals(3, sqls.size());
+        for (int i = 0; i < sqls.size(); i++) {
+            Assertions.assertEquals(1, sqls.get(i).size());
+            String sql = sqls.get(i).get(0);
+            starRocksAssert.useDatabase("_statistics_");
+            ExecPlan plan = getExecPlan(sql);
+            List<Expr> output = plan.getOutputExprs();
+            Assertions.assertEquals(output.get(2).getType().getPrimitiveType(), StringType.STRING.getPrimitiveType());
+            assertCContains(plan.getColNames().get(2).replace("\\", ""), columnNames.get(i));
+        }
+    }
+
+    @Test
+    public void testHistogramStatisticsSQLWithStruct() throws Exception {
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("struct_a");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
+        HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
+                db, t0, Lists.newArrayList("b.a", "b.c", "d.c.a"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.INT, IntegerType.INT), StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+        // The job above carries no analyze properties, so the params the traits read from are built
+        // explicitly here - HistogramCollectParams parses all four eagerly.
+        NativeHistogramTraits nativeTraits = new NativeHistogramTraits(histogramStatisticsCollectJob,
+                new HistogramCollectParams(ImmutableMap.of(
+                        StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1",
+                        StatsConstants.HISTOGRAM_BUCKET_NUM, "10",
+                        StatsConstants.HISTOGRAM_MCV_SIZE, "3",
+                        StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none")));
+        for (String col : columnNames) {
+            String sql = nativeTraits.buildMcvQuery(col);
+            starRocksAssert.useDatabase("_statistics_");
+            String plan = getFragmentPlan(sql);
+            assertCContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: struct_a");
+        }
+
+        for (String col : columnNames) {
+            String sql = nativeTraits.buildHistogramQuery(
+                    0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
+            starRocksAssert.useDatabase("_statistics_");
+            String plan = getFragmentPlan(sql);
+            assertCContains(plan, "AGGREGATE (update finalize)\n" +
+                    "  |  output: histogram");
+        }
+    }
+
+    @Test
+    public void testHiveHistogramStatisticsSQLWithStruct() throws Exception {
+        Table t0 = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(connectContext, "hive0", "subfield_db",
+                "subfield");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "subfield_db");
+
+        List<String> columnNames = Lists.newArrayList("col_struct.c0", "col_struct.c1.c11");
+        ExternalHistogramStatisticsCollectJob hiveHistogramStatisticsCollectJob = new ExternalHistogramStatisticsCollectJob(
+                "hive0", db, t0, columnNames, Lists.newArrayList(IntegerType.INT, IntegerType.INT),
+                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+        // The job above carries no analyze properties, so the params the traits read from are built
+        // explicitly here - HistogramCollectParams parses all four eagerly.
+        ExternalHistogramTraits externalTraits = new ExternalHistogramTraits(hiveHistogramStatisticsCollectJob,
+                new HistogramCollectParams(ImmutableMap.of(
+                        StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1",
+                        StatsConstants.HISTOGRAM_BUCKET_NUM, "10",
+                        StatsConstants.HISTOGRAM_MCV_SIZE, "3",
+                        StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none")));
+        for (String col : columnNames) {
+            String sql = externalTraits.buildMcvQuery(col);
+            starRocksAssert.useDatabase("_statistics_");
+            String plan = getFragmentPlan(sql);
+            assertCContains(plan, " 0:HdfsScanNode\n" +
+                    "     TABLE: subfield");
+        }
+
+        for (String col : columnNames) {
+            String sql = externalTraits.buildHistogramQuery(
+                    0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
+            starRocksAssert.useDatabase("_statistics_");
+            String plan = getFragmentPlan(sql);
+            assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
+                    "  |  output: histogram");
+        }
+    }
+
+    // The external placeholder-bucket SQL for char-family columns is asserted end-to-end in
+    // ExternalHistogramStatisticsCollectJobTest#testBatchInsertCalculatesMcvsAndHistogramsForMultipleColumnTypes,
+    // which drives collect() rather than a private builder.
+
+    @Test
     public void testEscapeFullSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = t0.getColumns().stream().map(Column::getName).collect(Collectors.toList());
@@ -139,38 +302,41 @@ public class StatisticsSQLTest extends PlanTestBase {
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
-        Assert.assertEquals(7, sqls.size());
+        Assertions.assertEquals(7, sqls.size());
 
         for (int i = 0; i < sqls.size(); i++) {
-            Assert.assertEquals(1, sqls.get(i).size());
+            Assertions.assertEquals(1, sqls.get(i).size());
             String sql = sqls.get(i).get(0);
             starRocksAssert.useDatabase("_statistics_");
             ExecPlan plan = getExecPlan(sql);
             List<Expr> output = plan.getOutputExprs();
-            Assert.assertEquals(output.get(2).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(2).getType().getPrimitiveType(), StringType.STRING.getPrimitiveType());
             assertCContains(plan.getColNames().get(2).replace("\\", ""), columnNames.get(i));
         }
     }
 
     @Test
     public void testEscapeSampleSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
-        List<String> columnNames = t0.getColumns().stream().map(Column::getName).collect(Collectors.toList());
-        SampleStatisticsCollectJob job = new SampleStatisticsCollectJob(db, t0, columnNames,
-                StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
-
-        for (String column : columnNames) {
-            String sql = job.buildSampleInsertSQL(db.getId(), t0.getId(), Lists.newArrayList(column), 200);
+        for (Column column : t0.getColumns()) {
+            if (!column.getType().canStatistic()) {
+                continue;
+            }
+            TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
+            SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
+            String sql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                    Lists.newArrayList(new PrimitiveTypeColumnStats(column.getName(), column.getType())),
+                    tabletSampleManager);
             starRocksAssert.useDatabase("_statistics_");
             ExecPlan plan = getExecPlan(sql);
             List<Expr> output = plan.getOutputExprs();
-            Assert.assertEquals(output.get(1).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
-            Assert.assertEquals(output.get(3).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
-            Assert.assertEquals(output.get(4).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(1).getType().getPrimitiveType(), StringType.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(3).getType().getPrimitiveType(), StringType.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(4).getType().getPrimitiveType(), StringType.STRING.getPrimitiveType());
 
-            assertCContains(plan.getColNames().get(1).replace("\\", ""), column);
+            assertCContains(plan.getColNames().get(1).replace("\\", ""), column.getName());
             assertCContains(plan.getColNames().get(3).replace("\\", ""), "escape0['abc']");
         }
     }
@@ -192,5 +358,131 @@ public class StatisticsSQLTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "table_id IN (4, 5, 6)");
         assertCContains(plan, "partition_id NOT IN (1, 2, 3)");
+    }
+
+    @Test
+    public void testCacheQueryColumnStatics() {
+        String sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L, Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.INT));
+        assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
+        Assertions.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L,
+                Lists.newArrayList("col1", "col2", "col3"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.BIGINT, IntegerType.LARGEINT));
+        assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col3\")");
+        Assertions.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L,
+                Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.BIGINT, IntegerType.LARGEINT,
+                        StringType.STRING, VarcharType.VARCHAR, ArrayType.ARRAY_DATE, DateType.DATE));
+        assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col3\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col4\", \"col5\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col7\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col6\")");
+        Assertions.assertEquals(4, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L,
+                Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
+                Lists.newArrayList(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 8, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 6),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
+        assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
+        Assertions.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+    }
+
+    @Test
+    public void testQueryTableStatisticsFiltersZeroRowCount() {
+        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, Lists.newArrayList());
+        assertContains(sql, "WHERE table_id = 2 AND row_count > 0");
+
+        sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, Lists.newArrayList(10L, 20L));
+        assertContains(sql, "WHERE table_id = 2 and partition_id in (10, 20) AND row_count > 0");
+
+        sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, 10L);
+        assertContains(sql, "WHERE table_id = 2 and partition_id = 10 AND row_count > 0");
+    }
+
+    @Test
+    public void testCacheExternalQueryColumnStatics() {
+        // table_uuid is stored hashed (StatisticUtils.hashTableUuidForPkStorage) to stay within
+        // BE's primary_key_limit_size; queries match both the hashed and raw value so historical
+        // rows written before hashing was introduced remain visible.
+        String hashedTableUUID = StatisticUtils.hashTableUuidForPkStorage("a");
+        String tableUUIDPredicate = "table_uuid in (\"" + hashedTableUUID + "\", \"a\")";
+
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.INT));
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col1\", \"col2\")");
+        Assertions.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
+                Lists.newArrayList("col1", "col2", "col3"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.BIGINT, IntegerType.LARGEINT));
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col3\")");
+        Assertions.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
+                Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.BIGINT, IntegerType.LARGEINT,
+                        StringType.STRING, VarcharType.VARCHAR, ArrayType.ARRAY_DATE, DateType.DATE));
+        assertContains(sql, "column_name in (\"col1\", \"col2\")");
+        assertContains(sql, "column_name in (\"col3\")");
+        assertContains(sql, "column_name in (\"col4\", \"col5\", \"col6\")");
+        assertContains(sql, "column_name in (\"col7\")");
+        Assertions.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
+                Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
+                Lists.newArrayList(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 8, 3),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 6),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
+        assertContains(sql, "column_name in (\"col1\", \"col2\")");
+        Assertions.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+    }
+
+    @Test
+    public void testExternalTableCollectionStatsType() {
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(ArrayType.ARRAY_INT, new MapType(IntegerType.INT, StringType.STRING)));
+        assertContains(sql, "cast(max(cast(nullif(max, '') as string)) as string)," +
+                " cast(min(cast(nullif(min, '') as string)) as string)");
+    }
+
+    @Test
+    public void testQuota() {
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("complex_table");
+        assertContains(StatisticUtils.quoting(t0, "v2.a2.b2['+']"), "`v2.a2.b2['+']`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3"), "`struct_a.c3.d3`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_b"), "`struct_a.c3.d3`.`struct_b`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_c.e3"), "`struct_a.c3.d3`.`struct_c.e3`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_d.f4"), "`struct_a.c3.d3`.`struct_d.f4`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_d.f4.struct_e"),
+                "`struct_a.c3.d3`.`struct_d.f4`.`struct_e`");
+        assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_d.f4.struct_g.h"),
+                "`struct_a.c3.d3`.`struct_d.f4`.`struct_g.h`");
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
@@ -42,6 +43,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import io.netty.handler.codec.http.HttpMethod;
 
 public class GetStreamLoadState extends RestBaseAction {
@@ -57,7 +59,7 @@ public class GetStreamLoadState extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
-            throws DdlException {
+            throws DdlException, AccessDeniedException {
 
         if (redirectToLeader(request, response)) {
             return;
@@ -73,24 +75,26 @@ public class GetStreamLoadState extends RestBaseAction {
             throw new DdlException("No label selected.");
         }
 
-        // FIXME(cmy)
-        // checkReadPriv(authInfo.fullUserName, fullDbName);
+        requireDbInsertIfHttpAuthEnabled(dbName);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("unknown database, database=" + dbName);
         }
 
-        String status = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelStatus(db.getId(), label).toString();
-
-        sendResult(request, response, new Result(status));
+        TransactionStateSnapshot transactionStateSnapshot =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(db.getId(), label);
+        sendResult(request, response,
+                new Result(transactionStateSnapshot.getStatus().name(), transactionStateSnapshot.getReason()));
     }
 
     private static class Result extends RestBaseResult {
         private String state;
+        private String reason;
 
-        public Result(String state) {
+        public Result(String state, String reason) {
             this.state = state;
+            this.reason = reason;
         }
     }
 }

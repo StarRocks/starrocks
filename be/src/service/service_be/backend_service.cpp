@@ -23,6 +23,7 @@
 // "License"); you may not use this file except in compliance
 // with the License.  You may obtain a copy of the License at
 //
+
 //   http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing,
@@ -34,16 +35,36 @@
 
 #include "backend_service.h"
 
+#include <algorithm>
+#include <memory>
+
 #include "agent/agent_server.h"
+#include "agent/task_worker_pool.h"
+#include "common/config_network_fwd.h"
+#include "common/logging.h"
+#include "common/util/thrift_server.h"
+#include "exec/exec_env.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 
 namespace starrocks {
 
-BackendService::BackendService(ExecEnv* exec_env)
-        : BackendServiceBase(exec_env), _agent_server(exec_env->agent_server()) {}
+BackendService::BackendService(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env)
+        : BackendServiceBase(exec_env, orchestration_env), _agent_server(exec_env->agent_server()) {}
 
 BackendService::~BackendService() = default;
+
+std::unique_ptr<ThriftServer> BackendService::create(ExecEnv* exec_env,
+                                                     orchestration::OrchestrationEnv* orchestration_env,
+                                                     MetricRegistry* metrics, int port) {
+    auto handler = std::make_shared<BackendService>(exec_env, orchestration_env);
+    auto processor = std::make_shared<BackendServiceProcessor>(handler);
+
+    LOG(INFO) << "StarRocksInternalService has started listening port on " << port;
+    // TODO: May be rename be_service_threads to thrift_service_threads ?
+    return std::make_unique<ThriftServer>("BackendService", processor, port, metrics, config::be_service_threads);
+}
 
 void BackendService::get_tablet_stat(TTabletStatResult& result) {
     StorageEngine::instance()->tablet_manager()->get_tablet_stat(&result);
@@ -63,6 +84,21 @@ void BackendService::release_snapshot(TAgentResult& return_value, const std::str
 
 void BackendService::publish_cluster_state(TAgentResult& result, const TAgentPublishRequest& request) {
     _agent_server->publish_cluster_state(result, request);
+}
+
+void BackendService::get_tablets_info(TGetTabletsInfoResult& result_, const TGetTabletsInfoRequest& request) {
+    result_.__set_report_version(curr_report_version());
+    result_.__set_tablet_max_compaction_score(
+            std::max(StorageMetrics::instance()->tablet_cumulative_max_compaction_score.value(),
+                     StorageMetrics::instance()->tablet_base_max_compaction_score.value()));
+    result_.__isset.tablets = true;
+    TStatus t_status;
+    Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&result_.tablets);
+    if (!st_report.ok()) {
+        LOG(WARNING) << "Fail to get all tablets info, err=" << st_report.to_string();
+    }
+    st_report.to_thrift(&t_status);
+    result_.status = t_status;
 }
 
 } // namespace starrocks

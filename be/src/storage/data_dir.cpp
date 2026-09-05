@@ -39,13 +39,19 @@
 #include <sstream>
 #include <utility>
 
-#include "common/config.h"
+#include "base/string/string_util.h"
+#include "base/system/errno.h"
+#include "base/time/monotime.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
+#include "common/system/backend_options.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
-#include "service/backend_options.h"
-#include "storage/olap_define.h"
+#include "platform/path_rw.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -54,11 +60,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
-#include "storage/utils.h" // for check_dir_existed
-#include "util/defer_op.h"
-#include "util/errno.h"
-#include "util/monotime.h"
-#include "util/string_util.h"
 
 using strings::Substitute;
 
@@ -69,14 +70,11 @@ static const char* const kTestFilePath = "/.testfile";
 DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
                  TxnManager* txn_manager)
         : _path(path),
-          _available_bytes(0),
-          _disk_capacity_bytes(0),
+
           _storage_medium(storage_medium),
-          _is_used(false),
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
-          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
-          _current_shard(0) {}
+          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)) {}
 
 DataDir::~DataDir() {
     delete _id_generator;
@@ -84,7 +82,7 @@ DataDir::~DataDir() {
 }
 
 Status DataDir::init(bool read_only) {
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_fs->path_exists(_path));
     std::string align_tag_path = _path + ALIGN_TAG_PREFIX;
     if (access(align_tag_path.c_str(), F_OK) == 0) {
@@ -99,13 +97,12 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
     RETURN_IF_ERROR_WITH_WARN(init_persistent_index_dir(), "_init_persistent_index_dir failed");
 
-    _is_used = true;
+    _state = DiskState::ONLINE;
     return Status::OK();
 }
 
 void DataDir::stop_bg_worker() {
     _stop_bg_worker = true;
-    _cv.notify_one();
 }
 
 Status DataDir::_init_data_dir() {
@@ -123,7 +120,7 @@ Status DataDir::init_persistent_index_dir() {
 }
 
 Status DataDir::_init_tmp_dir() {
-    std::string tmp_path = _path + TMP_PREFIX;
+    std::string tmp_path = get_tmp_path();
     auto st = _fs->create_dir_recursive(tmp_path);
     LOG_IF(ERROR, !st.ok()) << "failed to create temp directory " << tmp_path;
     return st;
@@ -150,14 +147,25 @@ Status DataDir::set_cluster_id(int32_t cluster_id) {
 }
 
 void DataDir::health_check() {
+    const int retry_times = 10;
     // check disk
-    if (_is_used) {
-        Status res = _read_and_write_test_file();
-        if (!res.ok()) {
-            LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path << ", res=" << res.to_string();
-            if (is_io_error(res)) {
-                _is_used = false;
+    if (_state != DiskState::DECOMMISSIONED && _state != DiskState::DISABLED) {
+        bool all_failed = true;
+        for (int i = 0; i < retry_times; i++) {
+            Status res = _read_and_write_test_file();
+            if (res.ok() || !is_io_error(res)) {
+                all_failed = false;
+                break;
+            } else {
+                LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path
+                             << ", res=" << res.to_string();
             }
+        }
+        if (all_failed) {
+            LOG(WARNING) << "store test failed " << retry_times << " times, set _state to OFFLINE. path=" << _path;
+            _state = DiskState::OFFLINE;
+        } else {
+            _state = DiskState::ONLINE;
         }
     }
 }
@@ -260,8 +268,8 @@ std::string DataDir::get_root_path_from_schema_hash_path_in_trash(const std::str
             .string();
 }
 
-// TODO(ygl): deal with rowsets and tablets when load failed
-Status DataDir::load() {
+// [NOTICE] we must ensure that all tablets are either properly loaded or handled within load().
+void DataDir::load() {
     // load tablet
     // create tablet from tablet meta and add it to tablet mgr
     int64_t load_tablet_start = MonotonicMillis();
@@ -287,27 +295,8 @@ Status DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status =
-            TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
-    if (load_tablet_status.is_time_out()) {
-        LOG(WARNING) << "load tablets from rocksdb timeout, try to compact meta and retry. path: " << _path;
-        Status s = _kv_store->compact();
-        if (!s.ok()) {
-            LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
-            return s;
-        }
-        for (auto tablet_id : tablet_ids) {
-            Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
-            if (!s.ok()) {
-                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.get_error_msg();
-                return s;
-            }
-        }
-        LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
-        tablet_ids.clear();
-        failed_tablet_ids.clear();
-        load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
-    }
+    Status load_tablet_status = TabletMetaManager::walk_with_compact_on_timeout(_kv_store, load_tablet_func,
+                                                                                config::load_tablet_timeout_seconds);
 
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
@@ -320,7 +309,7 @@ Status DataDir::load() {
     if (!load_tablet_status.ok()) {
         LOG(FATAL) << "there is failure when scan rockdb tablet metas, quit process"
                    << ". loaded tablet: " << tablet_ids.size() << " error tablet: " << failed_tablet_ids.size()
-                   << ", path: " << _path << " error: " << load_tablet_status.get_error_msg()
+                   << ", path: " << _path << " error: " << load_tablet_status.message()
                    << " duration: " << (MonotonicMillis() - load_tablet_start) << "ms";
     } else {
         LOG(INFO) << "load tablet from meta finished"
@@ -343,8 +332,8 @@ Status DataDir::load() {
             tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
             Status s = TabletMetaManager::save(this, tablet_meta_pb);
             if (!s.ok()) {
-                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.get_error_msg();
-                return s;
+                // Only print log, do not return error. We can handle it later.
+                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.message();
             }
         }
     }
@@ -377,8 +366,8 @@ Status DataDir::load() {
             return true;
         }
         RowsetSharedPtr rowset;
-        Status create_status =
-                RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(), rowset_meta, &rowset);
+        Status create_status = RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(),
+                                                            rowset_meta, &rowset, tablet->data_dir()->get_meta());
         if (!create_status.ok()) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();
@@ -390,18 +379,11 @@ Status DataDir::load() {
             if (!rowset_meta->tablet_schema()) {
                 auto tablet_schema_ptr = tablet->tablet_schema();
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
-                Status rs_meta_save_status =
-                        RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), rowset_meta->get_meta_pb());
-                if (!rs_meta_save_status.ok()) {
-                    LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
-                                 << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
-                    error_rowset_count++;
-                    return true;
-                }
+                rowset_meta->set_skip_tablet_schema(true);
             }
-            Status commit_txn_status = _txn_manager->commit_txn(
-                    _kv_store, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->tablet_id(),
-                    rowset_meta->tablet_schema_hash(), rowset_meta->tablet_uid(), rowset_meta->load_id(), rowset, true);
+            Status commit_txn_status = _txn_manager->commit_txn(tablet, rowset_meta->partition_id(),
+                                                                rowset_meta->txn_id(), rowset_meta->load_id(), rowset,
+                                                                true, tablet->tablet_state() != TABLET_RUNNING);
             if (!commit_txn_status.ok() && !commit_txn_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
                              << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
@@ -413,24 +395,22 @@ Status DataDir::load() {
 
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
-            Status publish_status = tablet->load_rowset(rowset);
-            if (!rowset_meta->tablet_schema()) {
-                rowset_meta->set_tablet_schema(tablet->tablet_schema());
-                Status rs_meta_save_status =
-                        RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), rowset_meta->get_meta_pb());
-                if (!rs_meta_save_status.ok()) {
-                    LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
-                                 << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
-                    error_rowset_count++;
-                    return true;
+            if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+                VLOG(1) << "skip a visible rowset meta, tablet: " << tablet->tablet_id()
+                        << ", rowset: " << rowset_meta->rowset_id();
+            } else {
+                Status publish_status = tablet->load_rowset(rowset);
+                if (!rowset_meta->tablet_schema()) {
+                    rowset_meta->set_tablet_schema(tablet->tablet_schema());
+                    rowset_meta->set_skip_tablet_schema(true);
                 }
-            }
-            if (!publish_status.ok() && !publish_status.is_already_exist()) {
-                LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
-                             << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
-                             << " start version=" << rowset_meta->version().first
-                             << " end version=" << rowset_meta->version().second;
-                error_rowset_count++;
+                if (!publish_status.ok() && !publish_status.is_already_exist()) {
+                    LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
+                                 << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
+                                 << " start version=" << rowset_meta->version().first
+                                 << " end version=" << rowset_meta->version().second;
+                    error_rowset_count++;
+                }
             }
         } else {
             LOG(WARNING) << "Found invalid rowset=" << rowset_meta->rowset_id()
@@ -445,7 +425,7 @@ Status DataDir::load() {
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
-                     << "/" << total_rowset_count << " error: " << load_rowset_status.get_error_msg()
+                     << "/" << total_rowset_count << " error: " << load_rowset_status.message()
                      << " duration: " << (MonotonicMillis() - load_rowset_start) << "ms";
     } else {
         LOG(INFO) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
@@ -468,19 +448,26 @@ Status DataDir::load() {
             LOG(WARNING) << "Fail to finish loading rowsets, tablet id=" << tablet_id << ", status: " << st.to_string();
         }
     }
-
-    return Status::OK();
 }
 
 // gc unused tablet schemahash dir
+const size_t LOG_GC_BATCH_SIZE = 50;
 void DataDir::perform_path_gc_by_tablet() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_tablet_schemahash_paths.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_tablet_schemahash_paths.empty()) {
         return;
     }
     LOG(INFO) << "start to path gc by tablet schema hash.";
     int counter = 0;
+    std::vector<string> delete_success_tablet_paths;
+    auto log_tablet_path = [](const auto& paths) {
+        if (paths.empty()) return;
+        std::stringstream ss;
+        for (const auto& path : paths) {
+            ss << path << ",";
+        }
+        LOG(INFO) << "Move tablet_id_path to trash: [" << ss.str() << "]";
+    };
     for (auto& path : _all_tablet_schemahash_paths) {
         ++counter;
         if (config::path_gc_check_step > 0 && counter % config::path_gc_check_step == 0) {
@@ -513,8 +500,23 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "could not find data dir for tablet path " << path;
             continue;
         }
-        _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash, tablet_id_path.string());
+        auto st = _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash,
+                                                                 tablet_id_path.string());
+        if (!st.ok()) {
+            LOG(INFO) << "remove " << tablet_id_path << "failed, status: " << st;
+        } else {
+            if (delete_success_tablet_paths.size() > LOG_GC_BATCH_SIZE) {
+                log_tablet_path(delete_success_tablet_paths);
+                delete_success_tablet_paths.clear();
+            }
+            delete_success_tablet_paths.emplace_back(tablet_id_path.string());
+        }
     }
+    if (delete_success_tablet_paths.size() > 0) {
+        log_tablet_path(delete_success_tablet_paths);
+        delete_success_tablet_paths.clear();
+    }
+
     _all_tablet_schemahash_paths.clear();
     LOG(INFO) << "finished one time path gc by tablet.";
 }
@@ -561,8 +563,7 @@ static bool is_delta_column_file(const std::string& path) {
 
 void DataDir::perform_delta_column_files_gc() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_dcg_files.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_check_dcg_files.empty()) {
         return;
     }
     LOG(INFO) << "start to do delta column files gc.";
@@ -594,8 +595,7 @@ void DataDir::perform_path_gc_by_rowsetid() {
     // init the set of valid path
     // validate the path in data dir
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_paths.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_check_paths.empty()) {
         return;
     }
     LOG(INFO) << "start to path gc by rowsetid.";
@@ -631,6 +631,63 @@ void DataDir::perform_path_gc_by_rowsetid() {
     }
     _all_check_paths.clear();
     LOG(INFO) << "finished one time path gc by rowsetid.";
+}
+
+void DataDir::perform_crm_gc(int32_t unused_crm_file_threshold_sec) {
+    // init the set of valid path
+    // validate the path in data dir
+    std::unique_lock<std::mutex> lck(_check_path_mutex);
+    if (_stop_bg_worker || _all_check_crm_files.empty()) {
+        return;
+    }
+    LOG(INFO) << "start to crm file gc.";
+    int counter = 0;
+    for (auto& path : _all_check_crm_files) {
+        ++counter;
+        if (config::path_gc_check_step > 0 && counter % config::path_gc_check_step == 0) {
+            SleepFor(MonoDelta::FromMilliseconds(config::path_gc_check_step_interval_ms));
+        }
+        auto now = time(nullptr);
+        auto mtime_or = FileSystem::Default()->get_file_modified_time(path);
+        if (!mtime_or.ok() || (*mtime_or) <= 0) {
+            continue;
+        }
+        if (now >= unused_crm_file_threshold_sec + (*mtime_or)) {
+            _process_garbage_path(path);
+        }
+    }
+    _all_check_crm_files.clear();
+    LOG(INFO) << "finished one time crm file gc.";
+}
+
+void DataDir::perform_tmp_path_scan() {
+    std::unique_lock<std::mutex> lck(_check_path_mutex);
+    if (!_all_check_crm_files.empty()) {
+        LOG(INFO) << "_all_check_crm_files is not empty when tmp path scan.";
+        return;
+    }
+    LOG(INFO) << "start to scan tmp dir path.";
+    std::string tmp_path_str = _path + TMP_PREFIX;
+    std::filesystem::path tmp_path(tmp_path_str.c_str());
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(tmp_path)) {
+            if (entry.is_regular_file()) {
+                const auto& filename = entry.path().string();
+                if (filename.ends_with(".crm")) {
+                    _all_check_crm_files.insert(filename);
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& ex) {
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Filesystem error: " << ex.what();
+        // do nothing
+    } catch (const std::exception& ex) {
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Standard error: " << ex.what();
+        // do nothing
+    } catch (...) {
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Unknown exception occurred.";
+        // do nothing
+    }
 }
 
 // path producer
@@ -672,8 +729,9 @@ void DataDir::perform_path_scan() {
                     std::string tablet_schema_hash_path = tablet_id_path + "/" + schema_hash;
                     _all_tablet_schemahash_paths.insert(tablet_schema_hash_path);
                     std::set<std::string> rowset_files;
+                    std::set<std::string> inverted_dirs;
 
-                    ret = fs::list_dirs_files(_fs.get(), tablet_schema_hash_path, nullptr, &rowset_files);
+                    ret = fs::list_dirs_files(_fs.get(), tablet_schema_hash_path, &inverted_dirs, &rowset_files);
                     if (!ret.ok()) {
                         LOG(WARNING) << "fail to walk dir. [path=" << tablet_schema_hash_path << "] error["
                                      << ret.to_string() << "]";
@@ -687,13 +745,18 @@ void DataDir::perform_path_scan() {
                             _all_check_paths.insert(rowset_file_path);
                         }
                     }
+                    for (const auto& inverted_dir : inverted_dirs) {
+                        std::string inverted_index_path = tablet_schema_hash_path + "/" + inverted_dir;
+                        if (inverted_index_path.ends_with(".ivt")) {
+                            _all_check_paths.insert(inverted_index_path);
+                        }
+                    }
                 }
             }
         }
         LOG(INFO) << "scan data dir path:" << _path << " finished. path size:" << _all_check_paths.size()
                   << " dcg file size: " << _all_check_dcg_files.size();
     }
-    _cv.notify_one();
 }
 
 void DataDir::_process_garbage_path(const std::string& path) {

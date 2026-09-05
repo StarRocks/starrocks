@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Some people want to become StarRocks contributor, but are troubled by the development environment, so here I write a tutorial about it."
 ---
 
 # Setup IDE  for developing StarRocks
@@ -22,19 +23,17 @@ The overall idea is to write code on the MacBook,  then automatically synchroniz
 
 ### MacBook Setup
 
-#### Thrift 0.13
-
-There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
+#### Thrift 0.20
 
 ```bash
-brew install alberttwong/thrift/thrift@0.13
+brew install cartman-kai/thrift/thrift@0.20
 ```
 
 You can check whether Thrift is installed successfully with the following command:
 
 ```bash
 $ thrift -version
-Thrift version 0.13.0
+Thrift version 0.20.0
 ```
 
 #### Protobuf
@@ -51,10 +50,10 @@ brew install protobuf
 brew install maven
 ```
 
-#### OpenJDK 1.8 or 11
+#### OpenJDK 17
 
 ```bash
-brew install openjdk@11
+brew install openjdk@17
 ```
 
 #### Python3
@@ -68,7 +67,7 @@ export JAVA_HOME=xxxxx
 export PYTHON=/usr/bin/python3
 ```
 
-### Ubuntu22 server setup
+### Ubuntu server setup
 
 #### Clone StarRocks code
 
@@ -81,13 +80,13 @@ sudo apt update
 ```
 
 ```bash
-sudo apt install gcc g++ maven openjdk-11-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison binutils-dev libiberty-dev build-essential ninja-build
+sudo apt install gcc g++ maven openjdk-17-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison libiberty-dev build-essential ninja-build curl
 ```
 
 Setup `JAVA_HOME` env
 
 ```bash
-export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ```
 
 #### Do a compilation of StarRocks
@@ -111,7 +110,8 @@ Then you can use IDEA to open `fe` folder directly, everything is ok.
 
 #### Local debug
 
-The same as other Java applications.
+The same as other Java applications. You might face OOM error while compiling StarRocks on Intellij IDEA, you can go to Build, Execution, Deployment -> Compiler -> Increase Heap size to a larger value.
+
 
 #### Remote debug
 
@@ -119,37 +119,37 @@ In Ubuntu server, run with `./start_fe.sh --debug`, then use IDEA remote debug t
 
 Debug java parameter: `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005` is just copied from IDEA.
 
-![IDE](../../assets/ide-1.png)
+![IDE](../../_assets/ide-1.png)
 
 ### BE
 
-It is recommended to run `mvn install -DskipTests` first in `fe` folder to ensure that thrift and protobuf in the gensrc directory are compiled correctly.
+It is recommended to run `mvn install -DskipTests` first in `fe` to generate the FE-side Java thrift/proto sources.
 
-Then you need to enter  `gensrc` folder, run `make clean` and `make` commands respectively, otherwise Clion can't detect thrift's output files.
+For BE, run the CMake configure/build flow once. The BE thrift/protobuf headers are materialized by CMake during configure/build into the active build directory (for example `be/build_Release/gensrc/gen_cpp`), so you no longer need `cd gensrc && make` for those files. If you need the shared script outputs first, run `make -C gensrc script`.
 
 Use Clion to open `be` folder.
 
 Enter `Settings`, add `Toolchains`. Add a remote server first, then setup Build Tool, C and C++ Compiler separately.
 
-![IDE](../../assets/ide-2.png)
+![IDE](../../_assets/ide-2.png)
 
 In `Settings` / `Deployment`. Change folder `mappings`.
 
-![IDE](../../assets/ide-3.png)
+![IDE](../../_assets/ide-3.png)
 
 In `Settings` / `Cmake`. Change Toolchain to be the remote toolchain just added. Add the following environment variables:
 
 ```bash
-JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 STARROCKS_GCC_HOME=/usr/
 STARROCKS_THIRDPARTY=/root/starrocks/thirdparty
 ```
 
 Notice: Be careful not to check `Include system environment variables`.
 
-![IDE](../../assets/ide-4.png)
+![IDE](../../_assets/ide-4.png)
 
-![IDE](../../assets/ide-5.png)
+![IDE](../../_assets/ide-5.png)
 
 From here on, all setup is complete. After Clion and the remote server are synchronized for a while, the code jump will work normally.
 
@@ -198,8 +198,3 @@ Then use the command:  `CC=clang-15 CXX=clang++-15 ./build.sh` to compile be. Bu
 ## Last
 
 Feel free to contribute codes to StarRocks. 🫵
-
-## Reference
-
-* [https://www.inlighting.org/archives/setup-perfect-starrocks-dev-env-en](https://www.inlighting.org/archives/setup-perfect-starrocks-dev-env-en)
-* Chinese version: [https://www.inlighting.org/archives/setup-perfect-starrocks-dev-env](https://www.inlighting.org/archives/setup-perfect-starrocks-dev-env)

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Converts a string to lowercase; alias of lower."
 ---
 
 # lcase
 
-## Description
+
 
 This function converts a string to lower-case. It is analogous to the function lower.
 

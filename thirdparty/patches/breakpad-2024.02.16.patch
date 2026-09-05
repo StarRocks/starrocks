@@ -1,0 +1,17 @@
+diff --git a/src/common/linux/dump_symbols.cc b/src/common/linux/dump_symbols.cc
+index b693fc9e..8686ee38 100644
+--- a/src/common/linux/dump_symbols.cc
++++ b/src/common/linux/dump_symbols.cc
+@@ -82,6 +82,12 @@
+ #endif
+ #include "common/using_std_string.h"
+ 
++#ifndef SHF_COMPRESSED
++#define SHF_COMPRESSED       (1 << 11)  /* Section with compressed data. */
++#define ELFCOMPRESS_ZLIB     1          /* ZLIB/DEFLATE algorithm.  */
++#define EM_RISCV             243     /* RISC-V */
++#endif
++
+ // This namespace contains helper functions.
+ namespace {
+ 

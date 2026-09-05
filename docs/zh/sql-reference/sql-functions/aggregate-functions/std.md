@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回表达式的标准差，支持作为窗口函数使用。"
 ---
 
-# STD
+# std
 
-## 功能
+
 
 返回 `expr` 表达式的标准差。从 2.5.10 版本开始，该函数也可以用作窗口函数。
 

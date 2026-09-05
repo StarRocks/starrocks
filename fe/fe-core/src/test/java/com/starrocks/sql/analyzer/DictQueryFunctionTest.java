@@ -14,11 +14,18 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class DictQueryFunctionTest {
 
@@ -27,7 +34,7 @@ public class DictQueryFunctionTest {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -51,7 +58,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -67,7 +74,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -83,7 +90,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
         starRocksAssert.withTable(dictTable);
@@ -127,7 +134,7 @@ public class DictQueryFunctionTest {
 
         testDictMappingFunction(
                 "SELECT dict_mapping('dict.dict_table', 'key', '2023-05-06', 'value', 'extra');",
-                "dict_mapping function strict_mode param should be bool constant.");
+                "dict_mapping function null_if_not_found param should be bool constant.");
 
         testDictMappingFunction(
                 "SELECT dict_mapping('dict.dict_table', 'key', CAST('2023-05-06' AS datetime), 'v');",
@@ -148,6 +155,33 @@ public class DictQueryFunctionTest {
         testDictMappingFunction(
                 "SELECT dict_mapping('dict.dict_table', 'key', null, 'value', true);",
                 "dict_mapping function params not match expected");
+
+        Config.run_mode = "shared_data";
+        RunMode.detectRunMode();
+        testDictMappingFunction(
+                "SELECT dict_mapping('dict.dict_table', 'key', null, 'value', true);",
+                "dict_mapping function do not support shared data mode");
+        Config.run_mode = "shared_nothing";
+        RunMode.detectRunMode();
+    }
+
+    @Test
+    public void testDictTable() throws Exception {
+        starRocksAssert.useDatabase(TEST_DICT_DATABASE);
+        starRocksAssert.withTable("CREATE TABLE `dd0` (\n" +
+                "  `k1` int(11) NOT NULL,\n" +
+                "  `k2` BIGINT(11) NULL AS dict_mapping('dict_table', `k1`, TRUE)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable(TEST_DICT_DATABASE, "dd0");
+        List<String> cols = StatisticUtils.getCollectibleColumns(table);
+        Assertions.assertEquals(1, cols.size());
+
+        starRocksAssert.dropTable("dd0");
     }
 
     private void testDictMappingFunction(String sql, String expectException) {
@@ -198,9 +232,6 @@ public class DictQueryFunctionTest {
                     }
                 }
                 throw new RuntimeException("expect no exception, actual: " + e.getMessage(), e);
-            }
-            if (expectException != null) {
-                throw new RuntimeException(String.format("expect exception: %s, actual no exception", expectException.getName()));
             }
         }
 

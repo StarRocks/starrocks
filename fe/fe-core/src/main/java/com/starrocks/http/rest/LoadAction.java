@@ -35,32 +35,61 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
+import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.rejected.RejectedRecordsTable;
+import com.starrocks.load.streamload.StreamLoadHttpHeader;
+import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.Warehouse;
-import io.netty.handler.codec.http.HttpHeaders;
+import com.starrocks.warehouse.Utils;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.codec.http.HttpVersion;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
+
+    // Internal-trust header used by RejectedRecordSyncDaemon (BE-side) to
+    // post rejected_records to the FE Stream Load endpoint without Basic
+    // auth. The header value is the FE cluster token, which the FE master
+    // distributes to every BE through heartbeats and stays inside the
+    // VPC. Bypass is gated to the `_statistics_.rejected_records` table
+    // only so a leaked token cannot be reused to write any other table.
+    static final String INTERNAL_TOKEN_HEADER = "X-StarRocks-Internal-Token";
 
     public LoadAction(ActionController controller) {
         super(controller);
@@ -73,25 +102,134 @@ public class LoadAction extends RestBaseAction {
     }
 
     @Override
+    public void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+        if (tryInternalTokenBypass(request, response)) {
+            return;
+        }
+        super.execute(request, response);
+    }
+
+    // Returns true iff the request carried a valid internal-trust token
+    // for `_statistics_.rejected_records` and the request has been
+    // dispatched as ROOT. Returning false leaves the request untouched
+    // for the normal Basic-auth-and-checkPassword pipeline.
+    //
+    // Package-private for testability: each fall-through branch is
+    // exercised independently in LoadActionInternalTokenTest.
+    boolean tryInternalTokenBypass(BaseRequest request, BaseResponse response)
+            throws DdlException, AccessDeniedException {
+        String token = request.getRequest().headers().get(INTERNAL_TOKEN_HEADER);
+        if (Strings.isNullOrEmpty(token)) {
+            return false;
+        }
+        String dbName = request.getSingleParameter(DB_KEY);
+        String tableName = request.getSingleParameter(TABLE_KEY);
+        if (!RejectedRecordsTable.DATABASE_NAME.equals(dbName)
+                || !RejectedRecordsTable.TABLE_NAME.equals(tableName)) {
+            // The internal token only authorizes one specific system table.
+            // Anything else falls through to Basic auth so we don't leak
+            // whether the token was wrong vs the path was wrong.
+            return false;
+        }
+        String expected = GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+        if (Strings.isNullOrEmpty(expected) || !expected.equals(token)) {
+            // Same: don't reveal whether the token was missing on the FE
+            // side or just mismatched -- fall back and let Basic auth
+            // produce a generic 401.
+            return false;
+        }
+
+        HttpConnectContext ctx = request.getConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(UserIdentity.ROOT.getUser());
+        ctx.setNettyChannel(request.getContext());
+        ctx.setQueryId(UUIDUtil.genUUID());
+        try (var scope = ctx.bindScope()) {
+            executeWithoutPassword(request, response);
+        }
+        return true;
+    }
+
+    public static List<Long> selectNodes(ComputeResource computeResource) throws DdlException {
+        // Choose a backend sequentially, or choose a cn in shared_data mode
+        List<Long> nodeIds = new ArrayList<>();
+        if (RunMode.isSharedDataMode()) {
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeIds = warehouseManager.getAllComputeNodeIds(computeResource);
+            for (long nodeId : computeIds) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAvailable()) {
+                    nodeIds.add(nodeId);
+                }
+            }
+        } else {
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            nodeIds = systemInfoService.getAvailableBackends().stream().map(be -> be.getId()).collect(Collectors.toList());
+        }
+
+        List<Long> filterNodeIds = nodeIds.stream()
+                .filter(id -> !SimpleScheduler.isInBlocklist(id)).collect(Collectors.toList());
+        if (filterNodeIds != null && !filterNodeIds.isEmpty()) {
+            nodeIds = filterNodeIds;
+        }
+
+        if (CollectionUtils.isEmpty(nodeIds)) {
+            throw new DdlException("No backend alive.");
+        }
+
+        Collections.shuffle(nodeIds);
+        return nodeIds;
+    }
+
+    @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         try {
             executeWithoutPasswordInternal(request, response);
         } catch (DdlException e) {
             TransactionResult resp = new TransactionResult();
             resp.status = ActionStatus.FAILED;
-            resp.msg = e.getClass().toString() + ": " + e.getMessage();
-            LOG.warn(e);
+            resp.msg = e.getClass() + ": " + e.getMessage();
+            String firstStackTrace = "<null>";
+            Optional<StackTraceElement> stElem = Arrays.stream(e.getStackTrace()).findFirst();
+            if (stElem.isPresent()) {
+                firstStackTrace = stElem.get().toString();
+            }
+            LOG.warn("Failed to execute executeWithoutPasswordInternal: {}, The most inner stack: {}",
+                    e.getMessage(), firstStackTrace);
 
             sendResult(request, response, resp);
         }
     }
 
+    // Basically a complete copy of the private interface HttpUtil.isExpectHeaderValid.
+    private static boolean isExpectHeaderValid(final HttpRequest message) {
+        /*
+         * Expect: 100-continue is for requests only and it works only on HTTP/1.1 or later. Note further that RFC 7231
+         * section 5.1.1 says "A server that receives a 100-continue expectation in an HTTP/1.0 request MUST ignore
+         * that expectation."
+         */
+        return message.protocolVersion().compareTo(HttpVersion.HTTP_1_1) >= 0;
+    }
+
     public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException,
             AccessDeniedException {
 
-        // A 'Load' request must have 100-continue header
-        if (!request.getRequest().headers().contains(HttpHeaders.Names.EXPECT)) {
+        // A 'Load' request must have "Expect: 100-continue" header for HTTP/1.1 and onward.
+        // Skip the "Expect" header check for HTTP/1.0 and earlier versions.
+        if (isExpectHeaderValid(request.getRequest()) && !HttpUtil.is100ContinueExpected(request.getRequest())) {
+            // TODO: should respond "HTTP 417 Expectation Failed"
+            response.setForceCloseConnection(true);
             throw new DdlException("There is no 100-continue header");
+        }
+        // close the connection forcibly after the request, so the `Expect: 100-Continue` won't
+        // affect subsequent requests processing.
+        response.setForceCloseConnection(true);
+
+        boolean enableBatchWrite = StreamLoadHttpHeader.isEnabledBatchWrite(request);
+        if (enableBatchWrite && redirectToLeader(request, response)) {
+            return;
         }
 
         String dbName = request.getSingleParameter(DB_KEY);
@@ -104,41 +242,78 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No table selected.");
         }
 
+        Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
+
+        if (!enableBatchWrite) {
+            processNormalStreamLoad(request, response, dbName, tableName);
+        } else {
+            processBatchWriteStreamLoad(request, response, dbName, tableName);
+        }
+    }
+
+    private void processNormalStreamLoad(
+            BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
         String label = request.getRequest().headers().get(LABEL_KEY);
 
-        Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                dbName, tableName, PrivilegeType.INSERT);
-
-        // Choose a backend sequentially, or choose a cn in shared_data mode
-        List<Long> nodeIds = new ArrayList<>();
-        if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
-                if (node != null && node.isAvailable()) {
-                    nodeIds.add(nodeId);
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        } else {
+            ConnectContext ctx = request.getConnectContext();
+            if (ctx != null) {
+                Optional<String> userWarehouseName = Utils.getUserDefaultWarehouse(ctx.getCurrentUserIdentity());
+                if (userWarehouseName.isPresent() && warehouseManager.warehouseExists(userWarehouseName.get())) {
+                    warehouseName = userWarehouseName.get();
                 }
             }
-            Collections.shuffle(nodeIds);
-        } else {
-            nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
         }
-        
-        if (CollectionUtils.isEmpty(nodeIds)) {
-            throw new DdlException("No backend alive.");
-        }
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
+        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
+        final List<Long> nodeIds = LoadAction.selectNodes(computeResource);
         // TODO: need to refactor after be split into cn + dn
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
         if (node == null) {
             throw new DdlException("No backend or compute node alive.");
         }
 
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
 
-        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}",
-                redirectAddr.toString(), dbName, tableName, label);
+        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}, warehouse: {}",
+                redirectAddr.toString(), dbName, tableName, label, warehouseName);
         redirectTo(request, response, redirectAddr);
+    }
+
+    private void processBatchWriteStreamLoad(
+            BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
+        TableId tableId = new TableId(dbName, tableName);
+        StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
+        ConnectContext ctx = request.getConnectContext();
+        UserIdentity userIdentity = ctx != null ? ctx.getCurrentUserIdentity() : null;
+        RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState().getBatchWriteMgr().requestCoordinatorBackends(
+                tableId, params, userIdentity);
+        if (!result.isOk()) {
+            BatchWriteResponseResult responseResult = new BatchWriteResponseResult(
+                    result.getStatus().status_code.name(), ActionStatus.FAILED,
+                    result.getStatus().error_msgs.get(0));
+            sendResult(request, response, responseResult);
+            return;
+        }
+
+        List<ComputeNode> nodes = result.getValue();
+        int index = ThreadLocalRandom.current().nextInt(nodes.size());
+        ComputeNode node = nodes.get(index);
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
+        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr, dbName, tableName);
+        redirectTo(request, response, redirectAddr);
+    }
+
+    public static class BatchWriteResponseResult extends RestBaseResult {
+
+        public BatchWriteResponseResult(String code, ActionStatus status, String msg) {
+            super(code, status, msg);
+        }
     }
 }
 

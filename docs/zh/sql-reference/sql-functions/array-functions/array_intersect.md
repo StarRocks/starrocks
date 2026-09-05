@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回多个同类型数组的交集。"
 ---
 
 # array_intersect
 
-## 功能
+
 
 对于多个同类型数组，返回交集。
 

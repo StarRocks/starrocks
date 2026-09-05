@@ -42,9 +42,9 @@
 #include <string>
 #include <vector>
 
+#include "base/utility/scoped_cleanup.h"
 #include "storage/olap_common.h"
 #include "storage/utils.h"
-#include "util/scoped_cleanup.h"
 
 using apache::thrift::ThriftDebugString;
 using std::numeric_limits;
@@ -90,12 +90,12 @@ Status DeleteConditionHandler::generate_delete_predicate(const TabletSchema& sch
                 in_pred->add_values(condition_value);
             }
 
-            LOG(INFO) << "store one sub-delete condition. condition name=" << in_pred->column_name()
-                      << ",condition size=" << in_pred->values().size();
+            VLOG(3) << "store one sub-delete condition. condition name=" << in_pred->column_name()
+                    << ",condition size=" << in_pred->values().size();
         } else {
             string condition_str = construct_sub_predicates(condition);
             del_pred->add_sub_predicates(condition_str);
-            LOG(INFO) << "store one sub-delete condition. condition=" << condition_str;
+            VLOG(3) << "store one sub-delete condition. condition=" << condition_str;
         }
     }
     del_pred->set_version(-1);
@@ -217,12 +217,12 @@ bool DeleteHandler::parse_condition(const std::string& condition_str, TCondition
 
     try {
         // Condition string format
-        // eg:  condition_str="c1 = 1597751948193618247  and length(source)<1;\n;\n"
-        //  group1:  ([^\0=<>!\*]{1,64}) matches "c1"
+        // eg:  condition_str="c1= 1597751948193618247  and length(source)<1;\n;\n"
+        //  group1:  ([^\0=<>!\*]{1,1024}) matches "c1"
         //  group2:  ((?:=)|(?:!=)|(?:>>)|(?:<<)|(?:>=)|(?:<=)|(?:\*=)|(?:IS)) matches  "="
-        //  group3:  ((?:[\s\S]+)?) matches "1597751948193618247  and length(source)<1;\n;\n"
+        //  group3:  ((?:[\s\S]+)?) matches " 1597751948193618247  and length(source)<1;\n;\n"
         const char* const CONDITION_STR_PATTERN =
-                R"(([^\0=<>!\*]{1,64})\s*((?:=)|(?:!=)|(?:>>)|(?:<<)|(?:>=)|(?:<=)|(?:\*=)|(?: IS ))\s*((?:[\s\S]+)?))";
+                R"(([^\0=<>!\*]{1,1024})((?:=)|(?:!=)|(?:>>)|(?:<<)|(?:>=)|(?:<=)|(?:\*=)|(?: IS ))((?:[\s\S]+)?))";
         regex ex(CONDITION_STR_PATTERN);
         if (regex_match(condition_str, what, ex)) {
             if (condition_str.size() != what[0].str().size()) {
@@ -251,6 +251,43 @@ bool DeleteHandler::parse_condition(const std::string& condition_str, TCondition
     condition->condition_values.push_back(what[3].str());
 
     return true;
+}
+
+bool DeleteHandler::is_delete_condition_evaluated(const TabletSchema& schema, const std::string& column_name) {
+    return schema.field_index(column_name) < schema.num_key_columns() || schema.keys_type() == DUP_KEYS;
+}
+
+Status DeleteHandler::delete_predicate_column_ids(const DelPredicateArray& delete_predicates,
+                                                  const TabletSchema& schema, int64_t max_version,
+                                                  std::set<ColumnId>* column_ids) {
+    // An unknown column is not evaluated either: the reader's parse_thrift_cond rejects it outright.
+    auto keep = [&](const std::string& column_name) {
+        const size_t index = schema.field_index(column_name);
+        if (index < schema.num_columns()) {
+            column_ids->insert(index);
+        }
+    };
+    for (const DeletePredicatePB& pred_pb : delete_predicates) {
+        if (pred_pb.version() > max_version) {
+            continue;
+        }
+        for (int i = 0; i != pred_pb.sub_predicates_size(); ++i) {
+            TCondition cond;
+            if (!parse_condition(pred_pb.sub_predicates(i), &cond)) {
+                LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
+                return Status::InternalError("invalid delete condition string");
+            }
+            if (!is_delete_condition_evaluated(schema, cond.column_name)) {
+                continue;
+            }
+            keep(cond.column_name);
+        }
+        // The reader applies no non-key filter to IN predicates, so neither does this.
+        for (int i = 0; i != pred_pb.in_predicates_size(); ++i) {
+            keep(pred_pb.in_predicates(i).column_name());
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

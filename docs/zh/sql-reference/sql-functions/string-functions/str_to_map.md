@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将字符串分割成键值对，使用两个分隔符并返回Map。"
 ---
 
 # str_to_map
 
-## 功能
+
 
 将给定的字符串分割成键值对 (Key-Value pair)，返回包含这些键值对的 Map。
 

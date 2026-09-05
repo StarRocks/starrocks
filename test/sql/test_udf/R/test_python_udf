@@ -1,0 +1,427 @@
+-- name: test_python_udf
+CREATE FUNCTION get_type(boolean) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return type(x)  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION get_type(int) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION get_type(double) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION get_type(string) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION get_type(array<int>) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION get_type(struct<a int, b string>) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION get_type(map<int,string>) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def echo(x):
+    return str(type(x))  
+$$;
+-- result:
+-- !result
+select get_type(1);
+-- result:
+<class 'int'>
+-- !result
+select get_type(1.1);
+-- result:
+<class 'float'>
+-- !result
+select get_type('1');
+-- result:
+<class 'str'>
+-- !result
+select get_type([]);
+-- result:
+<class 'list'>
+-- !result
+select get_type([1,2,3]);
+-- result:
+<class 'list'>
+-- !result
+select get_type(named_struct('a', 1,'b','value'));
+-- result:
+<class 'dict'>
+-- !result
+select get_type(map(1,2));
+-- result:
+<class 'dict'>
+-- !result
+CREATE FUNCTION nested_arr_arr(array<array<int>>) RETURNS string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    # x must be a list of lists of ints, sum total
+    return str(sum(sum(inner) for inner in x))
+$$;
+-- result:
+-- !result
+select nested_arr_arr([[1,2,3],[4,5]]);
+-- result:
+15
+-- !result
+CREATE FUNCTION nested_arr_map(array<map<string,int>>) RETURNS string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    # x must be a list of dicts (not list of tuples)
+    return ",".join(sorted(str(type(e).__name__) for e in x))
+$$;
+-- result:
+-- !result
+select nested_arr_map([map('a', 1), map('b', 2)]);
+-- result:
+dict,dict
+-- !result
+CREATE FUNCTION nested_map_arr(map<string,array<int>>) RETURNS int
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    # x must be a dict whose values are lists
+    return sum(sum(v) for v in x.values())
+$$;
+-- result:
+-- !result
+select nested_map_arr(map('k1', [1,2,3], 'k2', [4,5]));
+-- result:
+15
+-- !result
+CREATE FUNCTION nested_struct(struct<a array<int>, b map<string,int>>) RETURNS string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    # x must be a dict with keys 'a' (list) and 'b' (dict)
+    return "a={};b={}".format(sum(x['a']), sorted(x['b'].items()))
+$$;
+-- result:
+-- !result
+select nested_struct(named_struct('a', [10,20,30], 'b', map('x', 1, 'y', 2)));
+-- result:
+a=60;b=[('x', 1), ('y', 2)]
+-- !result
+CREATE FUNCTION return_arr_map(int) RETURNS array<map<string,int>>
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    return [{"a": x}, {"b": x + 1}]
+$$;
+-- result:
+-- !result
+[UC]select return_arr_map(7);
+CREATE FUNCTION return_struct_arr(int) RETURNS struct<x int, y array<int>>
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    return {"x": x, "y": [x, x + 1, x + 2]}
+$$;
+-- result:
+-- !result
+[UC]select return_struct_arr(3);
+CREATE FUNCTION add_one(int) RETURNS 
+int 
+properties(
+    "symbol" = "add", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def add(x):
+    return x + 1  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION add_one(bigint) RETURNS 
+bigint 
+properties(
+    "symbol" = "add", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS  
+$$ 
+def add(x):
+    return x + 1  
+$$;
+-- result:
+-- !result
+select add_one(1);
+-- result:
+2
+-- !result
+select add_one(2200000000);
+-- result:
+2200000001
+-- !result
+CREATE FUNCTION vector_echo(int) RETURNS 
+int 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return x  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION vector_echo(bigint) RETURNS 
+bigint 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return x 
+$$;
+-- result:
+-- !result
+CREATE FUNCTION vector_echo(string) RETURNS 
+string 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return type(x)  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION vector_echo(array<int>) RETURNS 
+array<int> 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return type(x)  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION get_type(struct<a int, b string>) RETURNS 
+struct<a int, b string> 
+properties(
+    "symbol" = "echo", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def echo(x):
+    return x 
+$$;
+-- result:
+E: (1064, 'function already exists')
+-- !result
+CREATE FUNCTION vectorized_add_one(int) RETURNS 
+int 
+properties(
+    "symbol" = "add", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+def add(x):
+    return x + 1  
+$$;
+-- result:
+-- !result
+CREATE FUNCTION vectorized_add_one(bigint) RETURNS 
+bigint 
+properties(
+    "symbol" = "add", 
+    "type" = "Python",     
+    "file" = "inline",
+    "input" = "arrow"
+)
+AS  
+$$ 
+import pyarrow.compute as pc
+
+def add(x):
+    return pc.add(x, 1)
+$$;
+-- result:
+-- !result
+select add_one(1);
+-- result:
+2
+-- !result
+select add_one(2200000000);
+-- result:
+2200000001
+-- !result
+
+CREATE FUNCTION get_invalid_input(boolean) RETURNS
+string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "invalid"
+)
+AS
+$$
+def echo(x):
+    return type(x)
+$$;
+-- result:
+[REGEX].*unknown input type.*
+-- !result
+CREATE FUNCTION get_invalid_input(boolean) RETURNS
+string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "invalid",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    return type(x)
+$$;
+-- result:
+[REGEX].*inline function file should be.*
+-- !result

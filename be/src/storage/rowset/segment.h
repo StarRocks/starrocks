@@ -37,20 +37,20 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 
+#include "base/concurrency/once.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
+#include "storage/base/short_key_index.h"
 #include "storage/delta_column_group.h"
-#include "storage/rowset/page_handle.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/options.h"
 #include "storage/rowset/page_pointer.h"
-#include "storage/short_key_index.h"
 #include "storage/tablet_schema.h"
-#include "util/faststring.h"
-#include "util/once.h"
 
 namespace starrocks {
 
@@ -70,6 +70,9 @@ class ColumnIterator;
 class Segment;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
+namespace lake {
+class TabletManager;
+}
 
 // A Segment is used to represent a segment in memory format. When segment is
 // generated, it won't be modified, so this struct aimed to help read operation.
@@ -82,26 +85,32 @@ using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 class Segment : public std::enable_shared_from_this<Segment> {
 public:
     // Like above but share the ownership of |unsafe_tablet_schema_ref|.
-    static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, const std::string& path,
+    static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info,
                                                    uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
-                                                   bool skip_fill_local_cache = true,
+                                                   const LakeIOOptions& lake_io_opts = {},
                                                    lake::TabletManager* tablet_manager = nullptr);
 
-    [[nodiscard]] static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                                     size_t* footer_length_hint,
-                                                     const FooterPointerPB* partial_rowset_footer);
+    static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                 size_t* footer_length_hint,
+                                                 const FooterPointerPB* partial_rowset_footer);
 
-    Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
-            lake::TabletManager* tablet_manager);
+    static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
+
+    Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
+            TabletSchemaCSPtr tablet_schema, lake::TabletManager* tablet_manager);
 
     ~Segment();
 
-    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
+    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                const LakeIOOptions& lake_io_opts);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
+    StatusOr<ChunkIteratorPtr> new_reusable_iterator(const Schema& iterator_schema, const Schema& output_schema,
+                                                     const SegmentReadOptions& read_options,
+                                                     ChunkIteratorPtr* reusable_slot);
 
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
                                                        const TabletSchemaCSPtr& read_tablet_schema);
@@ -114,16 +123,19 @@ public:
     // the elements in a column of a segment. The iterator starts from the beginning
     // of the column.
     //
-    // @param id The unique identifier of the column.
+    // @param column The column that need to be read.
     // @param path A pointer to the access path of the column.
     // @return A new iterator object for the specified column, or NotFound if the segment does not have the column.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(ColumnUID id, ColumnAccessPath* path);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(const TabletColumn& column, ColumnAccessPath* path);
 
     // Creates a new iterator for a specific column in a segment.
     //
-    // The main difference from `new_iterator` is, if the segment does not have the
-    // column, `new_column_iterator_or_default` will return an iterator that can read
-    // the default value of the column, if there is one.
+    // Difference from `new_iterator`:
+    //  - If the segment does not have the column, `new_column_iterator_or_default` will return an iterator that
+    //    can read the default value of the column, if there is one.
+    //  - If the type of the data stored in the segment file does not match the type of |column|, the iterator
+    //    returned from `new_column_iterator_or_default` will perform type conversion and return data that matches
+    //    the type of |column|.
     //
     // Note: If this column does not have a default value defined, but is nullable, then
     // NULL will be used as the default value.
@@ -139,6 +151,30 @@ public:
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
+    // Presence: the segment footer carries a full sort key index page (field 11). Resolved at
+    // open() from the footer without reading the page, so it needs neither load_index() nor a
+    // usability check. Presence does NOT imply the page is loaded or valid; a query must gate on
+    // use_full_sort_key_index() (which validates and lazily loads) before seeking off the page.
+    bool has_full_sort_key_index_page() const { return _has_full_sort_key_index_page; }
+
+    // Query read gate. True only when the read config is on AND the full sort key index page is
+    // present, loads, and passes validation (encoding/geometry/arity/order). Triggers the lazy
+    // load+validate on first call; a true return guarantees a non-null validated full decoder.
+    bool use_full_sort_key_index();
+
+    // Lazily read+parse+validate the full sort key index page (footer field 11) exactly once in a
+    // thread-safe way. On success publishes the full decoder and charges its memory; on any failure
+    // records permanent unusability (no retained allocation) and falls back to the legacy page.
+    // Returns whether the full page is usable.
+    bool ensure_full_sort_key_index_usable();
+
+    // Number of sort key columns encoded by the full sort key index page. Only valid after
+    // ensure_full_sort_key_index_usable() has published the full decoder.
+    size_t num_sort_key_columns() const {
+        DCHECK(_full_sk_index_decoder != nullptr);
+        return _full_sk_index_decoder->num_sort_key_columns();
+    }
+
     uint32_t num_rows_per_block() const {
         DCHECK(invoked(_load_index_once));
         return _sk_index_decoder->num_rows_per_block();
@@ -152,6 +188,18 @@ public:
     ShortKeyIndexIterator upper_bound(const Slice& key) const {
         DCHECK(invoked(_load_index_once));
         return _sk_index_decoder->upper_bound(key);
+    }
+
+    // Full-page counterparts of lower_bound()/upper_bound(). Only valid after
+    // ensure_full_sort_key_index_usable() has published the full decoder.
+    ShortKeyIndexIterator lower_bound_full(const Slice& key) const {
+        DCHECK(_full_sk_index_decoder != nullptr);
+        return _full_sk_index_decoder->lower_bound(key);
+    }
+
+    ShortKeyIndexIterator upper_bound_full(const Slice& key) const {
+        DCHECK(_full_sk_index_decoder != nullptr);
+        return _full_sk_index_decoder->upper_bound(key);
     }
 
     // This will return the last row block in this segment.
@@ -176,42 +224,79 @@ public:
 
     FileSystem* file_system() const { return _fs.get(); }
 
+    // Use this instead of file_system() whenever the FileSystem must outlive this Segment.
+    // The .vi reader is stored inside the tenann index cache entry, which is not bound to
+    // the Segment/SegmentIterator that loaded it, so a raw FileSystem* would dangle there.
+    const std::shared_ptr<FileSystem>& shared_file_system() const { return _fs; }
+
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
     const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }
 
-    const std::string& file_name() const { return _fname; }
+    const std::string& file_name() const { return _segment_file_info.path; }
+
+    const FileInfo& file_info() const { return _segment_file_info; }
 
     uint32_t num_rows() const { return _num_rows; }
 
+    // True when the segment footer explicitly marks no .vi file for this segment
+    // (e.g. the writer's vector index build threshold was not met). The
+    // SegmentIterator uses this to skip opening the .vi file and go straight to
+    // the brute-force distance-computation fallback.
+    bool skip_vector_index() const { return _skip_vector_index; }
+
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    [[nodiscard]] Status load_index(bool skip_fill_local_cache = true);
+    Status load_index(const LakeIOOptions& lake_io_opts = {});
     bool has_loaded_index() const;
+
+    Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
+                                       const IndexReadOptions& index_opt);
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
+    // Full sort key index decoder; non-null only after ensure_full_sort_key_index_usable() succeeds.
+    const ShortKeyIndexDecoder* full_sort_key_index_decoder() const { return _full_sk_index_decoder.get(); }
+
     size_t mem_usage() const;
 
-    int64_t get_data_size() {
-        auto res = _fs->get_file_size(_fname);
-        if (res.ok()) {
-            return res.value();
-        }
-        return 0;
-    }
+    StatusOr<int64_t> get_data_size() const;
+
+    lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
 
     // read short_key_index, for data check, just used in unit test now
-    [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
+    Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
     // for cloud native tablet metadata cache.
     // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
     // so the segment size in the cache needs to be updated when indexes are loading.
     void update_cache_size();
 
+    bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
+
+    const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
+
+    inline void turn_on_batch_update_cache_size() {
+#ifdef BE_TEST
+        if (!_s_allow_batch_update_mode) return;
+#endif
+        _batch_on_flags_counter.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void turn_off_batch_update_cache_size();
+
     DISALLOW_COPY_AND_MOVE(Segment);
 
+    // for ut test
+    void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+
+#ifdef BE_TEST
+    static void toggle_batch_update_cache_mode(bool enabled) { _s_allow_batch_update_mode = enabled; }
+#endif
+
 private:
+    friend struct SegmentZoneMapPruner;
+
     struct DummyDeleter {
         void operator()(const TabletSchema*) {}
     };
@@ -239,16 +324,24 @@ private:
         TabletSchemaCSPtr _schema;
     };
 
-    Status _load_index(bool skip_fill_local_cache);
+    Status _load_index(const LakeIOOptions& lake_io_opts);
+
+    // Read+parse+validate the full sort key index page into _full_sk_index_handle/_decoder and
+    // charge its incremental memory. Called at most once via ensure_full_sort_key_index_usable().
+    Status _load_full_sort_key_index();
 
     void _reset();
 
-    size_t _basic_info_mem_usage() const { return sizeof(Segment) + _fname.size(); }
+    size_t _basic_info_mem_usage() const { return sizeof(Segment) + _segment_file_info.path.size(); }
 
     size_t _short_key_index_mem_usage() const {
         size_t size = _sk_index_handle.mem_usage();
         if (_sk_index_decoder != nullptr) {
             size += _sk_index_decoder->mem_usage();
+        }
+        size += _full_sk_index_handle.mem_usage();
+        if (_full_sk_index_decoder != nullptr) {
+            size += _full_sk_index_decoder->mem_usage();
         }
         return size;
     }
@@ -256,21 +349,35 @@ private:
     size_t _column_index_mem_usage() const;
 
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
+    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                 const LakeIOOptions& lake_io_opts);
     Status _create_column_readers(SegmentFooterPB* footer);
 
+    Status _check_column_unique_id_uniqueness(SegmentFooterPB* footer,
+                                              std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal);
+
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
+    Status _prune_by_segment_zone_map(const SegmentReadOptions& read_options);
 
     bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
+
+    // Create an iterator for extended column
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_extended_column_iterator(const TabletColumn& column,
+                                                                            ColumnAccessPath* path);
 
     friend class SegmentIterator;
 
     std::shared_ptr<FileSystem> _fs;
-    std::string _fname;
+    FileInfo _segment_file_info;
     TabletSchemaWrapper _tablet_schema;
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
+    // Presence + page pointer for the optional full sort key index page (footer field 11). Set at
+    // open(); the page itself is loaded lazily by ensure_full_sort_key_index_usable().
+    bool _has_full_sort_key_index_page = false;
+    PagePointer _full_sort_key_index_page;
+    bool _skip_vector_index = false;
 
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
     // This means that this segment has no data for that column, which may be added
@@ -284,10 +391,26 @@ private:
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
+    // Full sort key index (footer field 11). Loaded, validated, and published together on the first
+    // full-key request; usability is a permanent, once-resolved tri-state.
+    enum class FullSortKeyIndexUsability : uint8_t { UNKNOWN, USABLE, UNUSABLE };
+    OnceFlag _load_full_sk_index_once;
+    std::atomic<FullSortKeyIndexUsability> _full_sort_key_index_usable{FullSortKeyIndexUsability::UNKNOWN};
+    PageHandle _full_sk_index_handle;
+    std::unique_ptr<ShortKeyIndexDecoder> _full_sk_index_decoder;
+
+    std::unique_ptr<FileEncryptionInfo> _encryption_info;
+
+    std::atomic_int _batch_on_flags_counter{0};
+    std::atomic_int _dirty_cache_counter{0};
+
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;
     // used to guarantee that segment will be opened at most once in a thread-safe way
     OnceFlag _open_once;
+#ifdef BE_TEST
+    static bool _s_allow_batch_update_mode;
+#endif
 };
 
 } // namespace starrocks

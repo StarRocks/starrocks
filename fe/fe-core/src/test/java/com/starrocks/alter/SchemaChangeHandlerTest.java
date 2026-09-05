@@ -34,72 +34,97 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.TestWithFeService;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+@TestMethodOrder(MethodName.class)
 public class SchemaChangeHandlerTest extends TestWithFeService {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerTest.class);
     private int jobSize = 0;
 
     @Override
+    protected void createStarrocksCluster() {
+        UtFrameUtils.createMinStarRocksCluster(false, runMode);
+    }
+
+    @Override
     protected void runBeforeAll() throws Exception {
+        // set some parameters to speedup test
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
         //create database db1
         createDatabase("test");
 
         //create tables
         String createAggTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_agg (\n" + "user_id LARGEINT NOT NULL,\n"
-                + "date DATE NOT NULL,\n" + "city VARCHAR(20),\n" + "age SMALLINT,\n" + "sex TINYINT,\n"
-                + "last_visit_date DATETIME REPLACE DEFAULT '1970-01-01 00:00:00',\n" + "cost BIGINT SUM DEFAULT '0',\n"
-                + "max_dwell_time INT MAX DEFAULT '0',\n" + "min_dwell_time INT MIN DEFAULT '99999')\n"
-                + "AGGREGATE KEY(user_id, date, city, age, sex)\n" + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+                    + "date DATE NOT NULL,\n" + "city VARCHAR(20),\n" + "age SMALLINT,\n" + "sex TINYINT,\n"
+                    + "last_visit_date DATETIME REPLACE DEFAULT '1970-01-01 00:00:00',\n" + "cost BIGINT SUM DEFAULT '0',\n"
+                    + "max_dwell_time INT MAX DEFAULT '0',\n" + "min_dwell_time INT MIN DEFAULT '99999')\n"
+                    + "AGGREGATE KEY(user_id, date, city, age, sex)\n" + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
+                    + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
         createTable(createAggTblStmtStr);
 
         String createUniqTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_uniq (\n" + "user_id LARGEINT NOT NULL,\n"
-                + "username VARCHAR(50) NOT NULL,\n" + "city VARCHAR(20),\n" + "age SMALLINT,\n" + "sex TINYINT,\n"
-                + "phone LARGEINT,\n" + "address VARCHAR(500),\n" + "register_time DATETIME)\n"
-                + "UNIQUE  KEY(user_id, username)\n" + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+                    + "username VARCHAR(50) NOT NULL,\n" + "city VARCHAR(20),\n" + "age SMALLINT,\n" + "sex TINYINT,\n"
+                    + "phone LARGEINT,\n" + "address VARCHAR(500),\n" + "register_time DATETIME)\n"
+                    + "UNIQUE  KEY(user_id, username)\n" + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
+                    + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
         createTable(createUniqTblStmtStr);
 
         String createDupTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup (\n" + "timestamp DATETIME,\n"
-                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
-                + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+                    + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                    + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                    + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
 
         createTable(createDupTblStmtStr);
 
         String createDupTbl2StmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup2 (\n" + "timestamp DATETIME,\n"
-                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
-                + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+                    + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                    + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                    + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
 
         createTable(createDupTbl2StmtStr);
 
         String createPKTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_pk (\n" + "timestamp DATETIME,\n"
-                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
-                + "op_time DATETIME)\n" + "PRIMARY  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+                    + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                    + "op_time DATETIME)\n" + "PRIMARY  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                    + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
 
         createTable(createPKTblStmtStr);
 
@@ -112,10 +137,11 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 Thread.sleep(1000);
             }
             LOG.info("alter job {} is done. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
 
-            Database db = GlobalStateMgr.getCurrentState().getDb(alterJobV2.getDbId());
-            OlapTable tbl = (OlapTable) db.getTable(alterJobV2.getTableId());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), alterJobV2.getTableId());
             while (tbl.getState() != OlapTable.OlapTableState.NORMAL) {
                 Thread.sleep(1000);
             }
@@ -123,341 +149,1104 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     }
 
     @Test
-    public void testAggAddOrDropColumn() throws Exception {
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+    public void testBuildSchemaMapAndGet() {
+        LinkedList<Column> schemaList = new LinkedList<>();
+        String colName1 = "__starrocks_shadow_c1";
+        String colName2 = "__starrocks_shadow_c2";
+        Column col1 = new Column(colName1, IntegerType.INT);
+        Column col2 = new Column(colName2, IntegerType.INT);
+        schemaList.add(col1);
+        schemaList.add(col2);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("sc_agg");
-        db.readLock();
+        Map<String, Column> schemaMap = SchemaChangeHandler.buildSchemaMapFromList(schemaList, true, true);
+        Column col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "c1", true, true);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, colName1, true, true);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "__starrocks_shadow_C2", true, true);
+        Assertions.assertNull(col);
+
+        schemaMap = SchemaChangeHandler.buildSchemaMapFromList(schemaList, true, false);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "c1", true, false);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, colName1, true, false);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "__starrocks_shadow_C2", true, false);
+        Assertions.assertEquals(col.getName(), colName2);
+
+        schemaMap = SchemaChangeHandler.buildSchemaMapFromList(schemaList, false, true);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "c1", false, true);
+        Assertions.assertNull(col);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, colName1, false, true);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "__starrocks_shadow_C2", false, true);
+        Assertions.assertNull(col);
+
+        schemaMap = SchemaChangeHandler.buildSchemaMapFromList(schemaList, false, false);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "c1", false, false);
+        Assertions.assertNull(col);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, colName1, false, false);
+        Assertions.assertEquals(col.getName(), colName1);
+        col = SchemaChangeHandler.getColumnFromSchemaMap(schemaMap, "__starrocks_shadow_C2", false, false);
+        Assertions.assertEquals(col.getName(), colName2);
+    }
+
+    @Test
+    public void testAggAddOrDropColumn() throws Exception {
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames(new ConnectContext()));
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_agg");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process agg add value column schema change
         String addValColStmtStr = "alter table test.sc_agg add column new_v1 int MAX default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        DDLStmtExecutor.execute(addValColStmt, connectContext);
         jobSize++;
         // check alter job, do not create job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         Assertions.assertEquals(jobSize, alterJobs.size());
 
-        db.readLock();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(10, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process agg add  key column schema change
         String addKeyColStmtStr = "alter table test.sc_agg add column new_k1 int default '1'";
         AlterTableStmt addKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addKeyColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addKeyColStmt);
+        DDLStmtExecutor.execute(addKeyColStmt, connectContext);
 
         //check alter job
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
         waitAlterJobDone(alterJobs);
 
-        db.readLock();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(11, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process agg drop value column schema change
         String dropValColStmtStr = "alter table test.sc_agg drop column new_v1";
         AlterTableStmt dropValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStmt);
+        DDLStmtExecutor.execute(dropValColStmt, connectContext);
         jobSize++;
         //check alter job, do not create job
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
 
-        db.readLock();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(10, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process agg drop key column with replace schema change, expect exception.
         String dropKeyColStmtStr = "alter table test.sc_agg drop column new_k1";
         AlterTableStmt dropKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropKeyColStmtStr);
-        Assertions.assertThrows(Exception.class,
-                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropKeyColStmt));
+        Assertions.assertThrows(Exception.class, () -> DDLStmtExecutor.execute(dropKeyColStmt, connectContext));
 
-        LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
-
-        String addRollUpStmtStr = "alter table test.sc_agg add rollup agg_rollup(user_id, max_dwell_time);";
-        AlterTableStmt addRollUpStmt = (AlterTableStmt) parseAndAnalyzeStmt(addRollUpStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addRollUpStmt);
-        // 2. check alter job
-        Map<Long, AlterJobV2> materializedViewAlterJobs = GlobalStateMgr.getCurrentState().getRollupHandler()
-                .getAlterJobsV2();
-        waitAlterJobDone(materializedViewAlterJobs);
-        Assertions.assertEquals(1, materializedViewAlterJobs.size());
-
-        LOG.info("getIndexIdToSchema 2: {}", tbl.getIndexIdToSchema());
+        LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexMetaIdToSchema());
 
         //process agg drop value column with rollup schema change
         String dropRollUpValColStmtStr = "alter table test.sc_agg drop column max_dwell_time";
         AlterTableStmt dropRollUpValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropRollUpValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropRollUpValColStmt);
+        DDLStmtExecutor.execute(dropRollUpValColStmt, connectContext);
         jobSize++;
         //check alter job, need create job
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
-        waitAlterJobDone(materializedViewAlterJobs);
 
-        db.readLock();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
-
-        //process agg add mul value column schema change
-        String addMultiValColStmtStr
-                = "alter table test.sc_agg add column new_v2 int MAX default '0', add column new_v3 int MAX default '1';";
-        AlterTableStmt addMultiValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addMultiValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addMultiValColStmt);
-        jobSize++;
-        //check alter job, do not create job
-        Assertions.assertEquals(jobSize, alterJobs.size());
     }
 
     @Test
     public void testUniqAddOrDropColumn() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames(new ConnectContext()));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("sc_uniq");
-        db.readLock();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_uniq");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(8, tbl.getBaseSchema().size());
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process uniq add value column schema change
         String addValColStmtStr = "alter table test.sc_uniq add column new_v1 int default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        DDLStmtExecutor.execute(addValColStmt, connectContext);
         jobSize++;
         //check alter job, do not create job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
 
-        db.readLock();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process uniq drop val column schema change
         String dropValColStmtStr = "alter table test.sc_uniq drop column new_v1";
         AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm);
+        DDLStmtExecutor.execute(dropValColStm, connectContext);
         jobSize++;
         //check alter job
         Assertions.assertEquals(jobSize, alterJobs.size());
-        db.readLock();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(8, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
     }
 
     @Test
     public void testDupAddOrDropColumn() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames(new ConnectContext()));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("sc_dup");
-        db.readLock();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_dup");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process uniq add value column schema change
         String addValColStmtStr = "alter table test.sc_dup add column new_v1 int default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        DDLStmtExecutor.execute(addValColStmt, connectContext);
         jobSize++;
         //check alter job, do not create job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
 
-        db.readLock();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(7, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process uniq drop val column schema change
         String dropValColStmtStr = "alter table test.sc_dup drop column new_v1";
         AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm);
+        DDLStmtExecutor.execute(dropValColStm, connectContext);
         jobSize++;
         //check alter job
         Assertions.assertEquals(jobSize, alterJobs.size());
-        db.readLock();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
     }
 
     @Test
     public void testModifyTableAddOrDropColumns() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("sc_dup2");
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_dup2");
+        Map<Long, AlterJobV2> alterJobs = globalStateMgr.getSchemaChangeHandler().getAlterJobsV2();
 
         // origin columns
-        Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
-        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexIdToSchema().entrySet()) {
+        Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
+        Map<Long, Long> indexToNewSchemaId = new HashMap<>();
+        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexMetaIdToSchema().entrySet()) {
             indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+            indexToNewSchemaId.put(entry.getKey(), globalStateMgr.getNextId());
         }
         List<Index> newIndexes = tbl.getCopiedIndexes();
 
         Assertions.assertDoesNotThrow(
-                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 100, 100, false));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .applyFastSchemaEvolutionMetaChange(db, tbl, indexSchemaMap, newIndexes, 100,
+                                            indexToNewSchemaId));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         Assertions.assertDoesNotThrow(
-                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 101, 101, true));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .applyFastSchemaEvolutionMetaChange(db, tbl, indexSchemaMap, newIndexes, 101,
+                                            indexToNewSchemaId));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         OlapTableState beforeState = tbl.getState();
         tbl.setState(OlapTableState.ROLLUP);
         Assertions.assertThrows(DdlException.class,
-                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 102, 102, false));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .applyFastSchemaEvolutionMetaChange(
+                                        db, tbl, indexSchemaMap, newIndexes, 102, indexToNewSchemaId));
         tbl.setState(beforeState);
-
-        Map<Long, LinkedList<Column>> indexSchemaMapInvalid2 = new HashMap<>(indexSchemaMap);
-
-        // value before key
-        indexSchemaMapInvalid2.get(tbl.getBaseIndexId()).add(0, new Column("kk", Type.INT));
-
-        Assertions.assertThrows(DdlException.class,
-                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid2, newIndexes, 103, 103, false));
-
-        Map<Long, LinkedList<Column>> indexSchemaMapInvalid3 = new HashMap<>(indexSchemaMap);
-
-        // not key
-        indexSchemaMapInvalid3.get(tbl.getBaseIndexId()).removeIf(Column::isKey);
-        Assertions.assertThrows(DdlException.class,
-                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid3, newIndexes, 104, 104, false));
-
-        Map<Long, LinkedList<Column>> emptyIndexMap = new HashMap<>();
-
-        Assertions.assertThrows(DdlException.class,
-                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, emptyIndexMap, newIndexes, 105, 105, false));
-
     }
 
     @Test
     public void testSetPrimaryIndexCacheExpireSec() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames(new ConnectContext()));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("sc_pk");
-        db.readLock();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_pk");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
         } finally {
-            db.readUnlock();
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         //process set properties
         String addValColStmtStr = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = '3600');";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        DDLStmtExecutor.execute(addValColStmt, connectContext);
 
         try {
             String addValColStmtStr2 = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = '-12');";
             AlterTableStmt addValColStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr2);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt2);
+            DDLStmtExecutor.execute(addValColStmt2, connectContext);
         } catch (Exception e) {
-            LOG.warn(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must not be less than 0"));
+            LOG.warn(e.getMessage(), e);
+            Assertions.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must not be less than 0"));
         }
 
         try {
             String addValColStmtStr3 = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = 'asd');";
             AlterTableStmt addValColStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr3);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt3);
+            DDLStmtExecutor.execute(addValColStmt3, connectContext);
         } catch (Exception e) {
-            LOG.warn(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
+            LOG.warn(e.getMessage(), e);
+            Assertions.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
         }
+    }
+
+    @Test
+    public void testAddReserveColumn() throws Exception {
+
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames(new ConnectContext()));
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_pk");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+        try {
+            Assertions.assertNotNull(tbl);
+            System.out.println(tbl.getName());
+            Assertions.assertEquals("StarRocks", tbl.getEngine());
+            Assertions.assertEquals(6, tbl.getBaseSchema().size());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+        }
+        Config.allow_system_reserved_names = true;
+
+        try {
+            String addValColStmtStr2 = "alter table test.sc_pk add column __op int";
+            AlterTableStmt addValColStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr2);
+            DDLStmtExecutor.execute(addValColStmt2, connectContext);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage(), e);
+            Assertions.assertTrue(e.getMessage().contains("Column name '__op' is reserved for primary key table"));
+        }
+
+        try {
+            String addValColStmtStr3 = "alter table test.sc_pk add column __row int";
+            AlterTableStmt addValColStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr3);
+            DDLStmtExecutor.execute(addValColStmt3, connectContext);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage(), e);
+            Assertions.assertTrue(e.getMessage().contains("Column name '__row' is reserved for primary key table"));
+        }
+        Config.allow_system_reserved_names = false;
+    }
+
+    @Test
+    public void testUpdateFlatJsonConfigMeta() throws Exception {
+        // Create a test table
+        String createTableStmt = "CREATE TABLE test.flat_json_test (\n" +
+                "id INT NOT NULL,\n" +
+                "data JSON\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("flat_json_test");
+        Assertions.assertNotNull(table);
+
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+
+        // Test case 1: Enable flat JSON with all properties
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result1 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties1,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result1);
+
+        // Verify the configuration was applied
+        Assertions.assertTrue(table.containsFlatJsonConfig());
+        FlatJsonConfig config1 = table.getFlatJsonConfig();
+        Assertions.assertTrue(config1.getFlatJsonEnable());
+        Assertions.assertEquals(0.1, config1.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.8, config1.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config1.getFlatJsonColumnMax());
+
+        // Test case 2: Try to set flat JSON properties when flat_json.enable is false - should throw exception
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.2");
+
+        try {
+            handler.updateFlatJsonConfigMeta(db, table.getId(), properties2,
+                    TTabletMetaType.FLAT_JSON_CONFIG);
+            Assertions.fail("Should throw exception when setting flat JSON properties with flat_json.enable=false");
+        } catch (RuntimeException e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("flat JSON configuration must be set after enabling flat JSON"));
+        }
+
+        // Test case 3: Update existing flat JSON configuration
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.3");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.9");
+
+        boolean result3 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties3,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result3);
+
+        // Verify the configuration was updated
+        FlatJsonConfig config3 = table.getFlatJsonConfig();
+        Assertions.assertTrue(config3.getFlatJsonEnable());
+        Assertions.assertEquals(0.3, config3.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.9, config3.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config3.getFlatJsonColumnMax()); // Should remain unchanged
+
+        // Test case 4: Disable flat JSON
+        Map<String, String> properties4 = new HashMap<>();
+        properties4.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
+
+        boolean result4 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties4,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result4);
+
+        // Verify flat JSON is disabled
+        FlatJsonConfig config4 = table.getFlatJsonConfig();
+        Assertions.assertFalse(config4.getFlatJsonEnable());
+
+        // Test case 5: Try to set properties when flat JSON is disabled - should throw exception
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "100");
+
+        try {
+            handler.updateFlatJsonConfigMeta(db, table.getId(), properties5,
+                    TTabletMetaType.FLAT_JSON_CONFIG);
+            Assertions.fail("Should throw exception when setting flat JSON properties with flat_json.enable=false");
+        } catch (RuntimeException e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("flat JSON configuration must be set after enabling flat JSON"));
+        }
+    }
+
+    @Test
+    public void testUpdateFlatJsonConfigMetaWithNoChange() throws Exception {
+        // Create a test table
+        String createTableStmt = "CREATE TABLE test.flat_json_no_change (\n" +
+                "id INT NOT NULL,\n" +
+                "data JSON\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("flat_json_no_change");
+        Assertions.assertNotNull(table);
+
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+
+        // First, set up flat JSON configuration
+        Map<String, String> initialProperties = new HashMap<>();
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result1 = handler.updateFlatJsonConfigMeta(db, table.getId(), initialProperties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result1);
+
+        // Now try to set the same values again - should return true but no actual change
+        Map<String, String> sameProperties = new HashMap<>();
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result2 = handler.updateFlatJsonConfigMeta(db, table.getId(), sameProperties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result2);
+
+        // Verify the configuration remains the same
+        FlatJsonConfig config = table.getFlatJsonConfig();
+        Assertions.assertTrue(config.getFlatJsonEnable());
+        Assertions.assertEquals(0.1, config.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.8, config.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config.getFlatJsonColumnMax());
+    }
+
+    @Test
+    public void testUpdateFlatJsonConfigMetaWithInvalidTable() throws Exception {
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        // Test with non-existent table ID
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+
+        boolean result = handler.updateFlatJsonConfigMeta(db, 99999L, properties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertFalse(result);
+    }
+
+    @Test
+    public void testAlterTableConflictClauses() throws Exception {
+        String createTableStmt =
+                "create table test.test_crash2(c1 varchar(255),c2 datetime, c3 bigint, c4 varchar(255)," +
+                        " c5 varchar(255)) " +
+                        " primary key(c1,c2) partition by date_trunc('day',c2) distributed by hash(c1) buckets 2" +
+                        " order by (c1,c3,c4,c5) PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+        { // reorder conflict
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c6 VARCHAR(255) " +
+                    "NULL COMMENT 'ccc', ORDER BY(c1, c3,c4,c6);";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterTableSql);
+            Assertions.assertEquals(2L, alterTableStmt.getAlterClauseList().size());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) db.getTable("test_crash2");
+            SchemaChangeHandler handler = new SchemaChangeHandler();
+            DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                    handler.process(alterTableStmt.getAlterClauseList(), db, table));
+            Assertions.assertTrue(exception.getMessage()
+                            .contains("MODIFY SORT KEY COLUMNS can not be combined with other alter operations"),
+                    exception.getMessage());
+        }
+        {
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c7 VARCHAR(255) " +
+                    "NULL COMMENT 'ccc', MODIFY COLUMN c1 COMMENT 'c1c1' ;";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterTableSql);
+            Assertions.assertEquals(2L, alterTableStmt.getAlterClauseList().size());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) db.getTable("test_crash2");
+            SchemaChangeHandler handler = new SchemaChangeHandler();
+            DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                    handler.process(alterTableStmt.getAlterClauseList(), db, table));
+            Assertions.assertTrue(exception.getMessage()
+                            .contains("MODIFY COLUMN COMMENT can not be combined with other alter operations"),
+                    exception.getMessage());
+        }
+        {
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c8 VARCHAR(255) " +
+                    "NULL COMMENT 'c8c8', DISTRIBUTED BY HASH(c2) BUCKETS 2;";
+            SemanticException exception = Assertions.assertThrows(SemanticException.class, () ->
+                    parseAndAnalyzeStmt(alterTableSql));
+            Assertions.assertTrue(
+                    exception.getMessage().contains("Alter operation OPTIMIZE conflicts with operation SCHEMA_CHANGE"),
+                    exception.getMessage());
+        }
+    }
+
+    @Test
+    public void testAlterTableAddComplexTypeDefaultValue() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_default (\n" +
+                "id INT NOT NULL,\n" +
+                "name STRING\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_complex_default");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+
+        String alterSql1 = "ALTER TABLE test.test_complex_default ADD COLUMN arr ARRAY<INT> DEFAULT [1, 2, 3]";
+        AlterTableStmt alterStmt1 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql1);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt1.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(3, table.getBaseSchema().size());
+        Column arrCol = table.getColumn("arr");
+        Assertions.assertNotNull(arrCol);
+        Assertions.assertTrue(arrCol.getType().isArrayType());
+        Assertions.assertNotNull(arrCol.getDefaultExpr());
+
+        String alterSql2 = "ALTER TABLE test.test_complex_default ADD COLUMN mp MAP<STRING, INT> DEFAULT map{'k1': 1, 'k2': 2}";
+        AlterTableStmt alterStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql2);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt2.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(4, table.getBaseSchema().size());
+        Column mpCol = table.getColumn("mp");
+        Assertions.assertNotNull(mpCol);
+        Assertions.assertTrue(mpCol.getType().isMapType());
+        Assertions.assertNotNull(mpCol.getDefaultExpr());
+
+        String alterSql3 = "ALTER TABLE test.test_complex_default ADD COLUMN st STRUCT<id INT, name STRING> " +
+                "DEFAULT row(1, 'test')";
+        AlterTableStmt alterStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql3);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt3.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(5, table.getBaseSchema().size());
+        Column stCol = table.getColumn("st");
+        Assertions.assertNotNull(stCol);
+        Assertions.assertTrue(stCol.getType().isStructType());
+        Assertions.assertNotNull(stCol.getDefaultExpr());
+
+        String alterSql4 = "ALTER TABLE test.test_complex_default ADD COLUMN" +
+                " nested_arr ARRAY<STRUCT<id INT, tags ARRAY<STRING>>> DEFAULT [row(1, ['a', 'b']), row(2, ['c', 'd'])]";
+        AlterTableStmt alterStmt4 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql4);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt4.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(6, table.getBaseSchema().size());
+        Column nestedCol = table.getColumn("nested_arr");
+        Assertions.assertNotNull(nestedCol);
+        Assertions.assertTrue(nestedCol.getType().isArrayType());
+        Assertions.assertNotNull(nestedCol.getDefaultExpr());
+    }
+
+    @Test
+    public void testAlterTableComplexTypeRequiresFastSchemaEvolution() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_no_fast (\n" +
+                "id INT NOT NULL,\n" +
+                "name STRING\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'false'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_complex_no_fast");
+        Assertions.assertNotNull(table);
+
+        String alterSql = "ALTER TABLE test.test_complex_no_fast ADD COLUMN arr ARRAY<INT> DEFAULT [1, 2, 3]";
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt.getAlterClauseList(), db, table);
+        });
+
+        Assertions.assertTrue(exception.getMessage().contains("Complex type (ARRAY/MAP/STRUCT) " +
+                "default values require fast schema evolution"), exception.getMessage());
+    }
+
+    @Test
+    public void testAlterTableComplexTypeInvalidExpression() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_invalid (\n" +
+                "id INT NOT NULL\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        String alterSql1 = "ALTER TABLE test.test_complex_invalid ADD COLUMN arr ARRAY<DATETIME> DEFAULT [now()]";
+        SemanticException exception1 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql1));
+        Assertions.assertTrue(exception1.getMessage().contains("Function 'now' is not supported"),
+                exception1.getMessage());
+
+        String alterSql2 = "ALTER TABLE test.test_complex_invalid ADD COLUMN st STRUCT<id INT, name STRING> DEFAULT row(null, " +
+                "'test')";
+        SemanticException exception2 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql2));
+        Assertions.assertTrue(exception2.getMessage().contains("NULL literal is not supported"),
+                exception2.getMessage());
+
+        String alterSql3 = "ALTER TABLE test.test_complex_invalid ADD COLUMN arr2 ARRAY<INT> DEFAULT [1+2, 3*4]";
+        SemanticException exception3 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql3));
+        Assertions.assertTrue(exception3.getMessage().contains("ArithmeticExpr' is not supported"),
+                exception3.getMessage());
+    }
+
+    @Test
+    public void testAlterTableAddColumnDefaultCurrentTimestampPreservesGenerator() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_alter_add_now (\n" +
+                "id BIGINT NOT NULL\n" +
+                ") PRIMARY KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_alter_add_now");
+        Assertions.assertNotNull(table);
+
+        String alterSql = "ALTER TABLE test.test_alter_add_now ADD COLUMN ts DATETIME DEFAULT current_timestamp";
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt.getAlterClauseList(), db, table);
+        });
+        jobSize++;
+
+        Column tsCol = table.getColumn("ts");
+        Assertions.assertNotNull(tsCol);
+        Assertions.assertNotNull(tsCol.getDefaultExpr());
+        // ALTER-time string is preserved on defaultValue so BE can backfill pre-existing rows.
+        Assertions.assertNotNull(tsCol.getDefaultValue(),
+                "ALTER-time materialization must be kept for BE backfill of pre-existing rows");
+        Assertions.assertEquals(Column.DefaultValueType.CONST, tsCol.getDefaultValueType());
+
+        // Metadata callers (DESCRIBE, information_schema.columns) must surface the generator, not the
+        // frozen literal stashed in defaultValue by the schema-change backfill path.
+        List<String> extras = Lists.newArrayList();
+        Assertions.assertEquals("CURRENT_TIMESTAMP", tsCol.getMetaDefaultValue(extras));
+        Assertions.assertTrue(extras.contains("DEFAULT_GENERATED"),
+                "current_timestamp default must be reported as DEFAULT_GENERATED");
+    }
+
+    @Test
+    public void testSortKeyUpdatedAfterAddKeyColumnAgg() throws Exception {
+        createTable("CREATE TABLE test.sc_agg_sort_key (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 INT SUM DEFAULT '0'\n"
+                + ") AGGREGATE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg_sort_key");
+        doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_agg_sort_key");
+    }
+
+    @Test
+    public void testSortKeyUpdatedAfterAddKeyColumnUniq() throws Exception {
+        createTable("CREATE TABLE test.sc_uniq_sort_key (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 VARCHAR(1024)\n"
+                + ") UNIQUE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_uniq_sort_key");
+        doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_uniq_sort_key");
+    }
+
+    @Test
+    public void testSortKeyFallbackToIndexesWhenUniqueIdsMissing() throws Exception {
+        createTable("CREATE TABLE test.sc_agg_sort_key_fallback (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 INT SUM DEFAULT '0'\n"
+                + ") AGGREGATE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg_sort_key_fallback");
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), indexMeta.getSortKeyIdxes());
+        Assertions.assertNotNull(indexMeta.getSortKeyUniqueIds());
+
+        // Emulate legacy metadata: sort key indexes exist but unique ids are absent.
+        indexMeta.setSortKeyUniqueIds(null);
+        indexMeta.getSchema().get(1).setUniqueId(Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+
+        executeAlterAndWaitDone("alter table test.sc_agg_sort_key_fallback add column new_v1 int MAX default '0'");
+
+        MaterializedIndexMeta updatedIndexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), updatedIndexMeta.getSortKeyIdxes());
+        Assertions.assertNull(updatedIndexMeta.getSortKeyUniqueIds());
+    }
+
+    private void doTestSortKeyUpdatedAfterAddKeyColumn(OlapTable tbl, String qualifiedName) throws Exception {
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId()).getSortKeyIdxes());
+
+        // Add a key column with positional clause (AFTER k2)
+        executeAlterAndWaitDone("alter table " + qualifiedName + " add column k_new1 int key after k2");
+        Assertions.assertEquals("k0", tbl.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k1", tbl.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k2", tbl.getBaseSchema().get(2).getName());
+        Assertions.assertEquals("k_new1", tbl.getBaseSchema().get(3).getName());
+        Assertions.assertEquals("k3", tbl.getBaseSchema().get(4).getName());
+        assertSortKey(tbl, Arrays.asList(4, 2, 1, 0, 3));
+
+        // Add another key column at the default (last key) position
+        executeAlterAndWaitDone("alter table " + qualifiedName + " add column k_new2 int key default '0'");
+        Assertions.assertEquals("k0", tbl.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k1", tbl.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k2", tbl.getBaseSchema().get(2).getName());
+        Assertions.assertEquals("k_new1", tbl.getBaseSchema().get(3).getName());
+        Assertions.assertEquals("k3", tbl.getBaseSchema().get(4).getName());
+        Assertions.assertEquals("k_new2", tbl.getBaseSchema().get(5).getName());
+        assertSortKey(tbl, Arrays.asList(4, 2, 1, 0, 3, 5));
+    }
+
+
+    @Test
+    public void testModifyColumnCommentOnlyForDuplicateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_dup (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_dup",
+                "ALTER TABLE test.cmt_dup MODIFY COLUMN v1 INT COMMENT 'dup comment';",
+                "v1", "dup comment");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyForAggregateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_agg (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_agg",
+                "ALTER TABLE test.cmt_agg MODIFY COLUMN v1 INT SUM COMMENT 'agg comment';",
+                "v1", "agg comment");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyForUniqueTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_uniq (k1 INT, v1 INT) UNIQUE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_uniq",
+                "ALTER TABLE test.cmt_uniq MODIFY COLUMN v1 INT COMMENT 'uniq comment';",
+                "v1", "uniq comment");
+    }
+
+    // A comment-only MODIFY COLUMN takes the lightweight path even for a primary key table's key column,
+    // which the regular processModifyColumn path rejects ("Can not modify key column ... for primary key table").
+    @Test
+    public void testModifyColumnCommentOnlyForPrimaryKeyTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_pk (k1 INT, v1 INT) PRIMARY KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_pk",
+                "ALTER TABLE test.cmt_pk MODIFY COLUMN k1 INT COMMENT 'pk key comment';",
+                "k1", "pk key comment");
+        assertCommentOnlyModify("cmt_pk",
+                "ALTER TABLE test.cmt_pk MODIFY COLUMN v1 INT COMMENT 'pk value comment';",
+                "v1", "pk value comment");
+    }
+
+    // On an AGGREGATE table the aggregation method is omitted for key columns, so MODIFY COLUMN k1 INT COMMENT '...'
+    // rebuilds k1 with no aggregation type; isCommentOnlyModification must infer the key flag from "no aggregation
+    // method == key column" (the AGG_KEYS branch), otherwise the comment-only change on the key column would be
+    // misclassified and spawn a schema change job.
+    @Test
+    public void testModifyColumnCommentOnlyForKeyColumnOfAggregateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_agg_key (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_agg_key",
+                "ALTER TABLE test.cmt_agg_key MODIFY COLUMN k1 INT COMMENT 'agg key comment';",
+                "k1", "agg key comment");
+    }
+
+    // On a DUPLICATE table the helper only treats a MODIFY COLUMN target as a key column when the clause carries the
+    // KEY keyword (otherwise it fills in the NONE value-column aggregation). So a comment-only change on a key column
+    // must spell out KEY -- "MODIFY COLUMN k1 INT KEY COMMENT '...'" -- for the rebuilt column to match the stored key
+    // column and take the lightweight path.
+    @Test
+    public void testModifyColumnCommentOnlyForKeyColumnOfDuplicateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_dup_key (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_dup_key",
+                "ALTER TABLE test.cmt_dup_key MODIFY COLUMN k1 INT KEY COMMENT 'dup key comment';",
+                "k1", "dup key comment");
+    }
+
+    // Same as the DUPLICATE case: on a UNIQUE table a key column omitting KEY would be rebuilt as a REPLACE value
+    // column, so the comment-only clause has to carry the KEY keyword to stay on the lightweight path.
+    @Test
+    public void testModifyColumnCommentOnlyForKeyColumnOfUniqueTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_uniq_key (k1 INT, v1 INT) UNIQUE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_uniq_key",
+                "ALTER TABLE test.cmt_uniq_key MODIFY COLUMN k1 INT KEY COMMENT 'uniq key comment';",
+                "k1", "uniq key comment");
+    }
+
+    // Reverse of testModifyColumnCommentOnlyForKeyColumnOfDuplicateTable: omitting the KEY keyword makes the helper
+    // rebuild k1 as a NONE value column, so the modify is no longer comment-only and demoting the sole key column is
+    // rejected. The comment must stay unchanged.
+    @Test
+    public void testModifyKeyColumnCommentWithoutKeyKeywordFailsForDuplicateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_dup_key_nokey (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertModifyColumnFails("cmt_dup_key_nokey",
+                "ALTER TABLE test.cmt_dup_key_nokey MODIFY COLUMN k1 INT COMMENT 'dup key comment';",
+                "k1");
+    }
+
+    // Reverse of testModifyColumnCommentOnlyForKeyColumnOfUniqueTable: omitting the KEY keyword makes the helper
+    // rebuild k1 as a REPLACE value column, so the modify is rejected and the comment stays unchanged.
+    @Test
+    public void testModifyKeyColumnCommentWithoutKeyKeywordFailsForUniqueTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_uniq_key_nokey (k1 INT, v1 INT) UNIQUE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertModifyColumnFails("cmt_uniq_key_nokey",
+                "ALTER TABLE test.cmt_uniq_key_nokey MODIFY COLUMN k1 INT COMMENT 'uniq key comment';",
+                "k1");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyCannotCombineWithOtherClause() throws Exception {
+        createTable("CREATE TABLE test.cmt_combine (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        String alterSql = "ALTER TABLE test.cmt_combine MODIFY COLUMN v1 INT COMMENT 'x', ADD COLUMN v2 INT;";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_combine");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
+        Assertions.assertTrue(exception.getMessage()
+                        .contains("MODIFY COLUMN COMMENT can not be combined with other alter operations"),
+                exception.getMessage());
+    }
+
+    @Test
+    public void testModifyColumnRepositionIsNotCommentOnly() throws Exception {
+        createTable("CREATE TABLE test.cmt_reposition (k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_reposition");
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.cmt_reposition MODIFY COLUMN v2 INT AFTER k1;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        // Remove the job this test created from the shared global alterJobsV2 map so it does not skew the
+        // absolute job-count assertions in sibling tests
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
+    // Omitting an explicit aggregation type on an AGGREGATE table value column (v INT SUM -> v INT) is a real
+    // schema change, not a comment-only one: the stored SUM is explicit user schema, so isCommentOnlyModification
+    // must NOT inherit it. The clause has to fall through to processModifyColumn, which treats the missing
+    // aggregation as turning the value column into a key column and rejects it on this table.
+    @Test
+    public void testModifyColumnOmittingExplicitAggregationIsNotCommentOnly() throws Exception {
+        createTable("CREATE TABLE test.cmt_agg_omit (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_agg_omit");
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.cmt_agg_omit MODIFY COLUMN v1 INT COMMENT 'agg comment';");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
+        // It must not have been silently routed to the comment-only path: the comment stays unchanged.
+        Assertions.assertEquals("", table.getColumn("v1").getComment(), exception.getMessage());
+    }
+
+    @Test
+    public void testNoOpModifyColumnCanCombineWithOtherClause() throws Exception {
+        createTable("CREATE TABLE test.noop_batch_dup (k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("noop_batch_dup");
+        // "MODIFY COLUMN v1 INT" changes nothing (no-op); batched with a real change on v2.
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.noop_batch_dup MODIFY COLUMN v1 INT, MODIFY COLUMN v2 BIGINT;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        // Must not throw the comment-combine error; the no-op clause stays on the schema-change path.
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        // Remove the job this test created from the shared global alterJobsV2 map so it does not skew the
+        // absolute job-count assertions in sibling tests
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
+    @Test
+    public void testNoOpModifyColumnCanCombineWithOtherClauseOnPrimaryKeyTable() throws Exception {
+        createTable("CREATE TABLE test.noop_batch_pk (k1 INT NOT NULL, v10 VARCHAR(40) NULL, v11 INT NULL) "
+                + "PRIMARY KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("noop_batch_pk");
+        // "MODIFY COLUMN v10 VARCHAR(40)" is a no-op (v10 already is VARCHAR(40)); batched with a real change on v11.
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.noop_batch_pk MODIFY COLUMN v10 VARCHAR(40), MODIFY COLUMN v11 BIGINT;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
+    private void assertCommentOnlyModify(String tableName, String alterSql, String columnName, String expectedComment)
+            throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        Assertions.assertNotNull(table);
+
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        // A comment-only MODIFY COLUMN must take the lightweight path: no schema change job is created and
+        // the table stays in NORMAL state, while the column comment is updated in place.
+        Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(expectedComment, table.getColumn(columnName).getComment());
+    }
+
+    private void assertModifyColumnFails(String tableName, String alterSql, String columnName) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        Assertions.assertNotNull(table);
+        String originalComment = table.getColumn(columnName).getComment();
+
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
+
+        // The rejected modify must not have been routed to the comment-only path: the comment stays unchanged, no
+        // schema change job is created, and the table remains NORMAL.
+        Assertions.assertEquals(originalComment, table.getColumn(columnName).getComment(), exception.getMessage());
+        Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    private void assertSortKey(OlapTable tbl, List<Integer> expectedSortKeyIndexes) {
+        List<Column> columns = tbl.getBaseSchema();
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(expectedSortKeyIndexes, indexMeta.getSortKeyIdxes());
+        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
+        Assertions.assertNotNull(sortKeyUniqueIds);
+        Assertions.assertEquals(expectedSortKeyIndexes.size(), sortKeyUniqueIds.size());
+        for (int i = 0; i < expectedSortKeyIndexes.size(); i++) {
+            Assertions.assertEquals(columns.get(expectedSortKeyIndexes.get(i)).getUniqueId(),
+                    (int) sortKeyUniqueIds.get(i));
+        }
+    }
+
+    private void executeAlterAndWaitDone(String sql) throws Exception {
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(sql);
+        DDLStmtExecutor.execute(alterStmt, connectContext);
+        jobSize++;
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        waitAlterJobDone(alterJobs);
     }
 }

@@ -1,0 +1,30 @@
+-- name: test_ivm_having_reject
+-- HAVING that references an aggregate must be rejected at CREATE: aggregate IVM
+-- is UPSERT-only, so a group crossing the HAVING threshold can't be maintained.
+create external catalog ivm_ice_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog ivm_ice_${uuid0};
+create database ivm_ice_db_${uuid0};
+use ivm_ice_db_${uuid0};
+create table base (region string, amount int, score int);
+insert into base values ('CN', 30, 1), ('CN', 40, 2), ('US', 5, 3);
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+CREATE MATERIALIZED VIEW mv_having
+DISTRIBUTED BY HASH(region) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, SUM(amount) AS s, COUNT(*) AS c
+FROM ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base
+GROUP BY region
+HAVING SUM(amount) > 10;
+drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+drop database ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
+drop catalog ivm_ice_${uuid0};
+drop database db_${uuid0};

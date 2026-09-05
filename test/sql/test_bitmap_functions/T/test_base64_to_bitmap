@@ -1,0 +1,53 @@
+-- name: test_base64_to_bitmap
+
+select base64_to_bitmap(null);
+
+select base64_to_bitmap('');
+
+select base64_to_bitmap('!!!invalid!!!');
+
+select base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAA');
+
+select bitmap_to_string(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'));
+
+select bitmap_count(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'));
+
+select bitmap_min(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'));
+
+select bitmap_max(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'));
+
+select bitmap_contains(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'), 95);
+
+select bitmap_contains(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'), 200);
+
+select bitmap_to_string(bitmap_and(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'), base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA')));
+
+-- test with table to exercise the const optimization in prepared statements
+create table t_base64_bitmap_test (k int);
+
+insert into t_base64_bitmap_test values (1), (2), (3);
+
+select k, bitmap_to_string(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA')) from t_base64_bitmap_test order by k;
+
+drop table t_base64_bitmap_test;
+
+-- test bitmap_contains(base64_to_bitmap(const), col) as a WHERE predicate
+-- exercises the const optimization in the scan/filter path
+create table t_base64_bitmap_pred (k int) properties('replication_num'='1');
+insert into t_base64_bitmap_pred values (90), (95), (100), (200), (50);
+select k from t_base64_bitmap_pred where bitmap_contains(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'), k) order by k;
+drop table t_base64_bitmap_pred;
+
+-- test ALLOW_THROW_EXCEPTION mode: truncated base64 should cause error
+set sql_mode='ALLOW_THROW_EXCEPTION';
+
+-- constant path: error raised during prepare
+select base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAA');
+
+-- non-constant path: error raised during evaluate
+create table t_base64_bitmap_nonconst (k int, b varchar(200));
+insert into t_base64_bitmap_nonconst values (1, 'CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAA');
+select k, bitmap_to_string(base64_to_bitmap(b)) from t_base64_bitmap_nonconst order by k;
+drop table t_base64_bitmap_nonconst;
+
+set sql_mode='';

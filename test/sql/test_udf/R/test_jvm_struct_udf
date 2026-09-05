@@ -1,0 +1,76 @@
+-- name: test_jvm_struct_udf @no_arrow_flight_sql
+CREATE FUNCTION echo_struct_a(struct<`key` int, `value` string>)
+RETURNS struct<`key` int, `value` string>
+PROPERTIES (
+    "symbol" = "EchoStructA",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/struct.jar"
+);
+-- result:
+-- !result
+CREATE TABLE t_struct (
+    id INT,
+    stru1 struct<`key` int, `value` string>,
+    stru2 struct<`value` string, `key` int>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_struct values
+    (1, row(1, 'hello'), row('world', 2)),
+    (2, row(3, 'foo'), row('bar', 4));
+-- result:
+-- !result
+select echo_struct_a(row(1, 'hello'));
+-- result:
+{"key":1,"value":"hello"}
+-- !result
+select echo_struct_a(stru1) from t_struct order by id;
+-- result:
+{"key":1,"value":"hello"}
+{"key":3,"value":"foo"}
+-- !result
+set sql_mode= "STRUCT_CAST_BY_NAME";
+-- result:
+-- !result
+select echo_struct_a(stru2) from t_struct order by id;
+-- result:
+{"key":2,"value":"world"}
+{"key":4,"value":"bar"}
+-- !result
+set sql_mode= "";
+-- result:
+-- !result
+CREATE FUNCTION echo_array_struct_a(array<struct<`key` int, `value` string>>)
+RETURNS array<struct<`key` int, `value` string>>
+PROPERTIES (
+    "symbol" = "EchoStructArray",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/struct.jar"
+);
+-- result:
+-- !result
+select echo_array_struct_a([row(1, 'hello'), row(2, 'world')]);
+-- result:
+[{"key":1,"value":"hello"},{"key":2,"value":"world"}]
+-- !result
+select echo_array_struct_a([stru1]) from t_struct;
+-- result:
+[{"key":1,"value":"hello"}]
+[{"key":3,"value":"foo"}]
+-- !result
+CREATE FUNCTION echo_nested_struct(struct<a struct<`key` int, `value` string>, lists array<struct<`key` int, `value` string>>>)
+RETURNS struct<a struct<`key` int, `value` string>, lists array<struct<`key` int, `value` string>>>
+PROPERTIES (
+    "symbol" = "EchoStructB",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/struct.jar"
+);
+-- result:
+-- !result
+select echo_nested_struct(row(row(0, "value0"), [row(1, "value1"), row(2, "value2")]));
+-- result:
+{"a":{"key":0,"value":"value0"},"lists":[{"key":1,"value":"value1"},{"key":2,"value":"value2"}]}
+-- !result

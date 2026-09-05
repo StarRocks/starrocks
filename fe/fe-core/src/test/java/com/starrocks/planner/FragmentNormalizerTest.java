@@ -16,22 +16,32 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Range;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
-
-import org.junit.Assert;
-import org.junit.Test;
 
 public class FragmentNormalizerTest {
 
@@ -50,9 +60,9 @@ public class FragmentNormalizerTest {
         upperKey.pushColumn(upper, partitionColumn.getPrimitiveType());
         upperSuccKey.pushColumn(upperSucc, partitionColumn.getPrimitiveType());
 
-        Assert.assertEquals(lowerKey.successor(), lowerSuccKey);
-        Assert.assertEquals(upperKey.successor(), upperSuccKey);
-        Assert.assertEquals(maxKey.successor(), maxKey);
+        Assertions.assertEquals(lowerKey.successor(), lowerSuccKey);
+        Assertions.assertEquals(upperKey.successor(), upperSuccKey);
+        Assertions.assertEquals(maxKey.successor(), maxKey);
 
         Object[][] cases = new Object[][] {{Range.open(lowerKey, upperKey), Range.closedOpen(lowerSuccKey, upperKey)},
                 {Range.openClosed(lowerKey, upperKey), Range.closedOpen(lowerSuccKey, upperSuccKey)},
@@ -67,13 +77,13 @@ public class FragmentNormalizerTest {
         for (Object[] tc : cases) {
             Range<PartitionKey> range = (Range<PartitionKey>) tc[0];
             Range<PartitionKey> targetRange = (Range<PartitionKey>) tc[1];
-            Assert.assertEquals(targetRange, FragmentNormalizer.toClosedOpenRange(range));
+            Assertions.assertEquals(targetRange, FragmentNormalizer.toClosedOpenRange(range));
         }
     }
 
     @Test
     public void testToClosedAndOpenRangeForDate() throws AnalysisException {
-        Column partitionColumn = new Column("dt", Type.fromPrimitiveType(PrimitiveType.DATE));
+        Column partitionColumn = new Column("dt", DateType.DATE);
         LiteralExpr lower = new DateLiteral(2022, 1, 1);
         LiteralExpr lowerSucc = new DateLiteral(2022, 1, 2);
         LiteralExpr upper = new DateLiteral(2022, 1, 10);
@@ -83,7 +93,7 @@ public class FragmentNormalizerTest {
 
     @Test
     public void testToClosedAndOpenRangeForDatetime() throws AnalysisException {
-        Column partitionColumn = new Column("ts", Type.fromPrimitiveType(PrimitiveType.DATETIME));
+        Column partitionColumn = new Column("ts", DateType.DATETIME);
         LiteralExpr lower = new DateLiteral(2022, 1, 1, 11, 23, 59, 0);
         LiteralExpr lowerSucc = new DateLiteral(2022, 1, 1, 11, 24, 0, 0);
         LiteralExpr upper = new DateLiteral(2022, 1, 10, 23, 59, 59, 0);
@@ -101,7 +111,7 @@ public class FragmentNormalizerTest {
                 PrimitiveType.TINYINT,
         };
         for (PrimitiveType ptype : integerPtypes) {
-            Type type = Type.fromPrimitiveType(ptype);
+            Type type = TypeFactory.createType(ptype);
             long secondMaxValue = (1L << (ptype.getTypeSize() * 8 - 1)) - 2;
             Column partitionColumn = new Column("k0", type);
             LiteralExpr lower = new IntLiteral(1, type);
@@ -114,7 +124,7 @@ public class FragmentNormalizerTest {
 
     @Test
     public void testToClosedAndOpenRangeForLargeInt() throws AnalysisException {
-        Column partitionColumn = new Column("k0", Type.fromPrimitiveType(PrimitiveType.LARGEINT));
+        Column partitionColumn = new Column("k0", IntegerType.LARGEINT);
         LiteralExpr lower = new LargeIntLiteral("1");
         LiteralExpr lowerSucc = new LargeIntLiteral("2");
         LiteralExpr upper =
@@ -122,5 +132,46 @@ public class FragmentNormalizerTest {
         LiteralExpr upperSucc =
                 new LargeIntLiteral(BigInteger.ONE.shiftLeft(127).subtract(BigInteger.valueOf(1)).toString());
         testHelper(partitionColumn, lower, lowerSucc, upper, upperSucc);
+    }
+
+    @Test
+    public void testNondetermisticTimeFunction() {
+        FragmentNormalizer fragmentNormalizer = new FragmentNormalizer(null, null);
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        for (String funcName : FunctionSet.nonDeterministicTimeFunctions) {
+            String sql = String.format("select %s()", funcName);
+            StatementBase statementBase;
+            try {
+                statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+                com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            Expr expr = selectRelation.getSelectList().getItems().get(0).getExpr();
+            Assertions.assertTrue(expr instanceof FunctionCallExpr);
+            Assertions.assertTrue(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+        }
+
+        for (String funcName : FunctionSet.nonDeterministicTimeFunctions) {
+            String sql = String.format("select %s('2022-12-01')", funcName);
+            StatementBase statementBase;
+            try {
+                statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+                com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            Expr expr = selectRelation.getSelectList().getItems().get(0).getExpr();
+            Assertions.assertTrue(expr instanceof FunctionCallExpr);
+            if (funcName.equals(FunctionSet.NOW)) {
+                Assertions.assertTrue(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+            } else {
+                Assertions.assertFalse(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+            }
+        }
     }
 }

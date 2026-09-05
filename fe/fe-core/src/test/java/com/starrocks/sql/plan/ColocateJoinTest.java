@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import org.apache.commons.lang.StringUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -28,7 +28,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
-class ColocateJoinTest extends PlanTestBase {
+public class ColocateJoinTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -48,13 +48,12 @@ class ColocateJoinTest extends PlanTestBase {
                 "\"colocate_with\" = \"colocate_group_1\"" +
                 ");");
     }
-
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("colocateJoinOnceSqls")
     void testColocateJoinOnce(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         int count = StringUtils.countMatches(plan, "INNER JOIN (COLOCATE)");
-        Assert.assertEquals(plan, 1, count);
+        Assertions.assertEquals(1, count, plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -62,7 +61,7 @@ class ColocateJoinTest extends PlanTestBase {
     void testColocateJoinTwice(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         int count = StringUtils.countMatches(plan, "INNER JOIN (COLOCATE)");
-        Assert.assertEquals(plan, 2, count);
+        Assertions.assertEquals(2, count, plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -73,8 +72,8 @@ class ColocateJoinTest extends PlanTestBase {
         int colocateCount = StringUtils.countMatches(plan, "(COLOCATE)");
         int bucketShuffleCount = StringUtils.countMatches(plan, "(BUCKET_SHUFFLE)");
 
-        Assert.assertEquals(plan, 1, colocateCount);
-        Assert.assertEquals(plan, 1, bucketShuffleCount);
+        Assertions.assertEquals(1, colocateCount, plan);
+        Assertions.assertEquals(1, bucketShuffleCount, plan);
 
         connectContext.getSessionVariable().enableJoinReorder();
     }
@@ -85,7 +84,7 @@ class ColocateJoinTest extends PlanTestBase {
         connectContext.getSessionVariable().disableJoinReorder();
         String plan = getFragmentPlan(sql);
         int count = StringUtils.countMatches(plan, "COLOCATE");
-        Assert.assertEquals(plan, 2, count);
+        Assertions.assertEquals(2, count, plan);
         connectContext.getSessionVariable().enableJoinReorder();
     }
 
@@ -95,7 +94,7 @@ class ColocateJoinTest extends PlanTestBase {
         connectContext.getSessionVariable().disableJoinReorder();
         String plan = getFragmentPlan(sql);
         int count = StringUtils.countMatches(plan, "COLOCATE");
-        Assert.assertEquals(plan, 1, count);
+        Assertions.assertEquals(1, count, plan);
         connectContext.getSessionVariable().enableJoinReorder();
     }
 
@@ -107,7 +106,7 @@ class ColocateJoinTest extends PlanTestBase {
         connectContext.getSessionVariable().disableJoinReorder();
         String plan = getFragmentPlan(pair.first);
         int count = StringUtils.countMatches(plan, "COLOCATE");
-        Assert.assertEquals(plan, 2, count);
+        Assertions.assertEquals(2, count, plan);
         if (pair.second) {
             // one phase agg
             assertContains(plan, "update finalize");
@@ -231,5 +230,4 @@ class ColocateJoinTest extends PlanTestBase {
 
         return pairs.stream().map(e -> Arguments.of(e));
     }
-
 }

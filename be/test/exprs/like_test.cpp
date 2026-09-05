@@ -16,6 +16,8 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+#include "common/bloom_filter.h"
+#include "exprs/function_call_expr.h"
 #include "exprs/like_predicate.h"
 #include "exprs/mock_vectorized_expr.h"
 
@@ -49,12 +51,12 @@ TEST_F(LikeTest, startConstPatternLike) {
         str->append("test" + std::to_string(j));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -64,13 +66,13 @@ TEST_F(LikeTest, startConstPatternLike) {
 
     for (int l = 0; l < 20; ++l) {
         if (l >= 10 || l == 1) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -88,12 +90,12 @@ TEST_F(LikeTest, endConstPatternLike) {
         null->append(j % 2 == 0);
     }
 
-    columns.push_back(NullableColumn::create(str, null));
-    columns.push_back(pattern);
+    columns.emplace_back(NullableColumn::create(std::move(str), std::move(null)));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -110,13 +112,13 @@ TEST_F(LikeTest, endConstPatternLike) {
         }
 
         if (l == 19 || l == 9) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -132,12 +134,12 @@ TEST_F(LikeTest, substringConstPatternLike) {
         str->append(std::to_string(j) + "test" + std::to_string(j));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -147,13 +149,13 @@ TEST_F(LikeTest, substringConstPatternLike) {
 
     for (int l = 0; l < 20; ++l) {
         if (l == 12) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -165,19 +167,19 @@ TEST_F(LikeTest, haystackConstantLike) {
     auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>("CHINA", 1);
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%IN%", 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -200,19 +202,19 @@ TEST_F(LikeTest, haystackConstantLikeLargerThanHyperscan) {
 
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -236,11 +238,11 @@ TEST_F(LikeTest, haystackNullableLike) {
         }
     }
 
-    columns.push_back(NullableColumn::create(haystack, null));
-    columns.push_back(pattern);
+    columns.emplace_back(NullableColumn::create(std::move(haystack), std::move(null)));
+    columns.emplace_back(std::move(pattern));
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -252,13 +254,13 @@ TEST_F(LikeTest, haystackNullableLike) {
     for (int l = 0; l < 20; ++l) {
         if (l % 2 == 0) {
             ASSERT_FALSE(result->is_null(l));
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
             ASSERT_TRUE(result->is_null(l));
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -274,12 +276,12 @@ TEST_F(LikeTest, patternEmptyLike) {
         str->append("test");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -288,10 +290,10 @@ TEST_F(LikeTest, patternEmptyLike) {
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
 
     for (int l = 0; l < 20; ++l) {
-        ASSERT_TRUE(v->get_data()[l]);
+        ASSERT_TRUE(v->immutable_data()[l]);
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -307,12 +309,12 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
         str->append("");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -321,10 +323,10 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
 
     for (int l = 0; l < 20; ++l) {
-        ASSERT_TRUE(v->get_data()[l]);
+        ASSERT_TRUE(v->immutable_data()[l]);
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -341,12 +343,12 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
         str->append(Slice(null_ptr, 0));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -355,10 +357,10 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
 
     for (int l = 0; l < 20; ++l) {
-        ASSERT_TRUE(v->get_data()[l]);
+        ASSERT_TRUE(v->immutable_data()[l]);
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -370,19 +372,19 @@ TEST_F(LikeTest, patternOnlyNullLike) {
     auto str = ColumnHelper::create_const_null_column(1);
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%Test%", 1);
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_TRUE(result->is_nullable());
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -404,12 +406,12 @@ TEST_F(LikeTest, rowsPatternLike) {
         }
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -419,13 +421,13 @@ TEST_F(LikeTest, rowsPatternLike) {
 
     for (int l = 0; l < 20; ++l) {
         if (l % 2 == 0) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -451,12 +453,12 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
         }
     }
 
-    columns.push_back(str);
-    columns.push_back(NullableColumn::create(pattern, null));
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(NullableColumn::create(std::move(pattern), std::move(null)));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -467,15 +469,15 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
 
     for (int l = 0; l < 20; ++l) {
         if (l % 2 == 0) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
             ASSERT_FALSE(result->is_null(l));
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
             ASSERT_TRUE(result->is_null(l));
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -492,12 +494,12 @@ TEST_F(LikeTest, rowsPatternRegex) {
         pattern->append(".+\\d\\d");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::regex(context, columns).value();
 
@@ -507,14 +509,15 @@ TEST_F(LikeTest, rowsPatternRegex) {
 
     for (int l = 0; l < 20; ++l) {
         if (l > 9) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
-    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                        .ok());
+    ASSERT_TRUE(
+            LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
 }
 
 TEST_F(LikeTest, constValueLike) {
@@ -543,7 +546,7 @@ TEST_F(LikeTest, constValueLike) {
     columns.emplace_back(std::move(pattern_col));
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
     ASSERT_TRUE(result->is_numeric());
@@ -551,10 +554,10 @@ TEST_F(LikeTest, constValueLike) {
 
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
     for (int i = 0; i < num_rows; ++i) {
-        ASSERT_EQ(expected[i], v->get_data()[i]);
+        ASSERT_EQ(expected[i], v->immutable_data()[i]);
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -578,7 +581,7 @@ TEST_F(LikeTest, constValueRegexp) {
     columns.emplace_back(std::move(pattern_col));
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::regex(context, columns).value();
     ASSERT_TRUE(result->is_numeric());
@@ -586,11 +589,12 @@ TEST_F(LikeTest, constValueRegexp) {
 
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
     for (int i = 0; i < num_rows; ++i) {
-        ASSERT_EQ(expected[i], v->get_data()[i]);
+        ASSERT_EQ(expected[i], v->immutable_data()[i]);
     }
 
-    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                        .ok());
+    ASSERT_TRUE(
+            LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
 }
 
 TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
@@ -609,20 +613,21 @@ TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
 
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::regex(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                        .ok());
+    ASSERT_TRUE(
+            LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
 }
 
 TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
@@ -642,20 +647,370 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
             "增|毛|胖|牙|奶|肉|毒|暑|总).{0,5}(永)";
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::regex(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(
+            LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeConstSubstring) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: %\\%  => LIKE substring match for literal backslash
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%\\\\%", 1);
+
+    str->append("abc\\def");
+    str->append("abcdef");
+    str->append("star\\");
+    str->append("\\start");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);  // abc\def matches %\\%
+    ASSERT_FALSE(v->get_data()[1]); // abcdef does not match
+    ASSERT_TRUE(v->get_data()[2]);  // star\ matches
+    ASSERT_TRUE(v->get_data()[3]);  // \start matches
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
+TEST_F(LikeTest, backslashEscapeConstEndsWith) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: %\\asdf  => LIKE ends-with match for literal "\asdf"
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%\\\\asdf", 1);
+
+    str->append("test\\asdf");
+    str->append("\\asdf");
+    str->append("testasdf");
+    str->append("test\\asdx");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_TRUE(v->get_data()[1]);
+    ASSERT_FALSE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeConstStartsWith) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: star\\%  => LIKE starts-with match for literal "star\"
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("star\\\\%", 1);
+
+    str->append("star\\test");
+    str->append("star\\");
+    str->append("startest");
+    str->append("xstar\\");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_TRUE(v->get_data()[1]);
+    ASSERT_FALSE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeConstEquals) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: star\\  => LIKE equals match for literal "star\"
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("star\\\\", 1);
+
+    str->append("star\\");
+    str->append("star\\\\");
+    str->append("star");
+    str->append("star\\x");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_FALSE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeConstEqualsEscapedPercent) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: star\%  => LIKE equals match for literal "star%"
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("star\\%", 1);
+
+    str->append("star%");
+    str->append("starrocks");
+    str->append("star\\%");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_FALSE(v->get_data()[2]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeRowPattern) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto pat = BinaryColumn::create();
+
+    // row 0: "abc\def" LIKE "%\\%" -> true (substring backslash)
+    str->append("abc\\def");
+    pat->append("%\\\\%");
+
+    // row 1: "star\" LIKE "star\\" -> true (equals backslash)
+    str->append("star\\");
+    pat->append("star\\\\");
+
+    // row 2: "star%" LIKE "star\%" -> true (equals literal %)
+    str->append("star%");
+    pat->append("star\\%");
+
+    // row 3: "test\asdf" LIKE "%\\asdf" -> true (ends-with)
+    str->append("test\\asdf");
+    pat->append("%\\\\asdf");
+
+    // row 4: "starrocks" LIKE "star%" -> true (starts-with)
+    str->append("starrocks");
+    pat->append("star%");
+
+    // row 5: "abcdef" LIKE "%\\%" -> false (no backslash)
+    str->append("abcdef");
+    pat->append("%\\\\%");
+
+    // row 6: "ab" LIKE "a\b" -> true (non-wildcard escape: \b unescapes to b)
+    str->append("ab");
+    pat->append("a\\b");
+
+    // row 7: "a\\b" LIKE "a\b" -> false (\b means literal b, not backslash+b)
+    str->append("a\\b");
+    pat->append("a\\b");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pat));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    auto result = LikePredicate::like_fn(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_TRUE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_TRUE(v->get_data()[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+    ASSERT_FALSE(v->get_data()[5]);
+    ASSERT_TRUE(v->get_data()[6]);  // "ab" matches "a\b"
+    ASSERT_FALSE(v->get_data()[7]); // "a\b" does not match "a\b" pattern
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
+    // pattern contains special characters
+    std::string pattern = "abc%_abccc\\%e\\\\\\\\";
+    std::vector<std::string> ngram_set;
+    NgramBloomFilterReaderOptions options{4, false};
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(6, ngram_set.size());
+    ASSERT_EQ("abcc", ngram_set[0]);
+    ASSERT_EQ("bccc", ngram_set[1]);
+    ASSERT_EQ("ccc%", ngram_set[2]);
+    ASSERT_EQ("cc%e", ngram_set[3]);
+    ASSERT_EQ("c%e\\", ngram_set[4]);
+    ASSERT_EQ("%e\\\\", ngram_set[5]);
+
+    // normal case
+    pattern = "abccd";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(2, ngram_set.size());
+    ASSERT_EQ("abcc", ngram_set[0]);
+    ASSERT_EQ("bccd", ngram_set[1]);
+
+    // pattern is empty
+    pattern = "";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(0, ngram_set.size());
+
+    // pattern is too short
+    pattern = "abc";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(0, ngram_set.size());
+}
+
+TEST_F(LikeTest, issue76417LikeMultiline) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    std::string test_str =
+            "-- --------------------------------------------------------------------------------\n"
+            "-- @Time     : 2026-05-07 17:02\n"
+            "    ,track_path                 ARRAY<STRING> COMMENT";
+
+    // Test with BinaryColumn
+    {
+        auto str = BinaryColumn::create();
+        str->append(test_str);
+        str->append("another row without matching keyword");
+
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%track_path%", 2);
+        Columns columns;
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::like(context, columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_TRUE(v->immutable_data()[0]);
+        ASSERT_FALSE(v->immutable_data()[1]);
+
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+
+    // Test with ConstColumn
+    {
+        auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>(test_str, 1);
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%track_path%", 1);
+        Columns columns;
+        columns.emplace_back(std::move(haystack));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::like(context, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
+
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+}
+
+TEST_F(LikeTest, issue76417RegexpAlternation) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    std::string test_str = "gk|abc_0.054523_psc2.8.225|cba_0.060057";
+
+    // Test with BinaryColumn
+    {
+        auto str = BinaryColumn::create();
+        str->append(test_str);
+        str->append("gk|xyz_dummy|cba_dummy");
+
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc_[0-9]+[.][0-9]+", 2);
+        Columns columns;
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::regex(context, columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_TRUE(v->immutable_data()[0]);
+        ASSERT_FALSE(v->immutable_data()[1]);
+
+        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+
+    // Test with ConstColumn
+    {
+        auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>(test_str, 1);
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc_[0-9]+[.][0-9]+", 1);
+        Columns columns;
+        columns.emplace_back(std::move(haystack));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::regex(context, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
+
+        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+}
 } // namespace starrocks

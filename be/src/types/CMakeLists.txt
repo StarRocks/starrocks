@@ -14,17 +14,34 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
-add_library(Types STATIC
-    array_type_info.cpp
+ADD_BE_LIB(Types
     bitmap_value.cpp
-    date_value.cpp
+    datum.cpp
+    decimalv2_value.cpp
+    int128_to_double.cpp
     hll.cpp
+    json_value.cpp
+    json_value_converter.cpp
+    simple_json_path.cpp
     logical_type.cpp
+    array_type_info.cpp
+    decimal_type_info.cpp
     map_type_info.cpp
     struct_type_info.cpp
+    type_info.cpp
+    agg_state_desc.cpp
+    type_descriptor.cpp
+    date_value.cpp
+    datetime_value.cpp
+    tdigest.cpp
+    time_types.cpp
     timestamp_value.cpp
+    variant.cpp
+    variant_value.cpp
+)
+
+target_link_libraries(Types PRIVATE
+    re2
+    simdjson
+    velocypack
 )

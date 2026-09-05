@@ -1,6 +1,8 @@
 #include "exec/table_function_node.h"
 
+#include "common/config_exec_fwd.h"
 #include "gtest/gtest.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 class TableFunctionNodeTest : public testing::Test {
@@ -62,7 +64,6 @@ void TableFunctionNodeTest::SetUp() {
     _tnode.num_children = 1;
 
     _tnode.row_tuples.push_back(1);
-    _tnode.nullable_tuples.push_back(false);
 }
 
 TEST_F(TableFunctionNodeTest, close_after_not_init) {

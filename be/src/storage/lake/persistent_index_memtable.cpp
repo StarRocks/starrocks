@@ -14,92 +14,285 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include <utility>
+
+#include "base/debug/trace.h"
+#include "base/string/string_util.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "fs/fs_util.h"
+#include "platform/key_cache.h"
+#include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
+
 namespace starrocks::lake {
 
+PersistentIndexMemtable::PersistentIndexMemtable(TabletManager* tablet_mgr, int64_t tablet_id, uint64_t max_rss_rowid)
+        : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _max_rss_rowid(max_rss_rowid) {}
+
+PersistentIndexMemtable::~PersistentIndexMemtable() = default;
+
+void PersistentIndexMemtable::update_index_value(IndexValueWithVer* index_value_info, int64_t version,
+                                                 const IndexValue& value) {
+    index_value_info->first = version;
+    index_value_info->second = value;
+}
+
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                       KeyIndexesInfo* not_found, size_t* num_found) {
+                                       KeyIndexSet* not_founds, size_t* num_found, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_upsert_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
+        auto key = std::string_view(keys[i].data, keys[i].size);
         const auto value = values[i];
-        if (auto [it, inserted] = _map.emplace(key, value); inserted) {
-            not_found->key_index_infos.emplace_back(i);
+        if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); inserted) {
+            not_founds->insert(i);
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
-            auto old_value = it->second;
+            auto& old_index_value_ver = it->second;
+            auto old_value = old_index_value_ver.second;
             old_values[i] = old_value;
             nfound += old_value.get_value() != NullIndexValue;
-            it->second = value;
+            update_index_value(&old_index_value_ver, version, value);
         }
+        _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
     }
     *num_found = nfound;
     return Status::OK();
 }
 
-Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values) {
+Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_insert_us");
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
-        auto size = keys[i].get_size();
+        auto key = std::string_view(keys[i].data, keys[i].size);
         const auto value = values[i];
-        if (auto [it, inserted] = _map.emplace(key, value); !inserted) {
-            std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
-                                                  hexdump((const char*)key.data(), size));
-            LOG(WARNING) << msg;
-            return Status::InternalError(msg);
+        if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); inserted) {
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
+        } else {
+            auto& old_index_value_ver = it->second;
+            auto old_index_value = old_index_value_ver.second;
+            if (old_index_value.get_value() != NullIndexValue) {
+                // shouldn't happen
+                std::string msg = strings::Substitute(
+                        "PersistentIndexMemtable<$0> insert found duplicate key $1, old_val $2 old_ver $3 new_val $4",
+                        key.size(), hexdump((const char*)key.data(), key.size()), old_index_value.get_value(),
+                        old_index_value_ver.first, value.get_value());
+                LOG(ERROR) << msg;
+                if (!config::experimental_lake_ignore_pk_consistency_check) {
+                    return Status::AlreadyExist(msg);
+                } else {
+                    update_index_value(&old_index_value_ver, version, value);
+                }
+            } else {
+                // cover delete operation.
+                update_index_value(&old_index_value_ver, version, value);
+            }
         }
+        _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
     }
     return Status::OK();
 }
 
-Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexesInfo* not_found,
-                                      size_t* num_found) {
+Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
+                                      size_t* num_found, int64_t version, uint32_t del_rssid) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_erase_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
-        if (auto [it, inserted] = _map.emplace(key, IndexValue(NullIndexValue)); inserted) {
+        auto key = std::string_view(keys[i].data, keys[i].size);
+        if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, IndexValue(NullIndexValue))); inserted) {
             old_values[i] = NullIndexValue;
-            not_found->key_index_infos.emplace_back(i);
+            not_founds->insert(i);
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
-            old_values[i] = it->second;
-            nfound += it->second.get_value() != NullIndexValue;
-            it->second = NullIndexValue;
+            auto& old_index_value_ver = it->second;
+            auto old_index_value = old_index_value_ver.second;
+            old_values[i] = old_index_value;
+            nfound += old_index_value.get_value() != NullIndexValue;
+            update_index_value(&old_index_value_ver, version, IndexValue(NullIndexValue));
         }
     }
+    // A delete sorts after the segment at its rssid (del_rssid = rowset_id + op_offset), hence the
+    // UINT32_MAX rowid.
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)del_rssid) << 32 | (uint64_t)UINT32_MAX);
     *num_found = nfound;
+    return Status::OK();
+}
+
+Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter,
+                                                  int64_t version, uint32_t del_rssid) {
+    for (size_t i = 0; i < n; ++i) {
+        if (filter[i]) {
+            // skip
+            continue;
+        }
+        auto key = std::string_view(keys[i].data, keys[i].size);
+        if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, IndexValue(NullIndexValue))); inserted) {
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
+        } else {
+            auto& old_index_value_ver = it->second;
+            update_index_value(&old_index_value_ver, version, IndexValue(NullIndexValue));
+        }
+    }
+    // A delete sorts after the segment at its rssid (del_rssid = rowset_id + op_offset), hence the
+    // UINT32_MAX rowid.
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)del_rssid) << 32 | (uint64_t)UINT32_MAX);
     return Status::OK();
 }
 
 Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* values,
-                                        const std::vector<size_t>& replace_idxes) {
+                                        const std::vector<size_t>& replace_idxes, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_replace_us");
     for (unsigned long idx : replace_idxes) {
-        auto key = keys[idx].to_string();
+        auto key = std::string_view(keys[idx].data, keys[idx].size);
         const auto value = values[idx];
-        if (auto [it, inserted] = _map.emplace(key, value); !inserted) {
-            it->second = value;
+        if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); !inserted) {
+            update_index_value(&it->second, version, value);
+        } else {
+            _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
+        }
+        _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
+    }
+    return Status::OK();
+}
+
+Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* not_founds,
+                                    int64_t version) const {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_get_us");
+    for (size_t i = 0; i < n; ++i) {
+        auto key = std::string_view(keys[i].data, keys[i].size);
+        auto it = _map.find(key);
+        if (it == _map.end()) {
+            values[i] = NullIndexValue;
+            not_founds->insert(i);
+        } else {
+            // Assuming we want the latest (first) value due to emplace_front in updates/inserts
+            auto& index_value_ver = it->second;
+            auto index_value = index_value_ver.second;
+            values[i] = index_value;
         }
     }
     return Status::OK();
 }
 
-Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found,
-                                    size_t* num_found) {
-    size_t nfound = 0;
-    for (size_t i = 0; i < n; ++i) {
-        auto key = std::string_view(keys[i]);
-        auto iter = _map.find(key);
-        if (iter == _map.end()) {
-            values[i] = NullIndexValue;
-            not_found->key_index_infos.emplace_back(i);
-        } else {
-            values[i] = iter->second;
-            nfound += iter->second.get_value() != NullIndexValue;
+Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes,
+                                    KeyIndexSet* found_key_indexes, int64_t version) const {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_get_us");
+    for (auto& key_index : key_indexes) {
+        auto key = std::string_view(keys[key_index].data, keys[key_index].size);
+        auto it = _map.find(key);
+        if (it != _map.end()) {
+            // Assuming we want the latest (first) value due to emplace_front in updates/inserts
+            auto& index_value_ver = it->second;
+            auto& index_value = index_value_ver.second;
+            values[key_index] = index_value.get_value();
+            found_key_indexes->insert(key_index);
         }
     }
-    *num_found = nfound;
     return Status::OK();
+}
+
+size_t PersistentIndexMemtable::memory_usage() const {
+    // _keys_heap_size is the memory usage of std::string which are heap allocated.
+    // _map.bytes_used() is the memory usage of the btree.
+    // The total memory usage is the sum of these two.
+    return _keys_heap_size + _map.bytes_used();
+}
+
+Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb) {
+    return PersistentIndexSstable::build_sstable(_map, wf, filesize, range_pb);
+}
+
+Status PersistentIndexMemtable::flush() {
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        if (_sstable != nullptr) {
+            // already compacted
+            return Status::AlreadyExist("PersistentIndexMemtable already flushed");
+        }
+    }
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
+    auto filename = gen_sst_filename();
+    auto location = _tablet_mgr->sst_location(_tablet_id, filename);
+    CancelableDefer cleanup_output([&] { (void)fs::delete_file(location); });
+    WritableFileOptions wopts;
+    std::string encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        encryption_meta.swap(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
+    Status injected_status;
+    std::pair<const std::string*, Status*> hook_arg{&location, &injected_status};
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::flush:after_create", &hook_arg);
+    RETURN_IF_ERROR(injected_status);
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    RETURN_IF_ERROR(flush(wf.get(), &filesize, &range_pb));
+    RETURN_IF_ERROR(wf->close());
+
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RandomAccessFileOptions opts;
+    if (!encryption_meta.empty()) {
+        opts.encryption_info = wopts.encryption_info;
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.set_max_rss_rowid(max_rss_rowid());
+    sstable_pb.set_encryption_meta(encryption_meta);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    _sstable = std::move(sstable);
+    cleanup_output.cancel();
+    return Status::OK();
+}
+
+void PersistentIndexMemtable::advance_max_rss_rowid(uint64_t max_rss_rowid) {
+    DCHECK(empty());
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    DCHECK(_sstable == nullptr);
+    _max_rss_rowid = std::max(_max_rss_rowid, max_rss_rowid);
 }
 
 void PersistentIndexMemtable::clear() {
     _map.clear();
+    _keys_heap_size = 0;
+}
+
+void PersistentIndexMemtable::run() {
+    auto st = flush();
+    if (!st.ok()) {
+        LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
+    }
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _flush_status = st;
+    }
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::run:after_flush", &_flush_status);
+}
+
+void PersistentIndexMemtable::cancel() {
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+}
+
+std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    return std::move(_sstable);
+}
+
+Status PersistentIndexMemtable::flush_status() const {
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    return _flush_status;
 }
 
 } // namespace starrocks::lake

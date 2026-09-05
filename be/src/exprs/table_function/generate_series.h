@@ -14,12 +14,15 @@
 
 #pragma once
 
+#include <algorithm>
+#include <type_traits>
+
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
-#include "column/type_traits.h"
-#include "common/config.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/table_function/table_function.h"
-#include "runtime/integer_overflow_arithmetics.h"
+#include "runtime/runtime_state.h"
+#include "types/integer_overflow_arithmetics.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -35,25 +38,24 @@ class GenerateSeries final : public TableFunction {
 public:
     ~GenerateSeries() override = default;
 
-    [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
+    Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new MyState();
         return Status::OK();
     }
 
-    [[nodiscard]] Status prepare(TableFunctionState* /*state*/) const override { return Status::OK(); }
+    Status prepare(TableFunctionState* /*state*/) const override { return Status::OK(); }
 
-    [[nodiscard]] Status open(RuntimeState* /*runtime_state*/, TableFunctionState* /*state*/) const override {
-        return Status::OK();
-    }
+    Status open(RuntimeState* /*runtime_state*/, TableFunctionState* /*state*/) const override { return Status::OK(); }
 
-    [[nodiscard]] Status close(RuntimeState* /*runtime_state*/, TableFunctionState* state) const override {
+    Status close(RuntimeState* /*runtime_state*/, TableFunctionState* state) const override {
         delete state;
         return Status::OK();
     }
 
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* base_state) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* base_state) const override {
         using NumericType = RunTimeCppType<Type>;
-        auto max_chunk_size = config::vector_chunk_size;
+        auto max_chunk_size = runtime_state->chunk_size();
         auto state = down_cast<MyState*>(base_state);
         auto res = RunTimeColumnType<Type>::create();
         auto offsets = UInt32Column::create();
@@ -101,9 +103,42 @@ public:
                     continue;
                 }
 
-                auto count = (stop - current) / step + 1;
-                if (count > max_chunk_size - res->size()) {
-                    count = max_chunk_size - res->size();
+                // The number of values still to emit for this row is `(stop - current) / step + 1`,
+                // but neither the subtraction nor the division is safe in NumericType:
+                //   * `stop - current` overflows whenever the two ends are further apart than the
+                //     type range (e.g. `current = -1, stop = INT32_MAX`), which is undefined
+                //     behaviour and yields a garbage count;
+                //   * `<type>::min() / -1` is not representable. For INT and BIGINT the division
+                //     traps with SIGFPE on x86 and takes the BE down, e.g. INT columns feeding
+                //     `generate_series(0, -2147483648, -1)`; for LARGEINT the __int128 division
+                //     helper returns min() instead, and the resulting negative count skips the fill
+                //     loop and hands back uninitialized memory. (TINYINT and SMALLINT escape only
+                //     because their operands are promoted to `int` before the division.)
+                // Both operands come from input columns, so the offending values can only be known
+                // at runtime and cannot be rejected by constant-time analysis in the FE.
+                //
+                // Compute the distance and the step magnitude as unsigned values instead: unsigned
+                // arithmetic is defined to wrap, so it represents the whole two's-complement span
+                // exactly, and then clamp to the room left in the output chunk.
+                using UnsignedType = std::make_unsigned_t<NumericType>;
+                const auto u_current = static_cast<UnsignedType>(current);
+                const auto u_stop = static_cast<UnsignedType>(stop);
+                const UnsignedType span = (step > 0) ? static_cast<UnsignedType>(u_stop - u_current)
+                                                     : static_cast<UnsignedType>(u_current - u_stop);
+                const UnsignedType abs_step =
+                        (step > 0) ? static_cast<UnsignedType>(step)
+                                   : static_cast<UnsignedType>(UnsignedType{0} - static_cast<UnsignedType>(step));
+                // Values left after `current` itself; `+ 1` is applied below, after clamping, so it
+                // can never overflow UnsignedType.
+                const UnsignedType steps_left = span / abs_step;
+                const size_t room = static_cast<size_t>(max_chunk_size) - res->size();
+
+                size_t count;
+                if constexpr (sizeof(UnsignedType) >= sizeof(size_t)) {
+                    count = (steps_left >= static_cast<UnsignedType>(room)) ? room
+                                                                            : static_cast<size_t>(steps_left) + 1;
+                } else {
+                    count = std::min<size_t>(static_cast<size_t>(steps_left) + 1, room);
                 }
 
                 bool overflow = false;
@@ -127,7 +162,7 @@ public:
             }
         } // while
         offsets->append(res->size());
-        return std::make_pair(Columns{res}, offsets);
+        return std::make_pair(Columns{std::move(res)}, std::move(offsets));
     }
 
 private:

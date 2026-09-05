@@ -18,6 +18,12 @@
 #include "exprs/binary_function.h"
 #include "exprs/predicate.h"
 #include "exprs/unary_function.h"
+#include "runtime/runtime_state.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_codegen.h"
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -40,21 +46,76 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(AndImpl, l_value, r_value) {
     return l_value & r_value;
 }
 
-class VectorizedAndCompoundPredicate final : public Predicate {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedAndCompoundPredicate final : public Predicate,
+                                             public JITCodegenNode
+#else
+class VectorizedAndCompoundPredicate final : public Predicate
+#endif
+{
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedAndCompoundPredicate);
+
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         int l_falses = ColumnHelper::count_false_with_notnull(l);
 
         // left all false and not null
         if (l_falses == l->size()) {
-            return l->clone();
+            return Column::mutate(std::move(l));
         }
 
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         return VectorizedLogicPredicateBinaryFunction<AndNullImpl, AndImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
+    }
+
+#ifdef STARROCKS_JIT_ENABLE
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], ExprJITCodegen::generate_ir(context, _children[1], jit_ctx))
+        auto& b = jit_ctx->builder;
+        LLVMDatum result(b);
+        result.value = b.CreateAnd(datums[0].value, datums[1].value);
+        result.null_flag = b.CreateOr(b.CreateAnd(datums[0].null_flag, datums[1].null_flag),
+                                      b.CreateOr(b.CreateAnd(datums[0].null_flag, datums[1].value),
+                                                 b.CreateAnd(datums[1].null_flag, datums[0].value)));
+        return result;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + ExprJITCodegen::func_name(_children[0], state) + " & " +
+               ExprJITCodegen::func_name(_children[1], state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+#endif
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedAndCompoundPredicate ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 
@@ -72,7 +133,13 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(OrImpl, l_value, r_value) {
     return l_value | r_value;
 }
 
-class VectorizedOrCompoundPredicate final : public Predicate {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedOrCompoundPredicate final : public Predicate,
+                                            public JITCodegenNode
+#else
+class VectorizedOrCompoundPredicate final : public Predicate
+#endif
+{
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedOrCompoundPredicate);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
@@ -81,12 +148,61 @@ public:
         int l_trues = ColumnHelper::count_true_with_notnull(l);
         // left all true and not null
         if (l_trues == l->size()) {
-            return l->clone();
+            return Column::mutate(std::move(l));
         }
 
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         return VectorizedLogicPredicateBinaryFunction<OrNullImpl, OrImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
+    }
+
+#ifdef STARROCKS_JIT_ENABLE
+
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], ExprJITCodegen::generate_ir(context, _children[1], jit_ctx))
+        auto& b = jit_ctx->builder;
+        LLVMDatum result(b);
+        result.value = b.CreateOr(datums[0].value, datums[1].value);
+        result.null_flag = b.CreateOr(b.CreateAnd(datums[0].null_flag, datums[1].null_flag),
+                                      b.CreateOr(b.CreateAnd(datums[0].null_flag, b.CreateNot(datums[1].value)),
+                                                 b.CreateAnd(datums[1].null_flag, b.CreateNot(datums[0].value))));
+        return result;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + ExprJITCodegen::func_name(_children[0], state) + " | " +
+               ExprJITCodegen::func_name(_children[1], state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+#endif
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedOrCompoundPredicate ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 
@@ -94,13 +210,61 @@ DEFINE_UNARY_FN_WITH_IMPL(CompoundPredNot, l) {
     return !l;
 }
 
-class VectorizedNotCompoundPredicate final : public Predicate {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedNotCompoundPredicate final : public Predicate,
+                                             public JITCodegenNode
+#else
+class VectorizedNotCompoundPredicate final : public Predicate
+#endif
+{
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedNotCompoundPredicate);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
 
         return VectorizedStrictUnaryFunction<CompoundPredNot>::template evaluate<TYPE_BOOLEAN>(l);
+    }
+#ifdef STARROCKS_JIT_ENABLE
+
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        ASSIGN_OR_RETURN(LLVMDatum datum, ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
+        auto& b = jit_ctx->builder;
+        LLVMDatum result(b);
+        result.value = b.CreateSelect(IRHelper::bool_to_cond(b, datum.value), b.getInt8(0), b.getInt8(1));
+        result.null_flag = datum.null_flag;
+        return result;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{!" + ExprJITCodegen::func_name(_children[0], state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+#endif
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedNotCompoundPredicate (" << _children[0]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", child_is_constant=" << _children[0]->is_constant()
+            << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 

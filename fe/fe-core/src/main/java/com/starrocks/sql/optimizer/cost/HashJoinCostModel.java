@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -87,8 +89,10 @@ public class HashJoinCostModel {
         double probeCost;
         double leftOutput = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
-                ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
+        ConnectContext connectContext = ConnectContext.get();
+        SystemInfoService clusterInfo = connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo();
+        int parallelFactor = Math.max(connectContext.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber(),
+                connectContext.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId()));
         switch (execMode) {
             case BROADCAST:
                 buildCost = rightOutput;
@@ -112,7 +116,12 @@ public class HashJoinCostModel {
         JoinExecMode execMode = deriveJoinExecMode();
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
         double memCost;
-        int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber());
+
+        // TODO: It may not be accurate in shared-data cluster using all alive compute nodes to
+        //  estimate the cost, ideally it should be warehouse awareness.
+        int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber() +
+                (RunMode.isSharedDataMode() ?
+                ConnectContext.get().getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0));
 
         if (JoinExecMode.BROADCAST == execMode) {
             memCost = rightOutput * beNum;
@@ -126,11 +135,13 @@ public class HashJoinCostModel {
         JoinExecMode execMode = deriveJoinExecMode();
         double keySize = calculateKeySize();
 
-        double cachePenaltyFactor;
-        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
-                ConnectContext.get().getSessionVariable().getDegreeOfParallelism()) * 2;
+        ConnectContext connectContext = ConnectContext.get();
+        SystemInfoService clusterInfo = connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo();
+        int parallelFactor = Math.max(connectContext.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber(),
+                connectContext.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId())) * 2;
         double mapSize = Math.min(1, keySize) * rightStatistics.getOutputRowCount();
 
+        double cachePenaltyFactor;
         if (JoinExecMode.BROADCAST == execMode) {
             cachePenaltyFactor = Math.max(1, Math.log(mapSize / BOTTOM_NUMBER));
             // normalize ration when it hits the limit

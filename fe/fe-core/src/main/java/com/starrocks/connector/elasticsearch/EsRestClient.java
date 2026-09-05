@@ -168,6 +168,41 @@ public class EsRestClient {
     }
 
     /**
+     * Estimate the number of documents in an index using _cat/indices metadata.
+     * Reads from Lucene segment metadata — near-zero overhead, slightly stale, good enough for CBO.
+     *
+     * @param indexName
+     * @return document count, or -1 on failure
+     */
+    public long getRowCount(String indexName) {
+        String path = "_cat/indices/" + indexName + "?h=docs.count&format=json";
+        try {
+            String response = execute(path);
+            if (response == null) {
+                return -1L;
+            }
+            List list = mapper.readValue(response, List.class);
+            long total = 0;
+            boolean found = false;
+            for (Object row : list) {
+                if (row instanceof Map) {
+                    Object val = ((Map) row).get("docs.count");
+                    if (val != null) {
+                        total += Long.parseLong(val.toString());
+                        found = true;
+                    }
+                }
+            }
+            if (found) {
+                return total;
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get docs.count for ES index {}: {}", indexName, e.getMessage());
+        }
+        return -1L;
+    }
+
+    /**
      * Get Shard location
      *
      * @param indexName
@@ -189,7 +224,7 @@ public class EsRestClient {
      * @param path the path must not leading with '/'
      * @return response
      */
-    private String execute(String path) throws StarRocksConnectorException {
+    String execute(String path) throws StarRocksConnectorException {
         int retrySize = nodes.length;
         StarRocksConnectorException scratchExceptionForThrow = null;
         OkHttpClient client;
@@ -205,6 +240,7 @@ public class EsRestClient {
             // User may set a config like described below:
             // hosts: "http://192.168.0.1:8200, http://192.168.0.2:8200"
             // then currentNode will be "http://192.168.0.1:8200", " http://192.168.0.2:8200"
+            // If use ipv6, remember to use format like [2001:0db8:85a3:0000:0000:8a2e:0370:7334]:8080
             currentNode = currentNode.trim();
             if (!(currentNode.startsWith("http://") || currentNode.startsWith("https://"))) {
                 currentNode = "http://" + currentNode;
@@ -231,7 +267,7 @@ public class EsRestClient {
             }
             selectNextNode();
         }
-        LOG.warn("try all nodes [{}],no other nodes left", nodes);
+        LOG.warn("try all nodes [{}],no other nodes left", (Object) nodes);
         if (scratchExceptionForThrow != null) {
             throw scratchExceptionForThrow;
         }

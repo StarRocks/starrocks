@@ -23,7 +23,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterLoadAnalyzer {
 
@@ -40,8 +40,6 @@ public class AlterLoadAnalyzer {
     public static void analyze(AlterLoadStmt statement, ConnectContext context) {
         statement.setDbName(AnalyzerUtils.getOrDefaultDatabase(statement.getDbName(), context));
         FeNameFormat.checkLabel(statement.getLabel());
-        FeNameFormat.checkCommonName(NAME_TYPE, statement.getLabel());
-
 
         Map<String, String> jobProperties = statement.getJobProperties();
         Optional<String> optional = jobProperties.keySet().stream().filter(

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "按照指定格式将字符串转换为 DATETIME 类型的值。"
 ---
 
 # str_to_date
 
-## 功能
+
 
 按照 `format` 指定的格式将 `str` 转换为 DATETIME 类型的值。如果转换结果有误，则返回 NULL。该函数与 [date_format](./date_format.md) 函数功能相反。
 

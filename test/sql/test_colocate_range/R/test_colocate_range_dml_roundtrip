@@ -1,0 +1,50 @@
+-- name: test_colocate_range_dml_roundtrip @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_dml_${uuid0}:k1');
+-- result:
+-- !result
+insert into t values
+    (1, 10, 100), (1, 11, 110),
+    (2, 20, 200), (2, 21, 210),
+    (3, 30, 300), (3, 31, 310);
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+6
+-- !result
+select sum(v) from t;
+-- result:
+1230
+-- !result
+delete from t where k1 = 2;
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+4
+-- !result
+select sum(v) from t;
+-- result:
+820
+-- !result
+select count(distinct k1) from t;
+-- result:
+2
+-- !result
+drop table t;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

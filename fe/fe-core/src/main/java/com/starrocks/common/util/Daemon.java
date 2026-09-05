@@ -17,7 +17,6 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.meta.MetaContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,11 +27,9 @@ public class Daemon extends Thread {
     private static final int DEFAULT_INTERVAL_SECONDS = 30; // 30 seconds
 
     private long intervalMs;
-    private AtomicBoolean isStop;
     private Runnable runnable;
-    private AtomicBoolean isStart = new AtomicBoolean(false);
-
-    private MetaContext metaContext = null;
+    private final AtomicBoolean isStopped = new AtomicBoolean(false);
+    private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
     {
         setDaemon(true);
@@ -41,19 +38,6 @@ public class Daemon extends Thread {
     public Daemon() {
         super();
         intervalMs = DEFAULT_INTERVAL_SECONDS * 1000L;
-        isStop = new AtomicBoolean(false);
-    }
-
-    public Daemon(Runnable runnable) {
-        super(runnable);
-        this.runnable = runnable;
-        this.setName(((Object) runnable).toString());
-    }
-
-    public Daemon(ThreadGroup group, Runnable runnable) {
-        super(group, runnable);
-        this.runnable = runnable;
-        this.setName(((Object) runnable).toString());
     }
 
     public Daemon(String name) {
@@ -76,17 +60,20 @@ public class Daemon extends Thread {
 
     @Override
     public synchronized void start() {
-        if (isStart.compareAndSet(false, true)) {
-            super.start();
+        if (isRunning.compareAndSet(false, true)) {
+            isStopped.set(false);
+            if (getState() == State.NEW) {
+                super.start();
+            }
         }
     }
 
-    public void setMetaContext(MetaContext metaContext) {
-        this.metaContext = metaContext;
+    public void setStop() {
+        isStopped.set(true);
     }
 
-    public void setStop() {
-        isStop.set(true);
+    public boolean isRunning() {
+        return isRunning.get();
     }
 
     public long getInterval() {
@@ -106,11 +93,7 @@ public class Daemon extends Thread {
 
     @Override
     public void run() {
-        if (metaContext != null) {
-            metaContext.setThreadLocalInfo();
-        }
-
-        while (!isStop.get()) {
+        while (!isStopped.get()) {
             try {
                 runOneCycle();
             } catch (Throwable e) {
@@ -118,15 +101,15 @@ public class Daemon extends Thread {
             }
 
             try {
-                Thread.sleep(intervalMs);
+                Thread.sleep(getInterval());
             } catch (InterruptedException e) {
                 LOG.error("InterruptedException: ", e);
             }
         }
 
-        if (metaContext != null) {
-            MetaContext.remove();
-        }
         LOG.error("daemon thread exits. name=" + this.getName());
+        if (!isRunning.compareAndSet(true, false)) {
+            LOG.warn("set daemon thread {} to stop failed", getName());
+        }
     }
 }

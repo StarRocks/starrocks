@@ -15,16 +15,12 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MapTypeTest extends PlanTestBase {
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -60,10 +56,17 @@ public class MapTypeTest extends PlanTestBase {
     }
 
     @Test
+    public void testMapEquals() throws Exception {
+        String sql = "select c1 != NULL from test_map;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : NULL");
+    }
+
+    @Test
     public void testInsertErrorType() throws Exception {
         String sql = "insert into test_map values (1, map{1: map{1:2}}, map{1:1});";
         try {
-            String plan = getFragmentPlan(sql);
+            getFragmentPlan(sql);
         } catch (Exception e) {
             assertContains(e.getMessage(), 
                     "Cannot cast 'map{1:map{1:2}}' from " + 
@@ -74,7 +77,7 @@ public class MapTypeTest extends PlanTestBase {
     @Test
     public void testComplexAnyValue() throws Exception {
         String sql = "select any_value(c2) from test_map limit 1";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         assertContains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: any_value(3: c2)\n" +
                 "  |  group by: \n" +

@@ -14,22 +14,31 @@
 
 #pragma once
 
+#include <future>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "gutil/macros.h"
-#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
+class ConcurrencyLimitedThreadPoolToken;
 class SegmentWriter;
-}
+class ThreadPool;
+class BundleWritableFileContext;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
 class HorizontalGeneralTabletWriter : public TabletWriter {
 public:
-    explicit HorizontalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
+    explicit HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                           std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                           bool is_compaction, ThreadPool* flush_pool = nullptr,
+                                           BundleWritableFileContext* bundle_file_context = nullptr,
+                                           GlobalDictByNameMaps* global_dicts = nullptr);
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -37,13 +46,22 @@ public:
 
     Status open() override;
 
-    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr) override;
+    Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override;
+
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override {
+        return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
+    }
 
     Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key) override {
         return Status::NotSupported("HorizontalGeneralTabletWriter write_columns not support");
     }
 
-    Status flush_del_file(const Column& deletes) override {
+    Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key,
+                         const std::vector<uint64_t>& rssid_rowids) override {
+        return Status::NotSupported("HorizontalGeneralTabletWriter write_columns not support");
+    }
+
+    Status flush_del_file(const Column& deletes, uint32_t op_offset) override {
         return Status::NotSupported("HorizontalGeneralTabletWriter flush_del_file not support");
     }
 
@@ -57,19 +75,32 @@ public:
 
     void close() override;
 
+    StatusOr<std::unique_ptr<TabletWriter>> clone() const override;
+
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
 protected:
-    Status reset_segment_writer();
+    virtual Status reset_segment_writer(bool eos);
     virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
 
+    // Record into |segment_file_info| the vector indexes that need a .vi file, honoring the
+    // segment writer's sync/async build mode. Shared by this duplicate-key flush path and the
+    // primary-key override (HorizontalPkTabletWriter::flush_segment_writer) so the two cannot
+    // silently diverge: the PK override previously omitted this block, which dropped vector
+    // index builds for shared-data primary-key tables.
+    void record_segment_vector_index_ids(SegmentFileInfo& segment_file_info, SegmentWriter* seg_writer) const;
+
     std::unique_ptr<SegmentWriter> _seg_writer;
+    BundleWritableFileContext* _bundle_file_context = nullptr;
+    GlobalDictByNameMaps* _global_dicts = nullptr;
 };
 
 class VerticalGeneralTabletWriter : public TabletWriter {
 public:
-    explicit VerticalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                         uint32_t max_rows_per_segment);
+    explicit VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                         std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                         uint32_t max_rows_per_segment, bool is_compaction,
+                                         ThreadPool* flush_pool = nullptr);
 
     ~VerticalGeneralTabletWriter() override;
 
@@ -77,13 +108,22 @@ public:
 
     Status open() override;
 
-    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr) override {
+    Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override {
         return Status::NotSupported("VerticalGeneralTabletWriter write not support");
+    }
+
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override {
+        return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
     }
 
     Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key) override;
 
-    Status flush_del_file(const Column& deletes) override {
+    Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key,
+                         const std::vector<uint64_t>& rssid_rowids) override {
+        return Status::NotSupported("VerticalGeneralTabletWriter write_columns not support");
+    }
+
+    Status flush_del_file(const Column& deletes, uint32_t op_offset) override {
         return Status::NotSupported("VerticalGeneralTabletWriter flush_del_file not support");
     }
 
@@ -98,15 +138,24 @@ public:
 
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
-private:
-    StatusOr<std::unique_ptr<SegmentWriter>> create_segment_writer(const std::vector<uint32_t>& column_indexes,
+protected:
+    StatusOr<std::shared_ptr<SegmentWriter>> create_segment_writer(const std::vector<uint32_t>& column_indexes,
                                                                    bool is_key);
 
-    Status flush_columns(std::unique_ptr<SegmentWriter>* segment_writer);
+    Status flush_columns(const std::shared_ptr<SegmentWriter>& segment_writer);
+    Status check_futures();
+    Status wait_futures_finish();
 
     uint32_t _max_rows_per_segment = 0;
-    std::vector<std::unique_ptr<SegmentWriter>> _segment_writers;
+    std::vector<std::shared_ptr<SegmentWriter>> _segment_writers;
     size_t _current_writer_index = 0;
+
+    static constexpr int64_t kDefaultTimeoutForAsyncWriteSegment = 1 * 60 * 1000L; // 1 minutes
+
+    std::unique_ptr<ConcurrencyLimitedThreadPoolToken> _segment_writer_finalize_token;
+    std::vector<std::future<Status>> _futures;
 };
+
+void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer);
 
 } // namespace starrocks::lake

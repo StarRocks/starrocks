@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Calculates whether the input value is in the bitmap column, and returns a Boolean value."
 ---
 
 # bitmap_contains
 
-## Description
+
 
 Calculates whether the input value is in the bitmap column, and returns a Boolean value.
 

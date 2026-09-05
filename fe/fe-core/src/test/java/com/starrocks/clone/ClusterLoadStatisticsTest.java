@@ -45,9 +45,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -62,7 +62,7 @@ public class ClusterLoadStatisticsTest {
     private SystemInfoService systemInfoService;
     private TabletInvertedIndex invertedIndex;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         // be1
         be1 = new Backend(10001, "192.168.0.1", 9051);
@@ -138,16 +138,16 @@ public class ClusterLoadStatisticsTest {
         // tablet
         invertedIndex = new TabletInvertedIndex();
 
-        invertedIndex.addTablet(50000, new TabletMeta(1, 2, 3, 4, 5, TStorageMedium.HDD));
+        invertedIndex.addTablet(50000, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         invertedIndex.addReplica(50000, new Replica(50001, be1.getId(), 0, ReplicaState.NORMAL));
         invertedIndex.addReplica(50000, new Replica(50002, be2.getId(), 0, ReplicaState.NORMAL));
         invertedIndex.addReplica(50000, new Replica(50003, be3.getId(), 0, ReplicaState.NORMAL));
 
-        invertedIndex.addTablet(60000, new TabletMeta(1, 2, 3, 4, 5, TStorageMedium.HDD));
+        invertedIndex.addTablet(60000, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         invertedIndex.addReplica(60000, new Replica(60002, be2.getId(), 0, ReplicaState.NORMAL));
         invertedIndex.addReplica(60000, new Replica(60003, be3.getId(), 0, ReplicaState.NORMAL));
 
-        invertedIndex.addTablet(70000, new TabletMeta(1, 2, 3, 4, 5, TStorageMedium.HDD));
+        invertedIndex.addTablet(70000, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         invertedIndex.addReplica(70000, new Replica(70002, be2.getId(), 0, ReplicaState.NORMAL));
         invertedIndex.addReplica(70000, new Replica(70003, be3.getId(), 0, ReplicaState.NORMAL));
     }
@@ -156,9 +156,243 @@ public class ClusterLoadStatisticsTest {
     public void test() {
         ClusterLoadStatistic loadStatistic = new ClusterLoadStatistic(systemInfoService, invertedIndex);
         loadStatistic.init();
-        List<List<String>> infos = loadStatistic.getClusterStatistic(TStorageMedium.HDD);
+        List<List<String>> infos = loadStatistic.getBackendLoadStats(TStorageMedium.HDD);
         System.out.println(infos);
-        Assert.assertEquals(3, infos.size());
+        Assertions.assertEquals(3, infos.size());
+    }
+
+    @Test
+    public void testInit_singleMediumShortcutCountsAllReplicasUnderPhysicalMedium() throws LoadBalanceException {
+        // Build a BE with HDD-only disks but a mix of HDD- and SSD-declared TabletMeta. The
+        // SSD-declared entries simulate the post-cooldown / mis-placed-tablet windows where
+        // TabletMeta.storageMedium diverges from physical placement on a single-medium BE that
+        // ReportHandler cannot migrate. The shortcut in BackendLoadStatistic.init must count
+        // every replica on the BE under HDD (its physical medium), not drop the SSD-declared
+        // ones via the hasMedium() post-pass.
+        Backend hddOnlyBe = new Backend(11001, "192.168.0.11", 9051);
+        Map<String, DiskInfo> hddDisks = Maps.newHashMap();
+        DiskInfo hddDisk = new DiskInfo("/path1");
+        hddDisk.setTotalCapacityB(1_000_000);
+        hddDisk.setAvailableCapacityB(900_000);
+        hddDisk.setDataUsedCapacityB(100_000);
+        hddDisk.setStorageMedium(TStorageMedium.HDD);
+        hddDisks.put(hddDisk.getRootPath(), hddDisk);
+        hddOnlyBe.setDisks(ImmutableMap.copyOf(hddDisks));
+        hddOnlyBe.setAlive(true);
+
+        SystemInfoService localInfo = new SystemInfoService();
+        localInfo.addBackend(hddOnlyBe);
+
+        TabletInvertedIndex localIndex = new TabletInvertedIndex();
+        long tabletId = 80000;
+        // 3 HDD-declared and 2 SSD-declared replicas, all physically on the HDD-only BE.
+        for (int i = 0; i < 3; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, hddOnlyBe.getId(), 0, ReplicaState.NORMAL));
+        }
+        for (int i = 0; i < 2; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, TStorageMedium.SSD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, hddOnlyBe.getId(), 0, ReplicaState.NORMAL));
+        }
+
+        BackendLoadStatistic stat = new BackendLoadStatistic(
+                hddOnlyBe.getId(), SystemInfoService.DEFAULT_CLUSTER, localInfo, localIndex);
+        stat.init();
+
+        Assertions.assertEquals(5L, stat.getReplicaNum(TStorageMedium.HDD),
+                "single-medium HDD BE must count every replica under HDD, including SSD-declared ones");
+        Assertions.assertEquals(0L, stat.getReplicaNum(TStorageMedium.SSD),
+                "single-medium HDD BE must report zero SSD replicas");
+    }
+
+    @Test
+    public void testInit_singleMediumSsdShortcut() throws LoadBalanceException {
+        // Symmetric to the HDD-only case: SSD-only BE counts every replica under SSD even when
+        // some TabletMeta entries still carry the legacy HDD declaration.
+        Backend ssdOnlyBe = new Backend(11002, "192.168.0.12", 9051);
+        Map<String, DiskInfo> ssdDisks = Maps.newHashMap();
+        DiskInfo ssdDisk = new DiskInfo("/path1");
+        ssdDisk.setTotalCapacityB(1_000_000);
+        ssdDisk.setAvailableCapacityB(900_000);
+        ssdDisk.setDataUsedCapacityB(100_000);
+        ssdDisk.setStorageMedium(TStorageMedium.SSD);
+        ssdDisks.put(ssdDisk.getRootPath(), ssdDisk);
+        ssdOnlyBe.setDisks(ImmutableMap.copyOf(ssdDisks));
+        ssdOnlyBe.setAlive(true);
+
+        SystemInfoService localInfo = new SystemInfoService();
+        localInfo.addBackend(ssdOnlyBe);
+
+        TabletInvertedIndex localIndex = new TabletInvertedIndex();
+        long tabletId = 81000;
+        for (int i = 0; i < 4; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.SSD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, ssdOnlyBe.getId(), 0, ReplicaState.NORMAL));
+        }
+        for (int i = 0; i < 3; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, TStorageMedium.HDD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, ssdOnlyBe.getId(), 0, ReplicaState.NORMAL));
+        }
+
+        BackendLoadStatistic stat = new BackendLoadStatistic(
+                ssdOnlyBe.getId(), SystemInfoService.DEFAULT_CLUSTER, localInfo, localIndex);
+        stat.init();
+
+        Assertions.assertEquals(7L, stat.getReplicaNum(TStorageMedium.SSD),
+                "single-medium SSD BE must count every replica under SSD, including HDD-declared ones");
+        Assertions.assertEquals(0L, stat.getReplicaNum(TStorageMedium.HDD),
+                "single-medium SSD BE must report zero HDD replicas");
+    }
+
+    @Test
+    public void testInit_mixedMediumStillScansAndHonorsTabletMeta() throws LoadBalanceException {
+        // BE with both HDD and SSD disks: the per-tablet scan must run and counts must match
+        // TabletMeta.storageMedium so the migration scheduler in ReportHandler sees the right
+        // intended counts.
+        Backend mixedBe = new Backend(11003, "192.168.0.13", 9051);
+        Map<String, DiskInfo> mixedDisks = Maps.newHashMap();
+        DiskInfo hdd = new DiskInfo("/hdd");
+        hdd.setTotalCapacityB(2_000_000);
+        hdd.setAvailableCapacityB(1_500_000);
+        hdd.setDataUsedCapacityB(500_000);
+        hdd.setStorageMedium(TStorageMedium.HDD);
+        mixedDisks.put(hdd.getRootPath(), hdd);
+        DiskInfo ssd = new DiskInfo("/ssd");
+        ssd.setTotalCapacityB(1_000_000);
+        ssd.setAvailableCapacityB(700_000);
+        ssd.setDataUsedCapacityB(300_000);
+        ssd.setStorageMedium(TStorageMedium.SSD);
+        mixedDisks.put(ssd.getRootPath(), ssd);
+        mixedBe.setDisks(ImmutableMap.copyOf(mixedDisks));
+        mixedBe.setAlive(true);
+
+        SystemInfoService localInfo = new SystemInfoService();
+        localInfo.addBackend(mixedBe);
+
+        TabletInvertedIndex localIndex = new TabletInvertedIndex();
+        long tabletId = 82000;
+        for (int i = 0; i < 6; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, mixedBe.getId(), 0, ReplicaState.NORMAL));
+        }
+        for (int i = 0; i < 4; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, TStorageMedium.SSD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, mixedBe.getId(), 0, ReplicaState.NORMAL));
+        }
+
+        BackendLoadStatistic stat = new BackendLoadStatistic(
+                mixedBe.getId(), SystemInfoService.DEFAULT_CLUSTER, localInfo, localIndex);
+        stat.init();
+
+        Assertions.assertEquals(6L, stat.getReplicaNum(TStorageMedium.HDD),
+                "mixed-medium BE must keep the per-tablet scan counts");
+        Assertions.assertEquals(4L, stat.getReplicaNum(TStorageMedium.SSD),
+                "mixed-medium BE must keep the per-tablet scan counts");
+    }
+
+    /**
+     * A DiskInfo restored from the image carries no storage medium: the field is not persisted and
+     * is only filled in by the BE's disk report, so it is null from a leader restart until that
+     * report arrives -- forever for a BE that never comes back.
+     */
+    private static Backend backendWithUnreportedMedium(long beId, String host) {
+        Backend be = new Backend(beId, host, 9051);
+        Map<String, DiskInfo> disks = Maps.newHashMap();
+        DiskInfo disk1 = new DiskInfo("/path1");
+        disk1.setTotalCapacityB(1_000_000);
+        disk1.setAvailableCapacityB(900_000);
+        disk1.setDataUsedCapacityB(100_000);
+        // The image-restored state; DiskInfo's no-arg persist constructor is private, and the
+        // public one defaults to HDD, so clear the medium explicitly.
+        disk1.setStorageMedium(null);
+        disks.put(disk1.getRootPath(), disk1);
+
+        DiskInfo disk2 = new DiskInfo("/path2");
+        disk2.setTotalCapacityB(2_000_000);
+        disk2.setAvailableCapacityB(1_800_000);
+        disk2.setDataUsedCapacityB(200_000);
+        disk2.setStorageMedium(null);
+        disks.put(disk2.getRootPath(), disk2);
+
+        be.setDisks(ImmutableMap.copyOf(disks));
+        return be;
+    }
+
+    @Test
+    public void testInit_unreportedDiskMediumDoesNotThrow() throws LoadBalanceException {
+        Backend unreportedBe = backendWithUnreportedMedium(11004, "192.168.0.14");
+        SystemInfoService localInfo = new SystemInfoService();
+        localInfo.addBackend(unreportedBe);
+
+        TabletInvertedIndex localIndex = new TabletInvertedIndex();
+        long tabletId = 83000;
+        for (int i = 0; i < 3; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, unreportedBe.getId(), 0, ReplicaState.NORMAL));
+        }
+
+        BackendLoadStatistic stat = new BackendLoadStatistic(
+                unreportedBe.getId(), SystemInfoService.DEFAULT_CLUSTER, localInfo, localIndex);
+        stat.init();
+
+        // Same outcome as before the single-medium shortcut existed: a disk whose medium is
+        // unknown belongs to no medium, so hasMedium() is false and every count is zeroed.
+        Assertions.assertFalse(stat.hasMedium(TStorageMedium.HDD));
+        Assertions.assertFalse(stat.hasMedium(TStorageMedium.SSD));
+        Assertions.assertEquals(0L, stat.getReplicaNum(TStorageMedium.HDD));
+        Assertions.assertEquals(0L, stat.getReplicaNum(TStorageMedium.SSD));
+    }
+
+    @Test
+    public void testInit_oneKnownMediumPlusUnknownFallsBackToPerTabletScan() throws LoadBalanceException {
+        // updateDisks() fills the media of a BE's disks one DiskInfo at a time under no lock the
+        // scheduler shares, so a refresh can see one disk already HDD and the next still unknown.
+        // The single-medium shortcut must not fire there: the unclassified disk may hold replicas
+        // of the other medium, so counting every replica on the BE as HDD would inflate its HDD
+        // load score. Fall back to the per-tablet scan instead, as before the shortcut existed.
+        Backend partialBe = backendWithUnreportedMedium(11005, "192.168.0.15");
+        partialBe.getDisks().get("/path1").setStorageMedium(TStorageMedium.HDD);
+
+        SystemInfoService localInfo = new SystemInfoService();
+        localInfo.addBackend(partialBe);
+
+        TabletInvertedIndex localIndex = new TabletInvertedIndex();
+        long tabletId = 84000;
+        for (int i = 0; i < 5; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, partialBe.getId(), 0, ReplicaState.NORMAL));
+        }
+        for (int i = 0; i < 2; i++, tabletId++) {
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, TStorageMedium.SSD));
+            localIndex.addReplica(tabletId, new Replica(tabletId + 100, partialBe.getId(), 0, ReplicaState.NORMAL));
+        }
+
+        BackendLoadStatistic stat = new BackendLoadStatistic(
+                partialBe.getId(), SystemInfoService.DEFAULT_CLUSTER, localInfo, localIndex);
+        stat.init();
+
+        Assertions.assertTrue(stat.hasMedium(TStorageMedium.HDD));
+        Assertions.assertEquals(5L, stat.getReplicaNum(TStorageMedium.HDD),
+                "must count only the HDD-declared replicas, not all 7 on the backend");
+        Assertions.assertEquals(0L, stat.getReplicaNum(TStorageMedium.SSD),
+                "the BE has no known SSD disk, so its SSD count stays zeroed");
+    }
+
+    @Test
+    public void testClusterInitNotAbortedByUnreportedDiskMedium() {
+        // ClusterLoadStatistic.init() only catches LoadBalanceException, so anything else thrown
+        // for a single BE escapes to LeaderDaemon and kills the whole tablet-scheduler cycle.
+        systemInfoService.addBackend(backendWithUnreportedMedium(11006, "192.168.0.16"));
+
+        ClusterLoadStatistic loadStatistic = new ClusterLoadStatistic(systemInfoService, invertedIndex);
+        loadStatistic.init();
+
+        // The three healthy BEs are still classified, and the medium-less one is kept but reports
+        // no medium of its own.
+        Assertions.assertEquals(3, loadStatistic.getBackendLoadStats(TStorageMedium.HDD).size());
+        BackendLoadStatistic unreportedStat = loadStatistic.getBackendLoadStatistic(11006);
+        Assertions.assertNotNull(unreportedStat);
+        Assertions.assertEquals(0L, unreportedStat.getReplicaNum(TStorageMedium.HDD));
     }
 
     @Test
@@ -167,7 +401,7 @@ public class ClusterLoadStatisticsTest {
         clusterLoad.init();
 
         BackendLoadStatistic beLoad = clusterLoad.getBackendLoadStatistic(10001);
-        Assert.assertEquals("{\"beId\":10001,\"clusterName\":\"default_cluster\",\"isAvailable\":true," +
+        Assertions.assertEquals("{\"beId\":10001,\"clusterName\":\"default_cluster\",\"isAvailable\":true," +
                 "\"cpuCores\":0,\"memLimit\":0,\"memUsed\":0," +
                 "\"mediums\":[{\"medium\":\"HDD\",\"replica\":1,\"used\":570000,\"total\":\"1.5MB\"," +
                 "\"score\":1.0040447504302925}," +

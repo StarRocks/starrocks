@@ -17,25 +17,21 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.proc.UserPropertyProcNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 // Show Property Stmt
 //  syntax:
 //      SHOW PROPERTY [FOR user] [LIKE key pattern]
 public class ShowUserPropertyStmt extends ShowStmt {
-
     private String user;
     private String pattern;
 
@@ -65,13 +61,17 @@ public class ShowUserPropertyStmt extends ShowStmt {
         this.pattern = pattern;
     }
 
-    public List<List<String>> getRows(ConnectContext connectContext) throws AnalysisException {
+    public List<List<String>> getRows(ConnectContext connectContext) {
         List<List<String>> rows = new ArrayList<>();
         AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
-        // Currently only "max_user_connections" is supported
-        long maxConn = authenticationManager.getMaxConn(user);
-        rows.add(Lists.newArrayList("max_user_connections", String.valueOf(maxConn)));
+        UserProperty userProperty = authenticationManager.getUserProperty(user);
+        rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_CONNECTIONS, String.valueOf(userProperty.getMaxConn())));
+        rows.add(Lists.newArrayList(UserProperty.PROP_CATALOG, userProperty.getCatalog()));
+        rows.add(Lists.newArrayList(UserProperty.PROP_DATABASE, userProperty.getDatabase()));
+        for (Map.Entry<String, String> entry : userProperty.getSessionVariables().entrySet()) {
+            rows.add(Lists.newArrayList(String.format("%s.%s", "session", entry.getKey()), entry.getValue()));
+        }
 
         if (pattern == null) {
             return rows;
@@ -91,16 +91,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String col : UserPropertyProcNode.TITLE_NAMES) {
-            builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowUserPropertyStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowUserPropertyStatement(this, context);
     }
 }

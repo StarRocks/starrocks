@@ -37,6 +37,7 @@ public class ColumnType {
         STRING,
         BINARY,
         DATE,
+        TIME,
         // INT96 timestamp type, hive compatible (hive version < 4.x)
         DATETIME,
         // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MICROS)
@@ -81,7 +82,9 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("string", TypeValue.STRING);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("binary", TypeValue.BINARY);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("time", TypeValue.TIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("datetime", TypeValue.DATETIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-micros", TypeValue.DATETIME_MICROS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimalv2", TypeValue.DECIMALV2);
@@ -114,6 +117,11 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL32, 4);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL64, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL128, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATE, 4);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.TIME, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MICROS, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MILLIS, 8);
     }
 
     @Override
@@ -196,6 +204,11 @@ public class ColumnType {
         if (t.startsWith("decimal")) {
             t = scanner.substr(end);
             scanner.moveTo(end);
+        } else if (t.startsWith("char") || t.startsWith("varchar")) {
+            // right now this only used in hive scanner
+            // for char(xx) and varchar(xx), we only need t to be char or varchar and skip (xx)
+            // otherwise struct<c_char:char(30),c_varchar:varchar(200)> will get wrong result
+            scanner.moveTo(end);
         } else {
             scanner.moveTo(p);
         }
@@ -256,9 +269,7 @@ public class ColumnType {
     }
 
     public boolean isByteStorageType() {
-        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE
-                || typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME
-                || typeValue == TypeValue.DATETIME_MICROS || typeValue == TypeValue.DATETIME_MILLIS;
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.BINARY;
     }
 
     public boolean isArray() {
@@ -443,9 +454,8 @@ public class ColumnType {
             String[] ps = type.substring(s + 1, e).split(",");
             precision = Integer.parseInt(ps[0].trim());
             scale = Integer.parseInt(ps[1].trim());
-            if (precision <= MAX_DECIMAL32_PRECISION) {
-                type = "decimal32";
-            } else if (precision <= MAX_DECIMAL64_PRECISION) {
+            // this logic is the same as FE's ScalarType.createUnifiedDecimalType
+            if (precision <= MAX_DECIMAL64_PRECISION) {
                 type = "decimal64";
             } else {
                 type = "decimal128";

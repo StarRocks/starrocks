@@ -19,16 +19,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.type.StringType;
+import com.starrocks.type.UnknownType;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
+import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -50,8 +52,8 @@ public class HudiTableFactory extends ExternalTableFactory {
     public static void copyFromCatalogTable(HudiTable.Builder builder, HudiTable catalogTable, Map<String, String> properties) {
         builder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
-                .setHiveDbName(catalogTable.getDbName())
-                .setHiveTableName(catalogTable.getTableName())
+                .setHiveDbName(catalogTable.getCatalogDBName())
+                .setHiveTableName(catalogTable.getCatalogTableName())
                 .setPartitionColNames(catalogTable.getPartitionColumnNames())
                 .setDataColNames(catalogTable.getDataColumnNames())
                 .setHudiProperties(catalogTable.getProperties())
@@ -76,7 +78,7 @@ public class HudiTableFactory extends ExternalTableFactory {
         Set<String> includedMetaFields = columns.stream().map(Column::getName)
                 .filter(metaFields::contains).collect(Collectors.toSet());
         metaFields.removeAll(includedMetaFields);
-        metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
+        metaFields.forEach(f -> columns.add(new Column(f, StringType.STRING, true)));
 
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HUDI, HUDI);
         if (table == null) {
@@ -107,7 +109,7 @@ public class HudiTableFactory extends ExternalTableFactory {
 
     private static void validateHudiColumnType(List<Column> columns, HudiTable oTable) throws DdlException {
         String hudiBasePath = oTable.getTableLocation();
-        Configuration conf = new Configuration();
+        HadoopStorageConfiguration conf = new HadoopStorageConfiguration(new Configuration());
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
@@ -129,7 +131,7 @@ public class HudiTableFactory extends ExternalTableFactory {
             }
             Column oColumn = oTable.getColumn(column.getName());
 
-            if (oColumn.getType() == Type.UNKNOWN_TYPE) {
+            if (oColumn.getType() == UnknownType.UNKNOWN_TYPE) {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 

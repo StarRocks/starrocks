@@ -49,6 +49,7 @@ include "MasterService.thrift"
 include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
+include "DataCache.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -57,12 +58,27 @@ struct TSetSessionParams {
     1: required string user
 }
 
+enum TPrivilegeRequirement {
+    // Identity-only authentication, no role/privilege check beyond AuthN.
+    NONE = 0,
+    // Caller must hold System-level OPERATE privilege.
+    // Maps to Authorizer.checkSystemAction(OPERATE) on the FE side.
+    OPERATE = 1,
+    // Caller must hold System-level NODE privilege.
+    // Maps to Authorizer.checkSystemAction(NODE) on the FE side.
+    NODE = 2,
+}
+
 struct TAuthenticateParams {
     1: required string user
     2: required string passwd
     3: optional string host
     4: optional string db_name
     5: optional list<string> table_names;
+    // Required role/privilege the caller must have, in addition to identity AuthN.
+    // Used by FE.checkAuth on the BE HTTP auth path so BE handlers can demand
+    // admin/operate-level checks without round-tripping the role check themselves.
+    6: optional TPrivilegeRequirement required_privilege;
 }
 
 struct TColumnDesc {
@@ -81,6 +97,7 @@ struct TColumnDesc {
   // Let FE control the type, which makes it easier to modify and display complex types
   26: optional string columnTypeStr
   27: optional string dataType
+  28: optional string generatedColumnExprStr
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -115,17 +132,17 @@ struct TShowVariableRequest {
     2: required Types.TVarType varType
 }
 
-// Results of a call to describeTable()
-struct TShowVariableResult {
-    1: required map<string, string> variables
-    2: optional list<TVerboseVariableRecord> verbose_variables
-}
-
 struct TVerboseVariableRecord {
     1: optional string variable_name
     2: optional string value
     3: optional string default_value
     4: optional bool is_changed
+}
+
+// Results of a call to describeTable()
+struct TShowVariableResult {
+    1: required map<string, string> variables
+    2: optional list<TVerboseVariableRecord> verbose_variables
 }
 
 // Valid table file formats
@@ -354,6 +371,12 @@ struct TGetTablesParams {
 
   // If not set, match default_catalog
   22: optional string catalog_name
+  23: optional string table_name
+
+  // Remaining query_timeout (seconds) of the outer user query. Forwarded by the BE schema scanner so the
+  // FE side can bound internal reads (e.g. task_run_history for information_schema.materialized_views) by
+  // the user's query_timeout instead of statistic_collect_query_timeout when the request is not FE-evaluated.
+  24: optional i64 query_timeout
 }
 
 struct TTableStatus {
@@ -399,6 +422,23 @@ struct TMaterializedViewStatus {
     23: optional string task_id
     24: optional string task_name
     25: optional string inactive_reason
+
+    26: optional string extra_message
+    27: optional string query_rewrite_status
+
+    28: optional string creator
+    29: optional string last_refresh_process_time
+    30: optional string last_refresh_job_id
+    31: optional string last_refresh_time
+    32: optional string warehouse
+    33: optional string refresh_mode
+    34: optional string refresh_trigger
+    35: optional string refresh_policy
+    36: optional string resource_group
+    37: optional string query_rewrite_status_reason
+    // Ids 38/39 must stay as branch-4.1 shipped them in 4.1.4: rolling upgrade runs new BEs against old FEs.
+    38: optional string base_table_refresh_version_times
+    39: optional string last_freshness_confirmed_at
 }
 
 struct TListPipesParams {
@@ -409,6 +449,7 @@ struct TListPipesInfo {
     // pipe entity
     1: optional i64 pipe_id
     2: optional string pipe_name
+    3: optional string properties
 
     // schema info
     10: optional string database_name
@@ -468,10 +509,54 @@ struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
 
+struct TMaterializedViewRefreshJobInfo {
+    1: optional string job_id
+    2: optional string materialized_view_id
+    3: optional string table_schema
+    4: optional string table_name
+    5: optional string task_id
+    6: optional string warehouse
+    7: optional string resource_group
+    8: optional string creator
+    9: optional string submit_user
+    10: optional string run_as_user
+    11: optional string submit_time
+    12: optional string refresh_state
+    13: optional string finish_time
+    14: optional string duration_time
+    15: optional string refresh_trigger
+    16: optional string refresh_mode
+    17: optional string imv_source_version_range
+    18: optional string imv_source_timestamp_range
+    19: optional string imv_source_pinned_snapshot_id_map
+    20: optional string failed_task_run_id
+    21: optional string failed_query_id
+    22: optional string error_code
+    23: optional string error_message
+}
+
+struct TListMaterializedViewRefreshJobsResult {
+    1: optional list<TMaterializedViewRefreshJobInfo> jobs
+}
+
+// Pagination cursor for request segmentation
+struct TRequestPagination {
+    1: optional i64 offset
+    2: optional i64 limit
+}
+
 // Arguments to showTasks/ShowTaskRuns
 struct TGetTasksParams {
     1: optional string db
     2: optional Types.TUserIdentity current_user_ident
+    // task's name
+    3: optional string task_name
+    // task run's query_id
+    4: optional string query_id
+    // task's state
+    5: optional string state
+
+    6: optional TRequestPagination pagination
 }
 
 struct TTaskInfo {
@@ -481,6 +566,9 @@ struct TTaskInfo {
     4: optional string database
     5: optional string definition
     6: optional i64 expire_time
+    7: optional string properties
+    8: optional string catalog
+    9: optional string creator
 }
 
 struct TGetTaskInfoResult {
@@ -502,6 +590,14 @@ struct TTaskRunInfo {
 
     12: optional string extra_message
     13: optional string properties
+
+    14: optional string catalog
+    15: optional string warehouse
+
+    16: optional string job_id
+    17: optional i64 process_time
+
+    18: optional string task_source
 }
 
 struct TGetTaskRunInfoResult {
@@ -514,14 +610,28 @@ struct TGetLoadsParams {
     3: optional i64 txn_id
     4: optional string label
     5: optional string load_type
-}
-
-struct TGetLoadsResult {
-    1: optional list<TLoadInfo> loads
-}
-
-struct TGetTrackingLoadsResult {
-    1: optional list<TTrackingLoadInfo> trackingLoads;
+    6: optional string table_name
+    7: optional string user
+    8: optional string state
+    // Legacy wall-clock-string bounds. BE writes them in whatever zone its session
+    // is in (no zone marker on the wire) and FE parses them in TimeUtils.TIME_ZONE
+    // (Asia/Shanghai). They are kept for cross-version compatibility only; new
+    // code should rely on the *_ms fields below, which are unambiguous UTC epoch ms.
+    9:  optional string load_start_time_from
+    10: optional string load_start_time_to
+    11: optional string load_finish_time_from
+    12: optional string load_finish_time_to
+    13: optional string create_time_from
+    14: optional string create_time_to
+    // UTC epoch milliseconds. Preferred by new FE; set by new BE alongside the
+    // legacy string fields. Lets FE filter without round-tripping through a
+    // wall-clock string in some implicit zone.
+    15: optional i64 load_start_time_from_ms
+    16: optional i64 load_start_time_to_ms
+    17: optional i64 load_finish_time_from_ms
+    18: optional i64 load_finish_time_to_ms
+    19: optional i64 create_time_from_ms
+    20: optional i64 create_time_to_ms
 }
 
 struct TTrackingLoadInfo {
@@ -530,6 +640,10 @@ struct TTrackingLoadInfo {
     3: optional string db
     4: optional list<string> urls
     5: optional string load_type
+}
+
+struct TGetTrackingLoadsResult {
+    1: optional list<TTrackingLoadInfo> trackingLoads;
 }
 
 struct TLoadInfo {
@@ -556,11 +670,32 @@ struct TLoadInfo {
     21: optional i64 num_filtered_rows
     22: optional i64 num_unselected_rows
     23: optional i64 num_sink_rows
+    // Deprecated: the BE-local tab-delimited rejected-record file was
+    // removed. Rejected rows are now in `_statistics_.rejected_records`,
+    // queryable by load label / txn_id. The field ordinal is kept for
+    // wire compatibility across rolling upgrades; BE never populates it.
     24: optional string rejected_record_path
+    25: optional string load_id
+    26: optional string profile_id
+    27: optional string table
+    28: optional string user
+    29: optional string load_commit_time
+    30: optional string warehouse
+    31: optional string runtime_details
+    32: optional string properties
+    33: optional i64 num_scan_bytes
+    // UTC epoch milliseconds. Preferred by new BE for materializing the DATETIME
+    // columns of information_schema.loads. When set, BE converts to a DateTimeValue
+    // in the session zone via from_unixtime(); the legacy string fields above are
+    // kept only for old BEs whose code path still relies on from_date_str().
+    34: optional i64 create_time_ms
+    35: optional i64 load_start_time_ms
+    36: optional i64 load_commit_time_ms
+    37: optional i64 load_finish_time_ms
 }
 
-struct TGetRoutineLoadJobsResult {
-    1: optional list<TRoutineLoadJobInfo> loads
+struct TGetLoadsResult {
+    1: optional list<TLoadInfo> loads
 }
 
 struct TRoutineLoadJobInfo {
@@ -583,10 +718,13 @@ struct TRoutineLoadJobInfo {
     17: optional string error_log_urls
     18: optional string tracking_sql
     19: optional string other_msg
+    20: optional string latest_source_position
+    21: optional string offset_lag
+    22: optional string timestamp_progress
 }
 
-struct TGetStreamLoadsResult {
-    1: optional list<TStreamLoadInfo> loads
+struct TGetRoutineLoadJobsResult {
+    1: optional list<TRoutineLoadJobInfo> loads
 }
 
 struct TStreamLoadInfo {
@@ -618,6 +756,10 @@ struct TStreamLoadInfo {
 
 }
 
+struct TGetStreamLoadsResult {
+    1: optional list<TStreamLoadInfo> loads
+}
+
 // getTableNames returns a list of unqualified table names
 struct TGetTablesResult {
   1: list<string> tables
@@ -641,10 +783,6 @@ struct TReportAuditStatisticsResult {
 // Service Protocol Details
 enum FrontendServiceVersion {
   V1
-}
-
-struct TBatchReportExecStatusParams {
-  1: required list<TReportExecStatusParams> params_list
 }
 
 // The results of an INSERT query, sent to the coordinator as part of
@@ -676,7 +814,7 @@ struct TReportExecStatusParams {
 
   // New errors that have not been reported to the coordinator
   // optional in V1
-  9: optional list<string> error_log
+  9: optional list<string> error_log // Decrepated
 
   // URL of files need to load
   // optional
@@ -711,7 +849,34 @@ struct TReportExecStatusParams {
 
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
+  // Deprecated: see TLoadInfo.rejected_record_path for the original field
+  // and the migration note explaining why it's gone. Kept for wire
+  // compatibility; BE never populates it.
   27: optional string rejected_record_path
+
+  28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
+
+  29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
+}
+
+struct TBatchReportExecStatusParams {
+  1: required list<TReportExecStatusParams> params_list
+}
+
+struct TReportFragmentFinishParams {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
+    4: optional i32 backend_num
+}
+
+struct TReportFragmentFinishResponse {
+    1: optional Status.TStatus status
+}
+
+struct TAuditStatisticsItem {
+    1: optional i64 scan_rows
+    2: optional i64 scan_bytes
+    3: optional i64 table_id
 }
 
 struct TAuditStatistics {
@@ -721,19 +886,16 @@ struct TAuditStatistics {
     6: optional i64 cpu_cost_ns
     7: optional i64 mem_cost_bytes
     8: optional i64 spill_bytes
+    10: optional i64 transmitted_bytes
     9: optional list<TAuditStatisticsItem> stats_items
+    11: optional i64 read_local_cnt
+    12: optional i64 read_remote_cnt
 }
 
 struct TReportAuditStatisticsParams {
     1: optional Types.TUniqueId query_id
     2: optional Types.TUniqueId fragment_instance_id
     3: optional TAuditStatistics audit_statistics
-}
-
-struct TAuditStatisticsItem {
-    1: optional i64 scan_rows
-    2: optional i64 scan_bytes
-    3: optional i64 table_id
 }
 
 struct TFeResult {
@@ -773,6 +935,28 @@ struct TMasterOpRequest {
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
+    34: optional i32 forward_times
+    35: optional string session_id
+    36: optional i32 connectionId
+    37: optional i64 txn_id;
+    38: optional bool isInternalStmt;
+
+    39: optional bool is_arrow_flight_sql;
+
+    40: optional list<string> user_groups;
+
+    101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
+}
+
+struct TNotifyForwardDeploymentFinishedRequest {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId arrow_flight_sql_result_fragment_id;
+    3: optional i64 arrow_flight_sql_result_backend_id;
+    4: optional binary arrow_flight_sql_result_schema;
+}
+
+struct TNotifyForwardDeploymentFinishedRespone {
+    1: optional Status.TStatus status
 }
 
 struct TColumnDefinition {
@@ -802,6 +986,16 @@ struct TMasterOpResult {
 
     6: optional string resource_group_name;
     7: optional TAuditStatistics audit_statistics;
+    8: optional string errorMsg;
+    9: optional i64 txn_id;
+    // SQL digest computed by Leader after analyze
+    10:optional string sql_digest;
+    // StarMgr max journal ID for shared-data mode follower sync
+    11:optional i64 maxStarMgrJournalId;
+    // Table/view relations collected by Leader after analyze (fully-qualified, CTE excluded).
+    // Followers that forward the statement never analyze it locally, so they cannot resolve
+    // CTE aliases or qualify names; they reuse this list for the audit log instead.
+    12:optional list<string> queried_relations;
 }
 
 struct TIsMethodSupportedRequest {
@@ -832,6 +1026,10 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
+
+    // begin from 101, in case of conflict with other's change
+    101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
+    102: optional i64 backend_id
 }
 
 struct TLoadTxnBeginResult {
@@ -897,6 +1095,13 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
+    56: optional string payload_compression_type
+    // CDC envelope format
+    57: optional PlanNodes.TEnvelopeType envelope
+
+    // begin from 101, in case of conflict with other's change
+    101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
+    102: optional i64 backend_id
 }
 
 struct TStreamLoadPutResult {
@@ -905,8 +1110,32 @@ struct TStreamLoadPutResult {
     2: optional InternalService.TExecPlanFragmentParams params
 }
 
+struct TMergeCommitRequest {
+    1: optional string db
+    2: optional string tbl
+    3: optional string user
+    4: optional string passwd
+    5: optional string user_ip
+    6: optional i64 backend_id
+    7: optional string backend_host;
+    8: optional map<string, string> params;
+    // Cluster-internal trust token: when set and matching the FE cluster
+    // token, the request bypasses Basic-style password verification and
+    // is dispatched as ROOT. Only honored for designated system tables
+    // (currently `_statistics_.rejected_records`); any other db/tbl
+    // falls back to the normal user/passwd check regardless of token.
+    9: optional string internal_token;
+}
+
+struct TMergeCommitResult {
+    1: optional Status.TStatus status;
+    // only valid for success
+    2: optional string label;
+}
+
 struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
+    2: optional map<i32,i64> partitionCmtOffsetTimestamp
 }
 
 struct TPulsarRLTaskProgress {
@@ -926,6 +1155,8 @@ struct TRLTaskTxnCommitAttachment {
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
     12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
+    // If true, the error is non-retryable and routine load job should be paused
+    13: optional bool nonRetryable
 }
 
 struct TMiniLoadTxnCommitAttachment {
@@ -941,6 +1172,9 @@ struct TManualLoadTxnCommitAttachment {
     4: optional i64 receivedBytes
     5: optional i64 loadedBytes
     6: optional i64 unselectedRows
+    7: optional i64 planTime
+    8: optional i64 receiveDataTime
+    9: optional i64 beginTxnTime
 }
 
 struct TTxnCommitAttachment {
@@ -964,6 +1198,8 @@ struct TLoadTxnCommitRequest {
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
     13: optional list<Types.TTabletFailInfo> failInfos
+    // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
+    14: optional i32 prepared_timeout_second
 }
 
 struct TLoadTxnCommitResult {
@@ -985,10 +1221,12 @@ struct TLoadTxnRollbackRequest {
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
+    12: optional list<Types.TTabletCommitInfo> commitInfos
 }
 
 struct TGetLoadTxnStatusResult {
     1: required Status.TTransactionStatus status
+    2: optional string reason;
 }
 
 struct TGetLoadTxnStatusRequest {
@@ -1295,6 +1533,9 @@ struct TAbortRemoteTxnRequest {
     2: optional i64 db_id
     3: optional string error_msg
     4: optional TAuthenticateParams auth_info
+    5: optional list<Types.TTabletCommitInfo> commit_infos
+    6: optional TTxnCommitAttachment commit_attachment
+    7: optional list<Types.TTabletFailInfo> fail_infos
 }
 
 struct TAbortRemoteTxnResponse {
@@ -1304,6 +1545,8 @@ struct TAbortRemoteTxnResponse {
 struct TSetConfigRequest {
     1: optional list<string> keys
     2: optional list<string> values
+    3: optional bool is_persistent
+    4: optional string user_identity
 }
 
 struct TSetConfigResponse {
@@ -1316,6 +1559,9 @@ struct TCreatePartitionRequest {
     3: optional i64 table_id
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
+    5: optional bool is_temp
+    // timeout in seconds for partition creation request
+    6: optional i32 timeout_s
 }
 
 struct TCreatePartitionResult {
@@ -1330,6 +1576,9 @@ struct TImmutablePartitionRequest {
     2: optional i64 db_id
     3: optional i64 table_id
     4: optional list<i64> partition_ids
+
+    // begin from 101, in case of conflict with other's change
+    101: optional i64 backend_id
 }
 
 struct TImmutablePartitionResult {
@@ -1352,10 +1601,7 @@ struct TAuthInfo {
 
 struct TGetTablesConfigRequest {
     1: optional TAuthInfo auth_info
-}
-
-struct TGetTablesConfigResponse {
-    1: optional list<TTableConfigInfo> tables_config_infos
+    2: optional string table_name
 }
 
 struct TTableConfigInfo {
@@ -1373,11 +1619,128 @@ struct TTableConfigInfo {
     12: optional i64 table_id
 }
 
+struct TGetTablesConfigResponse {
+    1: optional list<TTableConfigInfo> tables_config_infos
+}
+
+struct TGetPartitionsMetaRequest {
+    1: optional TAuthInfo auth_info
+    // get partitions where table id >= start_table_id_offset
+    2: optional i64 start_table_id_offset;
+}
+
+struct TPartitionMetaInfo {
+    1: optional string db_name
+    2: optional string table_name
+    3: optional string partition_name
+    4: optional i64 partition_id
+    5: optional i64 compact_version
+    6: optional i64 visible_version
+    7: optional i64 visible_version_time
+    8: optional i64 next_version
+    9: optional string partition_key
+    10: optional string partition_value
+    11: optional string distribution_key
+    12: optional i32 buckets
+    13: optional i32 replication_num
+    14: optional string storage_medium
+    15: optional i64 cooldown_time
+    16: optional i64 last_consistency_check_time
+    17: optional bool is_in_memory // Deprecated
+    18: optional bool is_temp
+    19: optional string data_size
+    20: optional i64 row_count
+    21: optional bool enable_datacache
+    22: optional double avg_cs
+    23: optional double p50_cs
+    24: optional double max_cs
+    25: optional string storage_path
+    26: optional i64 data_version
+    27: optional i64 version_epoch
+    28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
+    29: optional i64 storage_size
+    30: optional bool tablet_balanced
+    31: optional i64 metadata_switch_version
+    32: optional i64 path_id // deprecated
+    // [min, max] vector-index built-version span across the partition's base-index
+    // tablets. Only meaningful for tables with an async vector index (shared-data).
+    33: optional i64 min_vi_built_version
+    34: optional i64 max_vi_built_version
+    // Last time this partition was scanned by a query (unix seconds). In-memory only on FE
+    // (not persisted); 0/absent = never accessed, or the value was lost on FE restart/failover.
+    35: optional i64 last_access_time
+    // Last time this partition was modified by a user write (load/DML, excluding compaction),
+    // in unix seconds. 0/absent = unknown.
+    36: optional i64 last_update_time
+}
+
+// Ask one FE for its local in-memory partition query-access times of a table, so the querying FE
+// can aggregate (max) across all FEs. Best-effort: callers tolerate a missing/slow FE.
+struct TPartitionAccessTimeTableRef {
+    1: optional i64 db_id
+    2: optional i64 table_id
+}
+
+struct TGetPartitionAccessTimesRequest {
+    // One entry per requested table. SHOW PARTITIONS sends a single element; partitions_meta sends the
+    // whole page so a single RPC per FE covers many tables (O(FEs) round-trips, not O(tables * FEs)).
+    // Logical partition ids are globally unique, so the response merges into one logicalPartitionId -> ms map.
+    1: optional list<TPartitionAccessTimeTableRef> tables
+}
+
+struct TGetPartitionAccessTimesResponse {
+    1: optional Status.TStatus status
+    2: optional map<i64, i64> partition_id_to_access_time_ms // logicalPartitionId -> lastAccessTime(ms)
+}
+
+struct TGetPartitionsMetaResponse {
+    1: optional list<TPartitionMetaInfo> partitions_meta_infos
+    // max table id in partitions_meta_infos + 1, if set to 0, it means reaches end
+    2: optional i64 next_table_id_offset;
+}
+
 struct TGetTablesInfoRequest {
     1: optional TAuthInfo auth_info
+    2: optional string table_name;
+}
+
+struct TTableInfo {
+    1: optional string table_catalog
+    2: optional string table_schema
+    3: optional string table_name
+    4: optional string table_type
+    5: optional string engine
+    6: optional i64 version
+    7: optional string row_format
+    8: optional i64 table_rows
+    9: optional i64 avg_row_length
+    10: optional i64 data_length
+    11: optional i64 max_data_length
+    12: optional i64 index_length
+    13: optional i64 data_free
+    14: optional i64 auto_increment
+    15: optional i64 create_time
+    16: optional i64 update_time
+    17: optional i64 check_time
+    18: optional string table_collation
+    19: optional i64 checksum
+    20: optional string create_options
+    21: optional string table_comment
+    22: optional string session_id
+    23: optional i64 table_id
 }
 
 struct TGetTablesInfoResponse {
+    1: optional list<TTableInfo> tables_infos
+}
+
+struct TGetTemporaryTablesInfoRequest {
+    1: optional TAuthInfo auth_info
+    // only for no predicate and limit parameter is set
+    2: optional i64 limit
+}
+
+struct TGetTemporaryTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
@@ -1388,15 +1751,26 @@ struct TTabletSchedule {
     4: optional string type
     5: optional string priority
     6: optional string state
-    7: optional string tablet_status
+    7: optional string schedule_reason
     8: optional double create_time
     9: optional double schedule_time
     10: optional double finish_time
-    11: optional i64 clone_src
-    12: optional i64 clone_dest
+    11: optional i64 src_be_id
+    12: optional i64 dest_be_id
     13: optional i64 clone_bytes
     14: optional double clone_duration
     15: optional string error_msg
+    16: optional double clone_rate
+    17: optional i64 timeout
+    18: optional string medium
+    19: optional string src_path
+    20: optional string dest_path
+    21: optional string orig_priority
+    22: optional i64 last_priority_adjust_time
+    23: optional i64 visible_version
+    24: optional i64 committed_version
+    25: optional i32 failed_schedule_count
+    26: optional i32 failed_running_count
 }
 
 struct TGetTabletScheduleRequest {
@@ -1406,6 +1780,7 @@ struct TGetTabletScheduleRequest {
     4: optional string type
     5: optional string state
     6: optional i64 limit
+    7: optional Types.TUserIdentity current_user_ident
 }
 
 struct TGetTabletScheduleResponse {
@@ -1421,6 +1796,35 @@ struct TUpdateResourceUsageResponse {
     1: optional Status.TStatus status
 }
 
+struct TGetQueryStatisticsRequest {
+}
+
+struct TQueryStatisticsInfo {
+    1: optional i64 queryStartTime
+    2: optional string feIp
+    3: optional string queryId
+    4: optional string connId
+    5: optional string db
+    6: optional string user
+    7: optional i64 cpuCostNs
+    8: optional i64 scanBytes
+    9: optional i64 scanRows
+    10: optional i64 memUsageBytes
+    11: optional i64 spillBytes
+    12: optional i64 execTime
+    13: optional string wareHouseName
+    14: optional string customQueryId
+    15: optional string resourceGroupName
+    16: optional string execProgress
+    17: optional string execState
+    18: optional string queryType
+}
+
+struct TGetQueryStatisticsResponse {
+    1: optional Status.TStatus status
+    2: optional list<TQueryStatisticsInfo> queryStatistics_infos;
+}
+
 struct TResourceLogicalSlot {
     1: optional Types.TUniqueId slot_id
     2: optional string request_fe_name
@@ -1429,6 +1833,7 @@ struct TResourceLogicalSlot {
     5: optional i64 expired_pending_time_ms
     6: optional i64 expired_allocated_time_ms
     7: optional i64 fe_start_time_ms
+    8: optional i64 warehouse_id
 
     100: optional i32 num_fragments
     101: optional i32 pipeline_dop
@@ -1455,6 +1860,7 @@ struct TFinishSlotRequirementResponse {
 
 struct TReleaseSlotRequest {
     1: optional Types.TUniqueId slot_id
+    2: optional i64 warehouse_id
 }
 
 struct TReleaseSlotResponse {
@@ -1477,30 +1883,6 @@ struct TWarehouseInfo {
 struct TGetWarehousesResponse {
     1: optional Status.TStatus status
     2: optional list<TWarehouseInfo> warehouse_infos;
-}
-
-struct TTableInfo {
-    1: optional string table_catalog
-    2: optional string table_schema
-    3: optional string table_name
-    4: optional string table_type
-    5: optional string engine
-    6: optional i64 version
-    7: optional string row_format
-    8: optional i64 table_rows
-    9: optional i64 avg_row_length
-    10: optional i64 data_length
-    11: optional i64 max_data_length
-    12: optional i64 index_length
-    13: optional i64 data_free
-    14: optional i64 auto_increment
-    15: optional i64 create_time
-    16: optional i64 update_time
-    17: optional i64 check_time
-    18: optional string table_collation
-    19: optional i64 checksum
-    20: optional string create_options
-    21: optional string table_comment
 }
 
 struct TAllocateAutoIncrementIdParam {
@@ -1549,6 +1931,106 @@ struct TObjectDependencyRes {
     1: optional list<TObjectDependencyItem> items
 }
 
+struct TKeywordInfo {
+    1: optional string keyword;
+    2: optional bool reserved;
+}
+
+struct TGetKeywordsRequest {
+    1: optional TAuthInfo auth_info
+    // get keywords where table id >= start_table_id_offset
+    2: optional i64 start_table_id_offset;
+}
+
+struct TGetKeywordsResponse {
+    1: optional list<TKeywordInfo> keywords;
+    // max table id in keywords + 1, if set to 0, it means reaches end
+    2: optional i64 next_table_id_offset;
+}
+
+struct TFeLocksItem {
+    1: optional string lock_type
+    2: optional string lock_object
+    3: optional string lock_mode
+    4: optional i64 start_time
+    5: optional i64 hold_time_ms
+    
+    11: optional string thread_info
+    12: optional bool granted
+    14: optional string waiter_list
+}
+
+struct TFeLocksReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TFeLocksRes {
+    1: optional list<TFeLocksItem> items
+}
+
+struct TFeMemoryItem {
+    1: optional string module_name
+    2: optional string class_name
+    3: optional i64 current_consumption
+    4: optional i64 peak_consumption
+    5: optional string counter_info
+}
+
+struct TFeMemoryReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TFeMemoryRes {
+    1: optional list<TFeMemoryItem> items
+}
+
+struct TColumnStatsUsageReq {
+    1: optional TAuthInfo auth_info
+    2: optional string table_catalog
+    3: optional string table_database
+    4: optional string table_name
+}
+
+struct TColumnStatsUsage {
+    1: optional string table_catalog
+    2: optional string table_database
+    3: optional string table_name
+    4: optional string column_name
+    5: optional string usage
+    6: optional i64 last_used
+    7: optional i64 created
+}
+
+struct TColumnStatsUsageRes {
+    1: optional list<TColumnStatsUsage> items;
+}
+
+struct TAnalyzeStatusReq {
+    1: optional TAuthInfo auth_info
+    2: optional string table_catalog
+    3: optional string table_database
+    4: optional string table_name
+}
+
+struct TAnalyzeStatusItem {
+    1: optional string id
+    2: optional string catalog_name
+    3: optional string database_name
+    4: optional string table_name
+    5: optional string columns
+    6: optional string type
+    7: optional string schedule
+    8: optional string status
+    9: optional string start_time
+    10: optional string end_time
+    11: optional string properties
+    12: optional string reason
+}
+
+struct TAnalyzeStatusRes {
+    1: optional list<TAnalyzeStatusItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1574,6 +2056,10 @@ struct TGetGrantsToRolesOrUserResponse {
 
 struct TGetProfileRequest {
     1: optional list<string> query_id
+    // Optional field that controls whether query profiles are retrieved from all Frontends
+    // if true or unset, profiles are collected from all alive FEs
+    // if false, only the local FE (the one that received the query) is queried.
+    2: optional bool is_request_all_frontend
 }
 
 struct TGetProfileResponse {
@@ -1593,6 +2079,429 @@ struct TGetDictQueryParamResponse {
   4: required Descriptors.TNodesInfo nodes_info
 }
 
+struct TReplicaReplicationInfo {
+    1: optional Types.TBackend src_backend
+}
+
+struct TTabletReplicationInfo {
+    1: optional i64 tablet_id
+    2: optional i64 src_tablet_id
+    3: optional list<TReplicaReplicationInfo> replica_replication_infos
+}
+
+struct TIndexReplicationInfo {
+    1: optional i64 index_id
+    2: optional i32 src_schema_hash
+    3: optional map<i64, TTabletReplicationInfo> tablet_replication_infos
+}
+
+struct TPartitionReplicationInfo {
+    1: optional i64 partition_id
+    2: optional i64 src_version
+    3: optional map<i64, TIndexReplicationInfo> index_replication_infos
+    4: optional i64 src_version_epoch
+    5: optional i64 src_partition_id
+}
+
+struct TTableReplicationRequest {
+    1: optional string username
+    2: optional string password
+    3: optional i64 database_id
+    4: optional i64 table_id
+    5: optional string src_token
+    6: optional Types.TTableType src_table_type
+    7: optional i64 src_table_data_size
+    8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
+    9: optional string job_id
+    10: optional Types.TRunMode src_cluster_run_mode
+    11: optional string src_storage_volume_name
+    12: optional string src_service_id
+    13: optional i64 src_database_id
+    14: optional i64 src_table_id
+}
+
+struct TTableReplicationResponse {
+    1: optional Status.TStatus status
+}
+
+struct TReportLakeCompactionRequest {
+    1: optional i64 txn_id
+}
+
+struct TReportLakeCompactionResponse {
+    1: optional bool valid
+}
+
+struct TListSessionsOptions {
+    1: optional bool temporary_table_only;
+}
+
+struct TListSessionsRequest {
+    1: optional TListSessionsOptions options;
+}
+
+struct TSessionInfo {
+    1: optional string session_id;
+}
+
+struct TListSessionsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TSessionInfo> sessions;
+}
+
+struct TListConnectionRequest {
+    1: optional TAuthInfo auth_info;
+    2: optional string for_user;
+    3: optional bool show_full;
+}
+
+struct TConnectionInfo {
+    1: optional string connection_id;
+    2: optional string user;
+    3: optional string host;
+    4: optional string db;
+    5: optional string command;
+    6: optional string connection_start_time;
+    7: optional string time;
+    8: optional string state;
+    9: optional string info;
+    10: optional string isPending;
+    11: optional string warehouse;
+    12: optional string cngroup;
+    13: optional string catalog;
+    14: optional string queryId;
+}
+
+struct TListConnectionResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TConnectionInfo> connections;
+}
+
+struct TGetKeysRequest {
+}
+
+struct TGetKeysResponse {
+    1: optional list<binary> key_metas;
+}
+
+struct TGetWarehouseMetricsRequest {
+    1: optional TAuthInfo auth_info
+}
+struct TGetWarehouseMetricsResponeItem {
+    1: optional string warehouse_id;
+    2: optional string warehouse_name;
+    3: optional string queue_pending_length;
+    4: optional string queue_running_length;
+    5: optional string max_pending_length;
+    6: optional string max_pending_time_second;
+    7: optional string earliest_query_wait_time;
+    8: optional string max_required_slots;
+    9: optional string sum_required_slots;
+    10: optional string remain_slots;
+    11: optional string max_slots;
+    12: optional string extra_message;
+}
+struct TGetWarehouseMetricsRespone {
+    1:optional list<TGetWarehouseMetricsResponeItem> metrics;
+}
+
+struct TGetWarehouseQueriesRequest {
+    1: optional TAuthInfo auth_info
+}
+struct TGetWarehouseQueriesResponseItem {
+    1: optional string warehouse_id;
+    2: optional string warehouse_name;
+    3: optional string query_id;
+    4: optional string state;
+    5: optional string est_costs_slots;
+    6: optional string allocate_slots;
+    7: optional string queued_wait_seconds;
+    8: optional string query;
+    9: optional string query_start_time;
+    10: optional string query_end_time;
+    11: optional string query_duration;
+    12: optional string extra_message;
+}
+struct TGetWarehouseQueriesResponse {
+    1: optional list<TGetWarehouseQueriesResponseItem> queries;
+}
+
+struct TStartCheckpointRequest {
+    1: optional i64 epoch;
+    2: optional i64 journal_id;
+    3: optional bool is_global_state_mgr;
+}
+
+struct TStartCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TFinishCheckpointRequest {
+    1: optional i64 journal_id;
+    2: optional string node_name;
+    3: optional bool is_success;
+    4: optional string message;
+    5: optional bool is_global_state_mgr;
+}
+
+struct TFinishCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TListRecycleBinCatalogsParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListRecycleBinCatalogsInfo {
+    1: optional string type
+    2: optional string name
+    3: optional i64 dbid
+    4: optional i64 tableid
+    5: optional i64 partitionid
+    6: optional i64 droptime
+}
+
+struct TListRecycleBinCatalogsResult {
+    1: optional list<TListRecycleBinCatalogsInfo> recyclebin_catalogs
+}
+
+// Batch fetching partition meta info by a list of tablet ids
+// FIXME: add auth info to the request, so the API will be secured
+struct TPartitionMetaRequest {
+    1: optional list<i64> tablet_ids;
+}
+
+struct TPartitionMetaResponse {
+    1: optional Status.TStatus status;
+    // (tablet_id -> array index in partition_metas)
+    // In case of partial failure, the failed tablet_id will not be in the map
+    2: optional map<i64,i32> tablet_id_partition_meta_index;
+    // all the partition meta info found for the tablets
+    3: optional list<TPartitionMeta> partition_metas;
+}
+
+struct TClusterSnapshotsItem {
+    1: optional string snapshot_name;
+    2: optional string snapshot_type;
+    3: optional i64 created_time;
+    4: optional i64 fe_jouranl_id;
+    5: optional i64 starmgr_jouranl_id;
+    6: optional string properties;
+    7: optional string storage_volume;
+    8: optional string storage_path;
+}
+
+struct TClusterSnapshotsRequest {
+}
+
+struct TClusterSnapshotsResponse {
+    1: optional list<TClusterSnapshotsItem> items;
+}
+
+struct TClusterSnapshotJobsItem {
+    1: optional string snapshot_name;
+    2: optional i64 job_id;
+    3: optional i64 created_time;
+    4: optional i64 finished_time;
+    5: optional string state;
+    6: optional string detail_info;
+    7: optional string error_message;
+}
+
+struct TClusterSnapshotJobsRequest {
+}
+
+struct TClusterSnapshotJobsResponse {
+    1: optional list<TClusterSnapshotJobsItem> items;
+}
+
+struct TApplicableRolesInfo {
+    1: optional string user;
+    2: optional string host;
+    3: optional string grantee;
+    4: optional string grantee_host;
+    5: optional string role_name;
+    6: optional string role_host;
+    7: optional string is_grantable;
+    8: optional string is_default;
+    9: optional string is_mandatory;
+}
+
+struct TGetApplicableRolesRequest {
+    1: optional TAuthInfo auth_info;
+    2: optional i64 start_table_id_offset;
+}
+
+struct TGetApplicableRolesResponse {
+    1: optional list<TApplicableRolesInfo> roles;
+    2: optional i64 next_table_id_offset;
+}
+
+struct TUpdateFailPointRequest {
+    1: optional string name;
+    2: optional bool is_enable;
+    3: optional i32 times;
+    4: optional double probability;
+    // Pause mode: park threads reaching this failpoint until it is disabled. A pause request also
+    // sets is_enable = false, so a frontend that predates this field disables the failpoint instead
+    // of enabling it. Readers must check `pause` before `is_enable`.
+    5: optional bool pause;
+    // Pause timeout, snapshotted by the arming frontend and carried with the request, exactly as
+    // PUpdateFailPointStatusRequest.pause_timeout_second is for backends. Receivers must NOT re-read
+    // their own config at park time: that would let ADMIN SET FRONTEND CONFIG between arming and
+    // parking desynchronize the frontends from each other and from the backends.
+    6: optional i32 pause_timeout_second;
+}
+
+struct TUpdateFailPointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TTabletReshardJobsItem {
+    1: optional i64 job_id;
+    2: optional string db_name;
+    3: optional string table_name;
+    4: optional i64 db_id;
+    5: optional i64 table_id;
+    6: optional string job_type;
+    7: optional string job_state;
+    8: optional i64 transaction_id;
+    9: optional i64 parallel_partitions;
+    10: optional i64 parallel_tablets;
+    11: optional i64 created_time;
+    12: optional i64 finished_time;
+    13: optional string error_message;
+}
+
+struct TTabletReshardJobsRequest {
+}
+
+struct TTabletReshardJobsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TTabletReshardJobsItem> items;
+}
+
+struct TFeThreadInfo {
+    1: optional string fe_address;
+    2: optional i64 thread_id;
+    3: optional string thread_name;
+    4: optional string thread_state;
+    5: optional bool is_daemon;
+    6: optional i32 priority;
+    7: optional i64 cpu_time_ms;
+    8: optional i64 user_time_ms;
+}
+
+struct TGetFeThreadsRequest {
+    1: optional TAuthInfo auth_info;
+}
+
+struct TGetFeThreadsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TFeThreadInfo> threads;
+}
+
+struct TRefreshConnectionsRequest {
+    1: optional bool force;
+}
+
+struct TRefreshConnectionsResponse {
+    1: optional Status.TStatus status;
+}
+
+enum TTableSchemaRequestSource {
+    SCAN = 0,
+    LOAD = 1
+}
+
+struct TGetTableSchemaRequest {
+    1: optional Descriptors.TTableSchemaKey schema_key;
+    2: optional TTableSchemaRequestSource source;
+    3: optional i64 tablet_id;
+    // Valid if request_source is SCAN
+    4: optional Types.TUniqueId query_id;
+    // Valid if request_source is LOAD
+    5: optional i64 txn_id;
+}
+
+struct TGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional AgentService.TTabletSchema schema;
+}
+
+struct TBatchGetTableSchemaRequest {
+    1: optional list<TGetTableSchemaRequest> requests;
+}
+
+struct TBatchGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTableSchemaResponse> responses;
+}
+
+struct TGetTabletMetadataRequest {
+    1: optional i64 tablet_id;
+    2: optional i64 table_id;
+    3: optional i64 partition_id;
+    4: optional i64 index_id;
+    // The metadata version to fetch. Defaults to 1 when unset.
+    // The current implementation only serves version 1 (the initial empty metadata
+    // produced by tablet creation). Other versions return NOT_IMPLEMENTED until a
+    // future change extends the response with the fields needed for higher versions
+    // (rowsets, historical schemas, etc.).
+    5: optional i64 version;
+}
+
+// Extension point for TCloudTabletMeta. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TCloudTabletMeta
+// fields belong on TCloudTabletMeta itself, whose remaining numbers are free.
+struct TCloudTabletMetaExt {
+}
+
+// Subset of tablet metadata fields needed to construct a version-1 TabletMetadataPB
+// on CN. The shape currently overlaps with AgentService.TCreateTabletReq; the two
+// must be kept in sync per the NOTE on TCreateTabletReq. Higher versions will need
+// additional fields (rowsets, sstable meta, historical schemas, etc.) which can be
+// added without breaking compatibility since all fields are optional.
+struct TCloudTabletMeta {
+    1: optional i64 tablet_id;
+    2: optional AgentService.TTabletSchema schema;
+    3: optional bool enable_persistent_index;
+    4: optional AgentService.TPersistentIndexType persistent_index_type;
+    5: optional AgentService.TCompactionStrategy compaction_strategy;
+    6: optional AgentService.TFlatJsonConfig flat_json_config;
+    7: optional map<i64, Types.TTabletRange> tablet_ranges;
+    8: optional i64 gtid;
+    9: optional Types.TCompressionType compression_type;
+    10: optional i32 compression_level;
+    11: optional TCloudTabletMetaExt ext;
+}
+
+struct TGetTabletMetadataResponse {
+    1: optional Status.TStatus status;
+    2: optional TCloudTabletMeta meta;
+}
+
+struct TBatchGetTabletMetadataRequest {
+    1: optional list<TGetTabletMetadataRequest> requests;
+}
+
+struct TBatchGetTabletMetadataResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTabletMetadataResponse> responses;
+}
+
+// information_schema.fe_metrics: the BE scanner fetches each FE's metrics over the getFeMetrics
+// RPC (instead of scraping the HTTP /metrics endpoint), so fe_metrics works regardless of
+// `enable_http_auth` and no longer depends on HTTP Basic auth. The RPC takes no arguments —
+// FE process metrics are global with no per-object RBAC to authorize.
+struct TFeMetricsResult {
+    1: optional Status.TStatus status
+    // JSON payload identical to the FE `/metrics?type=json` output, parsed by the BE scanner.
+    2: optional string json_metrics
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1604,6 +2513,8 @@ service FrontendService {
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
+
+    TGetKeysResponse getKeys(1:TGetKeysRequest params);
 
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
     TGetTrackingLoadsResult getTrackingLoads(1:TGetLoadsParams params)
@@ -1629,9 +2540,11 @@ service FrontendService {
 
     //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems
     TMasterOpResult forward(TMasterOpRequest params)
+    TNotifyForwardDeploymentFinishedRespone notifyForwardDeploymentFinished(TNotifyForwardDeploymentFinishedRequest request)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
+    TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(1: optional TGetTasksParams params)
     TListPipesResult listPipes(1: TListPipesParams params)
     TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
 
@@ -1646,6 +2559,8 @@ service FrontendService {
     TLoadTxnCommitResult loadTxnPrepare(1: TLoadTxnCommitRequest request)
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
+
+    TMergeCommitResult requestMergeCommit(1: TMergeCommitRequest request)
 
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 
@@ -1665,6 +2580,8 @@ service FrontendService {
 
     TGetWarehousesResponse getWarehouses(1: TGetWarehousesRequest request)
 
+    TGetQueryStatisticsResponse getQueryStatistics(1: TGetQueryStatisticsRequest request)
+
     // For Materialized View
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
 
@@ -1672,11 +2589,27 @@ service FrontendService {
 
     TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
 
+    TGetFeThreadsResponse getFeThreads(1: TGetFeThreadsRequest request)
+
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
 
     // sys.object_dependencies
     TObjectDependencyRes listObjectDependencies(1: TObjectDependencyReq request)
+
+    // sys.fe_locks
+    TFeLocksRes listFeLocks(1: TFeLocksReq request)
+
+    // sys.fe_memory_usage
+    TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
+
+    // information_schema.fe_metrics
+    TFeMetricsResult getFeMetrics()
+
+    // information_schema.column_stats_uage
+    TColumnStatsUsageRes getColumnStatsUsage(1: TColumnStatsUsageReq request)
+    // information_schema.analyze_status
+    TAnalyzeStatusRes getAnalyzeStatus(1: TAnalyzeStatusReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
@@ -1685,5 +2618,52 @@ service FrontendService {
     TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
 
     TGetDictQueryParamResponse getDictQueryParam(1: TGetDictQueryParamRequest request)
-}
 
+    TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
+
+    TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
+
+    TGetPartitionAccessTimesResponse getPartitionAccessTimes(1: optional TGetPartitionAccessTimesRequest request)
+
+    TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
+
+    TListSessionsResponse listSessions(1: TListSessionsRequest request)
+    TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
+
+    TListConnectionResponse listConnections(1: TListConnectionRequest request)
+
+    TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
+
+    TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
+
+    TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
+    TListRecycleBinCatalogsResult listRecycleBinCatalogs(1: TListRecycleBinCatalogsParams params)
+
+    TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request)
+
+    TClusterSnapshotsResponse getClusterSnapshotsInfo(1: TClusterSnapshotsRequest request)
+    TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(1: TClusterSnapshotJobsRequest request)
+
+    TGetApplicableRolesResponse getApplicableRoles(1: TGetApplicableRolesRequest request)
+
+    TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
+
+    TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
+
+    TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
+
+    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
+
+    TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
+
+    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
+
+    TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
+
+    TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
+
+    // Verify Basic Auth credentials. Used by BE to authenticate external HTTP requests
+    // when `enable_http_auth` is on. Returns OK status when the user/password pair is
+    // valid for the given host, or an error status otherwise.
+    TFeResult checkAuth(1: optional TAuthenticateParams request)
+}

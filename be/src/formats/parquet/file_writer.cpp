@@ -16,24 +16,29 @@
 #include "formats/parquet/file_writer.h"
 
 #include <arrow/buffer.h>
-#include <arrow/io/file.h>
-#include <arrow/io/interfaces.h>
-#include <parquet/arrow/writer.h>
+#include <arrow/io/type_fwd.h>
+#include <fmt/core.h>
+#include <glog/logging.h>
+#include <parquet/exception.h>
+#include <parquet/metadata.h>
+#include <parquet/type_fwd.h>
+#include <runtime/current_thread.h>
 
-#include "column/array_column.h"
+#include <ostream>
+
+#include "base/concurrency/stopwatch.hpp"
+#include "base/string/slice.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/logging.h"
-#include "exprs/column_ref.h"
+#include "common/runtime_profile.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "exprs/expr.h"
-#include "runtime/exec_env.h"
-#include "util/defer_op.h"
-#include "util/priority_thread_pool.hpp"
-#include "util/runtime_profile.h"
-#include "util/slice.h"
+#include "exprs/expr_context.h"
+#include "formats/parquet/utils.h"
+#include "fs/fs.h"
+#include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 namespace starrocks::parquet {
 
@@ -103,6 +108,47 @@ arrow::Status ParquetOutputStream::Close() {
     return arrow::Status::OK();
 }
 
+AsyncParquetOutputStream::AsyncParquetOutputStream(formats::AsyncFlushOutputStream* stream) : _stream(stream) {
+    set_mode(arrow::io::FileMode::WRITE);
+}
+
+arrow::Status AsyncParquetOutputStream::Write(const std::shared_ptr<arrow::Buffer>& data) {
+    arrow::Status st = Write(data->data(), data->size());
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to write data to output stream, err msg: " << st.message();
+    }
+    return st;
+}
+
+arrow::Status AsyncParquetOutputStream::Write(const void* data, int64_t nbytes) {
+    if (_is_closed) {
+        return arrow::Status::IOError("The output stream is closed but there are still inputs");
+    }
+
+    auto status = _stream->write(static_cast<const uint8_t*>(data), nbytes);
+    if (!status.ok()) {
+        return arrow::Status::IOError(status.message());
+    }
+    return arrow::Status::OK();
+}
+
+arrow::Result<int64_t> AsyncParquetOutputStream::Tell() const {
+    return _stream->tell();
+}
+
+arrow::Status AsyncParquetOutputStream::Close() {
+    if (_is_closed) {
+        return arrow::Status::OK();
+    }
+    _is_closed = true;
+    Status st = _stream->close();
+    if (!st.ok()) {
+        LOG(WARNING) << "close parquet output stream failed: " << st;
+        return arrow::Status::IOError(st.to_string());
+    }
+    return arrow::Status::OK();
+}
+
 StatusOr<::parquet::Compression::type> ParquetBuildHelper::convert_compression_type(
         const TCompressionType::type& compression_type) {
     auto codec = ::parquet::Compression::UNCOMPRESSED;
@@ -159,16 +205,16 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
 
     for (int i = 0; i < output_expr_ctxs.size(); i++) {
         auto* column_expr = output_expr_ctxs[i]->root();
-        ARROW_ASSIGN_OR_RAISE(auto node, _make_schema_node(file_column_names[i], column_expr->type(),
-                                                           column_expr->is_nullable() ? ::parquet::Repetition::OPTIONAL
-                                                                                      : ::parquet::Repetition::REQUIRED,
-                                                           file_column_ids[i]));
+        ARROW_ASSIGN_OR_RAISE(auto node, make_schema_node(file_column_names[i], column_expr->type(),
+                                                          column_expr->is_nullable() ? ::parquet::Repetition::OPTIONAL
+                                                                                     : ::parquet::Repetition::REQUIRED,
+                                                          file_column_ids[i]));
         DCHECK(node != nullptr);
         fields.push_back(std::move(node));
     }
 
     return std::static_pointer_cast<::parquet::schema::GroupNode>(
-            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
+            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, fields));
 }
 
 // for UT only
@@ -178,20 +224,20 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
     ::parquet::schema::NodeVector fields;
 
     for (int i = 0; i < type_descs.size(); i++) {
-        ARROW_ASSIGN_OR_RAISE(auto node, _make_schema_node(file_column_names[i], type_descs[i],
-                                                           ::parquet::Repetition::OPTIONAL, file_column_ids[i]))
+        ARROW_ASSIGN_OR_RAISE(auto node, make_schema_node(file_column_names[i], type_descs[i],
+                                                          ::parquet::Repetition::OPTIONAL, file_column_ids[i]))
         DCHECK(node != nullptr);
         fields.push_back(std::move(node));
     }
 
     return std::static_pointer_cast<::parquet::schema::GroupNode>(
-            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
+            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, fields));
 }
 
 StatusOr<std::shared_ptr<::parquet::WriterProperties>> ParquetBuildHelper::make_properties(
         const ParquetBuilderOptions& options) {
     ::parquet::WriterProperties::Builder builder;
-    builder.version(::parquet::ParquetVersion::PARQUET_2_0);
+    builder.version(::parquet::ParquetVersion::PARQUET_2_6);
     options.use_dict ? builder.enable_dictionary() : builder.disable_dictionary();
     ASSIGN_OR_RETURN(auto compression_codec,
                      parquet::ParquetBuildHelper::convert_compression_type(options.compression_type));
@@ -200,10 +246,11 @@ StatusOr<std::shared_ptr<::parquet::WriterProperties>> ParquetBuildHelper::make_
 }
 
 // Repetition of subtype in nested type is set by default now, due to type descriptor has no nullable field.
-arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(const std::string& name,
-                                                                                const TypeDescriptor& type_desc,
-                                                                                ::parquet::Repetition::type rep_type,
-                                                                                FileColumnId file_column_id) {
+arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::make_schema_node(const std::string& name,
+                                                                               const TypeDescriptor& type_desc,
+                                                                               ::parquet::Repetition::type rep_type,
+                                                                               FileColumnId file_column_id,
+                                                                               const ParquetSchemaOptions& options) {
     if (file_column_id.children.size() != type_desc.children.size()) {
         file_column_id.children = std::vector<FileColumnId>(type_desc.children.size());
     }
@@ -237,6 +284,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
                                                       ::parquet::Type::DOUBLE, -1, file_column_id.field_id);
     }
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::String(),
@@ -247,35 +298,42 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                       ::parquet::Type::INT32, -1, file_column_id.field_id);
     }
     case TYPE_DATETIME: {
-        // TODO(letian-jiang): set isAdjustedToUTC to true, and normalize datetime values
+        if (options.use_int96_timestamp_encoding) {
+            return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::Type::INT96,
+                                                          ::parquet::ConvertedType::NONE, -1, file_column_id.field_id);
+        }
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type,
-                ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
+                ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
-    case TYPE_DECIMAL32: {
-        return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::INT32, -1, file_column_id.field_id);
-    }
-
-    case TYPE_DECIMAL64: {
-        return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::INT64, -1, file_column_id.field_id);
-    }
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
     case TYPE_DECIMAL128: {
+        if (!options.use_legacy_decimal_encoding) {
+            if (type_desc.type == TYPE_DECIMAL32) {
+                return ::parquet::schema::PrimitiveNode::Make(
+                        name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+                        ::parquet::Type::INT32, -1, file_column_id.field_id);
+            }
+            if (type_desc.type == TYPE_DECIMAL64) {
+                return ::parquet::schema::PrimitiveNode::Make(
+                        name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+                        ::parquet::Type::INT64, -1, file_column_id.field_id);
+            }
+        }
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 16, file_column_id.field_id);
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                ParquetUtils::decimal_precision_to_byte_count(type_desc.precision), file_column_id.field_id);
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());
         ::parquet::schema::NodeVector fields;
         for (size_t i = 0; i < type_desc.children.size(); i++) {
-            ARROW_ASSIGN_OR_RAISE(auto child, _make_schema_node(type_desc.field_names[i], type_desc.children[i],
-                                                                ::parquet::Repetition::OPTIONAL,
-                                                                file_column_id.children[i])); // use optional as default
+            ARROW_ASSIGN_OR_RAISE(
+                    auto child, make_schema_node(type_desc.field_names[i], type_desc.children[i],
+                                                 ::parquet::Repetition::OPTIONAL, file_column_id.children[i], options));
             fields.push_back(std::move(child));
         }
         return ::parquet::schema::GroupNode::Make(name, rep_type, fields, ::parquet::ConvertedType::NONE,
@@ -284,21 +342,46 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     case TYPE_ARRAY: {
         DCHECK(type_desc.children.size() == 1);
         ARROW_ASSIGN_OR_RAISE(auto element,
-                              _make_schema_node("element", type_desc.children[0], ::parquet::Repetition::OPTIONAL,
-                                                file_column_id.children[0])); // use optional as default
+                              make_schema_node("element", type_desc.children[0], ::parquet::Repetition::OPTIONAL,
+                                               file_column_id.children[0], options));
         auto list = ::parquet::schema::GroupNode::Make("list", ::parquet::Repetition::REPEATED, {element});
         return ::parquet::schema::GroupNode::Make(name, rep_type, {list}, ::parquet::LogicalType::List(),
                                                   file_column_id.field_id);
     }
     case TYPE_MAP: {
         DCHECK(type_desc.children.size() == 2);
-        ARROW_ASSIGN_OR_RAISE(auto key, _make_schema_node("key", type_desc.children[0], ::parquet::Repetition::REQUIRED,
-                                                          file_column_id.children[0]))
+        ARROW_ASSIGN_OR_RAISE(auto key, make_schema_node("key", type_desc.children[0], ::parquet::Repetition::REQUIRED,
+                                                         file_column_id.children[0], options))
         ARROW_ASSIGN_OR_RAISE(auto value,
-                              _make_schema_node("value", type_desc.children[1], ::parquet::Repetition::OPTIONAL,
-                                                file_column_id.children[1]));
+                              make_schema_node("value", type_desc.children[1], ::parquet::Repetition::OPTIONAL,
+                                               file_column_id.children[1], options));
         auto key_value = ::parquet::schema::GroupNode::Make("key_value", ::parquet::Repetition::REPEATED, {key, value});
         return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map(),
+                                                  file_column_id.field_id);
+    }
+    case TYPE_TIME: {
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
+                ::parquet::Type::INT64, -1, file_column_id.field_id);
+    }
+    case TYPE_JSON: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::JSON(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
+    }
+    case TYPE_VARIANT: {
+        if (file_column_id.children.size() != 2) {
+            file_column_id.children = std::vector<FileColumnId>(2);
+        }
+        ::parquet::schema::NodeVector fields;
+        auto metadata = ::parquet::schema::PrimitiveNode::Make(
+                "metadata", ::parquet::Repetition::REQUIRED, ::parquet::LogicalType::None(),
+                ::parquet::Type::BYTE_ARRAY, -1, file_column_id.children[0].field_id);
+        auto value = ::parquet::schema::PrimitiveNode::Make("value", ::parquet::Repetition::REQUIRED,
+                                                            ::parquet::LogicalType::None(), ::parquet::Type::BYTE_ARRAY,
+                                                            -1, file_column_id.children[1].field_id);
+        fields.push_back(std::move(metadata));
+        fields.push_back(std::move(value));
+        return ::parquet::schema::GroupNode::Make(name, rep_type, fields, ::parquet::ConvertedType::NONE,
                                                   file_column_id.field_id);
     }
     default: {
@@ -310,8 +393,9 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
-        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size) {
+                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size,
+                               RuntimeState* state)
+        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size), _state(state) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _type_descs.reserve(output_expr_ctxs.size());
     for (auto expr : output_expr_ctxs) {
@@ -326,8 +410,11 @@ FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               std::vector<TypeDescriptor> type_descs)
-        : _properties(std::move(properties)), _schema(std::move(schema)), _type_descs(std::move(type_descs)) {
+                               std::vector<TypeDescriptor> type_descs, RuntimeState* state)
+        : _properties(std::move(properties)),
+          _schema(std::move(schema)),
+          _type_descs(std::move(type_descs)),
+          _state(state) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _eval_func = [](Chunk* chunk, size_t col_idx) { return chunk->get_column_by_index(col_idx); };
 }
@@ -344,7 +431,7 @@ void FileWriterBase::_generate_chunk_writer() {
     DCHECK(_writer != nullptr);
     if (_chunk_writer == nullptr) {
         auto rg_writer = _writer->AppendBufferedRowGroup();
-        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func);
+        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func, _state->timezone());
     }
 }
 
@@ -379,15 +466,7 @@ Status FileWriterBase::split_offsets(std::vector<int64_t>& splitOffsets) const {
         LOG(WARNING) << "file metadata null";
         return Status::InternalError("Get split offsets while the file metadata is null");
     }
-    for (int i = 0; i < _file_metadata->num_row_groups(); i++) {
-        auto first_column_meta = _file_metadata->RowGroup(i)->ColumnChunk(0);
-        int64_t dict_page_offset = first_column_meta->dictionary_page_offset();
-        int64_t first_data_page_offset = first_column_meta->data_page_offset();
-        int64_t split_offset = dict_page_offset > 0 && dict_page_offset < first_data_page_offset
-                                       ? dict_page_offset
-                                       : first_data_page_offset;
-        splitOffsets.emplace_back(split_offset);
-    }
+    splitOffsets = ParquetUtils::collect_split_offsets(*_file_metadata);
     return Status::OK();
 }
 
@@ -414,7 +493,12 @@ Status SyncFileWriter::close() {
     }
 
     RETURN_IF_ERROR(_flush_row_group());
-    _writer->Close();
+    try {
+        _writer->Close();
+    } catch (const ::parquet::ParquetStatusException& e) {
+        LOG(WARNING) << "close writer error: " << e.what();
+        return Status::IOError(fmt::format("{}: {}", "close writer error", e.what()));
+    }
 
     auto arrow_st = _outstream->Close();
     if (!arrow_st.ok()) {
@@ -432,13 +516,14 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
                                  std::shared_ptr<::parquet::WriterProperties> properties,
                                  std::shared_ptr<::parquet::schema::GroupNode> schema,
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
-                                 RuntimeProfile* parent_profile, int64_t max_file_size)
+                                 RuntimeProfile* parent_profile, int64_t max_file_size, RuntimeState* state)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
-                         max_file_size),
+                         max_file_size, state),
           _file_location(std::move(file_location)),
           _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
-          _parent_profile(parent_profile) {
+          _parent_profile(parent_profile),
+          _state(state) {
     _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");
 }
 
@@ -449,6 +534,7 @@ Status AsyncFileWriter::_flush_row_group() {
     }
 
     bool ok = _executor_pool->try_offer([&]() {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
         SCOPED_TIMER(_io_timer);
         if (_chunk_writer != nullptr) {
             try {
@@ -483,6 +569,7 @@ Status AsyncFileWriter::_flush_row_group() {
 Status AsyncFileWriter::close(RuntimeState* state,
                               const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb) {
     bool ret = _executor_pool->try_offer([&, state, cb]() {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
         SCOPED_TIMER(_io_timer);
         {
             auto lock = std::unique_lock(_m);
@@ -493,7 +580,6 @@ Status AsyncFileWriter::close(RuntimeState* state,
             // set closed to true anyway
             _closed.store(true);
         });
-
         try {
             _writer->Close();
         } catch (const ::parquet::ParquetStatusException& e) {
@@ -501,7 +587,6 @@ Status AsyncFileWriter::close(RuntimeState* state,
             set_io_status(Status::IOError(fmt::format("{}: {}", "close writer error", e.what())));
         }
         _chunk_writer = nullptr;
-
         _file_metadata = _writer->metadata();
         auto st = _outstream->Close();
         if (!st.ok()) {

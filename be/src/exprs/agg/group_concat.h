@@ -15,18 +15,20 @@
 #pragma once
 
 #include <cmath>
+#include <type_traits>
 
+#include "base/string/utf8.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
+#include "column/sorting/sorting.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
-#include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
+#include "exprs/function_helper.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 template <LogicalType LT, typename = guard::Guard>
@@ -42,7 +44,7 @@ struct GroupConcatAggregateState {
 
 template <LogicalType LT, typename T = RunTimeCppType<LT>, LogicalType ResultLT = GroupConcatResultLT<LT>,
           typename TResult = RunTimeCppType<ResultLT>>
-class GroupConcatAggregateFunction
+class GroupConcatAggregateFunction final
         : public AggregateFunctionBatchHelper<GroupConcatAggregateState,
                                               GroupConcatAggregateFunction<LT, T, ResultLT, TResult>> {
 public:
@@ -56,16 +58,14 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(columns[0]->is_binary());
+        DCHECK(columns[0]->is_binary() || columns[0]->is_large_binary());
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
+                const auto val = GetContainer<LT>::get_data(columns[0], row_num);
+                const auto sep = GetContainer<LT>::get_data(columns[1], row_num);
 
                 std::string& result = this->data(state).intermediate_string;
 
-                Slice val = column_val->get_slice(row_num);
-                Slice sep = column_sep->get_slice(row_num);
                 if (!this->data(state).initial) {
                     this->data(state).initial = true;
 
@@ -79,10 +79,9 @@ public:
                 }
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
-                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
                 std::string& result = this->data(state).intermediate_string;
 
-                Slice val = column_val->get_slice(row_num);
+                Slice val = GetContainer<LT>::get_data(columns[0], row_num);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
 
                 if (!this->data(state).initial) {
@@ -98,10 +97,9 @@ public:
                 }
             }
         } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             std::string& result = this->data(state).intermediate_string;
 
-            Slice val = column_val->get_slice(row_num);
+            Slice val = GetContainer<LT>::get_data(columns[0], row_num);
             //DEFAULT sep_length.
             if (!this->data(state).initial) {
                 this->data(state).initial = true;
@@ -119,21 +117,18 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
+        auto val_bytes = GetContainer<TYPE_VARCHAR>::get_data(columns[0]).immutable_bytes_size();
         if (ctx->get_num_args() > 1) {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
-                this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
-                                                              column_sep->get_bytes().size());
+                auto sep_bytes = GetContainer<TYPE_VARCHAR>::get_data(columns[1]).immutable_bytes_size();
+                this->data(state).intermediate_string.reserve(val_bytes + sep_bytes);
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
-                this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
-                                                              sep.get_size() * chunk_size);
+                this->data(state).intermediate_string.reserve(val_bytes + sep.get_size() * chunk_size);
             }
         } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-            this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * chunk_size);
+            this->data(state).intermediate_string.reserve(val_bytes + 2 * chunk_size);
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -202,60 +197,93 @@ public:
         return old_size;
     }
 
+    template <typename DstOffsets, typename ValueOffsets, typename SepOffsets>
+    void serialize_column_sep_values(Bytes& bytes, size_t& old_size, size_t chunk_size, DstOffsets& dst_offsets,
+                                     const ValueOffsets& value_offsets, const char* value_base,
+                                     const SepOffsets& sep_offsets, const char* sep_base) const {
+        using DstOffset = typename std::decay_t<DstOffsets>::value_type;
+        dst_offsets[0] = 0;
+        for (size_t i = 0; i < chunk_size; ++i) {
+            const uint64_t value_begin = value_offsets[i];
+            const uint64_t value_end = value_offsets[i + 1];
+            const uint64_t sep_begin = sep_offsets[i];
+            const uint64_t sep_end = sep_offsets[i + 1];
+            const auto size_value = static_cast<uint32_t>(value_end - value_begin);
+            const auto size_sep = static_cast<uint32_t>(sep_end - sep_begin);
+
+            old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep_base + sep_begin,
+                                               value_base + value_begin);
+            dst_offsets[i + 1] = static_cast<DstOffset>(old_size);
+        }
+    }
+
+    template <typename DstOffsets, typename ValueOffsets>
+    void serialize_const_sep_values(Bytes& bytes, size_t& old_size, size_t chunk_size, DstOffsets& dst_offsets,
+                                    const ValueOffsets& value_offsets, const char* value_base, const char* sep,
+                                    uint32_t size_sep) const {
+        using DstOffset = typename std::decay_t<DstOffsets>::value_type;
+        dst_offsets[0] = 0;
+        for (size_t i = 0; i < chunk_size; ++i) {
+            const uint64_t value_begin = value_offsets[i];
+            const uint64_t value_end = value_offsets[i + 1];
+            const auto size_value = static_cast<uint32_t>(value_end - value_begin);
+
+            old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep, value_base + value_begin);
+            dst_offsets[i + 1] = static_cast<DstOffset>(old_size);
+        }
+    }
+
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if (src.size() > 1) {
-            auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+            auto* dst_column = down_cast<BinaryColumn*>(dst.get());
             Bytes& bytes = dst_column->get_bytes();
-            const auto* column_value = down_cast<BinaryColumn*>(src[0].get());
+            const auto* column_value = down_cast<const BinaryColumn*>(src[0].get());
             if (!src[1]->is_constant()) {
-                const auto* column_sep = down_cast<BinaryColumn*>(src[1].get());
+                const auto* column_sep = down_cast<const BinaryColumn*>(src[1].get());
                 if (chunk_size > 0) {
                     size_t old_size = bytes.size();
                     CHECK_EQ(old_size, 0);
-                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_bytes().size() +
-                                      column_sep->get_bytes().size();
+                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
+                                      column_sep->get_immutable_bytes().size();
                     bytes.resize(new_size);
-                    dst_column->get_offset().resize(chunk_size + 1);
+                    auto& offsets = dst_column->get_offset();
+                    offsets.resize_uninitialized(chunk_size + 1, new_size);
 
-                    for (size_t i = 0; i < chunk_size; ++i) {
-                        auto value = column_value->get_slice(i);
-                        auto sep = column_sep->get_slice(i);
-
-                        uint32_t size_value = value.get_size();
-                        uint32_t size_sep = sep.get_size();
-
-                        old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep.get_data(),
-                                                           value.get_data());
-                        dst_column->get_offset()[i + 1] = old_size;
-                    }
+                    Offsets::visit_storage_pair(
+                            offsets, column_value->get_offset(), [&](auto& offsets_buf, const auto& value_offsets) {
+                                column_sep->get_offset().visit_storage([&](const auto& sep_offsets) {
+                                    serialize_column_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
+                                                                column_value->get_string_begin(), sep_offsets,
+                                                                column_sep->get_string_begin());
+                                });
+                            });
+                    DCHECK_EQ(old_size, new_size);
                 }
             } else {
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(src[1]);
                 if (chunk_size > 0) {
                     size_t old_size = bytes.size();
                     CHECK_EQ(old_size, 0);
-                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_bytes().size() +
+                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
                                       chunk_size * sep.size;
                     bytes.resize(new_size);
-                    dst_column->get_offset().resize(chunk_size + 1);
+                    auto& offsets = dst_column->get_offset();
+                    offsets.resize_uninitialized(chunk_size + 1, new_size);
 
-                    for (size_t i = 0; i < chunk_size; ++i) {
-                        auto value = column_value->get_slice(i);
-
-                        uint32_t size_value = value.get_size();
-                        uint32_t size_sep = sep.size;
-
-                        old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep.get_data(),
-                                                           value.get_data());
-                        dst_column->get_offset()[i + 1] = old_size;
-                    }
+                    Offsets::visit_storage_pair(
+                            offsets, column_value->get_offset(), [&](auto& offsets_buf, const auto& value_offsets) {
+                                serialize_const_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
+                                                           column_value->get_string_begin(), sep.get_data(),
+                                                           static_cast<uint32_t>(sep.size));
+                            });
+                    DCHECK_EQ(old_size, new_size);
                 }
             }
         } else { //", "
-            auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+            auto* dst_column = down_cast<BinaryColumn*>(dst.get());
             Bytes& bytes = dst_column->get_bytes();
-            const auto* column_value = down_cast<BinaryColumn*>(src[0].get());
+            const auto* column_value = down_cast<const BinaryColumn*>(src[0].get());
 
             if (chunk_size > 0) {
                 const char* sep = ", ";
@@ -263,18 +291,18 @@ public:
 
                 size_t old_size = bytes.size();
                 CHECK_EQ(old_size, 0);
-                size_t new_size =
-                        2 * chunk_size * sizeof(uint32_t) + column_value->get_bytes().size() + size_sep * chunk_size;
+                size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
+                                  size_sep * chunk_size;
                 bytes.resize(new_size);
-                dst_column->get_offset().resize(chunk_size + 1);
+                auto& offsets = dst_column->get_offset();
+                offsets.resize_uninitialized(chunk_size + 1, new_size);
 
-                for (size_t i = 0; i < chunk_size; ++i) {
-                    auto value = column_value->get_slice(i);
-                    uint32_t size_value = value.get_size();
-
-                    old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep, value.get_data());
-                    dst_column->get_offset()[i + 1] = old_size;
-                }
+                Offsets::visit_storage_pair(
+                        offsets, column_value->get_offset(), [&](auto& offsets_buf, const auto& value_offsets) {
+                            serialize_const_sep_values(bytes, old_size, chunk_size, offsets_buf, value_offsets,
+                                                       column_value->get_string_begin(), sep, size_sep);
+                        });
+                DCHECK_EQ(old_size, new_size);
             }
         }
     }
@@ -321,19 +349,10 @@ struct GroupConcatAggregateStateV2 {
         data_columns->resize(output_col_num + 1);
     }
 
-    ~GroupConcatAggregateStateV2() {
-        if (data_columns != nullptr) {
-            for (auto& col : *data_columns) {
-                col.reset();
-            }
-            data_columns->clear();
-            data_columns.reset(nullptr);
-        }
-    }
     // using pointer rather than vector to avoid variadic size
     // group_concat(a, b order by c, d), the a,b,',',c,d are put into data_columns in order, and reject null for
     // output columns a and b.
-    std::unique_ptr<Columns> data_columns = nullptr;
+    std::unique_ptr<MutableColumns> data_columns = nullptr;
     int output_col_num = 0;
 };
 
@@ -345,13 +364,15 @@ struct GroupConcatAggregateStateV2 {
 // group_concat(cast(a to string), cast(b to string) order by a, b), resulting to keeping 4 columns, but it only needs
 // keep 2 columns in intermediate results.
 // 3. refactor order-by and distinct function to a combinator to clean the code.
-class GroupConcatAggregateFunctionV2
+class GroupConcatAggregateFunctionV2 final
         : public AggregateFunctionBatchHelper<GroupConcatAggregateStateV2, GroupConcatAggregateFunctionV2> {
 public:
     // group_concat(a, b order by c, d), the arguments are a,b,',',c,d
+    bool support_nullable_immediate_input() const override { return true; }
+
     void create_impl(FunctionContext* ctx, GroupConcatAggregateStateV2& state) const {
         auto num = ctx->get_num_args();
-        state.data_columns = std::make_unique<Columns>();
+        state.data_columns = std::make_unique<MutableColumns>();
         auto order_by_num = ctx->get_nulls_first().size();
         state.output_col_num = num - order_by_num - 1; // excluding separator column
         if (UNLIKELY(state.output_col_num <= 0)) {
@@ -368,7 +389,7 @@ public:
             }
         }
         for (auto i = 0; i < num; ++i) {
-            state.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
+            state.data_columns->emplace_back(FunctionHelper::create_column(*ctx->get_arg_type(i), true));
         }
         DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
     }
@@ -456,7 +477,7 @@ public:
         if (column->is_nullable() && column->is_null(row_num)) {
             return;
         }
-        auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
+        const auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
         auto& state_impl = this->data(state);
         if (state_impl.data_columns == nullptr) {
             create_impl(ctx, state_impl);
@@ -469,7 +490,7 @@ public:
         }
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
-            auto& offsets = array_column->offsets().get_data();
+            auto offsets = array_column->offsets().immutable_data();
             state_impl.update(ctx, array_column->elements(), i, offsets[row_num],
                               offsets[row_num + 1] - offsets[row_num]);
         }
@@ -483,26 +504,31 @@ public:
     // output columns wouldn't be null.
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(state);
+        DCHECK(state_impl.data_columns == nullptr || !state_impl.data_columns->empty());
         if (state_impl.data_columns == nullptr || (*state_impl.data_columns)[0]->size() == 0) {
             to->append_default();
             return;
         }
-        auto& columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(to))->fields_column();
+        auto* struct_column = down_cast<StructColumn*>(ColumnHelper::get_data_column(to));
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
         }
-        for (auto i = 0; i < columns.size(); ++i) {
+        for (auto i = 0; i < struct_column->fields_size(); ++i) {
             auto elem_size = (*state_impl.data_columns)[i]->size();
-            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[i].get()));
-            if (columns[i]->is_nullable()) {
-                down_cast<NullableColumn*>(columns[i].get())->null_column_data().emplace_back(0);
+            auto* field_column = struct_column->field_column_raw_ptr(i);
+            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(field_column));
+            if (field_column->is_nullable()) {
+                down_cast<NullableColumn*>(field_column)->null_column_data().emplace_back(0);
             }
-            array_col->elements_column()->append(
+            auto* elements_col = array_col->elements_column_raw_ptr();
+            elements_col->append(
                     *ColumnHelper::unpack_and_duplicate_const_column(elem_size, (*state_impl.data_columns)[i]), 0,
                     elem_size);
-            auto& offsets = array_col->offsets_column()->get_data();
+            auto& offsets = array_col->offsets_column_raw_ptr()->get_data();
             offsets.push_back(offsets.back() + elem_size);
+            (*state_impl.data_columns)[i].reset(); // early release memory
         }
+        state_impl.data_columns->clear();
     }
 
     // convert each cell of a row to a [nullable] array in a nullable struct, keep the same of chunk_size
@@ -510,19 +536,20 @@ public:
     // nullable struct {nullable array[nullable elements]...}, the struct and array may be null, array elements from
     // output columns wouldn't be null.
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst->get()))->fields_column();
-        if (UNLIKELY(src.size() != columns.size())) {
+                                     MutableColumnPtr& dst) const override {
+        auto* struct_column = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst.get()));
+        size_t columns_size = struct_column->fields_size();
+        if (UNLIKELY(src.size() != columns_size)) {
             ctx->set_error(std::string(get_name() + " to-serialized column num " + std::to_string(src.size()) +
-                                       " != expected " + std::to_string(columns.size()))
+                                       " != expected " + std::to_string(columns_size))
                                    .c_str(),
                            false);
             return;
         }
         // get null info from output columns
         auto output_col_num = ctx->get_num_args() - ctx->get_nulls_first().size() - 1;
-        NullColumnPtr nulls = NullColumn::create(chunk_size, false);
-        auto null_data = nulls->get_data();
+        NullColumn::MutablePtr nulls = NullColumn::create(chunk_size, false);
+        auto& null_data = nulls->get_data();
         for (int j = 0; j < output_col_num; ++j) {
             if (src[j]->only_null()) {
                 for (int i = 0; i < chunk_size; ++i) {
@@ -534,48 +561,50 @@ public:
                 continue;
             }
             if (src[j]->is_nullable()) {
-                auto null_col = down_cast<NullableColumn*>(src[j].get())->null_column_data();
-                for (int i = 0; i < chunk_size; ++i) {
-                    null_data[i] |= null_col[i];
-                }
+                auto null_col = down_cast<const NullableColumn*>(src[j].get())->null_column_data();
+                // Use SIMD-optimized OR
+                ColumnHelper::or_two_filters(chunk_size, null_data.data(), null_col.data());
             }
         }
-        if (dst->get()->is_nullable()) {
-            auto nullable_col = down_cast<NullableColumn*>(dst->get());
+        if (dst->is_nullable()) {
+            auto nullable_col = down_cast<NullableColumn*>(dst.get());
             for (size_t i = 0; i < chunk_size; i++) {
                 nullable_col->null_column_data().emplace_back(null_data[i]);
             }
             nullable_col->update_has_null();
         }
         // if i-th row is null, set nullable_array[x][i] = null, otherwise, set array[x][i]=src[x][i]
-        std::vector<ArrayColumn*> arrays(columns.size());
-        std::vector<NullData*> array_nulls(columns.size());
-        std::vector<std::vector<uint32_t>*> array_offsets(columns.size());
-        std::vector<NullableColumn*> nullable_arrays(columns.size());
-        auto old_size = columns[0]->size();
-        for (auto j = 0; j < columns.size(); ++j) {
-            nullable_arrays[j] = down_cast<NullableColumn*>(columns[j].get());
-            arrays[j] = down_cast<ArrayColumn*>(nullable_arrays[j]->data_column().get());
+        std::vector<ArrayColumn*> arrays(columns_size);
+        std::vector<NullData*> array_nulls(columns_size);
+        std::vector<Buffer<uint32_t>*> array_offsets(columns_size);
+        std::vector<NullableColumn*> nullable_arrays(columns_size);
+        std::vector<Column*> array_elements(columns_size);
+        auto old_size = struct_column->field_column_raw_ptr(0)->size();
+        for (auto j = 0; j < columns_size; ++j) {
+            auto* field_column = struct_column->field_column_raw_ptr(j);
+            nullable_arrays[j] = down_cast<NullableColumn*>(field_column);
+            arrays[j] = down_cast<ArrayColumn*>(nullable_arrays[j]->data_column_raw_ptr());
             arrays[j]->reserve(old_size + chunk_size);
             array_nulls[j] = &(nullable_arrays[j]->null_column_data());
             array_nulls[j]->resize(old_size + chunk_size);
-            array_offsets[j] = &(arrays[j]->offsets_column()->get_data());
+            array_offsets[j] = &(arrays[j]->offsets_column_raw_ptr()->get_data());
+            array_elements[j] = arrays[j]->elements_column_raw_ptr();
         }
         for (auto i = 0; i < chunk_size; i++) {
             if (null_data[i]) {
-                for (auto j = 0; j < columns.size(); ++j) {
+                for (auto j = 0; j < columns_size; ++j) {
                     (*array_nulls[j])[i + old_size] = 1;
                     array_offsets[j]->push_back(array_offsets[j]->back());
                 }
             } else {
-                for (auto j = 0; j < columns.size(); ++j) {
+                for (auto j = 0; j < columns_size; ++j) {
                     (*array_nulls[j])[i + old_size] = 0;
-                    arrays[j]->elements_column()->append_datum(src[j]->get(i));
+                    array_elements[j]->append_datum(src[j]->get(i));
                     array_offsets[j]->push_back(array_offsets[j]->back() + 1);
                 }
             }
         }
-        for (auto j = 0; j < columns.size(); ++j) {
+        for (auto j = 0; j < columns_size; ++j) {
             nullable_arrays[j]->update_has_null();
         }
     }
@@ -601,6 +630,8 @@ public:
             to->append_default();
             return;
         }
+        DCHECK(!state_impl.data_columns->empty());
+
         auto elem_size = (*state_impl.data_columns)[0]->size();
         if (elem_size == 0) {
             to->append_default();
@@ -610,13 +641,11 @@ public:
         Columns outputs(output_col_num);
         for (auto i = 0; i < output_col_num; ++i) {
             outputs[i] = (*state_impl.data_columns)[i];
+            DCHECK(!outputs[i]->is_constant()); // as they are appended one by one.
         }
         // order by
+        Permutation perm;
         if (!ctx->get_is_asc_order().empty()) {
-            for (auto i = 0; i < output_col_num; ++i) {
-                outputs[i] = (*state_impl.data_columns)[i]->clone_empty();
-            }
-            Permutation perm;
             Columns order_by_columns;
             SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
             order_by_columns.assign(state_impl.data_columns->begin() + output_col_num, state_impl.data_columns->end());
@@ -632,13 +661,10 @@ public:
                 ctx->set_error(st.to_string().c_str(), false);
                 return;
             }
-            for (auto i = 0; i < output_col_num; ++i) {
-                materialize_column_by_permutation(outputs[i].get(), {(*state_impl.data_columns)[i]}, perm);
-            }
         }
         // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
-        // TODO(fzh) optimize it later
-        std::vector<bool> duplicated(outputs[0]->size(), false);
+        // TODO(fzh) optimize it later, as distinct is often rewritten to group by.
+        Buffer<bool> duplicated(outputs[0]->size(), false);
         if (ctx->get_is_distinct()) {
             for (auto row_id = 0; row_id < elem_size; row_id++) {
                 bool is_duplicated = false;
@@ -668,7 +694,7 @@ public:
         size_t length = 0;
         std::vector<BinaryColumn*> binary_cols(output_col_num);
         for (auto i = 0; i < output_col_num; ++i) {
-            auto tmp = ColumnHelper::get_data_column(outputs[i].get());
+            auto tmp = ColumnHelper::get_data_column(outputs[i]->as_mutable_raw_ptr());
             binary_cols[i] = down_cast<BinaryColumn*>(tmp);
             length += binary_cols[i]->get_bytes().size();
         }
@@ -676,19 +702,36 @@ public:
         bytes.resize(offset + length);
         bool overflow = false;
         size_t limit = ctx->get_group_concat_max_len() + offset;
-        for (auto j = 0; j < elem_size && !overflow; ++j) {
-            if (duplicated[j]) {
+        auto last_unique_row_id = elem_size - 1;
+        for (auto i = elem_size - 1; i >= 0; i--) {
+            auto idx = i;
+            if (!perm.empty()) {
+                idx = perm[i].index_in_chunk;
+            }
+            if (!duplicated[idx]) {
+                last_unique_row_id = i;
+                break;
+            }
+        }
+
+        DCHECK(perm.empty() || elem_size == perm.size());
+        for (auto j = 0; j <= last_unique_row_id && !overflow; ++j) {
+            auto idx = j;
+            if (!perm.empty()) {
+                idx = perm[j].index_in_chunk;
+            }
+            if (duplicated[idx]) {
                 continue;
             }
             for (auto i = 0; i < output_col_num && !overflow; ++i) {
-                if (j + 1 == elem_size && i + 1 == output_col_num) { // ignore the last separator
+                if (j == last_unique_row_id && i + 1 == output_col_num) { // ignore the last separator
                     continue;
                 }
-                if (UNLIKELY(i + 1 < output_col_num && binary_cols[i]->is_null(j))) {
+                if (UNLIKELY(i + 1 < output_col_num && binary_cols[i]->is_null(idx))) {
                     ctx->set_error("group_concat mustn't output null", false);
                     return;
                 }
-                auto str = binary_cols[i]->get_slice(j);
+                auto str = binary_cols[i]->get_slice(idx);
                 if (offset + str.get_size() <= limit) {
                     memcpy(bytes.data() + offset, str.get_data(), str.get_size());
                     offset += str.get_size();
@@ -709,6 +752,7 @@ public:
                 }
             }
         }
+        state_impl.data_columns->clear(); // early release memory
         bytes.resize(offset);
         string->get_offset().emplace_back(offset);
     }

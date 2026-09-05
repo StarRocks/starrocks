@@ -46,6 +46,8 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_CONNECTION_POOL_SIZE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TIMEOUT;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
@@ -57,7 +59,8 @@ public class HiveMetaClient {
     public static final String DLF_HIVE_METASTORE = "dlf";
     public static final String GLUE_HIVE_METASTORE = "glue";
     // Maximum number of idle metastore connections in the connection pool at any point.
-    private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
+    private final int maxPoolSize;
+    private static final int MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT = 32;
 
     private final LinkedList<RecyclableClient> clientPool = new LinkedList<>();
     private final Object clientPoolLock = new Object();
@@ -69,6 +72,7 @@ public class HiveMetaClient {
 
     public HiveMetaClient(HiveConf conf) {
         this.conf = conf;
+        this.maxPoolSize = conf.getInt(HIVE_METASTORE_CONNECTION_POOL_SIZE, MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT);
     }
 
     public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
@@ -78,8 +82,11 @@ public class HiveMetaClient {
         if (properties.containsKey(HIVE_METASTORE_URIS)) {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
-        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
+        String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
+        String poolSize = properties.getOrDefault(HIVE_METASTORE_CONNECTION_POOL_SIZE,
+                String.valueOf(MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT));
+        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
+        conf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, poolSize);
         return new HiveMetaClient(conf);
     }
 
@@ -99,23 +106,31 @@ public class HiveMetaClient {
             }
         }
 
-        // When the number of currently used clients is less than MAX_HMS_CONNECTION_POOL_SIZE,
+        // When the number of currently used clients is less than maxPoolSize,
         // the client will be recycled and reused. If it does, we close the client.
         public void finish() {
+            boolean shouldClose = false;
             synchronized (clientPoolLock) {
-                if (clientPool.size() >= MAX_HMS_CONNECTION_POOL_SIZE) {
-                    LOG.warn("There are more than {} connections currently accessing the metastore",
-                            MAX_HMS_CONNECTION_POOL_SIZE);
-                    close();
+                if (clientPool.size() >= maxPoolSize) {
+                    shouldClose = true;
                 } else {
                     clientPool.offer(this);
                 }
+            }
+            if (shouldClose) {
+                LOG.warn("There are more than {} connections currently accessing the metastore",
+                        maxPoolSize);
+                close();
             }
         }
 
         public void close() {
             hiveClient.close();
         }
+    }
+
+    public int getMaxClientPoolSize() {
+        return maxPoolSize;
     }
 
     public int getClientSize() {
@@ -132,17 +147,12 @@ public class HiveMetaClient {
             Thread.currentThread().setContextClassLoader(ClassLoader.getSystemClassLoader());
         }
 
+        RecyclableClient client = null;
         synchronized (clientPoolLock) {
-            RecyclableClient client = clientPool.poll();
-            // The pool was empty so create a new client and return that.
-            // Serialize client creation to defend against possible race conditions accessing
-            // local Kerberos state
-            if (client == null) {
-                return new RecyclableClient(conf);
-            } else {
-                return client;
-            }
+            client = clientPool.poll();
         }
+
+        return client != null ? client : new RecyclableClient(conf);
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
@@ -160,7 +170,7 @@ public class HiveMetaClient {
             return (T) method.invoke(client.hiveClient, args);
         } catch (Throwable e) {
             LOG.error(messageIfError, e);
-            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
+            connectionException = new StarRocksConnectorException(messageIfError, e);
             throw connectionException;
         } finally {
             if (client == null && connectionException != null) {
@@ -259,6 +269,13 @@ public class HiveMetaClient {
         }
     }
 
+    public boolean tableExists(String dbName, String tableName) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.tableExists")) {
+            return callRPC("tableExists", String.format("Failed to get table exists [%s.%s]", dbName, tableName),
+                    dbName, tableName);
+        }
+    }
+
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartition")) {
             return callRPC("getPartition", String.format("Failed to get partition on %s.%s", dbName, tableName),
@@ -331,21 +348,6 @@ public class HiveMetaClient {
         }
     }
 
-    public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName,
-                                                                          String tableName,
-                                                                          List<String> partitionNames,
-                                                                          List<String> columnNames) {
-        int size = partitionNames.size();
-        Tracers.record(EXTERNAL, "HMS.PARTITIONS.getPartitionColumnStatistics." + tableName, size + " partitions");
-
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartitionColumnStatistics")) {
-            return callRPC("getPartitionColumnStatistics",
-                    String.format("Failed to get partitions column statistics on [%s.%s]. partition size: %d, columns size: %d.",
-                            dbName, tableName, partitionNames.size(), columnNames.size()),
-                    dbName, tableName, partitionNames, columnNames);
-        }
-    }
-
     /**
      * When the query scans many partitions in the table or the 'hive.metastore.try.direct.sql' in
      * hive metastore is false. The hive metastore will throw StackOverFlow exception.
@@ -387,6 +389,86 @@ public class HiveMetaClient {
             }
         } catch (Exception e) {
             throw new StarRocksConnectorException("Failed to getPartitionsNames on [%s.%s], msg: %s",
+                    dbName, tableName, e.getMessage());
+        } finally {
+            if (client != null) {
+                client.close();
+            }
+        }
+    }
+
+    public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName, String tblName,
+                                                                          List<String> partitionNames, List<String> columnNames) {
+        int size = partitionNames.size();
+        Map<String, List<ColumnStatisticsObj>> partitionStats;
+        Tracers.record(EXTERNAL, "HMS.PARTITIONS.getPartitionColumnStats." + tblName, size + " partitionStats");
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartitionColumnStats")) {
+            RecyclableClient client = null;
+            StarRocksConnectorException connectionException = null;
+            try {
+                client = getClient();
+                partitionStats = client.hiveClient.getPartitionColumnStatistics(dbName, tblName, partitionNames, columnNames);
+                if (partitionStats.size() != partitionNames.size()) {
+                    LOG.warn("Expect to fetch {} partitionStats on [{}.{}], but actually fetched {} partition",
+                            partitionNames.size(), dbName, tblName, partitionStats.size());
+                }
+            } catch (TTransportException te) {
+                partitionStats = getPartitionColumnStatsWithRetry(dbName, tblName, partitionNames, columnNames, 1);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitionStats on {}.{}", dbName, tblName, e);
+                connectionException = new StarRocksConnectorException("Failed to get partitionStats on [%s.%s]" +
+                        " from meta store: %s", dbName, tblName, e.getMessage());
+                throw connectionException;
+            } finally {
+                if (client == null && connectionException != null) {
+                    LOG.error("Failed to get hive client. {}", connectionException.getMessage());
+                } else if (connectionException != null) {
+                    LOG.error("An exception occurred when using the current long link " +
+                            "to access metastore. msg: {}", connectionException.getMessage());
+                    client.close();
+                } else if (client != null) {
+                    client.finish();
+                }
+            }
+        }
+        return partitionStats;
+    }
+
+    private Map<String, List<ColumnStatisticsObj>> getPartitionColumnStatsWithRetry(String dbName,
+                                                                                    String tableName,
+                                                                                    List<String> partNames,
+                                                                                    List<String> columnNames,
+                                                                                    int retryNum)
+            throws StarRocksConnectorException {
+        int subListSize = (int) Math.pow(2, retryNum);
+        int subListNum = partNames.size() / subListSize;
+        if (subListNum == 0) {
+            subListNum = 1;
+        }
+        List<List<String>> partNamesList = Lists.partition(partNames, subListNum);
+        Map<String, List<ColumnStatisticsObj>> partitionStats = new HashMap<>();
+
+        LOG.warn("Execute getPartitionColumnStatistics on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
+                dbName, tableName, retryNum, subListSize, partNames.size());
+
+        RecyclableClient client = null;
+        try {
+            client = getClient();
+            for (List<String> parts : partNamesList) {
+                partitionStats.putAll(client.hiveClient.getPartitionColumnStatistics(dbName, tableName, parts, columnNames));
+            }
+            LOG.info("Succeed to getPartitionColumnStatistics on [{}.{}] with {} times retry, slice size is {}," +
+                    " partName size is {}", dbName, tableName, retryNum, subListSize, partNames.size());
+            return partitionStats;
+        } catch (TTransportException te) {
+            if (subListNum > 1) {
+                return getPartitionColumnStatsWithRetry(dbName, tableName, partNames, columnNames, retryNum + 1);
+            } else {
+                throw new StarRocksConnectorException("Failed to getPartitionColumnStatistics on [%s.%s] with slice size is %d",
+                        dbName, tableName, subListNum);
+            }
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Failed to getPartitionColumnStatistics on [%s.%s], msg: %s",
                     dbName, tableName, e.getMessage());
         } finally {
             if (client != null) {

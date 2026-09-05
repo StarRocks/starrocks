@@ -1,0 +1,176 @@
+-- name: test_light_weight_tablet_creation_basic @cloud @sequential
+-- Exercise CREATE / DML / partition / TRUNCATE / INSERT OVERWRITE on shared-data
+-- tables created with light_weight_tablet_creation = true. The property skips
+-- writing version-1 tablet metadata to object storage at CREATE time; this test
+-- verifies the DDL / DML user surface still behaves correctly.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- 1.1.0 non-partitioned, hash distribution, no BUCKETS
+CREATE TABLE t_hash_no_bucket (
+    c0 INT,
+    c1 STRING,
+    c2 BIGINT
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0)
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_hash_no_bucket VALUES (1, 'a', 100);
+SELECT * FROM t_hash_no_bucket;
+DROP TABLE t_hash_no_bucket;
+
+-- 1.1.1 non-partitioned, hash distribution, BUCKETS 4
+CREATE TABLE t_hash (
+    c0 INT,
+    c1 STRING,
+    c2 BIGINT
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_hash VALUES (1, 'a', 100);
+SELECT * FROM t_hash;
+DROP TABLE t_hash;
+
+-- 1.2 non-partitioned, random distribution
+CREATE TABLE t_random (
+    c0 INT,
+    c1 STRING,
+    c2 BIGINT
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY RANDOM BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_random VALUES (1, 'a', 100);
+SELECT * FROM t_random;
+DROP TABLE t_random;
+
+-- 1.3.0 range partitioned, no BUCKETS
+CREATE TABLE t_partition_no_bucket (
+    dt DATE NOT NULL,
+    c0 INT,
+    c1 STRING
+) DUPLICATE KEY(dt, c0)
+PARTITION BY RANGE(dt) (
+    PARTITION p20240101 VALUES [('2024-01-01'), ('2024-01-02')),
+    PARTITION p20240102 VALUES [('2024-01-02'), ('2024-01-03'))
+)
+DISTRIBUTED BY HASH(c0)
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_partition_no_bucket VALUES ('2024-01-01', 1, 'a');
+SELECT * FROM t_partition_no_bucket;
+DROP TABLE t_partition_no_bucket;
+
+-- 1.3.1 range partitioned, BUCKETS 4
+CREATE TABLE t_partition (
+    dt DATE NOT NULL,
+    c0 INT,
+    c1 STRING
+) DUPLICATE KEY(dt, c0)
+PARTITION BY RANGE(dt) (
+    PARTITION p20240101 VALUES [('2024-01-01'), ('2024-01-02')),
+    PARTITION p20240102 VALUES [('2024-01-02'), ('2024-01-03'))
+)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_partition VALUES ('2024-01-01', 1, 'a');
+SELECT * FROM t_partition;
+DROP TABLE t_partition;
+
+-- 1.4 range distribution (Primary Key)
+set enable_range_distribution = true;
+CREATE TABLE t_range_dist (
+    c0 INT,
+    c1 STRING
+) PRIMARY KEY(c0)
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_range_dist VALUES (1, 'a');
+SELECT * FROM t_range_dist;
+DROP TABLE t_range_dist;
+set enable_range_distribution = false;
+
+-- 1.5 ADD PARTITION
+CREATE TABLE t_add_part (
+    dt DATE NOT NULL,
+    c0 INT
+) DUPLICATE KEY(dt, c0)
+PARTITION BY RANGE(dt) (
+    PARTITION p20240101 VALUES [('2024-01-01'), ('2024-01-02'))
+)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+ALTER TABLE t_add_part ADD PARTITION p20240102
+    VALUES [('2024-01-02'), ('2024-01-03'));
+INSERT INTO t_add_part VALUES ('2024-01-02', 1);
+SELECT * FROM t_add_part WHERE dt = '2024-01-02';
+DROP TABLE t_add_part;
+
+-- 1.6 TRUNCATE TABLE
+CREATE TABLE t_truncate (
+    c0 INT,
+    c1 STRING
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_truncate VALUES (1, 'a');
+TRUNCATE TABLE t_truncate;
+SELECT COUNT(*) AS cnt_after_truncate FROM t_truncate;
+INSERT INTO t_truncate VALUES (2, 'b');
+SELECT * FROM t_truncate;
+DROP TABLE t_truncate;
+
+-- 1.7 INSERT OVERWRITE
+CREATE TABLE t_overwrite (
+    dt DATE NOT NULL,
+    c0 INT,
+    c1 STRING
+) DUPLICATE KEY(dt, c0)
+PARTITION BY RANGE(dt) (
+    PARTITION p20240101 VALUES [('2024-01-01'), ('2024-01-02'))
+)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_overwrite VALUES ('2024-01-01', 1, 'old');
+INSERT OVERWRITE t_overwrite VALUES ('2024-01-01', 2, 'new');
+SELECT * FROM t_overwrite;
+DROP TABLE t_overwrite;
+
+-- 1.9 auto partition by expression (INSERT-triggered)
+CREATE TABLE t_auto (
+    dt DATE NOT NULL,
+    c0 INT
+) DUPLICATE KEY(dt, c0)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_auto VALUES ('2024-06-01', 1), ('2024-06-02', 2);
+SELECT * FROM t_auto ORDER BY dt;
+DROP TABLE t_auto;
+
+-- 1.10.1 explicit LIST partition
+CREATE TABLE t_list (
+    city STRING NOT NULL,
+    c0 INT,
+    c1 STRING
+) DUPLICATE KEY(city, c0)
+PARTITION BY LIST(city) (
+    PARTITION p_bj VALUES IN ('beijing'),
+    PARTITION p_sh VALUES IN ('shanghai')
+)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_list VALUES ('beijing', 1, 'a'), ('shanghai', 2, 'b');
+SELECT * FROM t_list ORDER BY city;
+DROP TABLE t_list;
+
+-- 1.10.2 expression LIST auto partition (INSERT-triggered)
+CREATE TABLE t_list_auto (
+    city STRING NOT NULL,
+    c0 INT
+) DUPLICATE KEY(city, c0)
+PARTITION BY (city)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+INSERT INTO t_list_auto VALUES ('beijing', 1), ('shanghai', 2), ('guangzhou', 3);
+SELECT * FROM t_list_auto ORDER BY city;
+DROP TABLE t_list_auto;
+
+DROP DATABASE db_${uuid0};

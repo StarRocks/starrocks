@@ -17,36 +17,43 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.EquivalentShuttleContext;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.IRewriteEquivalent;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.RewriteEquivalent;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.RewriteEquivalent.EQUIVALENTS;
 
 public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
-    private Multimap<ScalarOperator, Pair<ColumnRefOperator, PredicateReplaceChecker>> predicateProbMap;
+    private Map<IRewriteEquivalent.RewriteEquivalentType, List<RewriteEquivalent>> rewriteEquivalents;
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
+
     private AggregateFunctionRewriter aggregateFunctionRewriter;
-    boolean underAggFunctionRewriteContext;
+    boolean isUnderAggFuncNormalizerContext;
+
+    private final EquivalentShuttle defaultShuttle = new EquivalentShuttle(new EquivalentShuttleContext(null,
+            false, true, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE));
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
-        this.predicateProbMap = ArrayListMultimap.create();
+        this.rewriteEquivalents = Maps.newHashMap();
     }
 
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
@@ -57,142 +64,215 @@ public class EquationRewriter {
         this.aggregateFunctionRewriter = aggregateFunctionRewriter;
     }
 
-    public boolean isUnderAggFunctionRewriteContext() {
-        return underAggFunctionRewriteContext;
+    public boolean isUnderAggFuncNormalizerContext() {
+        return isUnderAggFuncNormalizerContext;
     }
 
-    public void setUnderAggFunctionRewriteContext(boolean underAggFunctionRewriteContext) {
-        this.underAggFunctionRewriteContext = underAggFunctionRewriteContext;
+    public void setUnderAggFuncNormalizerContext(boolean underAggFuncNormalizerContext) {
+        this.isUnderAggFuncNormalizerContext = underAggFuncNormalizerContext;
     }
 
-    protected ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
+    public boolean isColWithOnlyGroupByKeys(ScalarOperator expr) {
+        if (expr.getChildren().isEmpty()) {
+            return expr.isConstant() || equationMap.containsKey(expr);
+        }
+        for (ScalarOperator e : expr.getChildren()) {
+            if (expr.isConstant() || equationMap.containsKey(e)) {
+                continue;
+            }
+            if (!isColWithOnlyGroupByKeys(e)) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-        BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
-            @Override
-            public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
+    private final class EquivalentShuttle extends BaseScalarOperatorShuttle {
+        private final EquivalentShuttleContext shuttleContext;
+
+        public EquivalentShuttle(EquivalentShuttleContext eqContext) {
+            this.shuttleContext = eqContext;
+        }
+
+        @Override
+        public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
+            return null;
+        }
+
+        @Override
+        public Optional<ScalarOperator> preprocess(ScalarOperator scalarOperator) {
+            return replace(scalarOperator);
+        }
+
+        @Override
+        public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+            Optional<ScalarOperator> tmp = replace(predicate);
+            if (tmp.isPresent()) {
+                return tmp.get();
+            }
+
+            // rewrite by equivalent which only can be predicate type here.
+            ScalarOperator rewritten = rewriteByEquivalent(predicate, IRewriteEquivalent.RewriteEquivalentType.PREDICATE);
+            if (rewritten != null) {
+                shuttleContext.setRewrittenByEquivalent(true);
+                return rewritten;
+            }
+
+            return super.visitBinaryPredicate(predicate, context);
+        }
+
+        private ScalarOperator rewriteByEquivalent(ScalarOperator input,
+                                                   IRewriteEquivalent.RewriteEquivalentType type) {
+            if (!shuttleContext.isUseEquivalent()) {
                 return null;
             }
-
-            @Override
-            public Optional<ScalarOperator> preprocess(ScalarOperator scalarOperator) {
-                return replace(scalarOperator);
-            }
-
-            @Override
-            public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                Optional<ScalarOperator> tmp = replace(predicate);
-                if (tmp.isPresent()) {
-                    return tmp.get();
-                }
-
-                ScalarOperator left = predicate.getChild(0);
-                ScalarOperator right = predicate.getChild(1);
-
-                if (predicateProbMap.containsKey(left)) {
-                    Pair<ColumnRefOperator, PredicateReplaceChecker> pair = predicateProbMap.get(left).iterator().next();
-                    if (pair.second.canReplace(right)) {
-                        ColumnRefOperator replaced = columnMapping.get(pair.first);
+            if (type.isAny()) {
+                for (List<RewriteEquivalent> equivalents : rewriteEquivalents.values()) {
+                    for (RewriteEquivalent equivalent : equivalents) {
+                        ScalarOperator replaced = equivalent.rewrite(shuttleContext, columnMapping, input);
                         if (replaced != null) {
-                            ScalarOperator clonePredicate = predicate.clone();
-                            clonePredicate.setChild(0, replaced.clone());
-                            return clonePredicate;
+                            return replaced;
                         }
                     }
                 }
+            } else {
+                if (!rewriteEquivalents.containsKey(type)) {
+                    return null;
+                }
+                for (RewriteEquivalent equivalent : rewriteEquivalents.get(type)) {
+                    ScalarOperator replaced = equivalent.rewrite(shuttleContext, columnMapping, input);
+                    if (replaced != null) {
+                        return replaced;
+                    }
+                }
+            }
+            return null;
+        }
 
-                return super.visitBinaryPredicate(predicate, context);
+        @Override
+        public ScalarOperator visitCall(CallOperator call, Void context) {
+            // 1. rewrite query's predicate
+            Optional<ScalarOperator> tmp = replace(call);
+            if (tmp.isPresent()) {
+                return tmp.get();
             }
 
-            @Override
-            public ScalarOperator visitCall(CallOperator call, Void context) {
-                // 1. rewrite query's predicate
-                Optional<ScalarOperator> tmp = replace(call);
-                if (tmp.isPresent()) {
-                    return tmp.get();
-                }
-
-                // 2. normalize predicate to better match mv
-                // TODO: merge into aggregateFunctionRewriter later.
-                CallOperator normalizedCall = normalizeCallOperator(call);
-                tmp = replace(normalizedCall);
-                if (tmp.isPresent()) {
-                    return tmp.get();
-                }
-
-                // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
-                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(normalizedCall) &&
-                        !isUnderAggFunctionRewriteContext()) {
-                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(normalizedCall);
-                    if (newChooseScalarOp != null) {
-                        setUnderAggFunctionRewriteContext(true);
-                        // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
-                        // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
-                        ScalarOperator rewritten = newChooseScalarOp.accept(this, null);
-                        setUnderAggFunctionRewriteContext(false);
-                        return rewritten;
-                    }
-                }
-
-                return super.visitCall(call, context);
+            // rewrite by equivalent
+            ScalarOperator rewritten = rewriteByEquivalent(call, shuttleContext.getRewriteEquivalentType());
+            if (rewritten != null) {
+                shuttleContext.setRewrittenByEquivalent(true);
+                return rewritten;
             }
 
-            Optional<ScalarOperator> replace(ScalarOperator scalarOperator) {
-                if (equationMap.containsKey(scalarOperator)) {
-                    Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
-                            equationMap.get(scalarOperator).stream().findFirst();
-
-                    ColumnRefOperator basedColumn = mappedColumnAndExprRef.get().first;
-                    ScalarOperator extendedExpr = mappedColumnAndExprRef.get().second;
-
-                    if (columnMapping == null) {
-                        return extendedExpr == null ? Optional.of(basedColumn.clone()) : Optional.of(extendedExpr.clone());
+            // retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
+            if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(call) &&
+                    !isUnderAggFuncNormalizerContext()) {
+                boolean isRollup = shuttleContext == null ? false : shuttleContext.isRollup();
+                rewritten = aggregateFunctionRewriter.rewriteAggFunction(call, isRollup);
+                if (rewritten != null) {
+                    setUnderAggFuncNormalizerContext(true);
+                    // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
+                    // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
+                    setUnderAggFuncNormalizerContext(false);
+                    if (aggregateFunctionRewriter.getNewColumnRefToAggFuncMap() != null) {
+                        shuttleContext.setNewColumnRefToAggFuncMap(aggregateFunctionRewriter.getNewColumnRefToAggFuncMap());
                     }
+                    return rewritten;
+                }
+            }
+            // If count(1)/sum(1) cannot be rewritten by mv's defined equivalents, return null directly,
+            // otherwise it may cause a wrong plan.
+            // mv       : SELECT 1, count(distinct k1) from tbl1;
+            // query    : SELECT count(1) from tbl1;
+            // MV should not rewrite the query.
+            if (call.isAggregate() && call.isConstant()) {
+                return null;
+            }
+            return super.visitCall(call, context);
+        }
 
-                    ColumnRefOperator replaced = columnMapping.get(basedColumn);
-                    if (replaced == null) {
-                        return Optional.empty();
-                    }
+        Optional<ScalarOperator> replace(ScalarOperator scalarOperator) {
+            if (equationMap.containsKey(scalarOperator)) {
+                Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
+                        equationMap.get(scalarOperator).stream().findFirst();
 
-                    if (extendedExpr == null) {
-                        return Optional.of(replaced.clone());
-                    }
-                    ScalarOperator newExpr = extendedExpr.clone();
-                    return replaceColInExpr(newExpr, basedColumn,
-                            replaced.clone()) ? Optional.of(newExpr) : Optional.empty();
+                ColumnRefOperator basedColumn = mappedColumnAndExprRef.get().first;
+                ScalarOperator extendedExpr = mappedColumnAndExprRef.get().second;
+
+                if (columnMapping == null) {
+                    return extendedExpr == null ? Optional.of(basedColumn.clone()) : Optional.of(extendedExpr.clone());
                 }
 
-                return Optional.empty();
-            }
-
-            private boolean replaceColInExpr(ScalarOperator expr, ColumnRefOperator oldCol, ScalarOperator newCol) {
-                for (int i = 0; i < expr.getChildren().size(); i++) {
-                    if (oldCol.equals(expr.getChild(i))) {
-                        expr.setChild(i, newCol);
-                        return true;
-                    } else if (replaceColInExpr(expr.getChild(i), oldCol, newCol)) {
-                        return true;
-                    }
+                ColumnRefOperator replaced = columnMapping.get(basedColumn);
+                if (replaced == null) {
+                    return Optional.empty();
                 }
-                return false;
+
+                if (extendedExpr == null) {
+                    return Optional.of(replaced.clone());
+                }
+                ScalarOperator newExpr = extendedExpr.clone();
+                return replaceColInExpr(newExpr, basedColumn,
+                        replaced.clone()) ? Optional.of(newExpr) : Optional.empty();
             }
 
-        };
+            return Optional.empty();
+        }
 
-        return expr.accept(shuttle, null);
+        private boolean replaceColInExpr(ScalarOperator expr, ColumnRefOperator oldCol, ScalarOperator newCol) {
+            for (int i = 0; i < expr.getChildren().size(); i++) {
+                if (oldCol.equals(expr.getChild(i))) {
+                    expr.setChild(i, newCol);
+                    return true;
+                } else if (replaceColInExpr(expr.getChild(i), oldCol, newCol)) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
-    private static CallOperator normalizeCallOperator(CallOperator aggFunc) {
-        String aggFuncName = aggFunc.getFnName();
-        if (!aggFuncName.equals(FunctionSet.COUNT) || aggFunc.isDistinct()) {
-            return aggFunc;
-        }
+    /**
+     * Replace expr with target column with default shuttle by using expr's equivalent.
+     */
+    public ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
+        return expr.accept(defaultShuttle, null);
+    }
 
-        // unify count(*) or count(non-nullable column) to count(1) to be better for rewrite.
-        if (aggFunc.getChildren().size() == 0 || !aggFunc.getChild(0).isNullable()) {
-            return new CallOperator(FunctionSet.COUNT, aggFunc.getType(),
-                    Lists.newArrayList(ConstantOperator.createTinyInt((byte) 1)));
-        }
-        return aggFunc;
+    /**
+     * Rewrite expr with equivalent shuttle which can be more robust/powerful than `replaceExprWithTarget`.
+     * NOTE: This method is mainly used in Aggregate's rewrite since there are more equivalences defined in Aggregate.
+     */
+    public Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithRollup(RewriteContext rewriteContext,
+                                                                                ScalarOperator expr) {
+        return replaceExprWithEquivalent(rewriteContext, expr, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE);
+    }
+
+    /**
+     * Replace expr with equivalent shuttle with specific type.
+     * @param rewriteContext rewrite context
+     * @param expr input expr to be rewritten
+     * @param type equivalent type which is used for call operator rewrite to deduce rewriting strategy
+     * @return rewritten expr and equivalent shuttle context
+     */
+    public Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithEquivalent(
+            RewriteContext rewriteContext,
+            ScalarOperator expr,
+            IRewriteEquivalent.RewriteEquivalentType type) {
+        boolean isRollup = rewriteContext.isRollup();
+        final EquivalentShuttleContext shuttleContext = new EquivalentShuttleContext(rewriteContext,
+                isRollup, true, type);
+        final EquivalentShuttle shuttle = new EquivalentShuttle(shuttleContext);
+        return Pair.create(expr.accept(shuttle, null), shuttleContext);
+    }
+
+    /**
+     * Replace expr with equivalent shuttle, by default, we can rewrite call operator with any type of equivalent
+     * since call operator can be aggregate or predicate or group by keys.
+     */
+    public Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithEquivalent(RewriteContext rewriteContext,
+                                                                                    ScalarOperator expr) {
+        return replaceExprWithEquivalent(rewriteContext, expr, IRewriteEquivalent.RewriteEquivalentType.ANY);
     }
 
     public boolean containsKey(ScalarOperator scalarOperator) {
@@ -208,25 +288,17 @@ public class EquationRewriter {
             equationMap.put(extendedEntry.first, Pair.create(col, extendedEntry.second));
         }
 
-        if (expr instanceof CallOperator) {
-            CallOperator aggFunc = (CallOperator) expr;
-            if (aggFunc.getFnName().equals(FunctionSet.TIME_SLICE)) {
-                // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
-                // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
-                // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
-                ScalarOperator first = expr.getChild(0);
-                predicateProbMap.put(first, Pair.create(col, new TimeSliceReplaceChecker(((CallOperator) expr))));
-            } else if (aggFunc.getFnName().equals(FunctionSet.COUNT) && !aggFunc.isDistinct()) {
-                CallOperator newAggFunc = normalizeCallOperator(aggFunc);
-                if (newAggFunc != null && newAggFunc != aggFunc) {
-                    equationMap.put(newAggFunc,  Pair.create(col, null));
-                }
+        for (IRewriteEquivalent equivalent : EQUIVALENTS) {
+            IRewriteEquivalent.RewriteEquivalentContext eqContext = equivalent.prepare(expr);
+            if (eqContext != null) {
+                RewriteEquivalent eq = new RewriteEquivalent(eqContext, equivalent, col);
+                rewriteEquivalents.computeIfAbsent(eq.getRewriteEquivalentType(), x -> Lists.newArrayList())
+                        .add(eq);
             }
         }
     }
 
     private static class EquationTransformer extends ScalarOperatorVisitor<Void, Void> {
-
         private static final Map<String, String> COMMUTATIVE_MAP = ImmutableMap.<String, String>builder()
                 .put(FunctionSet.ADD, FunctionSet.SUBTRACT)
                 .put(FunctionSet.SUBTRACT, FunctionSet.ADD)
@@ -273,40 +345,8 @@ public class EquationRewriter {
             return null;
         }
 
-
         private Function findArithmeticFunction(CallOperator call, String fnName) {
-            return Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);
-        }
-
-    }
-
-    private interface PredicateReplaceChecker {
-        boolean canReplace(ScalarOperator operator);
-    }
-
-    private static class TimeSliceReplaceChecker implements PredicateReplaceChecker {
-        private final CallOperator mvTimeSlice;
-
-        public TimeSliceReplaceChecker(CallOperator mvTimeSlice) {
-            this.mvTimeSlice = mvTimeSlice;
-        }
-
-        @Override
-        public boolean canReplace(ScalarOperator operator) {
-            try {
-                if (operator.isConstantRef() && operator.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
-                    ConstantOperator sliced = ScalarOperatorFunctions.timeSlice(
-                            (ConstantOperator) operator,
-                            ((ConstantOperator) mvTimeSlice.getChild(1)),
-                            ((ConstantOperator) mvTimeSlice.getChild(2)),
-                            ((ConstantOperator) mvTimeSlice.getChild(3)));
-                    return sliced.equals(operator);
-                }
-            } catch (AnalysisException e) {
-                return false;
-            }
-            return false;
+            return ExprUtils.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);
         }
     }
-
 }

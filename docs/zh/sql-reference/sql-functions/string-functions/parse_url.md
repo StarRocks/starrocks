@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "从URL中提取指定部分，如协议、主机、路径或查询参数。"
 ---
 
 # parse_url
 
-## 功能
+
 
 从目标 URL 中提取一部分信息。
 

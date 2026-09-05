@@ -1,0 +1,116 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <atomic>
+#include <cstdint>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
+
+namespace starrocks::lake {
+
+// Log Type
+enum class LogType : uint8_t {
+    LOAD = 1,       // Data Load (Transaction Commit)
+    COMPACTION = 2, // Compaction
+    PUBLISH = 3     // Publish (PK index SST flush during publish)
+};
+
+// Single log entry
+struct TabletWriteLogEntry {
+    int64_t begin_time{0};           // Begin timestamp (ms)
+    int64_t finish_time{0};          // Finish timestamp (ms)
+    int64_t backend_id{0};           // Backend ID
+    int64_t txn_id{0};               // Transaction ID
+    int64_t tablet_id{0};            // Tablet ID
+    int64_t table_id{0};             // Table ID
+    int64_t partition_id{0};         // Partition ID
+    LogType log_type{LogType::LOAD}; // Log Type
+    int64_t input_rows{0};           // Input rows
+    int64_t input_bytes{0};          // Input bytes
+    int64_t output_rows{0};          // Output rows
+    int64_t output_bytes{0};         // Output bytes
+    int32_t input_segments{0};       // Input segment count (For Compaction)
+    int32_t output_segments{0};      // Output segment count
+    std::string label;               // Load label (For Load)
+    int64_t compaction_score{0};     // Compaction score (For Compaction)
+    std::string compaction_type;     // Compaction type (For Compaction)
+    int32_t sst_input_files{0};      // PK index SST input file count (For Compaction)
+    int64_t sst_input_bytes{0};      // PK index SST input bytes (For Compaction)
+    int32_t sst_output_files{0};     // PK index SST output file count
+    int64_t sst_output_bytes{0};     // PK index SST output bytes
+};
+
+// TabletWriteLogManager: Manages write logs in memory
+// Uses a ring buffer to keep recent log entries (default 30 minutes)
+class TabletWriteLogManager {
+public:
+    TabletWriteLogManager();
+    ~TabletWriteLogManager() = default;
+
+    // Disable copy
+    TabletWriteLogManager(const TabletWriteLogManager&) = delete;
+    TabletWriteLogManager& operator=(const TabletWriteLogManager&) = delete;
+
+    // Record Load log
+    void add_load_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id, int64_t partition_id,
+                      int64_t input_rows, int64_t input_bytes, int64_t output_rows, int64_t output_bytes,
+                      int32_t output_segments, const std::string& label, int64_t begin_time, int64_t finish_time,
+                      int32_t sst_output_files = 0, int64_t sst_output_bytes = 0);
+
+    // Record Publish log (PK index SST flush during publish)
+    void add_publish_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id, int64_t partition_id,
+                         int64_t begin_time, int64_t finish_time, int32_t sst_output_files, int64_t sst_output_bytes);
+
+    // Record Compaction log
+    void add_compaction_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id,
+                            int64_t partition_id, int64_t input_rows, int64_t input_bytes, int64_t output_rows,
+                            int64_t output_bytes, int32_t input_segments, int32_t output_segments,
+                            int64_t compaction_score, const std::string& compaction_type, int64_t begin_time,
+                            int64_t finish_time, int32_t sst_input_files = 0, int64_t sst_input_bytes = 0,
+                            int32_t sst_output_files = 0, int64_t sst_output_bytes = 0);
+
+    // Get logs (For SchemaScanner query)
+    // Optional filters: table_id, partition_id, tablet_id, log_type, start_finish_time, end_finish_time
+    std::vector<TabletWriteLogEntry> get_logs(int64_t table_id = -1, int64_t partition_id = -1, int64_t tablet_id = -1,
+                                              int64_t log_type = -1, int64_t start_finish_time = 0,
+                                              int64_t end_finish_time = 0) const;
+
+    // Cleanup old logs (finish_time < threshold_time)
+    void cleanup_old_logs(int64_t threshold_finish_time);
+
+    // Get current buffer size
+    size_t size() const;
+
+    // Get singleton instance
+    static TabletWriteLogManager* instance();
+
+private:
+    // Add log to buffer (internal method)
+    void _add_log(TabletWriteLogEntry entry);
+
+    // Check and clean overflowing logs
+    void _check_buffer_overflow();
+
+    mutable std::mutex _mutex;                    // Protects _log_buffer
+    std::deque<TabletWriteLogEntry> _log_buffer;  // Ring buffer
+    std::atomic<uint64_t> _total_logs_added{0};   // Stats: Total logs added
+    std::atomic<uint64_t> _total_logs_dropped{0}; // Stats: Logs dropped due to overflow
+};
+
+} // namespace starrocks::lake

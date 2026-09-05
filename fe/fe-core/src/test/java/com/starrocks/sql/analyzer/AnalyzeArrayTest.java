@@ -14,14 +14,14 @@
 
 package com.starrocks.sql.analyzer;
 
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeArrayTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -61,6 +61,7 @@ public class AnalyzeArrayTest {
         analyzeSuccess("select array_generate(1,9999999999999999, 10000)");
         analyzeSuccess("select array_generate(1,NULL,1)");
         analyzeSuccess("select array_generate(1,NULL)");
+        analyzeSuccess(" select array_generate(1, array_length([1,2,3]),1)");
         analyzeFail("select array_generate()");
         analyzeFail("select array_generate('c')");
         analyzeFail("select array_generate(a,b) from t");
@@ -72,5 +73,39 @@ public class AnalyzeArrayTest {
         analyzeSuccess("select array_concat([1.0, 2.0, 3.0], [2.00, 2.0])");
         analyzeSuccess("select array_concat([1.0, 2.0, 3.0], ['2.00', '2.0'])");
         analyzeFail("select array_concat([1, 2, 3], [[1, 1], [2, 2]])");
+    }
+
+    @Test
+    public void testArrayFlatten() {
+        analyzeFail("select array_flatten()");
+        analyzeFail("select array_flatten(1)");
+        analyzeFail("select array_flatten([1, 2, 3])");
+        analyzeSuccess("select array_flatten([[1, 2], [1, 4]])");
+    }
+
+    @Test
+    public void testNullOrEmpty() {
+        analyzeFail("select null_or_empty()");
+        analyzeSuccess("select null_or_empty('abc')");
+        analyzeSuccess("select null_or_empty([])");
+        analyzeSuccess("select null_or_empty([1, 2, 3])");
+        analyzeSuccess("select null_or_empty([[1, 2], [1, 4]])");
+    }
+
+    @Test
+    public void testUntypedNullInArrayPosition() {
+        // An untyped NULL reaches resolvePolymorphicArrayFunction as NullType. Casting it to ArrayType
+        // threw ClassCastException whenever the element argument was a complex type, even though the
+        // same call with a scalar element already resolved.
+        analyzeSuccess("select array_contains(NULL, 1)");
+        analyzeSuccess("select array_contains(NULL, 'x')");
+        analyzeSuccess("select array_contains(NULL, NULL)");
+        analyzeSuccess("select array_contains(NULL, [1, 2])");
+        analyzeSuccess("select array_contains(NULL, row(20, 'world'))");
+        analyzeSuccess("select array_position(NULL, 1)");
+        analyzeSuccess("select array_position(NULL, [1, 2])");
+        // Typed arrays and a NULL element keep working.
+        analyzeSuccess("select array_contains([1, 2], NULL)");
+        analyzeSuccess("select array_contains(cast(NULL as array<int>), 1)");
     }
 }

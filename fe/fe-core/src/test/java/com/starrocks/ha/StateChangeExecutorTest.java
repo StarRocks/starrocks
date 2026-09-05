@@ -20,25 +20,29 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class StateChangeExecutorTest {
     private static final Logger LOG = LogManager.getLogger(StateChangeExecutorTest.class);
 
     private class StateChangeExecutionTest implements StateChangeExecution {
         private FrontendNodeType type;
+
         @Override
         public void transferToLeader() {
             type = FrontendNodeType.LEADER;
         }
+
         @Override
         public void transferToNonLeader(FrontendNodeType newType) {
             type = newType;
         }
+
         public FrontendNodeType getType() {
             return type;
         }
+
         public void setType(FrontendNodeType newType) {
             type = newType;
         }
@@ -47,7 +51,7 @@ public class StateChangeExecutorTest {
     private void runOne(String name, FrontendNodeType oldType, FrontendNodeType newType) {
         StateChangeExecutionTest execution = new StateChangeExecutionTest();
         execution.setType(oldType);
-        Assert.assertEquals(oldType, execution.getType());
+        Assertions.assertEquals(oldType, execution.getType());
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -74,7 +78,7 @@ public class StateChangeExecutorTest {
             }
         }
         if (i != 4) { // it's possible that consumer thread is too slow
-            Assert.assertEquals(newType, execution.getType());
+            Assertions.assertEquals(newType, execution.getType());
         }
 
         executor.setStop();
@@ -102,5 +106,8 @@ public class StateChangeExecutorTest {
 
         // OBSERVER -> UNKNOWN
         runOne("StateChangeExecutor_observerTOunknown", FrontendNodeType.OBSERVER, FrontendNodeType.UNKNOWN);
+
+        // LEADER -> FOLLOWER
+        runOne("StateChangeExecutor_leaderTOfollower", FrontendNodeType.LEADER, FrontendNodeType.FOLLOWER);
     }
 }

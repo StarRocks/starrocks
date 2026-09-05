@@ -1,0 +1,122 @@
+name: Reader feedback
+   # This workflow pulls reader feedback from PostHog
+   # and opens a GitHub issue with the last week of feedback.
+   # The issue will be labelled with `docs-feedback`
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * SUN'  # once a week on Sunday
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  Weekly_info_for_docs_team:
+    env:
+      POSTHOG_TOKEN: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+      ALGOLIA_TOKEN: ${{ secrets.ALGOLIA_ANALYTICS_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: List PRs with docs-maintainer Label
+        run: |
+          set -eo pipefail # Ensure the script fails on any command error
+          echo "## PRs that need attention" > feedback.md
+          echo "Listing PRs with label: docs-maintainer" >> feedback.md
+
+          curl -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?state=open" | jq -r '.[] | select(.labels[]?.name == "docs-maintainer") | "- PR number: \(.number) PR title: [\(.title)](\(.html_url))"' >> feedback.md
+
+          echo "---" >> feedback.md
+
+
+      - name: Collect feedback
+        run: |
+          set -eo pipefail # Ensure the script fails on any command error
+          echo "## Feedback from readers" >> feedback.md
+          echo "Three sections: feedback, top working searches, and top failed searches." >> feedback.md
+          echo "Please check off the feedback and failed searches as you fix them and" >> feedback.md
+          echo "please add the `doc-feedback` label to your PRs related to this issue." >> feedback.md
+          echo " " >> feedback.md
+          echo "You do not need to edit this issue with PR numbers, as everything with" >> feedback.md
+          echo "the label will show in the GitHub project." >> feedback.md
+          echo " " >> feedback.md
+          curl --silent --fail \
+            --header "Content-Type: application/json" \
+            --data '{ "query": { "kind": "HogQLQuery", "query": "SELECT now() - INTERVAL 7 DAY as start_time, timestamp, properties.page, properties.text, properties.sentiment from events WHERE properties.sentiment IS NOT NULL AND timestamp > start_time ORDER BY properties.sentiment ASC"}}' \
+            -H "Authorization: Bearer $POSTHOG_TOKEN" \
+            https://app.posthog.com/api/projects/48961/query \
+            | jq -r '.results | to_entries[] | "- [ ] \(.value[2])", "  feedback: \(.value[3])", "  Rating: \(.value[4])", "  timestamp: \(.value[1])"' >> feedback.md
+
+      - name: Run Algolia scripts
+        run: |
+          set -eo pipefail # Ensure the script fails on any command error
+          echo " " >> feedback.md
+          echo "## Algolia top searches" >> feedback.md
+          echo " " >> feedback.md
+          echo "Note: Searches with zero hits are searches that are very popular and also not returning any results. They will also appear in the failed search list." >> feedback.md
+          echo " " >> feedback.md
+          curl --silent --fail \
+            -X GET \
+            -H "X-Algolia-API-Key: $ALGOLIA_TOKEN" \
+            -H "X-Algolia-Application-Id: ER08SJMRY1" \
+            "https://analytics.algolia.com/2/searches?index=starrocks" \
+            | jq -r '.searches | to_entries[] | "- \(.value.search)", "  count this week: \(.value.count)", "  Search hits: \(.value.nbHits)\n" ' >> feedback.md
+          echo " " >> feedback.md
+          echo "## Algolia top failed searches" >> feedback.md
+          echo " " >> feedback.md
+          curl --silent --fail \
+            -X GET \
+            -H "X-Algolia-API-Key: $ALGOLIA_TOKEN" \
+            -H "X-Algolia-Application-Id: ER08SJMRY1" \
+           "https://analytics.algolia.com/2/searches/noResults?index=starrocks" \
+           | jq -r '.searches | to_entries[] | "- [ ] \(.value.search)", "  failures this week: \(.value.count)"' \
+           >> feedback.md
+
+      - name: Add Dependabot reminder for docs
+        run: |
+          set -eo pipefail # Ensure the script fails on any command error
+          manual_dependabot_url="https://github.com/${GITHUB_REPOSITORY}/security/dependabot?q=is%3Aopen+sort%3Anewest+severity%3Ahigh+docs"
+
+          echo " " >> feedback.md
+          echo "## Dependabot alerts reminder" >> feedback.md
+          echo "- [ ] Check open Dependabot alerts for docs:" >> feedback.md
+          echo "  ${manual_dependabot_url}" >> feedback.md
+          echo " " >> feedback.md
+
+      - name: Check for broken external links
+        continue-on-error: true
+        uses: lycheeverse/lychee-action@v2.8.0
+        with:
+          fail: false
+          args: >
+            --config docs/lychee.toml
+            --format markdown
+            --output lychee-broken-links.md
+            "docs/en/**/*.md*"
+            "docs/zh/**/*.md*"
+            "docs/ja/**/*.md*"
+
+      - name: Append broken links to feedback
+        run: |
+          echo " " >> feedback.md
+          echo "## Broken external links" >> feedback.md
+          if [ -f lychee-broken-links.md ] && grep -q "Errors per input" lychee-broken-links.md; then
+            cat lychee-broken-links.md >> feedback.md
+          else
+            echo "No broken links detected." >> feedback.md
+          fi
+
+      - name: Create issue from file
+        if: always()
+        id: weekly-feedback-report
+        uses: peter-evans/create-issue-from-file@ceef9be92406ace67ab5421f66570acf213ec395
+        with:
+          title: Weekly documentation feedback from readers
+          content-filepath: ./feedback.md
+          labels: doc-feedback

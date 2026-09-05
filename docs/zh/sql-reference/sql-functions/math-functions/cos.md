@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算参数的余弦值。"
 ---
 
 # cos
 
-## 功能
+
 
 求参数 `x` 的余弦值。
 

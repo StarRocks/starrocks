@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "向日期时间或日期值添加指定年数。"
 ---
 
 # years_add
 
-## 功能
+
 
 向 `expr1` 添加指定的时间间隔，单位为年。
 

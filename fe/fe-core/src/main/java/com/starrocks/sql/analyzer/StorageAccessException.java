@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.starrocks.common.DdlException;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
  * Access remote storage(s3/gcs/oss/hdfs) exception
@@ -36,14 +36,19 @@ public class StorageAccessException extends RuntimeException {
     public String getMessage() {
         StringBuilder builder = new StringBuilder("Access storage error. ");
         Throwable rootCause = getRootCause();
-        if (rootCause instanceof AmazonS3Exception) {
-            AmazonS3Exception s3Exception = (AmazonS3Exception) rootCause;
-            builder.append("Error code: ").append(s3Exception.getErrorCode()).append(". ");
-            builder.append("Error message: ").append(s3Exception.getErrorMessage()).append(". ");
-        } else if (rootCause instanceof DdlException) {
-            builder.append("Error message: ").append(rootCause.getMessage());
+        if (rootCause instanceof S3Exception) {
+            S3Exception s3Exception = (S3Exception) rootCause;
+            AwsErrorDetails awsErrorDetails = s3Exception.awsErrorDetails();
+            if (awsErrorDetails.errorCode() != null) {
+                builder.append("Error code: ").append(awsErrorDetails.errorCode()).append(". ");
+            }
+            if (awsErrorDetails.errorMessage() != null) {
+                builder.append("Error message: ").append(awsErrorDetails.errorMessage());
+            } else {
+                builder.append("Error message: ").append(s3Exception.getMessage());
+            }
         } else {
-            builder.append("Unknown error");
+            builder.append("Error message: ").append(rootCause.getMessage());
         }
         // TODO: translate error message of other storage systems
         return builder.toString();

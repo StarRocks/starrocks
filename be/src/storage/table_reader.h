@@ -17,21 +17,20 @@
 #include <utility>
 #include <vector>
 
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "gen_cpp/Descriptors_types.h"
-#include "storage/chunk_iterator.h"
-#include "storage/column_predicate.h"
 #include "storage/tablet.h"
-
-namespace doris {
-class PBackendService_Stub;
-}
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/column_predicate_factory.h"
 
 namespace starrocks {
 
+class OlapTableSchemaParam;
 class OlapTablePartitionParam;
 class OlapTableLocationParam;
 class StarRocksNodesInfo;
 class LocalTabletReader;
+class PInternalService_RecoverableStub;
 
 namespace serde {
 struct ProtobufChunkMeta;
@@ -123,9 +122,9 @@ private:
                                     const std::vector<std::string>& value_columns, std::vector<bool>& found,
                                     Chunk& values, SchemaPtr& value_schema);
 
-    Status _tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
-                                 const std::vector<std::string>& value_columns, std::vector<bool>& found, Chunk& values,
-                                 SchemaPtr& value_schema);
+    Status _tablet_multi_get_rpc(const std::shared_ptr<PInternalService_RecoverableStub>& stub, int64_t tablet_id,
+                                 int64_t version, Chunk& keys, const std::vector<std::string>& value_columns,
+                                 std::vector<bool>& found, Chunk& values, SchemaPtr& value_schema);
     // fields for local tablet reader
     std::unique_ptr<LocalTableReaderParams> _local_params;
     std::unique_ptr<LocalTabletReader> _local_tablet_reader;
@@ -136,7 +135,6 @@ private:
     std::unique_ptr<OlapTablePartitionParam> _partition_param;
     std::unique_ptr<OlapTableLocationParam> _location_param;
     std::unique_ptr<StarRocksNodesInfo> _nodes_info;
-    std::unique_ptr<RowDescriptor> _row_desc;
 };
 
 } // namespace starrocks

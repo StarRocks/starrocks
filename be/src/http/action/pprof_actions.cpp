@@ -36,19 +36,26 @@
 
 #include <gperftools/profiler.h>
 
+#ifdef __APPLE__
+#include <stdlib.h>
+#endif
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 
-#include "common/config.h"
-#include "common/prof/heap_prof.h"
+#include "common/config_path_fwd.h"
 #include "common/status.h"
 #include "common/tracer.h"
-#include "http/ev_http_server.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "util/bfd_parser.h"
+#include "io/io_profiler.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "runtime/prof/heap_prof.h"
 
 namespace starrocks {
 
@@ -57,7 +64,9 @@ static const std::string SECOND_KEY = "seconds";
 static const int kPprofDefaultSampleSecs = 30;
 
 // Protect, only one thread can work
+#if !(defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER))
 static std::mutex kPprofActionMutex;
+#endif
 
 void HeapAction::handle(HttpRequest* req) {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
@@ -128,7 +137,37 @@ void ProfileAction::handle(HttpRequest* req) {
 #endif
 }
 
+static std::mutex kIOPprofActionMutex;
+
+void IOProfileAction::handle(HttpRequest* req) {
+    std::lock_guard<std::mutex> lock(kIOPprofActionMutex);
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_io_profile"));
+
+    int seconds = 10;
+    const std::string& seconds_str = req->param(SECOND_KEY);
+    if (!seconds_str.empty()) {
+        seconds = std::atoi(seconds_str.c_str());
+    }
+    int topn = 10;
+    const std::string& topn_str = req->param("topn");
+    if (!topn_str.empty()) {
+        topn = std::atoi(topn_str.c_str());
+    }
+    topn = std::max(1, topn);
+
+    auto ret = IOProfiler::profile_and_get_topn_stats_str(req->param("mode"), seconds, topn);
+    HttpChannel::send_reply(req, ret);
+}
+
 void CmdlineAction::handle(HttpRequest* req) {
+#ifdef __APPLE__
+    const char* prog_name = getprogname();
+    if (prog_name == nullptr || prog_name[0] == '\0') {
+        HttpChannel::send_reply(req, "read cmdline failed");
+        return;
+    }
+    HttpChannel::send_reply(req, prog_name);
+#else
     FILE* fp = fopen("/proc/self/cmdline", "r");
     if (fp == nullptr) {
         std::string str = "Unable to open file: /proc/self/cmdline";
@@ -137,51 +176,20 @@ void CmdlineAction::handle(HttpRequest* req) {
         return;
     }
     char buf[1024];
-    if (fscanf(fp, "%s ", buf) != 1) {
+    if (fscanf(fp, "%1023s ", buf) != 1) {
         strcpy(buf, "read cmdline failed");
     }
     fclose(fp);
     std::string str = buf;
 
     HttpChannel::send_reply(req, str);
+#endif
 }
 
 void SymbolAction::handle(HttpRequest* req) {
-    // TODO: Implement symbol resolution. Without this, the binary needs to be passed
+    // Symbol resolution is not available. The binary needs to be passed
     // to pprof to resolve all symbols.
-    if (req->method() == HttpMethod::GET) {
-        std::stringstream ss;
-        ss << "num_symbols: " << _parser->num_symbols();
-        std::string str = ss.str();
-
-        HttpChannel::send_reply(req, str);
-        return;
-    } else if (req->method() == HttpMethod::HEAD) {
-        HttpChannel::send_reply(req);
-        return;
-    } else if (req->method() == HttpMethod::POST) {
-        std::string request = req->get_request_body();
-        // parse address
-        std::string result;
-        const char* ptr = request.c_str();
-        const char* end = request.c_str() + request.size();
-        while (ptr < end && *ptr != '\0') {
-            std::string file_name;
-            std::string func_name;
-            unsigned int lineno = 0;
-            const char* old_ptr = ptr;
-            if (!_parser->decode_address(ptr, &ptr, &file_name, &func_name, &lineno)) {
-                result.append(old_ptr, ptr - old_ptr);
-                result.push_back('\t');
-                result.append(func_name);
-                result.push_back('\n');
-            }
-            if (ptr < end && *ptr == '+') {
-                ptr++;
-            }
-        }
-
-        HttpChannel::send_reply(req, result);
-    }
+    std::string str = "Symbol resolution is not available. Please use pprof with the binary file to resolve symbols.";
+    HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, str);
 }
 } // namespace starrocks

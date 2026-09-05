@@ -1,16 +1,26 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "SET ROLE activates roles, along with all of its associated privileges and nested roles, for the current session."
 ---
 
 # SET ROLE
 
-## Description
 
-Activates roles, along with all of its associated privileges and nested roles, for the current session. After the role is activated, users can use this role to perform operations.
+SET ROLE activates roles, along with all of its associated privileges and nested roles, for the current session. After the role is activated, users can use this role to perform operations.
 
- After running this command, you can run `select is_role_in_session("<role_name>");` to verify whether this role is active in the current session.
+After running this command, you can run `select is_role_in_session("<role_name>");` to verify whether this role is active in the current session.
 
 This command is supported from v3.0.
+
+## Usage notes
+
+Users can only activate roles that have been assigned to them.
+
+You can query the roles of a user using [SHOW GRANTS](./SHOW_GRANTS.md).
+
+You can query the active roles of the current user using `SELECT CURRENT_ROLE()`. For more information, see [current_role](../../sql-functions/utility-functions/current_role.md).
+
+The activated role affects all authorization checks, including queries against `information_schema` system views. For example, after executing `SET ROLE role1`, queries like `SELECT * FROM information_schema.tables` will only return tables accessible through `role1`. This ensures that role-based access control is consistently applied across all system catalogs and metadata queries.
 
 ## Syntax
 
@@ -26,14 +36,6 @@ SET ROLE ALL;
 ## Parameters
 
 `role_name`: the role name
-
-## Usage notes
-
-Users can only activate roles that have been assigned to them.
-
-You can query the roles of a user using [SHOW GRANTS](./SHOW_GRANTS.md).
-
-You can query the active roles of the current user using `SELECT CURRENT_ROLE()`. For more information, see [current_role](../../sql-functions/utility-functions/current_role.md).
 
 ## Examples
 

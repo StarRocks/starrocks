@@ -39,15 +39,15 @@
 
 #include "agent/status.h"
 #include "common/statusor.h"
+#include "common/storage_define.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/Status_types.h"
 #include "gutil/macros.h"
-#include "runtime/exec_env.h"
-#include "storage/olap_define.h"
 #include "thrift/transport/TTransportUtils.h"
 
 namespace starrocks {
 
+class MetricRegistry;
 class StorageEngine;
 class Status;
 class ThriftServer;
@@ -79,9 +79,12 @@ private:
 
     StatusOr<CmpResult> compare_master_info(const TMasterInfo& master_info);
 
+    // New function to print TMasterInfo object as a string
+    std::string print_master_info(const TMasterInfo& master_info) const;
+
     StorageEngine* _olap_engine;
 }; // class HeartBeatServer
 
-StatusOr<std::unique_ptr<ThriftServer>> create_heartbeat_server(ExecEnv* exec_env, uint32_t heartbeat_server_port,
+StatusOr<std::unique_ptr<ThriftServer>> create_heartbeat_server(MetricRegistry* metrics, uint32_t heartbeat_server_port,
                                                                 uint32_t worker_thread_num);
 } // namespace starrocks

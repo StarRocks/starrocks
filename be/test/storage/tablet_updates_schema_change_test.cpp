@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/failpoint/fail_point.h"
+#include "common/config_compaction_fwd.h"
 #include "tablet_updates_test.h"
 
 namespace starrocks {
@@ -36,6 +38,17 @@ void TabletUpdatesTest::test_link_from(bool enable_persistent_index) {
 
     _tablet2->set_tablet_state(TABLET_NOTREADY);
     auto chunk_changer = std::make_unique<ChunkChanger>(_tablet2->tablet_schema());
+    {
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("skip_alter_version");
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        ASSERT_TRUE(
+                _tablet2->updates()->link_from(_tablet.get(), 4, chunk_changer.get(), _tablet->tablet_schema()).ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
+    _tablet2->set_tablet_state(TABLET_NOTREADY);
     ASSERT_TRUE(_tablet2->updates()->link_from(_tablet.get(), 4, chunk_changer.get(), _tablet->tablet_schema()).ok());
 
     ASSERT_EQ(N, read_tablet(_tablet2, 4));
@@ -50,7 +63,6 @@ TEST_F(TabletUpdatesTest, link_from_with_persistent_index) {
 }
 
 void TabletUpdatesTest::test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index) {
-    sleep(30);
     srand(GetCurrentTimeMicros());
     auto base_tablet = create_tablet(rand(), rand());
     base_tablet->set_enable_persistent_index(enable_persistent_index);
@@ -105,8 +117,15 @@ void TabletUpdatesTest::test_schema_change_optimiazation_adding_generated_column
     std::string alter_msg_header = strings::Substitute("[Alter Job:$0, tablet:$1]: ", 999, base_tablet->tablet_id());
     SchemaChangeHandler handler;
     handler.set_alter_msg_header(alter_msg_header);
-    auto res = handler.process_alter_tablet_v2(request);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+            "base_tablet_max_version_greater_than_alter_version");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    auto res = handler.process_alter_tablet(request);
     ASSERT_TRUE(res.ok()) << res.to_string();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
 }
 
 TEST_F(TabletUpdatesTest, test_schema_change_optimiazation_adding_generated_column) {
@@ -142,6 +161,39 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
         }
     }
     ASSERT_TRUE(chunk_changer->prepare().ok());
+
+    {
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("skip_alter_version");
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        ASSERT_TRUE(tablet_to_schema_change->updates()
+                            ->convert_from(_tablet, 4, chunk_changer.get(), _tablet->tablet_schema())
+                            .ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
+        fp->setMode(trigger_mode);
+        fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("verify_rowset_failed");
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        // Both are process-global: if the assertion below fails, the plain resets at the end of this
+        // block are skipped and every later test compacts with rowset verification on.
+        DeferOp restore_verify([&]() {
+            PFailPointTriggerMode disable_mode;
+            disable_mode.set_mode(FailPointTriggerModeType::DISABLE);
+            fp->setMode(disable_mode);
+            config::enable_rowset_verify = false;
+        });
+        config::enable_rowset_verify = true;
+        ASSERT_FALSE(tablet_to_schema_change->updates()
+                             ->convert_from(_tablet, 4, chunk_changer.get(), _tablet->tablet_schema())
+                             .ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+        config::enable_rowset_verify = false;
+    }
+
+    tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
     ASSERT_TRUE(tablet_to_schema_change->updates()
                         ->convert_from(_tablet, 4, chunk_changer.get(), _tablet->tablet_schema())
                         .ok());
@@ -288,6 +340,37 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
     }
     ASSERT_TRUE(chunk_changer->prepare().ok());
 
+    {
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("skip_alter_version");
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        ASSERT_TRUE(tablet_with_sort_key1->updates()
+                            ->convert_from(_tablet, 4, chunk_changer.get(), _tablet->tablet_schema())
+                            .ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        tablet_with_sort_key1->set_tablet_state(TABLET_NOTREADY);
+        fp->setMode(trigger_mode);
+        fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("verify_rowset_failed");
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        // Both are process-global: if the assertion below fails, the plain resets at the end of this
+        // block are skipped and every later test compacts with rowset verification on.
+        DeferOp restore_verify([&]() {
+            PFailPointTriggerMode disable_mode;
+            disable_mode.set_mode(FailPointTriggerModeType::DISABLE);
+            fp->setMode(disable_mode);
+            config::enable_rowset_verify = false;
+        });
+        config::enable_rowset_verify = true;
+        ASSERT_FALSE(tablet_with_sort_key1->updates()
+                             ->convert_from(_tablet, 4, chunk_changer.get(), _tablet->tablet_schema())
+                             .ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+        config::enable_rowset_verify = false;
+    }
+    tablet_with_sort_key1->set_tablet_state(TABLET_NOTREADY);
     ASSERT_TRUE(tablet_with_sort_key1->updates()
                         ->reorder_from(_tablet, 4, chunk_changer.get(), _tablet->tablet_schema())
                         .ok());

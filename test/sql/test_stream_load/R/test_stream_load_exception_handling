@@ -1,0 +1,215 @@
+-- name: test_basic_txn_load_failure @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `table_strict` (
+  `id` int,
+  `name` varchar(100),
+  `required_col` bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:load_fail_basic_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:load_fail_basic_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "columns:id,name" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+ANALYSIS_ERROR
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:load_fail_basic_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+select count(*) from table_strict;
+-- result:
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_multi_txn_load_failure @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `table_strict` (
+  `id` int,
+  `name` varchar(100),
+  `required_col` bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:load_fail_multi_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:load_fail_multi_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "columns:id,name" -H "transaction_type:multi" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:load_fail_multi_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+select count(*) from table_strict;
+-- result:
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_load_failure_commit_behavior @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `table_strict` (
+  `id` int,
+  `name` varchar(100),
+  `required_col` bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:basic_fail_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:basic_fail_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "columns:id,name" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+ANALYSIS_ERROR
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:basic_fail_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:multi_fail_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:multi_fail_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "columns:id,name" -H "transaction_type:multi" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:multi_fail_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+select count(*) from table_strict;
+-- result:
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_basic_txn_load_failure_then_retry @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `table_strict` (
+  `id` int,
+  `name` varchar(100),
+  `required_col` bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:basic_retry_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:basic_retry_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "columns:id,name" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+ANALYSIS_ERROR
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:basic_retry_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -d '2,bob,100' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+TXN_NOT_EXISTS
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:basic_retry_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+select count(*) from table_strict;
+-- result:
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_multi_txn_load_failure_then_retry @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `table_strict` (
+  `id` int,
+  `name` varchar(100),
+  `required_col` bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:multi_retry_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:multi_retry_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "columns:id,name" -H "transaction_type:multi" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:multi_retry_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "transaction_type:multi" -d '2,bob,100' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:multi_retry_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+select count(*) from table_strict;
+-- result:
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

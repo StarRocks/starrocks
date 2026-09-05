@@ -34,12 +34,13 @@
 
 #pragma once
 
+#include "base/bit/frame_of_reference_coding.h"
 #include "column/column.h"
+#include "column/raw_data_visitor.h"
 #include "storage/rowset/options.h"      // for PageBuilderOptions/PageDecoderOptions
 #include "storage/rowset/page_builder.h" // for PageBuilder
 #include "storage/rowset/page_decoder.h" // for PageDecoder
-#include "storage/type_traits.h"
-#include "util/frame_of_reference_coding.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -102,7 +103,7 @@ public:
     }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
     PageBuilderOptions _options;
     uint32_t _count{0};
     bool _finished{false};
@@ -119,7 +120,7 @@ public:
 
     ~FrameOfReferencePageDecoder() override = default;
 
-    [[nodiscard]] Status init() override {
+    Status init() override {
         CHECK(!_parsed);
         bool result = _decoder.init();
         if (result) {
@@ -131,7 +132,7 @@ public:
         }
     }
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init() firstly";
         DCHECK_LE(pos, _num_elements) << "Tried to seek to " << pos << " which is > number of elements ("
                                       << _num_elements << ") in the block!";
@@ -146,7 +147,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
         DCHECK(_parsed) << "Must call init() firstly";
         bool found = _decoder.seek_at_or_after_value(value, exact_match);
         if (!found) {
@@ -156,7 +157,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override {
+    Status next_batch(size_t* n, Column* dst) override {
         SparseRange<> read_range;
         uint32_t begin = current_index();
         read_range.add(Range<>(begin, begin + *n));
@@ -165,7 +166,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed) << "Must call init() firstly";
         if (PREDICT_FALSE(range.span_size() == 0 || _cur_index >= _num_elements)) {
             return Status::OK();
@@ -195,7 +196,9 @@ public:
             Range<> r = iter.next(to_read);
             const size_t ori_size = dst->size();
             dst->resize(ori_size + r.span_size());
-            auto* p = reinterpret_cast<CppType*>(dst->mutable_raw_data()) + ori_size;
+            MutableRawDataVisitor visitor;
+            RETURN_IF_ERROR(dst->accept_mutable(&visitor));
+            auto* p = reinterpret_cast<CppType*>(visitor.result()) + ori_size;
             bool res = _decoder.get_batch(p, r.span_size());
             DCHECK(res);
             _cur_index += r.span_size();
@@ -211,7 +214,7 @@ public:
     EncodingTypePB encoding_type() const override { return FOR_ENCODING; }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
 
     bool _parsed{false};
     Slice _data;

@@ -17,8 +17,8 @@
 
 package com.starrocks.service;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -44,7 +44,7 @@ public class ExecuteEnvTest {
             }
         }
         for (int i = 1; i < THREAD_MAX_NUM; i++) {
-            Assert.assertEquals(oids[i - 1], oids[i]);
+            Assertions.assertEquals(oids[i - 1], oids[i]);
         }
     }
 }

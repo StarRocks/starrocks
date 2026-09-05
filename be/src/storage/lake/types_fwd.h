@@ -13,7 +13,10 @@
 // limitations under the License.
 
 #pragma once
+#include <cstdint>
 #include <memory>
+#include <set>
+#include <unordered_map>
 #include <vector>
 
 namespace starrocks {
@@ -25,6 +28,12 @@ class DelVector;
 class ChunkIterator;
 class Schema;
 class Column;
+class RowsetMetadataPB;
+
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
+using RowsetMetadata = RowsetMetadataPB;
+using RowsetMetadataPtr = std::shared_ptr<const RowsetMetadata>;
+using RowsetMetadataUniquePtr = std::unique_ptr<const RowsetMetadata>;
 
 namespace lake {
 
@@ -32,19 +41,25 @@ class Rowset;
 class Tablet;
 class CompactionTask;
 class LocationProvider;
-class RowsetMetadataPB;
+class PersistentIndexSstable;
+struct PreparedSegmentReadState;
+struct PreparedTabletReadState;
 
-using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
-using RowsetMetadata = RowsetMetadataPB;
-using RowsetMetadataPtr = std::shared_ptr<const starrocks::lake::RowsetMetadata>;
 using RowsetPtr = std::shared_ptr<starrocks::lake::Rowset>;
 using SegmentPtr = std::shared_ptr<starrocks::Segment>;
 using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;
 using CompactionTaskPtr = std::shared_ptr<CompactionTask>;
-using ColumnUniquePtr = std::unique_ptr<Column>;
+using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
+using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
 using segment_rowid_t = uint32_t;
 using DeletesMap = std::unordered_map<uint32_t, std::vector<segment_rowid_t>>;
 using DelVectorPtr = std::shared_ptr<DelVector>;
+
+using KeyIndex = size_t;
+using KeyIndexSet = std::set<KeyIndex>;
+
+using PersistentIndexSstableUniquePtr = std::unique_ptr<PersistentIndexSstable>;
+using PersistentIndexSstablePtr = std::shared_ptr<PersistentIndexSstable>;
 
 } // namespace lake
 

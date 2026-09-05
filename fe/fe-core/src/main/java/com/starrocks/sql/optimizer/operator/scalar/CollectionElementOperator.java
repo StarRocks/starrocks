@@ -17,41 +17,33 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.OperatorType.COLLECTION_ELEMENT;
 
-public class CollectionElementOperator extends ScalarOperator {
-    protected List<ScalarOperator> arguments = Lists.newArrayList();
+public class CollectionElementOperator extends ArgsScalarOperator {
+    private boolean isCheckOutOfBounds = false;
 
-    public CollectionElementOperator(Type type, ScalarOperator arrayOperator, ScalarOperator subscriptOperator) {
+    public CollectionElementOperator(Type type, ScalarOperator arrayOperator, ScalarOperator subscriptOperator,
+                                     boolean isCheckOutOfBounds) {
         super(COLLECTION_ELEMENT, type);
         this.arguments.add(arrayOperator);
         this.arguments.add(subscriptOperator);
+        this.isCheckOutOfBounds = isCheckOutOfBounds;
+        incrDepth(arguments);
+    }
+
+    public boolean isCheckOutOfBounds() {
+        return isCheckOutOfBounds;
     }
 
     @Override
     public boolean isNullable() {
         return true;
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
     }
 
     @Override
@@ -75,28 +67,26 @@ public class CollectionElementOperator extends ScalarOperator {
         List<ScalarOperator> newArguments = Lists.newArrayList();
         this.arguments.forEach(p -> newArguments.add(p.clone()));
         operator.arguments = newArguments;
+        operator.isCheckOutOfBounds = isCheckOutOfBounds;
         return operator;
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCollectionElement(this, context);
+        return  visitor.visitCollectionElement(this, context);
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         CollectionElementOperator that = (CollectionElementOperator) o;
-        return Objects.equal(arguments, that.arguments);
+        return isCheckOutOfBounds == that.isCheckOutOfBounds;
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hashCode(arguments);
+    public int hashCodeSelf() {
+        return Objects.hashCode(opType);
     }
 }

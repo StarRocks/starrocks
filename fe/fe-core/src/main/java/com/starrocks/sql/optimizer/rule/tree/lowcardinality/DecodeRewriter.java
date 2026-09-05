@@ -1,0 +1,975 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
+
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableFunction;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
+import com.starrocks.sql.optimizer.base.OrderSpec;
+import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.type.Type;
+import org.apache.commons.collections4.CollectionUtils;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+/*
+ * Rewrite the whole plan using the dict column by from bottom-up
+ */
+public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRefSet> {
+    private final ColumnRefFactory factory;
+
+    private final DecodeContext context;
+
+    private final SessionVariable sessionVariable;
+
+    public DecodeRewriter(ColumnRefFactory factory, DecodeContext context, SessionVariable sessionVariable) {
+        this.factory = factory;
+        this.context = context;
+        this.sessionVariable = sessionVariable;
+    }
+
+    // For structs, we only return the encoded fields collected by DecodeCollector.
+    static ColumnRefSet getUsedColumns(ScalarOperator scalarOperator, DecodeContext context) {
+        if (scalarOperator.isColumnRef()) {
+            return new ColumnRefSet(((ColumnRefOperator) scalarOperator).getId());
+        }
+        Map<String, ColumnRefOperator> structFieldsData = context.structManager.getFieldStringRefMap(scalarOperator);
+        if (structFieldsData != null) {
+            return new ColumnRefSet(structFieldsData.values());
+        }
+        ColumnRefSet result = new ColumnRefSet();
+        scalarOperator.getChildren().forEach(c -> result.union(getUsedColumns(c, context)));
+        return result;
+    }
+
+    public OptExpression rewrite(OptExpression optExpression) {
+        if (context.allStringColumns.isEmpty()) {
+            return optExpression;
+        }
+        context.initRewriteExpressions();
+        // check output need decode
+        DecodeInfo decodeInfo = context.operatorDecodeInfo.get(optExpression.getOp());
+        if (decodeInfo == null) {
+            decodeInfo = DecodeInfo.empty();
+        }
+        // compute the fragment used dict expr
+        optExpression = rewriteImpl(optExpression, new ColumnRefSet());
+        if (!decodeInfo.outputStringColumns.isEmpty()) {
+            // decode the output dict column
+            return insertStructuredDecodeNode(optExpression, decodeInfo.outputStringColumns, decodeInfo.outputStringColumns);
+        }
+
+        return optExpression;
+    }
+
+    // fragmentUseDictExprs: record the dict columns used in this fragment, to
+    // compute which expressions & dict should save in the fragment
+    private OptExpression rewriteImpl(OptExpression optExpression, ColumnRefSet fragmentUsedDictExprs) {
+        // should get DecodeInfo before rewrite operator
+        DecodeInfo decodeInfo = context.operatorDecodeInfo.get(optExpression.getOp());
+        if (decodeInfo == null) {
+            decodeInfo = DecodeInfo.empty();
+        }
+
+        fragmentUsedDictExprs.union(decodeInfo.outputStringColumns);
+        fragmentUsedDictExprs.union(decodeInfo.usedStringColumns);
+        fragmentUsedDictExprs.union(decodeInfo.inProgressStringAggregations);
+        ColumnRefSet childFragmentUsedDictExpr = optExpression.getOp() instanceof PhysicalDistributionOperator ?
+                new ColumnRefSet() : fragmentUsedDictExprs;
+
+        for (int i = 0; i < optExpression.arity(); i++) {
+            OptExpression child = optExpression.inputAt(i);
+
+            DecodeInfo childDecodeInfo = context.operatorDecodeInfo.get(child.getOp());
+            if (childDecodeInfo == null) {
+                childDecodeInfo = DecodeInfo.empty();
+            }
+            child = rewriteImpl(child, childFragmentUsedDictExpr.clone());
+            if (decodeInfo.decodeStringColumns.isIntersect(childDecodeInfo.outputStringColumns)) {
+                // if child's output dict column required decode, insert decode node
+                child = insertStructuredDecodeNode(child, childDecodeInfo.outputStringColumns, decodeInfo.decodeStringColumns);
+            }
+            optExpression.setChild(i, child);
+        }
+        // some string column need rewrite
+        boolean hasDictInput = !decodeInfo.inputStringColumns.isEmpty();
+        boolean hasDictOutput = !decodeInfo.outputStringColumns.isEmpty();
+        boolean hasDictAggregate = !decodeInfo.inProgressStringAggregations.isEmpty() ||
+                !decodeInfo.finalizingStringAggregations.isEmpty();
+
+        if (hasDictInput || hasDictOutput || hasDictAggregate) {
+            return optExpression.getOp().accept(this, optExpression, fragmentUsedDictExprs);
+        }
+        return optExpression;
+    }
+
+    private OptExpression insertStructuredDecodeNode(
+            OptExpression child, ColumnRefSet inputIds, ColumnRefSet decodeIds) {
+        List<ColumnRefOperator> structRefs = decodeIds.getStream()
+                .filter(inputIds::contains)
+                .map(factory::getColumnRef)
+                .filter(c -> c.getType().isStructType())
+                .toList();
+        if (structRefs.isEmpty()) {
+            return insertDecodeNode(child, inputIds, decodeIds);
+        }
+        // Decoding structs by decoding their fields first and then reconstructing them using a PhysicalProjectOperator
+        Map<ColumnRefOperator, ColumnRefOperator> dictRefToStructRefMap = structRefs.stream()
+                .map(k -> {
+                    ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(k);
+                    Preconditions.checkNotNull(dictRef);
+                    return new Pair<>(dictRef, k);
+                })
+                .collect(Collectors.toMap(k -> k.first, k -> k.second));
+        Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+        for (ColumnRefOperator columnRef : child.getLogicalProperty().getOutputColumns().getColumnRefOperators(factory)) {
+            if (!dictRefToStructRefMap.containsKey(columnRef)) {
+                projections.put(columnRef, columnRef);
+            } else {
+                ColumnRefOperator structRef = dictRefToStructRefMap.get(columnRef);
+                projections.put(structRef, context.stringExprToDictExprMap.get(structRef));
+            }
+        }
+        inputIds = inputIds.clone();
+        inputIds.except(dictRefToStructRefMap.values());
+        decodeIds = decodeIds.clone();
+        decodeIds.except(dictRefToStructRefMap.values());
+        PhysicalProjectOperator projectOp = new PhysicalProjectOperator(projections, Maps.newHashMap());
+        LogicalProperty logicalProperty = new LogicalProperty(child.getLogicalProperty());
+        logicalProperty.setOutputColumns(new ColumnRefSet(projections.keySet()));
+        OptExpression projectExpression = OptExpression.builder()
+                .with(child)
+                .setOp(projectOp)
+                .setLogicalProperty(logicalProperty)
+                .setInputs(Lists.newArrayList(child)).build();
+        if (decodeIds.isEmpty()) {
+            return projectExpression;
+        }
+        return insertDecodeNode(projectExpression, inputIds, decodeIds);
+    }
+
+    private OptExpression insertDecodeNode(OptExpression child, ColumnRefSet inputIds, ColumnRefSet decodeIds) {
+        Map<ColumnRefOperator, ColumnRefOperator> dictRefToStringRefMap = Maps.newHashMap();
+        Map<ColumnRefOperator, ScalarOperator> dictRefToDictExprMap = Maps.newHashMap();
+        for (Integer stringId : decodeIds.getColumnIds()) {
+            if (!inputIds.contains(stringId)) {
+                continue;
+            }
+            ColumnRefOperator stringRef = factory.getColumnRef(stringId);
+            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(stringRef);
+            dictRefToStringRefMap.put(dictRef, stringRef);
+        }
+
+        PhysicalDecodeOperator decodeOperator =
+                new PhysicalDecodeOperator(ImmutableMap.copyOf(dictRefToStringRefMap), dictRefToDictExprMap);
+
+        LogicalProperty property = new LogicalProperty(child.getLogicalProperty());
+        ColumnRefSet outputColumns = child.getLogicalProperty().getOutputColumns();
+
+        final ColumnRefSet rewriteOutputColumns = new ColumnRefSet();
+        // rewrite dict column -> string column
+        outputColumns.getStream().map(factory::getColumnRef).map(c -> dictRefToStringRefMap.getOrDefault(c, c))
+                .forEach(rewriteOutputColumns::union);
+        property.setOutputColumns(rewriteOutputColumns);
+
+        // use child's info
+        return OptExpression.builder().with(child).setOp(decodeOperator).setLogicalProperty(property)
+                .setInputs(Lists.newArrayList(child)).build();
+    }
+
+    @Override
+    public OptExpression visit(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalOperator op = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(op);
+        if (info == null) {
+            info = DecodeInfo.empty();
+        }
+        op.setPredicate(rewritePredicate(op.getPredicate(), info.inputStringColumns));
+        op.setProjection(rewriteProjection(op.getProjection(), info.inputStringColumns));
+        return rewriteOptExpression(optExpression, op, info.outputStringColumns);
+    }
+
+    private ScalarOperator rewriteJoinOnPredicate(ScalarOperator predicate, ColumnRefSet inputs) {
+        if (predicate == null) {
+            return null;
+        }
+
+        // replace string predicate to dict predicate
+        JoinOnPredicateReplacer replacer = new JoinOnPredicateReplacer(context.stringRefToDictRefMap, inputs, context);
+        return predicate.accept(replacer, null);
+    }
+
+    @Override
+    public OptExpression visitPhysicalHashJoin(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        if (!sessionVariable.isEnableLowCardinalityOptimizeForJoin()) {
+            return super.visitPhysicalHashJoin(optExpression, fragmentUseDictExprs);
+        }
+
+        PhysicalHashJoinOperator join = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(join);
+        if (info == null) {
+            info = DecodeInfo.empty();
+        }
+
+        ScalarOperator newOnPredicate = rewriteJoinOnPredicate(join.getOnPredicate(), info.inputStringColumns);
+        ScalarOperator newPredicate = rewritePredicate(join.getPredicate(), info.inputStringColumns);
+        Projection newProjection = rewriteProjection(join.getProjection(), info.inputStringColumns);
+
+        PhysicalHashJoinOperator newJoin = new PhysicalHashJoinOperator(
+                join.getJoinType(), newOnPredicate, join.getJoinHint(), join.getLimit(), newPredicate,
+                join.getPredicateCommonOperators(), newProjection, join.getSkewColumn(), join.getSkewValues());
+        newJoin.setSkewJoinFriend(join.getSkewJoinFriend().orElse(null));
+
+        return rewriteOptExpression(optExpression, newJoin, info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalUnion(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalUnionOperator unionOp = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(unionOp);
+        if (info == null) {
+            info = DecodeInfo.empty();
+        }
+        ColumnRefSet encodedUnionColumns = new ColumnRefSet();
+        final DecodeInfo finalInfo = info;
+        encodedUnionColumns.union(unionOp.getOutputColumnRefOp().stream().filter(
+                c -> finalInfo.outputStringColumns.contains(c) || finalInfo.usedStringColumns.contains(c)).toList());
+        List<Map<Integer, ConstantOperator>> constantMappings =
+                context.unionDictionaryManager.generateConstantEncodingMap(
+                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), encodedUnionColumns);
+        List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
+        for (int i = 0; i < optExpression.arity(); ++i) {
+            Map<Integer, ConstantOperator> constantMapping = constantMappings.get(i);
+            List<ColumnRefOperator> children = unionOp.getChildOutputColumns().get(i);
+            List<ColumnRefOperator> newChildren = Lists.newArrayList();
+            boolean needsProjection = false;
+            Map<ColumnRefOperator, ScalarOperator> projectionColumnMapping = Maps.newHashMap();
+            for (int j = 0; j < children.size(); ++j) {
+                final ColumnRefOperator child = children.get(j);
+                final ColumnRefOperator newChild;
+                final ScalarOperator projection;
+                if (constantMapping.containsKey(j)) {
+                    projection = constantMapping.get(j);
+                    newChild = factory.create(projection, projection.getType(), projection.isNullable());
+                    needsProjection = true;
+                } else if (finalInfo.inputStringColumns.contains(child.getId())) {
+                    newChild = context.stringRefToDictRefMap.getOrDefault(child, child);
+                    projection = newChild;
+                } else {
+                    newChild = child;
+                    projection = newChild;
+                }
+                newChildren.add(newChild);
+                projectionColumnMapping.put(newChild, projection);
+            }
+            newChildOutputColumns.add(newChildren);
+            if (!needsProjection) {
+                continue;
+            }
+            PhysicalProjectOperator projectOp = new PhysicalProjectOperator(projectionColumnMapping, Map.of());
+            LogicalProperty property = new LogicalProperty(optExpression.getInputs().get(i).getLogicalProperty());
+            property.setOutputColumns(new ColumnRefSet(projectOp.getOutputColumns()));
+            OptExpression newChild = OptExpression.builder().with(optExpression.getInputs().get(i)).setOp(projectOp)
+                    .setLogicalProperty(property).setInputs(List.of(optExpression.getInputs().get(i))).build();
+            optExpression.setChild(i, newChild);
+        }
+        List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
+                c -> encodedUnionColumns.contains(c) ? context.stringRefToDictRefMap.get(c) : c).toList();
+
+        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), encodedUnionColumns);
+        Projection newProjection = rewriteProjection(unionOp.getProjection(), encodedUnionColumns);
+
+        List<Pair<Integer, ColumnDict>> globalDicts = IntStream.range(0, newColumnRefOp.size())
+                .filter(i -> context.stringRefToDicts.containsKey(unionOp.getOutputColumnRefOp().get(i).getId()))
+                .mapToObj(i -> Pair.create(
+                        newColumnRefOp.get(i).getId(),
+                        context.stringRefToDicts.get(unionOp.getOutputColumnRefOp().get(i).getId()))).toList();
+
+        PhysicalUnionOperator newUnionOp = new PhysicalUnionOperator(newColumnRefOp, newChildOutputColumns,
+                unionOp.isUnionAll(), unionOp.getLimit(), newPredicate, newProjection,
+                unionOp.isFromIcebergEqualityDeleteRewrite(), globalDicts);
+        return rewriteOptExpression(optExpression, newUnionOp, finalInfo.outputStringColumns);
+    }
+
+
+    @Override
+    public OptExpression visitPhysicalHashAggregate(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        // rewrite multi-stage aggregate
+        PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(aggregate);
+        if (info == null) {
+            info = DecodeInfo.empty();
+        }
+        ColumnRefSet inputStringRefs = new ColumnRefSet();
+        inputStringRefs.union(info.inputStringColumns);
+
+        List<ColumnRefOperator> groupBys = aggregate.getGroupBys().stream()
+                .map(c -> inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                .collect(Collectors.toList());
+        List<ColumnRefOperator> partitions = aggregate.getPartitionByColumns().stream()
+                .map(c -> inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                .collect(Collectors.toList());
+
+        Map<ColumnRefOperator, CallOperator> aggregations = Maps.newLinkedHashMap();
+        for (ColumnRefOperator aggRef : aggregate.getAggregations().keySet()) {
+            CallOperator aggFn = aggregate.getAggregations().get(aggRef);
+            if (!context.stringExprToDictExprMap.containsKey(aggFn)) {
+                aggregations.put(aggRef, aggFn);
+                continue;
+            }
+
+            // merge stage is different from update stage
+            if (context.stringRefToDictRefMap.containsKey(aggRef)) {
+                ColumnRefOperator newAggRef = context.stringRefToDictRefMap.get(aggRef);
+                aggregations.put(newAggRef, context.stringExprToDictExprMap.get(aggFn).cast());
+                inputStringRefs.union(aggRef.getId());
+            } else {
+                aggregations.put(aggRef, context.stringExprToDictExprMap.get(aggFn).cast());
+            }
+        }
+
+        ScalarOperator predicate = rewritePredicate(aggregate.getPredicate(), inputStringRefs);
+        Projection projection = rewriteProjection(aggregate.getProjection(), inputStringRefs);
+        PhysicalHashAggregateOperator op =
+                new PhysicalHashAggregateOperator(aggregate.getType(), groupBys, partitions, aggregations,
+                        aggregate.isSplit(), aggregate.getLimit(), predicate,
+                        projection);
+        op.setWithLocalShuffle(aggregate.isWithLocalShuffle());
+        op.setMergedLocalAgg(aggregate.isMergedLocalAgg());
+        op.setTopNLocalAgg(aggregate.isTopNLocalAgg());
+        op.setTopNSortInfo(rewriteTopNSortInfo(aggregate.getTopNSortInfo(), inputStringRefs));
+        op.setUseSortAgg(aggregate.isUseSortAgg());
+        op.setUsePerBucketOptmize(aggregate.isUsePerBucketOptmize());
+        op.setWithoutColocateRequirement(aggregate.isWithoutColocateRequirement());
+        op.setDistinctColumnDataSkew(aggregate.getDistinctColumnDataSkew());
+        op.setForcePreAggregation(aggregate.isForcePreAggregation());
+        op.setLocalLimit(aggregate.getLocalLimit());
+        op.setGroupByMinMaxStatistic(aggregate.getGroupByMinMaxStatistic());
+        return rewriteOptExpression(optExpression, op, info.outputStringColumns);
+    }
+
+    private LogicalTopNOperator.TopNSortInfo rewriteTopNSortInfo(LogicalTopNOperator.TopNSortInfo sortInfo,
+                                                                 ColumnRefSet inputStringRefs) {
+        if (sortInfo == null) {
+            return null;
+        }
+        List<Ordering> newOrderByElements = sortInfo.orderByElements().stream().map(ordering -> {
+            ColumnRefOperator columnRef = ordering.getColumnRef();
+            if (inputStringRefs.contains(columnRef)) {
+                ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(columnRef);
+                if (dictRef != null) {
+                    return new Ordering(dictRef, ordering.isAscending(), ordering.isNullsFirst());
+                }
+            }
+            return ordering;
+        }).collect(Collectors.toList());
+        return new LogicalTopNOperator.TopNSortInfo(newOrderByElements, sortInfo.sortPhase(),
+                sortInfo.topNType(), sortInfo.limit(), sortInfo.offset());
+    }
+
+    @Override
+    public OptExpression visitPhysicalAnalytic(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalWindowOperator windowOp = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(windowOp);
+        if (info == null) {
+            info = DecodeInfo.empty();
+        }
+        ColumnRefSet inputStringRefs = new ColumnRefSet();
+        inputStringRefs.union(info.inputStringColumns);
+
+        List<Ordering> orderByList = windowOp.getOrderByElements().stream()
+                .map(ord -> {
+                    ColumnRefOperator c = ord.getColumnRef();
+                    ColumnRefOperator newColRef =
+                            inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c;
+                    return new Ordering(newColRef, ord.isAscending(), ord.isNullsFirst());
+                })
+                .collect(Collectors.toList());
+
+        List<ScalarOperator> partitions = windowOp.getPartitionExpressions().stream()
+                .map(p -> {
+                    Preconditions.checkArgument(p.isColumnRef());
+                    ColumnRefOperator c = p.cast();
+                    return inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c;
+                })
+                .collect(Collectors.toList());
+
+        Map<ColumnRefOperator, CallOperator> analyticFunctions = Maps.newLinkedHashMap();
+        for (ColumnRefOperator analyticRef : windowOp.getAnalyticCall().keySet()) {
+            CallOperator analyticFn = windowOp.getAnalyticCall().get(analyticRef);
+            if (!context.stringExprToDictExprMap.containsKey(analyticFn)) {
+                analyticFunctions.put(analyticRef, analyticFn);
+                continue;
+            }
+
+            // propagate low-cardinality encoded columns
+            if (analyticFn.getType().isStringType() || analyticFn.getType().isStringArrayType()) {
+                ColumnRefOperator newAnalyticRef = context.stringRefToDictRefMap.getOrDefault(analyticRef, analyticRef);
+                analyticFunctions.put(newAnalyticRef, context.stringExprToDictExprMap.get(analyticFn).cast());
+                inputStringRefs.union(analyticRef.getId());
+            } else {
+                // for count and count(distinct), which return neither non-string types nor non-string-array types/
+                // not propagate low-cardinality encoded columns, however function evaluation adopt encoded columns.
+                analyticFunctions.put(analyticRef, context.stringExprToDictExprMap.get(analyticFn).cast());
+            }
+        }
+
+        ScalarOperator predicate = rewritePredicate(windowOp.getPredicate(), inputStringRefs);
+        Projection projection = rewriteProjection(windowOp.getProjection(), inputStringRefs);
+        PhysicalWindowOperator op = new PhysicalWindowOperator(
+                analyticFunctions,
+                partitions,
+                orderByList,
+                windowOp.getAnalyticWindow(),
+                windowOp.getEnforceOrderBy(),
+                windowOp.isUseHashBasedPartition(),
+                windowOp.isSkewed(),
+                windowOp.getSkewColumn(),
+                windowOp.getSkewValues(),
+                windowOp.isForceMergeSort(),
+                windowOp.isInputIsBinary(),
+                windowOp.getLimit(),
+                predicate,
+                projection);
+        return rewriteOptExpression(optExpression, op, info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalDistribution(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalDistributionOperator exchange = optExpression.getOp().cast();
+        if (!context.operatorDecodeInfo.containsKey(exchange)) {
+            return optExpression;
+        }
+        DecodeInfo info = context.operatorDecodeInfo.get(exchange);
+        // compute the dicts and expressions used by in the fragment
+        Map<Integer, ColumnDict> dictMap = Maps.newHashMap();
+        ColumnRefSet inputColumns = new ColumnRefSet();
+        inputColumns.union(info.inputStringColumns);
+        inputColumns.union(info.inProgressStringAggregations);
+        inputColumns.union(inputColumns.getStream()
+                .map(factory::getColumnRef)
+                .filter(c -> c.getType().isStructType())
+                .map(context.structManager::getFieldStringRefMap)
+                .filter(Objects::nonNull)
+                .flatMap(k -> k.values().stream())
+                .toList());
+        for (int sid : inputColumns.getColumnIds()) {
+            ColumnRefOperator stringRef = factory.getColumnRef(sid);
+            if (!context.stringRefToDictRefMap.containsKey(stringRef)) {
+                // count/count distinct
+                continue;
+            }
+            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(stringRef);
+            if (context.stringRefToDicts.containsKey(sid)) {
+                dictMap.put(dictRef.getId(), context.stringRefToDicts.get(sid));
+            } else {
+                // follow the dict-expr chain down to the base dictionaries it ultimately needs
+                collectBaseDictChain(dictRef.getId(), dictMap, new HashSet<>());
+            }
+        }
+        List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
+        dictMap.forEach((k, v) -> dicts.add(new Pair<>(k, v)));
+        exchange.setGlobalDicts(dicts);
+        exchange.setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
+
+        if (!(exchange.getDistributionSpec() instanceof HashDistributionSpec spec)) {
+            return rewriteOptExpression(optExpression, exchange, info.outputStringColumns);
+        }
+
+        List<DistributionCol> shuffledColumns = Lists.newArrayList();
+        for (DistributionCol column : spec.getHashDistributionDesc().getDistributionCols()) {
+            if (!info.outputStringColumns.contains(column.getColId())) {
+                shuffledColumns.add(column);
+                continue;
+            }
+            ColumnRefOperator stringRef = factory.getColumnRef(column.getColId());
+            ColumnRefOperator dictRef = context.stringRefToDictRefMap.getOrDefault(stringRef, stringRef);
+            shuffledColumns.add(new DistributionCol(dictRef.getId(), column.isNullStrict()));
+        }
+        exchange.setDistributionSpec(new HashDistributionSpec(
+                new HashDistributionDesc(shuffledColumns, spec.getHashDistributionDesc().getSourceType())));
+        return rewriteOptExpression(optExpression, exchange, info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalTopN(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalTopNOperator topN = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(topN);
+
+        List<Ordering> newOrdering = Lists.newArrayList();
+        for (Ordering orderDesc : topN.getOrderSpec().getOrderDescs()) {
+            if (!info.inputStringColumns.contains(orderDesc.getColumnRef().getId()) ||
+                    !context.stringRefToDictRefMap.containsKey(orderDesc.getColumnRef())) {
+                newOrdering.add(orderDesc);
+                continue;
+            }
+            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(orderDesc.getColumnRef());
+            newOrdering.add(new Ordering(dictRef, orderDesc.isAscending(), orderDesc.isNullsFirst()));
+        }
+
+        List<ColumnRefOperator> newPartitionByColumns = null;
+
+        if (topN.getPartitionByColumns() != null) {
+            // only rewrite to the dict ref when the column still arrives at this TopN in dict
+            // form; a column decoded below (e.g. under a join) must keep its string ref
+            newPartitionByColumns = topN.getPartitionByColumns().stream()
+                    .map(c -> info.inputStringColumns.contains(c.getId())
+                            ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                    .collect(Collectors.toList());
+        }
+
+        Map<ColumnRefOperator, CallOperator> preAggCall = null;
+        if (topN.getPreAggCall() != null) {
+            preAggCall = Maps.newHashMap();
+            for (ColumnRefOperator aggRef : topN.getPreAggCall().keySet()) {
+                CallOperator aggFn = topN.getPreAggCall().get(aggRef);
+                if (!context.stringExprToDictExprMap.containsKey(aggFn)) {
+                    preAggCall.put(aggRef, aggFn);
+                    continue;
+                }
+
+                // merge stage is different from update stage
+                if (FunctionSet.MAX.equals(aggFn.getFnName()) || FunctionSet.MIN.equals(aggFn.getFnName())) {
+                    ColumnRefOperator newAggRef = context.stringRefToDictRefMap.getOrDefault(aggRef, aggRef);
+                    preAggCall.put(newAggRef, context.stringExprToDictExprMap.get(aggFn).cast());
+                } else {
+                    preAggCall.put(aggRef, context.stringExprToDictExprMap.get(aggFn).cast());
+                }
+            }
+        }
+
+        ScalarOperator predicate = rewritePredicate(topN.getPredicate(), info.inputStringColumns);
+        Projection projection = rewriteProjection(topN.getProjection(), info.inputStringColumns);
+        PhysicalTopNOperator newOp =
+                PhysicalTopNOperator.builder().withOperator(topN).setOrderSpec(new OrderSpec(newOrdering))
+                        .setPartitionByColumns(newPartitionByColumns).setPredicate(predicate).setProjection(projection)
+                        .setPreAggregate(preAggCall)
+                        .build();
+        return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalTableFunction(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalTableFunctionOperator tableFunc = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(tableFunc);
+        ColumnRefSet inputStringRefs = new ColumnRefSet();
+        inputStringRefs.union(info.inputStringColumns);
+
+        List<ColumnRefOperator> outers = tableFunc.getOuterColRefs().stream()
+                .map(c -> inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                .collect(Collectors.toList());
+
+        List<ColumnRefOperator> fnInputs = tableFunc.getFnParamColumnRefs();
+        List<ColumnRefOperator> fnOutputs = tableFunc.getFnResultColRefs();
+        TableFunction function = tableFunc.getFn();
+        if (FunctionSet.UNNEST.equalsIgnoreCase(tableFunc.getFn().getFunctionName().getFunction()) &&
+                inputStringRefs.containsAny(fnInputs)) {
+            for (int i = 0; i < fnInputs.size(); i++) {
+                if (!inputStringRefs.contains(fnInputs.get(i))) {
+                    continue;
+                }
+
+                inputStringRefs.union(fnOutputs.get(i));
+                ColumnRefOperator input = context.stringRefToDictRefMap.getOrDefault(fnInputs.get(i), fnInputs.get(i));
+                ColumnRefOperator output = context.stringRefToDictRefMap.getOrDefault(fnOutputs.get(i), fnOutputs.get(i));
+                fnInputs.set(i, input);
+                fnOutputs.set(i, output);
+                fragmentUseDictExprs.union(input);
+            }
+            Type[] argTypes = new Type[fnInputs.size()];
+            for (int j = 0; j < fnInputs.size(); j++) {
+                argTypes[j] = fnInputs.get(j).getType();
+            }
+            function = (TableFunction) ExprUtils.getBuiltinFunction(
+                    FunctionSet.UNNEST, argTypes, function.getArgNames(), Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            function.setIsLeftJoin(tableFunc.getFn().isLeftJoin());
+        }
+
+        ScalarOperator predicate = rewritePredicate(tableFunc.getPredicate(), inputStringRefs);
+        Projection projection = rewriteProjection(tableFunc.getProjection(), inputStringRefs);
+
+        PhysicalTableFunctionOperator op = new PhysicalTableFunctionOperator(fnOutputs, function, fnInputs,
+                outers, tableFunc.getLimit(), predicate, projection);
+        return rewriteOptExpression(optExpression, op, info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalOlapScan(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
+        DecodeInfo info = context.operatorDecodeInfo.get(scanOperator);
+
+        Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
+        List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
+        rewriteColumnRefToMetaMap(scanOperator, info, newRefToMetaMap, dicts);
+
+        PhysicalOlapScanOperator.Builder builder = PhysicalOlapScanOperator.builder();
+        builder.withOperator(scanOperator);
+
+        builder.setColRefToColumnMetaMap(newRefToMetaMap);
+        builder.setGlobalDicts(dicts);
+        builder.setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
+
+        builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
+        if (CollectionUtils.isNotEmpty(scanOperator.getPrunedPartitionPredicates())) {
+            List<ScalarOperator> prunedPredicates = scanOperator.getPrunedPartitionPredicates().stream()
+                    .map(p -> rewritePredicate(p, info.inputStringColumns)).collect(Collectors.toList());
+            builder.setPrunedPartitionPredicates(prunedPredicates);
+        }
+        builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
+        return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalHiveScan(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalHiveScanOperator scanOperator = (PhysicalHiveScanOperator) optExpression.getOp();
+        DecodeInfo info = context.operatorDecodeInfo.get(scanOperator);
+
+        Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
+        List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
+        rewriteColumnRefToMetaMap(scanOperator, info, newRefToMetaMap, dicts);
+
+        PhysicalHiveScanOperator.Builder builder = PhysicalHiveScanOperator.builder();
+        builder.withOperator(scanOperator);
+        builder.setColRefToColumnMetaMap(newRefToMetaMap);
+        builder.setScanPredicates(
+                rewriteScanPredicate(
+                        scanOperator.getScanOperatorPredicates(), newRefToMetaMap, info.inputStringColumns));
+        builder.setGlobalDicts(dicts).setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
+
+        builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
+        builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
+        return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalIcebergScan(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
+        DecodeInfo info = context.operatorDecodeInfo.get(scanOperator);
+
+        Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
+        List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
+        rewriteColumnRefToMetaMap(scanOperator, info, newRefToMetaMap, dicts);
+
+        PhysicalIcebergScanOperator.Builder builder = PhysicalIcebergScanOperator.builder();
+        builder.withOperator(scanOperator);
+        builder.setColRefToColumnMetaMap(newRefToMetaMap);
+        builder.setScanPredicates(
+                rewriteScanPredicate(
+                        scanOperator.getScanOperatorPredicates(), newRefToMetaMap, info.inputStringColumns));
+        builder.setGlobalDicts(dicts).setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
+
+        builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
+        builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
+        return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalCTEConsume(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(consume);
+        // Only rewrite the CTE output map to dict refs for columns that still arrive at this
+        // consume in dict form. A column that was decoded inside the CTE producer (e.g. by
+        // lead() with a non-null default) must keep its string ref here; otherwise the consume
+        // references a producer dict slot that the produce fragment no longer emits, and the
+        // query fails at BE with "slot_id N not found".
+        Map<ColumnRefOperator, ColumnRefOperator> newMap = consume.getCteOutputColumnRefMap().entrySet().stream().map(
+                        (e) -> info.inputStringColumns.contains(e.getValue().getId())
+                                ? new Pair<>(context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
+                                        context.stringRefToDictRefMap.getOrDefault(e.getValue(), e.getValue()))
+                                : new Pair<>(e.getKey(), e.getValue()))
+                .collect(Collectors.toMap(p -> p.first, p -> p.second));
+        ColumnRefSet supportColumns = new ColumnRefSet(consume.getCteOutputColumnRefMap().entrySet().stream()
+                .filter(k -> info.inputStringColumns.contains(k.getValue())).map(Map.Entry::getKey).toList());
+        PhysicalCTEConsumeOperator newOp = new PhysicalCTEConsumeOperator(
+                consume.getCteId(),
+                newMap,
+                consume.getLimit(),
+                rewritePredicate(consume.getPredicate(), supportColumns),
+                rewriteProjection(consume.getProjection(), supportColumns),
+                computeDictExpr(fragmentUseDictExprs)
+        );
+        return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
+    }
+
+    // Recursively collect a dict expr and every intermediate dict expr it references.
+    private void collectDictExprChain(int dictId, Map<Integer, ScalarOperator> out) {
+        if (out.containsKey(dictId)) {
+            return;
+        }
+        ScalarOperator expr = context.globalDictsExpr.get(dictId);
+        if (expr == null) {
+            return;
+        }
+        if (expr instanceof DictMappingOperator) {
+            collectDictExprChain(((DictMappingOperator) expr).getDictColumn().getId(), out);
+        }
+        out.put(dictId, expr);
+    }
+
+    // Recursively collect the base dictionaries a (possibly chained) dict expr ultimately needs.
+    private void collectBaseDictChain(int dictId, Map<Integer, ColumnDict> dictMap, Set<Integer> visited) {
+        if (!visited.add(dictId)) {
+            return;
+        }
+        ScalarOperator expr = context.globalDictsExpr.get(dictId);
+        if (expr == null) {
+            return;
+        }
+        for (ColumnRefOperator ref : expr.getColumnRefs()) {
+            if (context.stringRefToDicts.containsKey(ref.getId())) {
+                dictMap.put(context.stringRefToDictRefMap.get(ref).getId(),
+                        context.stringRefToDicts.get(ref.getId()));
+            } else if (context.stringRefToDictRefMap.containsKey(ref)) {
+                collectBaseDictChain(context.stringRefToDictRefMap.get(ref).getId(), dictMap, visited);
+            }
+        }
+    }
+
+    @NotNull
+    private Map<Integer, ScalarOperator> computeDictExpr(ColumnRefSet fragmentUseDictExprs) {
+        ColumnRefSet useDictExprs = fragmentUseDictExprs.clone();
+        for (int sid : fragmentUseDictExprs.getColumnIds()) {
+            ColumnRefOperator strRef = factory.getColumnRef(sid);
+            if (strRef.getType().isStructType()) {
+                Map<String, ColumnRefOperator> subFields = context.structManager.getFieldStringRefMap(strRef);
+                if (subFields != null) {
+                    useDictExprs.union(subFields.values());
+                }
+            }
+        }
+        Map<Integer, ScalarOperator> dictExprs = Maps.newHashMap();
+        for (int sid : useDictExprs.getColumnIds()) {
+            ColumnRefOperator strRef = factory.getColumnRef(sid);
+            if (!context.stringRefToDictRefMap.containsKey(strRef)) {
+                // count/count distinct
+                continue;
+            }
+            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(strRef);
+            // A kept (non-flattened) dict expr can reference an intermediate dict, which can
+            // reference another, etc. Collect the whole chain so the fragment that decodes the
+            // top dict also has every intermediate dict expr it depends on.
+            collectDictExprChain(dictRef.getId(), dictExprs);
+        }
+        return dictExprs;
+    }
+
+    private ScanOperatorPredicates rewriteScanPredicate(ScanOperatorPredicates predicates,
+                                                        Map<ColumnRefOperator, Column> newmap, ColumnRefSet inputs) {
+        ScanOperatorPredicates newPredicates = predicates.clone();
+        newPredicates.getNoEvalPartitionConjuncts().clear();
+        newPredicates.getNoEvalPartitionConjuncts().addAll(
+                predicates.getNoEvalPartitionConjuncts().stream().map(x -> rewritePredicate(x, inputs))
+                        .toList());
+        newPredicates.getNonPartitionConjuncts().clear();
+        newPredicates.getNonPartitionConjuncts().addAll(
+                predicates.getNonPartitionConjuncts().stream().map(x -> rewritePredicate(x, inputs))
+                        .toList());
+        newPredicates.getMinMaxConjuncts().clear();
+        newPredicates.getMinMaxConjuncts().addAll(
+                predicates.getMinMaxConjuncts().stream().map(x -> rewritePredicate(x, inputs))
+                        .toList());
+
+        newPredicates.getMinMaxColumnRefMap().clear();
+        for (Map.Entry<ColumnRefOperator, Column> kv : predicates.getMinMaxColumnRefMap().entrySet()) {
+            if (context.stringRefToDictRefMap.containsKey(kv.getKey())) {
+                newPredicates.getMinMaxColumnRefMap().put(context.stringRefToDictRefMap.get(kv.getKey()),
+                        newmap.get(context.stringRefToDictRefMap.get(kv.getKey())));
+            } else {
+                newPredicates.getMinMaxColumnRefMap().put(kv.getKey(), kv.getValue());
+            }
+        }
+        return newPredicates;
+    }
+
+    private void rewriteColumnRefToMetaMap(PhysicalScanOperator scanOperator,
+                                           DecodeInfo info,
+                                           Map<ColumnRefOperator, Column> newRefToMetaMap,
+                                           List<Pair<Integer, ColumnDict>> dicts) {
+        for (ColumnRefOperator ref : scanOperator.getColRefToColumnMetaMap().keySet()) {
+            Column meta = scanOperator.getColRefToColumnMetaMap().get(ref);
+
+            if (!info.inputStringColumns.contains(ref.getId())) {
+                newRefToMetaMap.put(ref, meta);
+                continue;
+            }
+
+            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(ref);
+            Column newMeta = new Column(meta);
+            newMeta.setType(dictRef.getType());
+            newRefToMetaMap.put(dictRef, newMeta);
+            dicts.add(new Pair<>(dictRef.getId(), context.stringRefToDicts.get(ref.getId())));
+        }
+    }
+
+    private ScalarOperator rewritePredicate(ScalarOperator predicate, ColumnRefSet inputs) {
+        if (predicate == null) {
+            return null;
+        }
+
+        // replace string predicate to dict predicate
+        ExprReplacer replacer = new ExprReplacer(context.stringExprToDictExprMap, inputs, context);
+        return predicate.accept(replacer, null);
+    }
+
+    private Projection rewriteProjection(Projection projection, ColumnRefSet inputs) {
+        if (projection == null) {
+            return null;
+        }
+
+        ExprReplacer replacer = new ExprReplacer(context.stringExprToDictExprMap, inputs, context);
+        Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
+        for (ColumnRefOperator key : projection.getColumnRefMap().keySet()) {
+            ScalarOperator value = projection.getColumnRefMap().get(key);
+
+            if (!context.stringRefToDictRefMap.containsKey(key)) {
+                newColumnRefMap.put(key, value.accept(replacer, null));
+                continue;
+            }
+            if (!inputs.containsAll(getUsedColumns(value, context))) {
+                newColumnRefMap.put(key, value);
+                continue;
+            }
+            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(key);
+            if (key.equals(value)) {
+                // a: a
+                newColumnRefMap.put(dictRef, dictRef);
+            } else {
+                // a: abs(b)
+                newColumnRefMap.put(dictRef, context.dictRefToDefineExprMap.get(dictRef));
+            }
+        }
+
+        return new Projection(newColumnRefMap);
+    }
+
+    private OptExpression rewriteOptExpression(OptExpression optExpression, Operator newOp, ColumnRefSet outputs) {
+        // rewrite logical property, update output columns
+        LogicalProperty property = optExpression.getLogicalProperty();
+        if (outputs.containsAny(property.getOutputColumns())) {
+            LogicalProperty newProperty = new LogicalProperty(property);
+            ColumnRefSet outputColumns = property.getOutputColumns();
+            final ColumnRefSet rewritesOutputColumns = new ColumnRefSet();
+            // For string column rewrite to dictionary column, other columns remain unchanged
+            outputColumns.getStream().map(factory::getColumnRef)
+                    .map(c -> outputs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                    .forEach(rewritesOutputColumns::union);
+            newProperty.setOutputColumns(rewritesOutputColumns);
+            property = newProperty;
+        }
+
+        return OptExpression.builder().with(optExpression).setOp(newOp).setLogicalProperty(property).build();
+    }
+
+    private static class ExprReplacer extends BaseScalarOperatorShuttle {
+        private final Map<ScalarOperator, ScalarOperator> exprMapping;
+        private final ColumnRefSet supportColumns;
+        private final DecodeContext context;
+
+        public ExprReplacer(Map<ScalarOperator, ScalarOperator> exprMapping,
+                            ColumnRefSet supportColumns,
+                            DecodeContext context) {
+            this.exprMapping = exprMapping;
+            this.supportColumns = supportColumns;
+            this.context = context;
+        }
+
+        @Override
+        public Optional<ScalarOperator> preprocess(ScalarOperator scalarOperator) {
+            if (exprMapping.containsKey(scalarOperator)
+                    && supportColumns.containsAll(getUsedColumns(scalarOperator, context))) {
+                return Optional.of(exprMapping.get(scalarOperator));
+            }
+            return Optional.empty();
+        }
+    }
+
+    private static class JoinOnPredicateReplacer extends BaseScalarOperatorShuttle {
+        private final Map<ColumnRefOperator, ColumnRefOperator> stringRefToDictRefMap;
+        private final ColumnRefSet supportColumns;
+        private final DecodeContext context;
+
+        public JoinOnPredicateReplacer(Map<ColumnRefOperator, ColumnRefOperator> stringRefToDictRefMap,
+                                       ColumnRefSet supportColumns,
+                                       DecodeContext context) {
+            this.stringRefToDictRefMap = stringRefToDictRefMap;
+            this.supportColumns = supportColumns;
+            this.context = context;
+        }
+
+        @Override
+        public Optional<ScalarOperator> preprocess(ScalarOperator scalarOperator) {
+            if (!(scalarOperator instanceof ColumnRefOperator columnRef)) {
+                return Optional.empty();
+            }
+
+            if (stringRefToDictRefMap.containsKey(columnRef) && supportColumns.containsAll(
+                    getUsedColumns(columnRef, context))) {
+                return Optional.of(stringRefToDictRefMap.get(columnRef));
+            }
+
+            return Optional.empty();
+        }
+    }
+}

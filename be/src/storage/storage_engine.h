@@ -42,23 +42,23 @@
 #include <ctime>
 #include <list>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <queue>
 #include <set>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include "agent/status.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
-#include "runtime/heartbeat_flags.h"
 #include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
@@ -72,12 +72,16 @@ namespace starrocks {
 class DataDir;
 class EngineTask;
 class MemTableFlushExecutor;
+class StorageCleanupExecutor;
 class Tablet;
+class ReplicationTxnManager;
+class TAllocateAutoIncrementIdParam;
+class TAllocateAutoIncrementIdResult;
 class UpdateManager;
 class CompactionManager;
-class PublishVersionManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
+class ThreadPool;
 
 struct DeltaColumnGroupKey {
     int64_t tablet_id;
@@ -217,17 +221,35 @@ public:
 
     TxnManager* txn_manager() { return _txn_manager.get(); }
 
-    CompactionManager* compaction_manager() { return _compaction_manager.get(); }
+    ReplicationTxnManager* replication_txn_manager() { return _replication_txn_manager.get(); }
 
-    PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
+    CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
+    MemTableFlushExecutor* lake_memtable_flush_executor() { return _lake_memtable_flush_executor.get(); }
+
     SegmentReplicateExecutor* segment_replicate_executor() { return _segment_replicate_executor.get(); }
 
     SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
+
+    // Dedicated pool used by lake schema-change inner sub-tasks (currently only
+    // the ADD INDEX fast path's per-segment index building). Physically isolated
+    // from the alter_tablet outer pool to avoid pool-exhaustion deadlock.
+    // Capacity = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism.
+    ThreadPool* lake_schema_change_thread_pool() const { return _lake_schema_change_thread_pool.get(); }
+
+    // Recompute and apply the lake_schema_change pool max size from the current
+    // values of `alter_tablet_worker_count` and
+    // `lake_schema_change_per_tablet_parallelism`. Invoked from the dynamic
+    // config update callback when either knob changes.
+    Status update_lake_schema_change_thread_pool_max();
+
+    StorageCleanupExecutor* storage_cleanup_executor() { return _storage_cleanup_executor.get(); }
+    Status update_storage_cleanup_thread_pool_max();
+    void wait_storage_cleanup_tasks();
 
     UpdateManager* update_manager() { return _update_manager.get(); }
 
@@ -278,21 +300,36 @@ public:
 
     void clear_rowset_delta_column_group_cache(const Rowset& rowset);
 
-    void wake_finish_publish_vesion_thread() {
-        std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
-        _finish_publish_version_cv.notify_one();
+    void disable_disks(const std::vector<string>& disabled_disks);
+
+    void decommission_disks(const std::vector<string>& decommissioned_disks);
+
+    void add_schedule_apply_task(int64_t tablet_id, std::chrono::steady_clock::time_point time_point);
+
+    void wake_schedule_apply_thread() {
+        std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
+        _apply_tablet_changed_cv.notify_one();
     }
 
+    void start_schedule_apply_thread();
+
     bool is_as_cn() { return !_options.need_write_cluster_id; }
+
+    bool enable_light_pk_compaction_publish();
 
 protected:
     static StorageEngine* _s_instance;
 
     static StorageEngine* _p_instance;
 
-    int32_t _effective_cluster_id;
+    int32_t _effective_cluster_id{-1};
 
 private:
+    // Friend class for testing
+    friend class StorageEngineCompactionTest;
+    friend class StorageEngineCacheExpireTest;
+    friend class TabletUpdatesTest;
+
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
     Status _open(const EngineOptions& options);
@@ -312,9 +349,6 @@ private:
 
     void _clean_unused_rowset_metas();
 
-    // remove pk index meta first, and if success then remove dir.
-    Status _clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir);
-
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
     Status _get_remote_next_increment_id_interval(const TAllocateAutoIncrementIdParam& request,
@@ -322,6 +356,7 @@ private:
 
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
+    void _expire_caches(int64_t vector_cache_now);
     void* _update_cache_expire_thread_callback(void* arg);
     // update cache evict thread
     void* _update_cache_evict_thread_callback(void* arg);
@@ -342,9 +377,11 @@ private:
     // pk index major compaction function
     void* _pk_index_major_compaction_thread_callback(void* arg);
 
+    void* _pk_dump_thread_callback(void* arg);
+
 #ifdef USE_STAROS
-    // local pk index of SHARD_DATA gc function
-    void* _local_pk_index_shard_data_gc_thread_callback(void* arg);
+    // local pk index of SHARED_DATA gc/evict function
+    void* _local_pk_index_shared_data_gc_evict_thread_callback(void* arg);
 #endif
 
     bool _check_and_run_manual_compaction_task();
@@ -355,9 +392,6 @@ private:
     // delete tablet with io error process function
     void* _disk_stat_monitor_thread_callback(void* arg);
 
-    // finish publish version process function
-    void* _finish_publish_version_thread_callback(void* arg);
-
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
 
@@ -366,9 +400,13 @@ private:
 
     void* _path_scan_thread_callback(void* arg);
 
+    void* _clear_expired_replication_snapshots_callback(void* arg);
+
     void* _tablet_checkpoint_callback(void* arg);
 
     void* _adjust_pagecache_callback(void* arg);
+
+    void* _schedule_apply_thread_callback(void* arg);
 
     void _start_clean_fd_cache();
     Status _perform_cumulative_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
@@ -382,9 +420,9 @@ private:
 private:
     EngineOptions _options;
     std::mutex _store_lock;
-    std::map<std::string, DataDir*> _store_map;
-    uint32_t _available_storage_medium_type_count;
-    bool _is_all_cluster_id_exist;
+    std::map<std::string, std::unique_ptr<DataDir>> _store_map;
+    uint32_t _available_storage_medium_type_count{0};
+    bool _is_all_cluster_id_exist{true};
 
     std::mutex _gc_mutex;
     // map<rowset_id(str), RowsetSharedPtr>, if we use RowsetId as the key, we need custom hash func
@@ -399,8 +437,6 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
-    // thread to check finish publish version task
-    std::thread _finish_publish_version_thread;
     // threads to run base compaction
     std::vector<std::thread> _base_compaction_threads;
     // threads to check cumulative
@@ -415,17 +451,20 @@ private:
     std::vector<std::thread> _manual_compaction_threads;
     // thread to run pk index major compaction
     std::thread _pk_index_major_compaction_thread;
-    // thread to gc local pk index in sharded_data
-    std::thread _local_pk_index_shard_data_gc_thread;
+    // thread to generate pk dump
+    std::thread _pk_dump_thread;
+    // thread to gc/evict local pk index in sharded_data
+    std::thread _local_pk_index_shared_data_gc_evict_thread;
 
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
-    std::thread _adjust_cache_thread;
     std::vector<std::thread> _path_gc_threads;
     // threads to scan disk paths
     std::vector<std::thread> _path_scan_threads;
     // threads to run tablet checkpoint
     std::vector<std::thread> _tablet_checkpoint_threads;
+
+    std::thread _clear_expired_replcation_snapshots_thread;
 
     std::thread _compaction_checker_thread;
     std::mutex _checker_mutex;
@@ -433,9 +472,6 @@ private:
 
     std::mutex _trash_sweeper_mutex;
     std::condition_variable _trash_sweeper_cv;
-
-    std::mutex _finish_publish_version_mutex;
-    std::condition_variable _finish_publish_version_cv;
 
     // For tablet and disk-stat report
     std::mutex _report_mtx;
@@ -446,21 +482,30 @@ private:
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TxnManager> _txn_manager;
 
+    std::unique_ptr<ReplicationTxnManager> _replication_txn_manager;
+
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 
+    std::unique_ptr<MemTableFlushExecutor> _lake_memtable_flush_executor;
+
     std::unique_ptr<SegmentReplicateExecutor> _segment_replicate_executor;
 
     std::unique_ptr<SegmentFlushExecutor> _segment_flush_executor;
 
+    // Sub-task pool for lake schema-change inner parallelism (e.g. per-segment
+    // index building). Sized as alter_tablet_worker_count *
+    // lake_schema_change_per_tablet_parallelism. See storage_engine.cpp pool init.
+    std::unique_ptr<ThreadPool> _lake_schema_change_thread_pool;
+
+    std::unique_ptr<StorageCleanupExecutor> _storage_cleanup_executor;
+
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
-
-    std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
@@ -473,6 +518,13 @@ private:
     std::mutex _delta_column_group_cache_lock;
     std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
+
+    mutable std::mutex _schedule_apply_mutex;
+    std::condition_variable _apply_tablet_changed_cv;
+    std::thread _schedule_apply_thread;
+    std::priority_queue<std::pair<std::chrono::steady_clock::time_point, int64_t>,
+                        std::vector<std::pair<std::chrono::steady_clock::time_point, int64_t>>, std::greater<>>
+            _schedule_apply_tasks;
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

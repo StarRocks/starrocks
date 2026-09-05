@@ -18,13 +18,16 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/connector_scan_node.h"
+#include "exec/exec_env.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
 
 //TODO: test multi thread
 //TODO: test runtime filter
@@ -36,6 +39,7 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
 
         _create_runtime_state();
         _pool = _runtime_state->obj_pool();
@@ -52,7 +56,6 @@ private:
     static ChunkPtr _create_chunk(const std::vector<TypeDescriptor>& types);
 
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
-    OlapTableDescriptor* _table_desc = nullptr;
     ObjectPool* _pool = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     ExecEnv* _exec_env = nullptr;
@@ -79,7 +82,7 @@ std::vector<TScanRangeParams> FileScanNodeTest::_create_csv_scan_ranges(const st
     params->src_tuple_id = 0;
     for (int i = 0; i < types.size(); i++) {
         params->expr_of_dest_slot[i] = TExpr();
-        params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
+        params->expr_of_dest_slot[i].nodes.emplace_back();
         params->expr_of_dest_slot[i].nodes[0].__set_type(types[i].to_thrift());
         params->expr_of_dest_slot[i].nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
         params->expr_of_dest_slot[i].nodes[0].__set_is_nullable(true);
@@ -116,7 +119,8 @@ void FileScanNodeTest::_create_runtime_state() {
     TUniqueId fragment_id;
     TQueryOptions query_options;
     TQueryGlobals query_globals;
-    _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                                    &_exec_env->query_execution_services(), _exec_env);
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
     _runtime_state->init_mem_trackers(id);
@@ -124,14 +128,12 @@ void FileScanNodeTest::_create_runtime_state() {
 
 std::shared_ptr<TPlanNode> FileScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;

@@ -44,10 +44,14 @@ public class Quantiles implements Comparable<Quantiles> {
         return new Quantiles(avg, p50, max);
     }
 
-    private Quantiles(double avg, double p50, double max) {
+    public Quantiles(double avg, double p50, double max) {
         this.avg = avg;
         this.p50 = p50;
         this.max = max;
+    }
+
+    public Quantiles(@NotNull Quantiles q) {
+        this(q.getAvg(), q.getP50(), q.getMax());
     }
 
     public double getAvg() {
@@ -64,14 +68,21 @@ public class Quantiles implements Comparable<Quantiles> {
 
     @Override
     public int compareTo(@NotNull Quantiles o) {
-        if (avg != o.avg) {
-            return avg > o.avg ? 1 : -1;
+        // Compare by max first: ScoreSorter uses this natural order to rank compaction
+        // candidates, and ScoreSelector admits a partition based on its MAX tablet score. A
+        // partition whose compaction debt is concentrated in a few tablets (high max, low avg)
+        // must still sort ahead of partitions with a lower max, or it is admitted every round
+        // yet never scheduled on a cluster whose compaction task slots stay saturated -- avg and
+        // p50 only break ties between partitions with an equal max.
+        // must use Double.compare to avoid float type precision issue
+        if (Double.compare(max, o.max) != 0) {
+            return Double.compare(max, o.max);
         }
-        if (p50 != o.p50) {
-            return p50 > o.p50 ? 1 : -1;
+        if (Double.compare(avg, o.avg) != 0) {
+            return Double.compare(avg, o.avg);
         }
-        if (max != o.max) {
-            return max > o.max ? 1 : -1;
+        if (Double.compare(p50, o.p50) != 0) {
+            return Double.compare(p50, o.p50);
         }
         return 0;
     }

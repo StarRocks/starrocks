@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 
@@ -31,24 +31,48 @@ public:
 
     ~ArrayColumnIterator() override = default;
 
-    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
+    Status init(const ColumnIteratorOptions& opts) override;
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
-    [[nodiscard]] Status seek_to_first() override;
+    Status seek_to_first() override;
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+    Status seek_to_ordinal(ordinal_t ord) override;
 
     ordinal_t get_current_ordinal() const override { return _array_size_iterator->get_current_ordinal(); }
 
-    /// for vectorized engine
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override;
+    ordinal_t num_rows() const override { return _reader->num_rows(); }
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    // for support array<string>
+    bool all_page_dict_encoded() const override;
+
+    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+
+    Status next_dict_codes(size_t* n, Column* dst) override;
+
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+
+    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
+
+    int dict_size() override { return _element_iterator->dict_size(); }
+
+    ColumnReader* get_column_reader() override { return _reader; }
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
+    std::string name() const override { return "ArrayColumnIterator"; }
+
+private:
+    Status next_batch_null_offsets(size_t* n, UInt32Column* offsets, UInt8Column* nulls, size_t* element_rows);
+    Status next_batch_null_offsets(const SparseRange<>& range, UInt32Column* offsets, UInt8Column* nulls,
+                                   SparseRange<>* element_range, size_t* element_rows);
 
 private:
     ColumnReader* _reader;
@@ -59,6 +83,7 @@ private:
     const ColumnAccessPath* _path;
 
     bool _access_values = true;
+    bool _is_string_element = false;
 };
 
 } // namespace starrocks

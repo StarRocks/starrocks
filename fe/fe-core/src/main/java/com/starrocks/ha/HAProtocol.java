@@ -36,4 +36,15 @@ public interface HAProtocol {
 
     // remove a node from the group
     boolean removeElectableNode(String nodeName);
+
+    long getLatestEpoch();
+
+    void removeUnstableNode(String nodeName, int currentFollowerCnt);
+
+    // Gracefully transfer the leader (BDBJE master) role to the node named `nodeName` by calling
+    // BDBJE transferMaster in-process. Returns the name of the node that won leadership. `force`
+    // supersedes a leader transfer that is already in progress; without it the call fails if one is
+    // in progress. `timeoutMs` bounds how long the target replica has to catch up before the
+    // transfer aborts.
+    String transferToLeader(String nodeName, int timeoutMs, boolean force);
 }

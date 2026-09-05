@@ -19,14 +19,14 @@ import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.util.List;
 import java.util.Random;
 
 public class BalanceTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
         Config.alter_scheduler_interval_millisecond = 5000;
@@ -35,7 +35,7 @@ public class BalanceTest {
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().runSql(null, "drop database test force");
         PseudoCluster.getInstance().shutdown(false);

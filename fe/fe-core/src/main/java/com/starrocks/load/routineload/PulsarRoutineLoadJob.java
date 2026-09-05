@@ -23,7 +23,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -36,36 +35,34 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * PulsarRoutineLoadJob is a kind of RoutineLoadJob which fetch data from pulsar.
@@ -90,7 +87,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     // pulsar properties, property prefix will be mapped to pulsar custom parameters, which can be extended in the future
     @SerializedName("cpt")
     private Map<String, String> customProperties = Maps.newHashMap();
-    private Map<String, String> convertedCustomProperties = Maps.newHashMap();
+    private final Map<String, String> convertedCustomProperties = Maps.newHashMap();
 
     public static final String POSITION_EARLIEST = "POSITION_EARLIEST"; // 1
     public static final String POSITION_LATEST = "POSITION_LATEST"; // 0
@@ -102,6 +99,8 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     public PulsarRoutineLoadJob() {
         // for serialization, id is dummy
         super(-1, LoadDataSourceType.PULSAR);
+        this.progress = new PulsarProgress();
+        this.timestampProgress = new PulsarProgress();
     }
 
     public PulsarRoutineLoadJob(Long id, String name, long dbId, long tableId,
@@ -111,6 +110,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         this.topic = topic;
         this.subscription = subscription;
         this.progress = new PulsarProgress();
+        this.timestampProgress = new PulsarProgress();
     }
 
     public String getTopic() {
@@ -130,7 +130,19 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    public void prepare() throws UserException {
+    protected String getSourceProgressString() {
+        // empty implement.
+        return "";
+    }
+
+    @Override
+    protected String getSourceLagString(String progressJsonStr) {
+        // empty implement.
+        return "";
+    }
+
+    @Override
+    public void prepare() throws StarRocksException {
         super.prepare();
         // should reset converted properties each time the job being prepared.
         // because the file info can be changed anytime.
@@ -173,7 +185,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    public void divideRoutineLoadJob(int currentConcurrentTaskNum) throws UserException {
+    public void divideRoutineLoadJob(int currentConcurrentTaskNum) throws StarRocksException {
         List<RoutineLoadTaskInfo> result = new ArrayList<>();
         writeLock();
         try {
@@ -194,16 +206,17 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                         }
                     }
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
-                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUID.randomUUID(), id,
+                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUIDUtil.genUUID(), this,
                             taskSchedIntervalS * 1000, timeToExecuteMs, partitions,
                             initialPositions, getTaskTimeoutSecond() * 1000);
+                    pulsarTaskInfo.setComputeResource(computeResource);
                     LOG.debug("pulsar routine load task created: " + pulsarTaskInfo);
                     routineLoadTaskInfoList.add(pulsarTaskInfo);
                     result.add(pulsarTaskInfo);
                 }
                 // change job state to running
                 if (result.size() != 0) {
-                    unprotectUpdateState(JobState.RUNNING, null, false);
+                    unprotectUpdateState(JobState.RUNNING, null);
                 }
             } else {
                 LOG.debug("Ignore to divide routine load job while job state {}", state);
@@ -217,14 +230,15 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
     @Override
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             aliveNodeNum = 0;
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
+            for (long nodeId : computeNodeIds) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
                     ++aliveNodeNum;
                 }
@@ -247,19 +261,19 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected boolean checkCommitInfo(RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment,
                                       TransactionState txnState,
-                                      TransactionState.TxnStatusChangeReason txnStatusChangeReason) {
+                                      TxnStatusChangeReason txnStatusChangeReason) {
         if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             // For committed txn, update the progress.
             return true;
         }
 
-        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        // For compatible reason, the default behavior of empty load is still returning
+        // "No rows were imported from upstream" and abort transaction.
         // In this situation, we also need update commit info.
-        if (txnStatusChangeReason != null &&
-                txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
+        if (txnStatusChangeReason == TxnStatusChangeReason.NO_ROWS_IMPORTED) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
-            // If no data is imported, the error "all partitions have no load data" may only be returned.
+            // If no data is imported, the error "No rows were imported from upstream" may only be returned.
             // In this case, the status of the transaction is ABORTED,
             // but we still need to update the position to skip these error lines.
             Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.ABORTED,
@@ -282,15 +296,16 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
+    protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws StarRocksException {
         super.updateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
+        this.timestampProgress.update(attachment.getTimestampProgress());
     }
 
     @Override
     protected void replayUpdateProgress(RLTaskTxnCommitAttachment attachment) {
         super.replayUpdateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
     }
 
     @Override
@@ -299,6 +314,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // add new task
         PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(timeToExecuteMs, oldPulsarTaskInfo,
                 ((PulsarProgress) progress).getPartitionToInitialPosition(oldPulsarTaskInfo.getPartitions()));
+        pulsarTaskInfo.setComputeResource(routineLoadTaskInfo.getComputeResource());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -312,57 +328,211 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         ((PulsarProgress) progress).unprotectUpdate(currentPulsarPartitions, defaultInitialPosition);
     }
 
-    // if customPulsarPartition is not null, then return false immediately
-    // else if pulsar partitions of topic has been changed, return true.
-    // else return false
-    // update current pulsar partition at the same time
-    // current pulsar partitions = customPulsarPartitions == 0 ? all of partition of pulsar topic : customPulsarPartitions
+    // Refresh `currentPulsarPartitions` against the broker. The slow step is a FE -> BE brpc
+    // (PulsarUtil.getAllPulsarPartitions), so we must not hold the per-job writeLock across it -
+    // otherwise readers (admin RPCs, SHOW ROUTINE LOAD, processTimeoutTasks) stall for the
+    // full RPC plus retries. Three phases: snapshot under readLock, fetch with no lock, apply
+    // under writeLock with a configVersion guard to discard a mid-flight ALTER.
     @Override
-    protected boolean unprotectNeedReschedule() throws UserException {
-        // only running and need_schedule job need to be changed current pulsar partitions
+    protected void refreshPartitionsIfNeeded() throws StarRocksException {
+        FetchSnapshot snapshot;
+        readLock();
+        try {
+            snapshot = takeFetchSnapshot();
+        } finally {
+            readUnlock();
+        }
+        if (snapshot == null) {
+            return;
+        }
+        switch (snapshot.kind) {
+            case PAUSED_AUTO_SCHEDULE:
+                applyPausedAutoSchedule();
+                return;
+            case CUSTOM_ONLY:
+                applyCustomPartitions(snapshot);
+                return;
+            case FETCH:
+                break;
+            default:
+                return;
+        }
+
+        List<String> newPartitions = null;
+        Exception fetchError = null;
+        try {
+            newPartitions = PulsarUtil.getAllPulsarPartitions(snapshot.serviceUrl, snapshot.topic,
+                    snapshot.subscription, snapshotConvertedCustomProperties(), snapshot.computeResource);
+        } catch (Exception e) {
+            fetchError = e;
+        }
+
+        applyFetchResult(snapshot, newPartitions, fetchError);
+    }
+
+    // Phase 1 helper. Must be called with at least readLock held so the read of state,
+    // customPulsarPartitions, serviceUrl, topic, subscription, dataSourceConfigVersion is
+    // consistent. Returns null when the job is in a final state (STOPPED/CANCELLED) or any
+    // state that does not require partition refresh; callers must short-circuit the rest of
+    // the cycle in that case.
+    private FetchSnapshot takeFetchSnapshot() {
         if (this.state == JobState.RUNNING || this.state == JobState.NEED_SCHEDULE) {
-            if (customPulsarPartitions != null && customPulsarPartitions.size() != 0) {
+            if (customPulsarPartitions != null && !customPulsarPartitions.isEmpty()) {
+                // User pinned the partition list at CREATE time; no broker RPC needed.
+                return FetchSnapshot.customOnly(dataSourceConfigVersion);
+            }
+            return FetchSnapshot.fetch(serviceUrl, topic, subscription, computeResource, dataSourceConfigVersion);
+        }
+        if (this.state == JobState.PAUSED) {
+            // PAUSED jobs do not need partition info, but may be eligible for auto-resume.
+            return FetchSnapshot.pausedAutoSchedule();
+        }
+        return null;
+    }
+
+    // Phase 3 (fast path). For jobs created with PROPERTIES("pulsar_partitions"=...) there is no
+    // broker RPC; we just copy the user-pinned list into currentPulsarPartitions. We still take
+    // writeLock and re-check configVersion + state because phase 1 ran under readLock and an
+    // ALTER ROUTINE LOAD could have landed in between - in that case we drop the assignment and
+    // let the next scheduler tick re-snapshot with the new config.
+    private void applyCustomPartitions(FetchSnapshot snapshot) {
+        writeLock();
+        try {
+            if (dataSourceConfigVersion != snapshot.configVersion) {
+                return;
+            }
+            if (this.state != JobState.RUNNING && this.state != JobState.NEED_SCHEDULE) {
+                return;
+            }
+            if (customPulsarPartitions != null && !customPulsarPartitions.isEmpty()) {
                 currentPulsarPartitions = customPulsarPartitions;
-                return false;
-            } else {
-                List<String> newCurrentPulsarPartition;
-                try {
-                    newCurrentPulsarPartition = getAllPulsarPartitions();
-                } catch (Exception e) {
-                    String msg = "Job failed to fetch all current partition with error [" + e.getMessage() + "]";
-                    LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                            .add("error_msg", msg)
-                            .build(), e);
-                    if (this.state == JobState.NEED_SCHEDULE) {
-                        unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
-                    }
-                    return false;
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // Phase 3 (PAUSED auto-resume). If a PAUSED job's pauseReason is recoverable (currently:
+    // REPLICA_FEW_ERR within ScheduleRule's retry/window budget), promote it back to
+    // NEED_SCHEDULE so the next RoutineLoadScheduler tick re-divides it into tasks. Pure FE
+    // state-machine work; no external calls, so the writeLock window is tiny.
+    private void applyPausedAutoSchedule() throws StarRocksException {
+        writeLock();
+        try {
+            if (this.state != JobState.PAUSED) {
+                return;
+            }
+            if (!ScheduleRule.isNeedAutoSchedule(this)) {
+                return;
+            }
+            LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                    .add("name", name)
+                    .add("current_state", this.state)
+                    .add("msg", "Job need to be rescheduled")
+                    .build());
+            unprotectUpdateProgress();
+            unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void applyFetchResult(FetchSnapshot snapshot, List<String> newPartitions, Exception fetchError)
+            throws StarRocksException {
+        writeLock();
+        try {
+            if (dataSourceConfigVersion != snapshot.configVersion) {
+                // ALTER ROUTINE LOAD landed during the brpc; drop the stale fetch and let the
+                // next scheduler tick refetch with the new config.
+                return;
+            }
+            if (this.state != JobState.RUNNING && this.state != JobState.NEED_SCHEDULE) {
+                return;
+            }
+            if (fetchError != null) {
+                String msg = "Job failed to fetch all current partition with error [" + fetchError.getMessage() + "]";
+                LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                        .add("error_msg", msg)
+                        .build(), fetchError);
+                // Only PAUSE jobs that were waiting to be (re)scheduled; jobs already RUNNING
+                // keep their current tasks so a transient broker hiccup does not nuke an
+                // otherwise-healthy pipeline. The next scheduler tick will retry.
+                if (this.state == JobState.NEED_SCHEDULE) {
+                    unprotectUpdateState(JobState.PAUSED,
+                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
                 }
-                if (currentPulsarPartitions.containsAll(newCurrentPulsarPartition)) {
-                    if (currentPulsarPartitions.size() > newCurrentPulsarPartition.size()) {
-                        unprotectUpdateCurrentPartitions(newCurrentPulsarPartition);
-                        return true;
-                    } else {
-                        return false;
-                    }
+                return;
+            }
+            // Diff currentPulsarPartitions vs newPartitions. Three cases:
+            //   1) current is a strict superset of new  -> partitions were removed
+            //      -> swap to the smaller list and reschedule
+            //   2) current equals new (same set, same size) -> no change
+            //   3) current is missing at least one of new -> partitions were added (or set was
+            //      replaced) -> swap to the new list and reschedule
+            boolean changed;
+            if (currentPulsarPartitions.containsAll(newPartitions)) {
+                if (currentPulsarPartitions.size() > newPartitions.size()) {
+                    unprotectUpdateCurrentPartitions(newPartitions);
+                    changed = true;
                 } else {
-                    unprotectUpdateCurrentPartitions(newCurrentPulsarPartition);
-                    return true;
+                    changed = false;
                 }
+            } else {
+                unprotectUpdateCurrentPartitions(newPartitions);
+                changed = true;
             }
-        } else if (this.state == JobState.PAUSED) {
-            boolean autoSchedule = ScheduleRule.isNeedAutoSchedule(this);
-            if (autoSchedule) {
-                LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, name)
-                        .add("current_state", this.state)
-                        .add("msg", "should be rescheduled")
+            if (changed) {
+                LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                        .add("msg", "Job need to be rescheduled")
                         .build());
+                unprotectUpdateProgress();
+                unprotectUpdateState(JobState.NEED_SCHEDULE, null);
             }
-            return autoSchedule;
-        } else {
-            return false;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // Discriminator for the apply phase of refreshPartitionsIfNeeded.
+    //   FETCH                - state RUNNING/NEED_SCHEDULE, no custom partitions; needs broker RPC
+    //   CUSTOM_ONLY          - state RUNNING/NEED_SCHEDULE, user-pinned partitions; no RPC needed
+    //   PAUSED_AUTO_SCHEDULE - state PAUSED; evaluate ScheduleRule for auto-resume
+    private enum FetchSnapshotKind { FETCH, CUSTOM_ONLY, PAUSED_AUTO_SCHEDULE }
+
+    // Immutable snapshot of the inputs captured in phase 1 (readLock) and consumed unchanged
+    // through phase 2 (unlocked broker RPC) and phase 3 (writeLock apply). Carrying the values
+    // on a snapshot rather than re-reading the mutable fields keeps the RPC inputs stable, and
+    // pairing them with configVersion lets phase 3 detect a concurrent ALTER and discard the
+    // stale fetch result.
+    private static final class FetchSnapshot {
+        final FetchSnapshotKind kind;
+        final String serviceUrl;
+        final String topic;
+        final String subscription;
+        final ComputeResource computeResource;
+        final long configVersion;
+
+        private FetchSnapshot(FetchSnapshotKind kind, String serviceUrl, String topic, String subscription,
+                              ComputeResource computeResource, long configVersion) {
+            this.kind = kind;
+            this.serviceUrl = serviceUrl;
+            this.topic = topic;
+            this.subscription = subscription;
+            this.computeResource = computeResource;
+            this.configVersion = configVersion;
+        }
+
+        static FetchSnapshot fetch(String serviceUrl, String topic, String subscription,
+                                   ComputeResource cr, long ver) {
+            return new FetchSnapshot(FetchSnapshotKind.FETCH, serviceUrl, topic, subscription, cr, ver);
+        }
+
+        static FetchSnapshot customOnly(long ver) {
+            return new FetchSnapshot(FetchSnapshotKind.CUSTOM_ONLY, null, null, null, null, ver);
+        }
+
+        static FetchSnapshot pausedAutoSchedule() {
+            return new FetchSnapshot(FetchSnapshotKind.PAUSED_AUTO_SCHEDULE, null, null, null, null, 0L);
         }
     }
 
@@ -379,45 +549,57 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected String getStatistic() {
         Map<String, Object> summary = Maps.newHashMap();
-        summary.put("totalRows", Long.valueOf(totalRows));
-        summary.put("loadedRows", Long.valueOf(totalRows - errorRows - unselectedRows));
-        summary.put("errorRows", Long.valueOf(errorRows));
-        summary.put("unselectedRows", Long.valueOf(unselectedRows));
-        summary.put("receivedBytes", Long.valueOf(receivedBytes));
-        summary.put("taskExecuteTimeMs", Long.valueOf(totalTaskExcutionTimeMs));
-        summary.put("receivedBytesRate", Long.valueOf(receivedBytes / totalTaskExcutionTimeMs * 1000));
+        summary.put("totalRows", totalRows);
+        summary.put("loadedRows", totalRows - errorRows - unselectedRows);
+        summary.put("errorRows", errorRows);
+        summary.put("unselectedRows", unselectedRows);
+        summary.put("receivedBytes", receivedBytes);
+        summary.put("taskExecuteTimeMs", totalTaskExcutionTimeMs);
+        summary.put("receivedBytesRate", receivedBytes * 1000 / totalTaskExcutionTimeMs);
         summary.put("loadRowsRate",
-                Long.valueOf((totalRows - errorRows - unselectedRows) / totalTaskExcutionTimeMs * 1000));
-        summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
-        summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
+                (totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs);
+        summary.put("committedTaskNum", committedTaskNum);
+        summary.put("abortedTaskNum", abortedTaskNum);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(summary);
     }
 
-    private List<String> getAllPulsarPartitions() throws UserException {
-        // Get custom properties like tokens
-        convertCustomProperties(false);
+    public List<String> getAllPulsarPartitions() throws StarRocksException {
+        // Get custom properties like tokens.
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
-                subscription, ImmutableMap.copyOf(convertedCustomProperties));
+                subscription, snapshotConvertedCustomProperties(), computeResource);
     }
 
-    public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {
+    // Snapshot `convertedCustomProperties` for use in an unlocked RPC call. Holds the intrinsic
+    // monitor across convertCustomProperties(false) + ImmutableMap.copyOf so a concurrent ALTER
+    // ROUTINE LOAD running modifyDataSourceProperties (which calls customProperties.putAll +
+    // convertCustomProperties(true) under the same monitor) cannot rebuild the backing HashMap
+    // mid-iteration. All RPC paths that need the converted-properties map must go through this
+    // helper - direct ImmutableMap.copyOf(convertedCustomProperties) is racy outside the monitor.
+    private ImmutableMap<String, String> snapshotConvertedCustomProperties() throws DdlException {
+        synchronized (this) {
+            convertCustomProperties(false);
+            return ImmutableMap.copyOf(convertedCustomProperties);
+        }
+    }
+
+    public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
         // check db and table
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDBName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDBName());
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDBName());
         }
 
         long tableId = -1L;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
-            Table table = db.getTable(stmt.getTableName());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), stmt.getTableName());
             Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
             tableId = table.getId();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // init pulsar routine load job
@@ -432,7 +614,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return pulsarRoutineLoadJob;
     }
 
-    private void checkCustomPartition() throws UserException {
+    private void checkCustomPartition() throws StarRocksException {
         if (customPulsarPartitions.isEmpty()) {
             return;
         }
@@ -453,14 +635,14 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 // check file
                 if (!smallFileMgr.containsFile(dbId, PULSAR_FILE_CATALOG, file)) {
                     throw new DdlException("File " + file + " does not exist in db "
-                            + dbId + " with globalStateMgr: " + PULSAR_FILE_CATALOG);
+                            + dbId + " with catalog: " + PULSAR_FILE_CATALOG);
                 }
             }
         }
     }
 
     @Override
-    protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
+    protected void setOptional(CreateRoutineLoadStmt stmt) throws StarRocksException {
         super.setOptional(stmt);
 
         if (!stmt.getPulsarPartitions().isEmpty()) {
@@ -511,40 +693,45 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, serviceUrl);
-        Text.writeString(out, topic);
-        Text.writeString(out, subscription);
+    protected void checkDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {
+        if (!dataSourceProperties.hasAnalyzedProperties()) {
+            return;
+        }
+        Map<String, String> properties = dataSourceProperties.getCustomPulsarProperties();
+        List<Pair<String, Long>> positions = dataSourceProperties.getPulsarPartitionInitialPositions();
 
-        out.writeInt(customPulsarPartitions.size());
-        for (String partition : customPulsarPartitions) {
-            Text.writeString(out, partition);
+        // check file existence
+        if (!properties.isEmpty()) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getValue().startsWith("FILE:")) {
+                    String file = entry.getValue().substring(entry.getValue().indexOf(":") + 1);
+                    SmallFileMgr smallFileMgr = GlobalStateMgr.getCurrentState().getSmallFileMgr();
+                    // check file
+                    if (!smallFileMgr.containsFile(dbId, PULSAR_FILE_CATALOG, file)) {
+                        throw new DdlException("File " + file + " does not exist in db "
+                                + dbId + " with catalog: " + PULSAR_FILE_CATALOG);
+                    }
+                }
+            }
         }
 
-        out.writeInt(customProperties.size());
-        for (Map.Entry<String, String> property : customProperties.entrySet()) {
-            Text.writeString(out, "property." + property.getKey());
-            Text.writeString(out, property.getValue());
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        serviceUrl = Text.readString(in);
-        topic = Text.readString(in);
-        subscription = Text.readString(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            customPulsarPartitions.add(Text.readString(in));
+        // check defaultInitialPosition
+        if (properties.containsKey(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION)) {
+            try {
+                CreateRoutineLoadStmt.getPulsarPosition(
+                        properties.get(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
         }
 
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            String propertyKey = Text.readString(in);
-            String propertyValue = Text.readString(in);
-            if (propertyKey.startsWith("property.")) {
-                this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
+        // check partition positions
+        if (positions != null && !positions.isEmpty()) {
+            for (Pair<String, Long> pair : positions) {
+                if (!customPulsarPartitions.contains(pair.first)) {
+                    throw new DdlException("The partition " +
+                            pair.first + " is not specified in the create statement");
+                }
             }
         }
     }
@@ -560,8 +747,13 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         }
 
         if (!customPulsarProperties.isEmpty()) {
-            this.customProperties.putAll(customPulsarProperties);
-            convertCustomProperties(true);
+            // Hold the intrinsic monitor across putAll + convertCustomProperties(true): the
+            // scheduler's lock-free refresh path reads customProperties via the synchronized
+            // convertCustomProperties(false); putAll outside the monitor would race that read.
+            synchronized (this) {
+                this.customProperties.putAll(customPulsarProperties);
+                convertCustomProperties(true);
+            }
 
             if (customPulsarProperties.containsKey(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION)) {
                 // defaultInitialPosition should be updated by convertCustomProperties()

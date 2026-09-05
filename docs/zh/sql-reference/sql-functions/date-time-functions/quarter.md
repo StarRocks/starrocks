@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回给定日期值对应的季度，取值范围 1 到 4。"
 ---
 
 # quarter
 
-## 功能
+
 
 返回给定的日期值对应的季度，范围 1~4。
 

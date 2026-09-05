@@ -1,0 +1,7 @@
+position: 90 # float position is supported
+label: '视图'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: View

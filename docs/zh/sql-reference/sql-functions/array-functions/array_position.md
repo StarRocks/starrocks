@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "获取数组中某个元素的位置。"
 ---
 
 # array_position
 
-## 功能
+
 
 获取数组中某个元素位置，是的话返回位置，否则返回0.
 

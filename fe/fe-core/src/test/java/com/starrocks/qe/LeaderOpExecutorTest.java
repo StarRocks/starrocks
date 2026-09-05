@@ -14,13 +14,17 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.ClientPool;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -30,16 +34,16 @@ import com.starrocks.utframe.MockGenericPool;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.thrift.TException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class LeaderOpExecutorTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static PseudoCluster cluster;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.bdbje_heartbeat_timeout_second = 60;
         Config.bdbje_replica_ack_timeout_second = 60;
@@ -56,7 +60,6 @@ public class LeaderOpExecutorTest {
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_experimental_mv = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -72,7 +75,6 @@ public class LeaderOpExecutorTest {
 
     @Test
     public void testResourceGroupNameInAuditLog() throws Exception {
-
         String createGroup = "create resource group rg1\n" +
                 "to\n" +
                 "    (db='d1')\n" +
@@ -87,12 +89,13 @@ public class LeaderOpExecutorTest {
         String sql = "insert into t1 select * from t1";
         StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         LeaderOpExecutor executor =
-                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC);
+                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false,
+                        null);
 
         mockFrontendService(new MockFrontendServiceClient());
         executor.execute();
 
-        Assert.assertEquals("rg1", connectContext.getAuditEventBuilder().build().resourceGroup);
+        Assertions.assertEquals("rg1", connectContext.getAuditEventBuilder().build().resourceGroup);
     }
 
     private static class MockFrontendServiceClient extends FrontendService.Client {
@@ -109,11 +112,48 @@ public class LeaderOpExecutorTest {
     }
 
     private static void mockFrontendService(MockFrontendServiceClient client) {
-        ClientPool.frontendPool = new MockGenericPool<FrontendService.Client>("leader-op-mocked-pool") {
+        ThriftConnectionPool.frontendPool = new MockGenericPool<FrontendService.Client>("leader-op-mocked-pool") {
             @Override
             public FrontendService.Client borrowObject(TNetworkAddress address, int timeoutMs) {
                 return client;
             }
         };
+    }
+
+    @Test
+    public void testForwardTooManyTimes() {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setForwardTimes(LeaderOpExecutor.MAX_FORWARD_TIMES);
+
+        try {
+            new LeaderOpExecutor(new OriginStatement("show frontends"), connectContext, RedirectStatus.FORWARD_NO_SYNC)
+                    .execute();
+        } catch (Exception e) {
+            Assertions.assertTrue(e instanceof ErrorReportException);
+            Assertions.assertEquals(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, ((ErrorReportException) e).getErrorCode());
+            return;
+        }
+        Assertions.fail("should throw ERR_FORWARD_TOO_MANY_TIMES exception");
+    }
+
+    @Test
+    public void testCreateTMasterOpRequest() {
+        String catalog = "myCatalog";
+        String database = "database";
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getServingState());
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setCurrentRoleIds(UserIdentity.ROOT);
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setThreadLocalInfo();
+        connectContext.setCurrentCatalog(catalog);
+        connectContext.setDatabase(database);
+
+        LeaderOpExecutor executor = new LeaderOpExecutor(new OriginStatement(""),
+                connectContext, RedirectStatus.FORWARD_NO_SYNC);
+        TMasterOpRequest request = executor.createTMasterOpRequest(connectContext, 1);
+        Assertions.assertEquals(catalog, request.getCatalog());
+        Assertions.assertEquals(database, request.getDb());
     }
 }

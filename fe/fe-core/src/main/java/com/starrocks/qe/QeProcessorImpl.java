@@ -34,11 +34,18 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.UserException;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -46,30 +53,39 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public final class QeProcessorImpl implements QeProcessor {
+import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
 
+public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
-    private static final long ONE_MINUTE = 60 * 1000L;
     private final Map<TUniqueId, QueryInfo> coordinatorMap = Maps.newConcurrentMap();
     private final Map<TUniqueId, Long> monitorQueryMap = Maps.newConcurrentMap();
-    private final AtomicLong lastCheckTime = new AtomicLong();
 
-    public static final QeProcessor INSTANCE;
+    public static final QeProcessorImpl INSTANCE;
+    private static final ScheduledExecutorService MONITOR_EXECUTOR;
 
     static {
         INSTANCE = new QeProcessorImpl();
+        MONITOR_EXECUTOR = Executors.newSingleThreadScheduledExecutor();
+        MONITOR_EXECUTOR.scheduleAtFixedRate(INSTANCE::scanMonitorQueries, 0, 1, TimeUnit.SECONDS);
     }
 
     private QeProcessorImpl() {
@@ -88,34 +104,56 @@ public final class QeProcessorImpl implements QeProcessor {
     public List<Coordinator> getCoordinators() {
         return coordinatorMap.values().stream()
                 .map(QueryInfo::getCoord)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Find the ConnectContext of a running query by the query id string shown in
+     * "SHOW PROC '/current_queries'" (i.e. {@code DebugUtil.printId(executionId)}). This lets KILL QUERY
+     * target coordinator-backed queries that are not registered as client connections in ConnectScheduler,
+     * such as statistics collection (ANALYZE), task runs and materialized view refreshes. Queries without a
+     * ConnectContext are not visible in current_queries, so a context-based lookup mirrors that visibility.
+     */
+    public ConnectContext getConnectContextByQueryId(String queryId) {
+        if (queryId == null) {
+            return null;
+        }
+        for (QueryInfo info : coordinatorMap.values()) {
+            ConnectContext ctx = info.getConnectContext();
+            if (ctx != null && queryId.equals(DebugUtil.printId(ctx.getExecutionId()))) {
+                return ctx;
+            }
+        }
+        return null;
+    }
+
     @Override
-    public void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException {
+    public void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException {
         registerQuery(queryId, new QueryInfo(coord));
     }
 
     @Override
-    public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
-        LOG.info("register query id = {}", DebugUtil.printId(queryId));
+    public void registerQuery(TUniqueId queryId, QueryInfo info) throws StarRocksException {
+        if (needLogRegisterAndUnregisterQueryId(info)) {
+            LOG.info("register query id = {}", DebugUtil.printId(queryId));
+        }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
-            throw new UserException("queryId " + queryId + " already exists");
+            throw new AlreadyExistsException("queryId " + queryId + " already exists");
         }
-        scanMonitorQueries();
     }
 
+    /**
+     * Scan all monitored queries, cleanup them if expired
+     */
     private void scanMonitorQueries() {
         long now = System.currentTimeMillis();
-        long lastCheckTime = this.lastCheckTime.get();
-        if (now - lastCheckTime > ONE_MINUTE && this.lastCheckTime.compareAndSet(lastCheckTime, now)) {
-            for (Map.Entry<TUniqueId, Long> entry : monitorQueryMap.entrySet()) {
-                if (now > entry.getValue()) {
-                    LOG.warn("monitor expired, query id = {}", DebugUtil.printId(entry.getKey()));
-                    unregisterQuery(entry.getKey());
-                    monitorQueryMap.remove(entry.getKey());
-                }
+        for (Map.Entry<TUniqueId, Long> entry : monitorQueryMap.entrySet()) {
+            if (now > entry.getValue()) {
+                LOG.warn("monitor expired, query id = {}", DebugUtil.printId(entry.getKey()));
+                unregisterQuery(entry.getKey());
+                monitorQueryMap.remove(entry.getKey());
             }
         }
     }
@@ -137,7 +175,9 @@ public final class QeProcessorImpl implements QeProcessor {
             if (info.getCoord() != null) {
                 info.getCoord().onFinished();
             }
-            LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
+            if (needLogRegisterAndUnregisterQueryId(info)) {
+                LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
+            }
         }
     }
 
@@ -150,8 +190,42 @@ public final class QeProcessorImpl implements QeProcessor {
             if (info.sql == null || context == null) {
                 continue;
             }
+
+            if (context.getEndTime() != null && Instant.now().isBefore(context.getEndTime())) {
+                LOG.warn("query {} end time is {}, but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()), context.getEndTime());
+                continue;
+            }
+            // Determine liveness from the coordinator once the query is executing. Internal queries (e.g.
+            // statistics collection) reuse a single ConnectContext across many statements, so the context's
+            // last-command state may already be EOF/OK while a new coordinator-backed statement is actively
+            // running; context.getState().isRunning() must not be used to filter those out. Planning-phase
+            // entries have no coordinator yet and fall back to the context state.
+            if (info.coord != null) {
+                if (info.coord.isDone()) {
+                    LOG.warn("query {} is done, but doesn't clean from coordinator",
+                            DebugUtil.printId(entry.getKey()));
+                    continue;
+                }
+            } else if (!context.getState().isRunning()) {
+                LOG.warn("query {} is not running, context state: {}, but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()), context.getState());
+                continue;
+            }
+
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
-            final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+
+            String execState;
+            if (context.isPlanning()) {
+                execState = LogicalSlot.State.CREATED.toQueryStateString();
+            } else {
+                execState = (context.isPending()
+                        ? LogicalSlot.State.REQUIRING
+                        : LogicalSlot.State.ALLOCATED).toQueryStateString();
+            }
+
+            final QueryStatisticsItem.Builder itemBuilder = new QueryStatisticsItem.Builder()
+                    .customQueryId(context.getCustomQueryId())
                     .queryId(queryIdStr)
                     .executionId(info.getConnectContext().getExecutionId())
                     .queryStartTime(info.getStartExecTime())
@@ -159,11 +233,50 @@ public final class QeProcessorImpl implements QeProcessor {
                     .user(context.getQualifiedUser())
                     .connId(String.valueOf(context.getConnectionId()))
                     .db(context.getDatabase())
-                    .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
-                    .profile(info.getCoord().getQueryProfile()).build();
-            querySet.put(queryIdStr, item);
+                    .execState(execState)
+                    .queryType(getQueryType(context));
+
+            if (info.getCoord() != null) {
+                itemBuilder
+                        .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
+                        .profile(info.getCoord().getQueryProfile())
+                        .warehouseName(info.coord.getWarehouseName())
+                        .resourceGroupName(info.coord.getResourceGroupName());
+            } else {
+                itemBuilder
+                        .fragmentInstanceInfos(Collections.emptyList())
+                        .warehouseName(context.getCurrentWarehouseName())
+                        .resourceGroupName("");
+            }
+
+            querySet.put(queryIdStr, itemBuilder.build());
         }
         return querySet;
+    }
+
+    /**
+     * Classify a running query by the origin of its ConnectContext, so that "SHOW PROC '/current_queries'"
+     * (and '/global_current_queries') can distinguish user queries from internal ones such as statistics
+     * collection (ANALYZE), task runs and materialized view refreshes.
+     */
+    private static String getQueryType(ConnectContext context) {
+        if (context.isStatisticsConnection()) {
+            return "Statistics";
+        }
+        if (context.getQuerySource() == null) {
+            return "Query";
+        }
+        switch (context.getQuerySource()) {
+            case TASK:
+                return "Task";
+            case MV:
+                return "MV";
+            case INTERNAL:
+                return "Internal";
+            case EXTERNAL:
+            default:
+                return "Query";
+        }
     }
 
     @Override
@@ -172,12 +285,13 @@ public final class QeProcessorImpl implements QeProcessor {
             LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
                     params.backend_num, beAddr);
-            LOG.debug("params: {}", params);
+            LOG.trace("params: {}", params);
         }
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);
         if (info == null) {
-            LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
+            // query is already removed which is acceptable
+            LOG.debug("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
             result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
             result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
@@ -276,8 +390,34 @@ public final class QeProcessorImpl implements QeProcessor {
     }
 
     @Override
+    public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params) {
+        final TReportFragmentFinishResponse result = new TReportFragmentFinishResponse();
+        final QueryInfo info = coordinatorMap.get(params.query_id);
+        if (info == null) {
+            LOG.debug("reportFragmentFinish() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            result.setStatus(new TStatus(TStatusCode.OK));
+            return result;
+        }
+        final TUniqueId fragment_instance_id = params.fragment_instance_id;
+        Status status = info.getCoord().scheduleNextTurn(fragment_instance_id);
+        result.setStatus(status.toThrift());
+        return result;
+    }
+
+    @Override
     public long getCoordinatorCount() {
         return coordinatorMap.size();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(coordinatorMap, 20);
     }
 
     public static final class QueryInfo {
@@ -308,6 +448,10 @@ public final class QeProcessorImpl implements QeProcessor {
             return res;
         }
 
+        public static QueryInfo fromPlanningQuery(ConnectContext connectContext, String sql) {
+            return new QueryInfo(connectContext, sql, null);
+        }
+
         public ConnectContext getConnectContext() {
             return connectContext;
         }
@@ -323,5 +467,13 @@ public final class QeProcessorImpl implements QeProcessor {
         public long getStartExecTime() {
             return startExecTime;
         }
+    }
+
+    private static boolean needLogRegisterAndUnregisterQueryId(QueryInfo inf) {
+        ConnectContext context = inf.getConnectContext();
+        return Config.log_register_and_unregister_query_id &&
+                context != null &&
+                (context.getCommand() != COM_STMT_EXECUTE ||
+                        context.getSessionVariable().isAuditExecuteStmt());
     }
 }

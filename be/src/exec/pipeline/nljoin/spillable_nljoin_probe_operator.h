@@ -17,21 +17,21 @@
 #include <memory>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
+#include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/spiller_factory.h"
-#include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
+#include "runtime/chunk_accumulator.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 
 class NLJoinProber {
 public:
     NLJoinProber(TJoinOp::type join_op, const std::vector<ExprContext*>& join_conjuncts,
-                 const std::vector<ExprContext*>& conjunct_ctxs, const std::vector<SlotDescriptor*>& col_types,
-                 size_t probe_column_count);
+                 const std::vector<ExprContext*>& conjunct_ctxs, const std::map<SlotId, ExprContext*>& common_expr_ctxs,
+                 const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count);
 
     ~NLJoinProber() = default;
 
@@ -80,6 +80,7 @@ private:
 
     const std::vector<ExprContext*>& _join_conjuncts;
     const std::vector<ExprContext*>& _conjunct_ctxs;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
 
     //
     ChunkPtr _probe_chunk = nullptr;
@@ -98,6 +99,7 @@ public:
                                  TJoinOp::type join_op, const std::string& sql_join_conjuncts,
                                  const std::vector<ExprContext*>& join_conjuncts,
                                  const std::vector<ExprContext*>& conjunct_ctxs,
+                                 const std::map<SlotId, ExprContext*>& common_expr_ctxs,
                                  const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                                  const std::shared_ptr<NLJoinContext>& cross_join_context);
 
@@ -128,7 +130,6 @@ public:
     // TODO: implements reset_state
 private:
     void _init_chunk_stream() const;
-    spill::IOTaskExecutor& _executor();
     // current build finish
     bool _is_current_build_probe_finished() const { return _current_build_probe_finished; }
     void _set_current_build_probe_finished(bool build_finished) { _current_build_probe_finished = build_finished; }
@@ -150,18 +151,20 @@ private:
 
 class SpillableNLJoinProbeOperatorFactory final : public OperatorWithDependencyFactory {
 public:
-    SpillableNLJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
-                                        const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
-                                        std::string sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
+    SpillableNLJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id, RecordDescriptor left_record_desc,
+                                        RecordDescriptor right_record_desc, std::string sql_join_conjuncts,
+                                        std::vector<ExprContext*>&& join_conjuncts,
                                         std::vector<ExprContext*>&& conjunct_ctxs,
+                                        std::map<SlotId, ExprContext*>&& common_expr_ctxs,
                                         std::shared_ptr<NLJoinContext>&& cross_join_context, TJoinOp::type join_op)
             : OperatorWithDependencyFactory(id, "spillable_nl_join_left", plan_node_id),
               _join_op(join_op),
-              _left_row_desc(left_row_desc),
-              _right_row_desc(right_row_desc),
+              _left_record_desc(std::move(left_record_desc)),
+              _right_record_desc(std::move(right_record_desc)),
               _sql_join_conjuncts(std::move(sql_join_conjuncts)),
               _join_conjuncts(std::move(join_conjuncts)),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _common_expr_ctxs(std::move(common_expr_ctxs)),
               _cross_join_context(std::move(cross_join_context)) {}
 
     ~SpillableNLJoinProbeOperatorFactory() override = default;
@@ -172,19 +175,20 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _init_row_desc();
+    void _init_col_types();
 
     const TJoinOp::type _join_op;
-    const RowDescriptor& _left_row_desc;
-    const RowDescriptor& _right_row_desc;
+    const RecordDescriptor _left_record_desc;
+    const RecordDescriptor _right_record_desc;
 
-    Buffer<SlotDescriptor*> _col_types;
+    std::vector<SlotDescriptor*> _col_types;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 
     std::string _sql_join_conjuncts;
     std::vector<ExprContext*> _join_conjuncts;
     std::vector<ExprContext*> _conjunct_ctxs;
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
 
     std::shared_ptr<NLJoinContext> _cross_join_context;
 };

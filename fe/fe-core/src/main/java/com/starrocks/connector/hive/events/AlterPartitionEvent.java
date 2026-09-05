@@ -17,7 +17,7 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveCommonStats;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HivePartitionName;
@@ -46,7 +46,7 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     // the Partition object after alter operation, as parsed from the NotificationEvent
     private final Partition partitionAfter;
 
-    private AlterPartitionEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+    private AlterPartitionEvent(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         super(event, cacheProcessor, catalogName);
         Preconditions.checkState(getEventType() == ALTER_PARTITION);
         Preconditions.checkNotNull(event.getMessage());
@@ -70,7 +70,7 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     }
 
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
-                                                 CacheUpdateProcessor cacheProcessor, String catalogName) {
+                                                 HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         return Lists.newArrayList(new AlterPartitionEvent(event, cacheProcessor, catalogName));
     }
 

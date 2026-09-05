@@ -1,0 +1,131 @@
+-- name: test_orc_files_merge
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/orc_format/basic_type.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,027. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_files/orc_format/basic_type_k2k5k7.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 434. OK num: 1(upload 1 files).
+-- !result
+
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/basic_type.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+k1	boolean	YES
+k2	int	YES
+k3	bigint	YES
+k4	decimal(10,2)	YES
+k5	date	YES
+k6	datetime	YES
+k7	varchar(1048576)	YES
+k8	double	YES
+-- !result
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/basic_type_k2k5k7.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+k2	int	YES
+k5	date	YES
+k7	varchar(1048576)	YES
+-- !result
+
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/basic_type.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+0	1	2	3.20	2024-10-01	2024-10-01 12:12:12	a	4.3
+1	11	12	13.20	2024-10-02	2024-10-02 13:13:13	b	14.3
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/basic_type_k2k5k7.orc",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+21	2024-10-03	c
+-- !result
+
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "null",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+None	21	None	None	2024-10-03	None	c	None
+0	1	2	3.20	2024-10-01	2024-10-01 12:12:12	a	4.3
+1	11	12	13.20	2024-10-02	2024-10-02 13:13:13	b	14.3
+-- !result
+
+select k2, k5, k7 from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "null",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+21	2024-10-03	c
+1	2024-10-01	a
+11	2024-10-02	b
+-- !result
+
+select k1, k3, k8 from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "null",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+None	None	None
+0	2	4.3
+1	12	14.3
+-- !result
+
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "fill_mismatch_column_with" = "none",
+    "auto_detect_sample_files" = "2",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*Column: k1 is not found in file: .*basic_type_k2k5k7.orc.* Consider setting 'fill_mismatch_column_with' = 'null' property.*
+-- !result
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null

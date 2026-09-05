@@ -40,12 +40,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.CommandResult;
 import com.starrocks.common.util.Util;
@@ -55,6 +54,7 @@ import com.starrocks.load.loadv2.SparkLoadAppHandle.State;
 import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.load.loadv2.etl.SparkEtlJob;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TEtlState;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
@@ -139,9 +139,9 @@ public class SparkEtlJobHandler {
             if (brokerDesc.hasBroker()) {
                 BrokerUtil.writeFile(configData, jobConfigHdfsPath, brokerDesc);
             } else {
-                HdfsUtil.writeFile(configData, jobConfigHdfsPath, brokerDesc);
+                HdfsUtil.writeFile(configData, jobConfigHdfsPath, brokerDesc.getProperties());
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new LoadException(e.getMessage());
         }
 
@@ -196,7 +196,7 @@ public class SparkEtlJobHandler {
             if (state == State.KILLED) {
                 try {
                     killYarnApplication(appId, loadJobId, resource);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     LOG.warn(errMsg, e);
                 }
             }
@@ -216,7 +216,7 @@ public class SparkEtlJobHandler {
     }
 
     public void killYarnApplication(String appId, long loadJobId, SparkResource resource)
-            throws UserException {
+            throws StarRocksException {
         if (!resource.isYarnMaster()) {
             return;
         }
@@ -242,7 +242,7 @@ public class SparkEtlJobHandler {
     }
 
     public EtlStatus getEtlJobStatus(SparkLoadAppHandle handle, String appId, long loadJobId, String etlOutputPath,
-                                     SparkResource resource, BrokerDesc brokerDesc) throws UserException {
+                                     SparkResource resource, BrokerDesc brokerDesc) throws StarRocksException {
         EtlStatus status = new EtlStatus();
 
         Preconditions.checkState(appId != null && !appId.isEmpty());
@@ -311,7 +311,7 @@ public class SparkEtlJobHandler {
                 if (brokerDesc.hasBroker()) {
                     data = BrokerUtil.readFile(dppResultFilePath, brokerDesc);
                 } else {
-                    data = HdfsUtil.readFile(dppResultFilePath, brokerDesc);
+                    data = HdfsUtil.readFile(dppResultFilePath, brokerDesc.getProperties());
                 }
                 String dppResultStr = new String(data, StandardCharsets.UTF_8);
                 DppResult dppResult = new Gson().fromJson(dppResultStr, DppResult.class);
@@ -321,7 +321,7 @@ public class SparkEtlJobHandler {
                         status.setFailMsg(dppResult.failedReason);
                     }
                 }
-            } catch (UserException | JsonSyntaxException e) {
+            } catch (StarRocksException | JsonSyntaxException e) {
                 LOG.warn("read broker file failed. path: {}", dppResultFilePath, e);
             }
         }
@@ -330,7 +330,7 @@ public class SparkEtlJobHandler {
     }
 
     public void killEtlJob(SparkLoadAppHandle handle, String appId, long loadJobId, SparkResource resource)
-            throws UserException {
+            throws StarRocksException {
         if (resource.isYarnMaster()) {
             // The appId may be empty when the load job is in PENDING phase. This is because the appId is
             // parsed from the spark launcher process's output (spark launcher process submit job and then
@@ -360,9 +360,9 @@ public class SparkEtlJobHandler {
             if (brokerDesc.hasBroker()) {
                 BrokerUtil.parseFile(etlFilePaths, brokerDesc, fileStatuses);
             } else {
-                HdfsUtil.parseFile(etlFilePaths, brokerDesc, fileStatuses);
+                HdfsUtil.parseFile(etlFilePaths, brokerDesc.getProperties(), fileStatuses);
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new Exception(e);
         }
 
@@ -390,10 +390,10 @@ public class SparkEtlJobHandler {
             if (brokerDesc.hasBroker()) {
                 BrokerUtil.deletePath(outputPath, brokerDesc);
             } else {
-                HdfsUtil.deletePath(outputPath, brokerDesc);
+                HdfsUtil.deletePath(outputPath, brokerDesc.getProperties());
             }
             LOG.info("delete path success. path: {}", outputPath);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("delete path failed. path: {}", outputPath, e);
         }
     }

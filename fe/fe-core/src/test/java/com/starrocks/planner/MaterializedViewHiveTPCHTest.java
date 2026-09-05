@@ -14,20 +14,22 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
+@TestMethodOrder(MethodName.class)
 public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
-    @BeforeClass
-    public static void setUp() throws Exception {
-        PlanTestBase.beforeClass();
-        MaterializedViewTestBase.setUp();
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
+        connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(true);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
     }
-
 
     @Test
     public void testQuery1() {

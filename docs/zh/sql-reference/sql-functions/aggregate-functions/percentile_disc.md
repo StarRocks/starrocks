@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "percentile_disc 计算百分位数，未找到匹配值时返回较大的相邻值。"
 ---
 
 # percentile_disc
 
-## 功能
+
 
 计算百分位数。和 percentile_cont 不同的是，该函数如果未找到与百分位完全匹配的值，则默认返回临近两个值中较大的值。
 
@@ -39,11 +40,11 @@ PERCENTILE_DISC (expr, percentile)
 ```sql
 CREATE TABLE exam (
     subject STRING,
-    exam_result INT
+    score INT
 ) 
 DISTRIBUTED BY HASH(`subject`);
 
-insert into exam values
+INSERT INTO exam VALUES
 ('chemistry',80),
 ('chemistry',100),
 ('chemistry',null),
@@ -57,9 +58,9 @@ insert into exam values
 ```
 
 ```Plain
-select * from exam order by Subject;
+select * from exam order by subject;
 +-----------+-------+
-| Subject   | Score |
+| subject   | score |
 +-----------+-------+
 | chemistry |    80 |
 | chemistry |   100 |
@@ -79,15 +80,15 @@ select * from exam order by Subject;
 查询语句：
 
 ```SQL
-SELECT Subject, PERCENTILE_DISC (Score, 0.5)
-FROM exam group by Subject;
+select subject, percentile_disc (score, 0.5)
+from exam group by subject;
 ```
 
 返回结果：
 
 ```Plain
 +-----------+-----------------------------+
-| Subject   | percentile_disc(Score, 0.5) |
+| subject   | percentile_disc(score, 0.5) |
 +-----------+-----------------------------+
 | chemistry |                         100 |
 | math      |                          70 |

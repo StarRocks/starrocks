@@ -12,47 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.hash.HashFunction;
-import com.google.common.hash.Hashing;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
+import com.starrocks.connector.statistics.RowCountEstimator;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.common.collect.Maps.immutableEntry;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
@@ -75,15 +72,14 @@ public class HiveStatisticsProvider {
             Table table,
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys) {
-        Statistics.Builder builder = Statistics.builder();
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        if (hmsTbl.isUnPartitioned()) {
-            HivePartitionStats tableStats = hmsOps.getTableStatistics(hmsTbl.getDbName(), hmsTbl.getTableName());
+        Statistics.Builder builder = Statistics.builder().setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+        if (table.isUnPartitioned()) {
+            HivePartitionStats tableStats = hmsOps.getTableStatistics(table.getCatalogDBName(), table.getCatalogTableName());
             return createUnpartitionedStats(tableStats, columns, builder, table);
         }
 
         int sampleSize = getSamplePartitionSize(session);
-        List<String> partitionColumnNames = hmsTbl.getPartitionColumnNames();
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
         List<String> partitionNames = partitionKeys.stream()
                 .peek(partitionKey -> checkState(partitionKey.getKeys().size() == partitionColumnNames.size(),
                         "columns size is " + partitionColumnNames.size() +
@@ -91,7 +87,7 @@ public class HiveStatisticsProvider {
                 .map(partitionKey -> toHivePartitionName(partitionColumnNames, partitionKey))
                 .collect(Collectors.toList());
 
-        List<String> sampledPartitionNames = getPartitionsSample(partitionNames, sampleSize);
+        List<String> sampledPartitionNames = StatisticUtils.getRandomPartitionsSample(partitionNames, sampleSize);
         Map<String, HivePartitionStats> partitionStatistics = hmsOps.getPartitionStatistics(table, sampledPartitionNames);
 
         double avgRowNumPerPartition = -1;
@@ -99,7 +95,9 @@ public class HiveStatisticsProvider {
         avgRowNumPerPartition = getPerPartitionRowAvgNums(partitionStatistics.values());
 
         if (avgRowNumPerPartition <= 0) {
-            builder.setOutputRowCount(getEstimatedRowCount(table, partitionKeys));
+            double estimatedRows = getEstimatedRowCount(table, partitionKeys);
+            builder.setOutputRowCount(estimatedRows);
+            addFallbackColumnStats(builder, columns, table, partitionKeys, partitionStatistics, estimatedRows);
             return builder.build();
         }
 
@@ -127,7 +125,9 @@ public class HiveStatisticsProvider {
             Table table) {
         long rowNum = tableStats.getCommonStats().getRowNums();
         if (rowNum == -1) {
-            builder.setOutputRowCount(getEstimatedRowCount(table, Lists.newArrayList(new PartitionKey())));
+            double estimatedRows = getEstimatedRowCount(table, Lists.newArrayList(new PartitionKey()));
+            builder.setOutputRowCount(estimatedRows);
+            addFallbackColumnStats(builder, columns, table, Lists.newArrayList(), Collections.emptyMap(), estimatedRows);
             return builder.build();
         } else {
             builder.setOutputRowCount(rowNum);
@@ -143,30 +143,30 @@ public class HiveStatisticsProvider {
     }
 
     public long getEstimatedRowCount(Table table, List<PartitionKey> partitionKeys) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        List<Partition> partitions = hmsTbl.isUnPartitioned() ?
-                Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
+        List<Partition> partitions = table.isUnPartitioned() ?
+                Lists.newArrayList(
+                        hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList())) :
                 Lists.newArrayList(hmsOps.getPartitionByPartitionKeys(table, partitionKeys).values());
 
-        Optional<String> hudiBasePath = table.isHiveTable() ? Optional.empty() : Optional.of(hmsTbl.getTableLocation());
-        List<RemoteFileInfo> remoteFileInfos = fileOps.getRemoteFileInfoForStats(partitions, hudiBasePath);
-
-        long totalBytes = 0;
-        for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
-            for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
-                totalBytes += fileDesc.getLength();
-            }
-        }
-
-        List<Column> dataColumns = table.getColumns().stream()
-                .filter(column -> hmsTbl.getDataColumnNames().contains(column.getName()))
-                .collect(Collectors.toList());
-
-        if (totalBytes <= 0) {
+        List<RemoteFileInfo> remoteFileInfos =
+                fileOps.getRemoteFileInfoForStats(table, partitions, GetRemoteFilesParams.newBuilder().build());
+        if (remoteFileInfos.isEmpty()) {
             return 1;
         }
 
-        long presentRowNums = totalBytes / dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+        List<Column> dataColumns = table.getColumns().stream()
+                .filter(column -> table.getDataColumnNames().contains(column.getName()))
+                .collect(Collectors.toList());
+
+        Map<RemoteFileInputFormat, Long> bytesByFormat = new LinkedHashMap<>();
+        for (RemoteFileInfo info : remoteFileInfos) {
+            long bytes = info.getFiles().stream().mapToLong(RemoteFileDesc::getLength).sum();
+            bytesByFormat.merge(info.getFormat(), bytes, Long::sum);
+        }
+        long presentRowNums = 0;
+        for (Map.Entry<RemoteFileInputFormat, Long> entry : bytesByFormat.entrySet()) {
+            presentRowNums += RowCountEstimator.estimate(entry.getValue(), dataColumns, entry.getKey());
+        }
         long presentPartitionSize = remoteFileInfos.size();
         return presentRowNums / presentPartitionSize * partitionKeys.size();
     }
@@ -176,10 +176,8 @@ public class HiveStatisticsProvider {
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys,
             double presentRowNums) {
-        Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columns) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
-        }
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
 
         double totalRowNums = 0;
         try {
@@ -189,6 +187,7 @@ public class HiveStatisticsProvider {
         } finally {
             builder.setOutputRowCount(totalRowNums);
         }
+        addFallbackColumnStats(builder, columns, table, partitionKeys, Collections.emptyMap(), totalRowNums);
 
         return builder.build();
     }
@@ -307,11 +306,17 @@ public class HiveStatisticsProvider {
                 .collect(Collectors.toList());
 
         if (columnStatistics.isEmpty()) {
-            return ColumnStatistic.unknown();
+            return typeNdvStatistic(column, rowNums);
         }
 
+        double ndv = ndv(columnStatistics);
+        if (Double.isNaN(ndv)) {
+            // No partition had a valid NDV in HMS → fall back to type-fraction
+            ndv = ConnectorNdvEstimator.typeNdv(
+                    ConnectorNdvEstimator.fromStarRocksType(column.getType()), Math.max(1L, (long) rowNums));
+        }
         return ColumnStatistic.builder()
-                .setDistinctValuesCount(ndv(columnStatistics))
+                .setDistinctValuesCount(ndv)
                 .setNullsFraction(nullsFraction(column, partitionStatistics))
                 .setAverageRowSize(averageRowSize(column, partitionStatistics, rowNums))
                 .setMaxValue(max(columnStatistics))
@@ -325,8 +330,8 @@ public class HiveStatisticsProvider {
                 .filter(x -> x >= 0)
                 .mapToDouble(x -> x)
                 .max();
-
-        return  ndv.isPresent() ? ndv.getAsDouble() : 1;
+        // NaN signals "no valid HMS NDV found" so callers can apply Tier-3 fallback
+        return ndv.isPresent() ? ndv.getAsDouble() : Double.NaN;
     }
 
     private double nullsFraction(Column column, Collection<HivePartitionStats> partitionStatistics) {
@@ -357,7 +362,6 @@ public class HiveStatisticsProvider {
         return (double) totalNullsNums / totalRowNums;
     }
 
-
     private double averageRowSize(Column column, Collection<HivePartitionStats> partitionStatistics, double totalRowNums) {
         if (!column.getType().isStringType()) {
             return column.getType().getTypeSize();
@@ -384,7 +388,7 @@ public class HiveStatisticsProvider {
     }
 
     private double max(List<HiveColumnStats> columnStatistics) {
-        OptionalDouble max =  columnStatistics.stream()
+        OptionalDouble max = columnStatistics.stream()
                 .map(HiveColumnStats::getMax)
                 .filter(value -> value != POSITIVE_INFINITY)
                 .mapToDouble(x -> x)
@@ -393,7 +397,7 @@ public class HiveStatisticsProvider {
     }
 
     private double min(List<HiveColumnStats> columnStatistics) {
-        OptionalDouble min =  columnStatistics.stream()
+        OptionalDouble min = columnStatistics.stream()
                 .map(HiveColumnStats::getMin)
                 .filter(value -> value != NEGATIVE_INFINITY)
                 .mapToDouble(x -> x)
@@ -466,47 +470,42 @@ public class HiveStatisticsProvider {
         return session.getSessionVariable().getHivePartitionStatsSampleSize();
     }
 
-    // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,
-    // and return an ordered list of partitionNames.
-    // In order to ensure more accurate sampling, put min and max in the sampled result.
-    static List<String> getPartitionsSample(List<String> partitions, int sampleSize) {
-        checkArgument(sampleSize > 0, "sampleSize is expected to be greater than zero");
+    private static ColumnStatistic typeNdvStatistic(Column column, double rowCount) {
+        ConnectorNdvEstimator.TypeCategory cat = ConnectorNdvEstimator.fromStarRocksType(column.getType());
+        double ndv = ConnectorNdvEstimator.typeNdv(cat, Math.max(1L, (long) rowCount));
+        return ColumnStatistic.builder()
+                .setDistinctValuesCount(ndv)
+                .setAverageRowSize(column.getType().getTypeSize())
+                .setNullsFraction(0)
+                .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                .build();
+    }
 
-        if (partitions.size() <= sampleSize) {
-            return partitions;
-        }
-
-        List<String> result = new ArrayList<>();
-        int left = sampleSize;
-        String min = partitions.get(0);
-        String max = partitions.get(0);
-        for (String partition : partitions) {
-            if (partition.compareTo(min) < 0) {
-                min = partition;
-            } else if (partition.compareTo(max) > 0) {
-                max = partition;
+    /**
+     * Populates column statistics when HMS row counts are unavailable (fallback path).
+     * Partition columns receive exact NDV derived from the known partition-key list;
+     * data columns receive a type-fraction NDV estimate.
+     */
+    private void addFallbackColumnStats(Statistics.Builder builder,
+                                        List<ColumnRefOperator> columns,
+                                        Table table,
+                                        List<PartitionKey> partitionKeys,
+                                        Map<String, HivePartitionStats> partitionStats,
+                                        double rowCount) {
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
+        double avgPerPartition = partitionColumnNames.isEmpty() || partitionKeys.isEmpty()
+                ? 0 : rowCount / partitionKeys.size();
+        for (ColumnRefOperator col : columns) {
+            Column column = table.getColumn(col.getName());
+            if (column == null) {
+                builder.addColumnStatistic(col, ColumnStatistic.unknown());
+            } else if (!partitionColumnNames.isEmpty() && partitionColumnNames.contains(col.getName())) {
+                builder.addColumnStatistic(col, createPartitionColumnStatistics(
+                        column, partitionKeys, partitionStats, partitionColumnNames,
+                        avgPerPartition, rowCount));
+            } else {
+                builder.addColumnStatistic(col, typeNdvStatistic(column, rowCount));
             }
         }
-
-        result.add(min);
-        left--;
-        if (left > 0) {
-            result.add(max);
-            left--;
-        }
-
-        if (left > 0) {
-            HashFunction hashFunction = Hashing.murmur3_128();
-            Comparator<Map.Entry<String, Long>> hashComparator = Map.Entry.<String, Long>comparingByValue()
-                    .thenComparing(Map.Entry::getKey);
-
-            partitions.stream()
-                    .filter(partition -> !result.contains(partition))
-                    .map(partition -> immutableEntry(partition, hashFunction.hashUnencodedChars(partition).asLong()))
-                    .sorted(hashComparator)
-                    .limit(left)
-                    .forEachOrdered(entry -> result.add(entry.getKey()));
-        }
-        return Lists.newArrayList(result);
     }
 }

@@ -15,15 +15,15 @@
 
 package com.starrocks.load;
 
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class RoutineLoadDescTest {
     @Test
     public void testToSql() throws Exception {
-        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement("CREATE ROUTINE LOAD job ON tbl " +
+        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo("CREATE ROUTINE LOAD job ON tbl " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c`=1), " +
@@ -35,30 +35,95 @@ public class RoutineLoadDescTest {
         RoutineLoadDesc desc = new RoutineLoadDesc();
         // set column separator and check
         desc.setColumnSeparator(originLoad.getColumnSeparator());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';'", desc.toSql());
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';'", desc.toSql());
         // set row delimiter and check
         desc.setRowDelimiter(originLoad.getRowDelimiter());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n'", desc.toSql());
         // set columns and check
         desc.setColumnsInfo(originLoad.getColumnsInfo());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1)", desc.toSql());
         // set partitions and check
         desc.setPartitionNames(originLoad.getPartitionNames());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';', " +
                         "ROWS TERMINATED BY '\n', " +
                         "COLUMNS(`a`, `b`, `c` = 1), " +
                         "TEMPORARY PARTITION(`p1`, `p2`)",
                 desc.toSql());
         // set where and check
         desc.setWherePredicate(originLoad.getWherePredicate());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';', " +
                         "ROWS TERMINATED BY '\n', " +
                         "COLUMNS(`a`, `b`, `c` = 1), " +
                         "TEMPORARY PARTITION(`p1`, `p2`), " +
                         "WHERE `a` = 1",
                 desc.toSql());
+    }
+
+    @Test
+    public void testIncludeMetadataRoundTrip() throws Exception {
+        // parse + AstBuilder.visitIncludeMetadata + buildLoadDesc populate the clause.
+        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " +
+                        "INCLUDE METADATA(KEY AS k, PARTITION AS p, OFFSET AS o, HEADERS AS h), " +
+                        "COLUMNS(a, b) " +
+                        "PROPERTIES (\"format\"=\"json\") " +
+                        "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+
+        Assertions.assertNotNull(originLoad.getMetadata());
+        Assertions.assertEquals(4, originLoad.getMetadata().getItems().size());
+        Assertions.assertEquals("KEY", originLoad.getMetadata().getItems().get(0).getKey());
+        Assertions.assertEquals("k", originLoad.getMetadata().getItems().get(0).getAlias());
+
+        // toSql renders the clause (write leg of the persistence round-trip).
+        RoutineLoadDesc desc = new RoutineLoadDesc();
+        desc.setMetadata(originLoad.getMetadata());
+        Assertions.assertEquals("INCLUDE METADATA(KEY AS `k`, PARTITION AS `p`, OFFSET AS `o`, HEADERS AS `h`)",
+                desc.toSql());
+
+        // re-parse the rendered SQL (read leg) -> the clause survives an origStmt round-trip.
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " + desc.toSql() +
+                        " PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+        Assertions.assertNotNull(reparsed.getMetadata());
+        Assertions.assertEquals(4, reparsed.getMetadata().getItems().size());
+        Assertions.assertEquals("OFFSET", reparsed.getMetadata().getItems().get(2).getKey());
+        Assertions.assertEquals("o", reparsed.getMetadata().getItems().get(2).getAlias());
+
+        // A reserved-word alias round-trips because ParseUtil.backquote quotes it; without the backquotes
+        // the rendered `AS from` would fail to re-parse.
+        RoutineLoadDesc reserved = new RoutineLoadDesc();
+        reserved.setMetadata(CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl INCLUDE METADATA(KEY AS `from`), COLUMNS(a, b) " +
+                        "PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null)
+                .getMetadata());
+        Assertions.assertEquals("INCLUDE METADATA(KEY AS `from`)", reserved.toSql());
+        RoutineLoadDesc reservedReparsed = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " + reserved.toSql() +
+                        " PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+        Assertions.assertEquals("from", reservedReparsed.getMetadata().getItems().get(0).getAlias());
+    }
+
+    @Test
+    public void testIncludeMetadataAliasOptional() throws Exception {
+        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " +
+                        "INCLUDE METADATA(topic, KEY AS k), " +
+                        "COLUMNS(topic, k) " +
+                        "PROPERTIES (\"format\"=\"json\") " +
+                        "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+
+        Assertions.assertNotNull(originLoad.getMetadata());
+        Assertions.assertEquals(2, originLoad.getMetadata().getItems().size());
+        Assertions.assertEquals("topic", originLoad.getMetadata().getItems().get(0).getKey());
+        Assertions.assertEquals("topic", originLoad.getMetadata().getItems().get(0).getAlias());
+        Assertions.assertEquals("KEY", originLoad.getMetadata().getItems().get(1).getKey());
+        Assertions.assertEquals("k", originLoad.getMetadata().getItems().get(1).getAlias());
+
+        RoutineLoadDesc desc = new RoutineLoadDesc();
+        desc.setMetadata(originLoad.getMetadata());
+        Assertions.assertEquals("INCLUDE METADATA(topic AS `topic`, KEY AS `k`)", desc.toSql());
     }
 }

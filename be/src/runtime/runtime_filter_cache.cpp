@@ -16,8 +16,10 @@
 
 #include <chrono>
 
+#include "base/uid_util.h"
+#include "common/system/backend_options.h"
+#include "common/thread/thread.h"
 #include "gutil/strings/substitute.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
@@ -29,14 +31,14 @@ class RfCacheValue {
 public:
     RfCacheValue() { _extend_lifetime(); }
     ~RfCacheValue() = default;
-    void put_if_absent(int filter_id, const JoinRuntimeFilterPtr& filter) {
+    void put_if_absent(int filter_id, const RuntimeFilterPtr& filter) {
         _extend_lifetime();
         if (!_filters.count(filter_id)) {
             _filters[filter_id] = filter;
         }
     }
 
-    JoinRuntimeFilterPtr get(int filter_id) const {
+    RuntimeFilterPtr get(int filter_id) const {
         _extend_lifetime();
         auto it = _filters.find(filter_id);
         if (it != _filters.end()) {
@@ -55,7 +57,7 @@ private:
     void _extend_lifetime() const {
         _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + EXPIRE_SECONDS).count();
     }
-    std::unordered_map<int, JoinRuntimeFilterPtr> _filters;
+    std::unordered_map<int, RuntimeFilterPtr> _filters;
     mutable int64_t _deadline;
     static constexpr seconds EXPIRE_SECONDS = seconds(60);
 };
@@ -169,7 +171,7 @@ void RuntimeFilterCache::_clean_filters() {
 size_t RuntimeFilterCache::_slot_idx(const TUniqueId& query_id) {
     return std::hash<size_t>()(query_id.lo) & _slot_mask;
 }
-void RuntimeFilterCache::put_if_absent(const TUniqueId& query_id, int filter_id, const JoinRuntimeFilterPtr& filter) {
+void RuntimeFilterCache::put_if_absent(const TUniqueId& query_id, int filter_id, const RuntimeFilterPtr& filter) {
     const auto slot_idx = _slot_idx(query_id);
     auto& mutex = _mutexes[slot_idx];
     auto& map = _filter_maps[slot_idx];
@@ -182,7 +184,7 @@ void RuntimeFilterCache::put_if_absent(const TUniqueId& query_id, int filter_id,
     cached->put_if_absent(filter_id, filter);
 }
 
-JoinRuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filter_id) {
+RuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filter_id) {
     const auto slot_idx = _slot_idx(query_id);
     auto& mutex = _mutexes[slot_idx];
     auto& map = _filter_maps[slot_idx];
@@ -195,6 +197,12 @@ JoinRuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filt
         _use_times.fetch_add(filter != nullptr);
         return filter;
     }
+}
+
+void RuntimeFilterCache::add_rf_event(const RfTracePoint& pt) {
+    std::string msg =
+            strings::Substitute("$0($1)", pt.msg, pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
+    add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
 }
 
 void RuntimeFilterCache::add_rf_event(const TUniqueId& query_id, int filter_id, std::string&& msg) {

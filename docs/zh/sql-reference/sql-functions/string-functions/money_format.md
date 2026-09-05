@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将数字按照货币格式输出，整数部分每隔3位用逗号分隔，小数部分保留2位。"
 ---
 
 # money_format
 
-## 功能
+
 
 将数字按照货币格式输出，整数部分每隔 3 位用逗号分隔，小数部分保留 2 位。
 

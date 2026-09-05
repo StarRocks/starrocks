@@ -14,7 +14,10 @@
 
 #pragma once
 
+#include <limits>
+
 #include "common/statusor.h"
+#include "storage/persistent_index.h"
 
 namespace starrocks::lake {
 
@@ -40,6 +43,23 @@ inline StatusOr<T> enhance_error_prompt(StatusOr<T> res) {
     } else {
         return res.status().clone_and_append(kNotFoundPrompt);
     }
+}
+
+inline IndexValue build_index_value(const IndexValueWithVerPB& value) {
+    return IndexValue(((uint64_t)value.rssid() << 32 | value.rowid()));
+}
+
+// A tombstone in the persistent-index sstable encodes NullIndexValue as the full
+// pair (rssid=UINT32_MAX, rowid=UINT32_MAX). The packed 64-bit value compares
+// equal to NullIndexValue only while *both* halves are UINT32_MAX, so any code
+// that mutates rssid/rowid (e.g. shared_rssid overwrite, rssid_offset shift)
+// must skip these entries — otherwise the caller's NullIndexValue check
+// downgrades the tombstone to a live pointer and downstream upserts feed the
+// publish delvec builder with bogus rowids. Project version freely; only the
+// rssid/rowid pair is the sentinel.
+inline bool is_index_tombstone(const IndexValueWithVerPB& value) {
+    return value.rssid() == std::numeric_limits<uint32_t>::max() &&
+           value.rowid() == std::numeric_limits<uint32_t>::max();
 }
 
 } // namespace starrocks::lake

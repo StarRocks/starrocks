@@ -18,13 +18,14 @@
 #include "exec/meta_scan_node.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 
 class MetaChunkSource final : public ChunkSource {
 public:
-    MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel, MetaScanContextPtr scan_ctx);
+    MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                    const MetaScanContextPtr& scan_ctx);
 
     ~MetaChunkSource() override;
 
@@ -34,8 +35,6 @@ public:
 
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
-
-    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     MetaScanContextPtr _scan_ctx;
 

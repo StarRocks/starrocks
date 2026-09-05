@@ -1,25 +1,3 @@
-[sql]
-select
-    o_orderpriority,
-    count(*) as order_count
-from
-    orders
-where
-        o_orderdate >= date '1994-09-01'
-  and o_orderdate < date '1994-12-01'
-  and exists (
-        select
-            *
-        from
-            lineitem
-        where
-                l_orderkey = o_orderkey
-          and l_receiptdate > l_commitdate
-    )
-group by
-    o_orderpriority
-order by
-    o_orderpriority ;
 [fragment statistics]
 PLAN FRAGMENT 0(F06)
 Output Exprs:6: o_orderpriority | 27: count
@@ -125,6 +103,7 @@ NON-PARTITION PREDICATES: 5: o_orderdate >= '1994-09-01', 5: o_orderdate < '1994
 MIN/MAX PREDICATES: 5: o_orderdate >= '1994-09-01', 5: o_orderdate < '1994-12-01'
 partitions=1/1
 avgRowSize=27.0
+dataCacheOptions={populate: false}
 cardinality: 5675676
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 5675675.675675674] ESTIMATE
@@ -149,6 +128,7 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 22: l_receiptdate > 21: l_commitdate
 partitions=1/1
 avgRowSize=16.0
+dataCacheOptions={populate: false}
 cardinality: 300018951
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: l_orderkey)

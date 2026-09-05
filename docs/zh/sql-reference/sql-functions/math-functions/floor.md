@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回不大于x的最大整数值。"
 ---
 
 # floor, dfloor
 
-## 功能
+
 
 返回不大于 `x` 的最大整数值。
 

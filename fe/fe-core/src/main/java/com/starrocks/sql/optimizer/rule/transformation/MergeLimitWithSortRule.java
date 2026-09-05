@@ -33,12 +33,11 @@ public class MergeLimitWithSortRule extends TransformationRule {
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalTopNOperator topN = (LogicalTopNOperator) input.getInputs().get(0).getOp();
         LogicalLimitOperator limit = ((LogicalLimitOperator) input.getOp());
 
         // Merge Init-Limit/Local-limit and Sort
         // Local-limit may be generate at MergeLimitWithLimitRule
-        return (limit.isInit() || limit.isLocal()) && !topN.hasLimit();
+        return limit.isInit() || limit.isLocal();
     }
 
     @Override
@@ -47,6 +46,10 @@ public class MergeLimitWithSortRule extends TransformationRule {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
         LogicalTopNOperator sort = (LogicalTopNOperator) input.getInputs().get(0).getOp();
 
+        long minLimit = limit.getLimit();
+        if (sort.hasLimit()) {
+            minLimit = Math.min(minLimit, sort.getLimit());
+        }
         OptExpression result = new OptExpression(
                 new LogicalTopNOperator(sort.getOrderByElements(), limit.getLimit(), limit.getOffset()));
         result.getInputs().addAll(input.getInputs().get(0).getInputs());

@@ -1,53 +1,9 @@
-[sql]
-select
-    s_acctbal,
-    s_name,
-    n_name,
-    p_partkey,
-    p_mfgr,
-    s_address,
-    s_phone,
-    s_comment
-from
-    part,
-    supplier,
-    partsupp,
-    nation,
-    region
-where
-        p_partkey = ps_partkey
-  and s_suppkey = ps_suppkey
-  and p_size = 12
-  and p_type like '%COPPER'
-  and s_nationkey = n_nationkey
-  and n_regionkey = r_regionkey
-  and r_name = 'AMERICA'
-  and ps_supplycost = (
-    select
-        min(ps_supplycost)
-    from
-        partsupp,
-        supplier,
-        nation,
-        region
-    where
-            p_partkey = ps_partkey
-      and s_suppkey = ps_suppkey
-      and s_nationkey = n_nationkey
-      and n_regionkey = r_regionkey
-      and r_name = 'AMERICA'
-)
-order by
-    s_acctbal desc,
-    n_name,
-    s_name,
-    p_partkey limit 100;
 [scheduler]
 PLAN FRAGMENT 0(F09)
   DOP: 16
   INSTANCES
     INSTANCE(0-F09#0)
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 1(F08)
   DOP: 16
@@ -219,6 +175,7 @@ PLAN FRAGMENT 1
   |  
   19:SORT
   |  order by: <slot 1> 1: p_partkey ASC
+  |  analytic partition by: 1: p_partkey
   |  offset: 0
   |  
   18:EXCHANGE
@@ -370,4 +327,3 @@ PLAN FRAGMENT 5
      cardinality=1
      avgRowSize=29.0
 [end]
-

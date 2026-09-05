@@ -1,0 +1,75 @@
+-- name: test_topn_filter_throttle_scan
+DROP TABLE if exists t0;
+-- result:
+-- !result
+CREATE TABLE if not exists t0
+(
+c0 INT NOT NULL,
+c1 INT NOT NULL 
+) ENGINE=OLAP
+DUPLICATE KEY(`c0` )
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0` ) BUCKETS 1
+PROPERTIES(
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "default" 
+);
+-- result:
+-- !result
+DROP TABLE if exists t1;
+-- result:
+-- !result
+CREATE TABLE if not exists t1
+(
+c0 INT NOT NULL,
+c1 INT NOT NULL 
+) ENGINE=OLAP
+DUPLICATE KEY(`c0` )
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0` ) BUCKETS 1
+PROPERTIES(
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "default" 
+);
+-- result:
+-- !result
+insert into t0 select c0, 0 from Table(generate_series(1,10000)) ta(c0), Table(generate_series(1,1));
+-- result:
+-- !result
+insert into t0 select t0.* from t0, Table(generate_series(1,10));
+-- result:
+-- !result
+insert into t1 select c0, c1 from Table(generate_series(1,10000)) ta(c0), Table(generate_series(1,10)) tb(c1);
+-- result:
+-- !result
+set topn_filter_back_pressure_mode='2';
+-- result:
+-- !result
+set enable_profile='true';
+-- result:
+-- !result
+set enable_async_profile=false;
+-- result:
+-- !result
+[UC]select t0.c1, repeat('x', t0.c1+t1.c1) as a, repeat('y',t1.c0 + t1.c0) as b  from t0 join[broadcast] t1 on t0.c0 = t1.c0 order by 1 limit 10;
+-- result:
+0	xxxxxxx	yy
+0	xxxxxxxxx	yy
+0	xxxxxx	yy
+0	xxx	yy
+0	xxxxx	yy
+0	xx	yy
+0	x	yy
+0	xxxx	yy
+0	xxxxxxxx	yy
+0	xxxxxxxxxx	yy
+-- !result
+create table profile_table properties("replication_num"="1") as select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line);
+-- result:
+-- !result
+select assert_true(count(1)>0) from profile_table where line like '%TopnRuntimeFilter%';
+-- result:
+1
+-- !result

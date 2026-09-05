@@ -1,0 +1,137 @@
+-- name: test_approx_top_k_with_null
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c1 bigint NULL,
+  c2 int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 16
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 select idx, idx % 10, idx % 2 from __row_util;
+-- result:
+-- !result
+with w1 as (select approx_top_k(c2, 3) as x from t1) -- non-group-by.
+select array_sortby((x) -> x.item, x) from w1;
+-- result:
+[{"item":0,"count":640000},{"item":1,"count":640000}]
+-- !result
+with w1 as (select approx_top_k(c2, 3) as x, c1 from t1 group by c1) -- group by.
+select c1, array_sortby((x) -> x.item, x) from w1 order by c1;
+-- result:
+0	[{"item":0,"count":128000}]
+1	[{"item":1,"count":128000}]
+2	[{"item":0,"count":128000}]
+3	[{"item":1,"count":128000}]
+4	[{"item":0,"count":128000}]
+5	[{"item":1,"count":128000}]
+6	[{"item":0,"count":128000}]
+7	[{"item":1,"count":128000}]
+8	[{"item":0,"count":128000}]
+9	[{"item":1,"count":128000}]
+-- !result
+insert into t1 select idx, idx % 10, null from __row_util order by idx limit 1000;
+-- result:
+-- !result
+with w1 as (select approx_top_k(c2, 3) as x from t1) -- non-group-by.
+select array_sortby((x) -> x.item, x) from w1;
+-- result:
+[{"item":null,"count":1000},{"item":0,"count":640000},{"item":1,"count":640000}]
+-- !result
+with w1 as (select approx_top_k(c2, 3) as x, c1 from t1 group by c1) -- group by.
+select c1, array_sortby((x) -> x.item, x) from w1 order by c1;
+-- result:
+0	[{"item":null,"count":100},{"item":0,"count":128000}]
+1	[{"item":null,"count":100},{"item":1,"count":128000}]
+2	[{"item":null,"count":100},{"item":0,"count":128000}]
+3	[{"item":null,"count":100},{"item":1,"count":128000}]
+4	[{"item":null,"count":100},{"item":0,"count":128000}]
+5	[{"item":null,"count":100},{"item":1,"count":128000}]
+6	[{"item":null,"count":100},{"item":0,"count":128000}]
+7	[{"item":null,"count":100},{"item":1,"count":128000}]
+8	[{"item":null,"count":100},{"item":0,"count":128000}]
+9	[{"item":null,"count":100},{"item":1,"count":128000}]
+-- !result
+insert into t1 select idx, idx % 10, null from __row_util;
+-- result:
+-- !result
+with w1 as (select approx_top_k(c2, 3) as x from t1) -- non-group-by.
+select array_sortby((x) -> x.item, x) from w1;
+-- result:
+[{"item":null,"count":1281000},{"item":0,"count":640000},{"item":1,"count":640000}]
+-- !result
+with w1 as (select approx_top_k(c2, 3) as x, c1 from t1 group by c1) -- group by.
+select c1, array_sortby((x) -> x.item, x) from w1 order by c1;
+-- result:
+0	[{"item":null,"count":128100},{"item":0,"count":128000}]
+1	[{"item":null,"count":128100},{"item":1,"count":128000}]
+2	[{"item":null,"count":128100},{"item":0,"count":128000}]
+3	[{"item":null,"count":128100},{"item":1,"count":128000}]
+4	[{"item":null,"count":128100},{"item":0,"count":128000}]
+5	[{"item":null,"count":128100},{"item":1,"count":128000}]
+6	[{"item":null,"count":128100},{"item":0,"count":128000}]
+7	[{"item":null,"count":128100},{"item":1,"count":128000}]
+8	[{"item":null,"count":128100},{"item":0,"count":128000}]
+9	[{"item":null,"count":128100},{"item":1,"count":128000}]
+-- !result
+CREATE TABLE t2 (
+  k1 bigint NULL,
+  c1 bigint NULL,
+  c2 int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 16
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t2 select idx, null, null from __row_util;
+-- result:
+-- !result
+with w1 as (select approx_top_k(c2, 3) as x from t2) -- non-group-by.
+select array_sortby((x) -> x.item, x) from w1;
+-- result:
+[{"item":null,"count":1280000}]
+-- !result
+with w1 as (select approx_top_k(c2, 3) as x, c1 from t2 group by c1) -- group by.
+select c1, array_sortby((x) -> x.item, x) from w1 order by c1;
+-- result:
+None	[{"item":null,"count":1280000}]
+-- !result

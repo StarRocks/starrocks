@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the byte length of a string."
 ---
 
 # length
 
-## Description
+
 
 This function returns the length of a string (in bytes).
 

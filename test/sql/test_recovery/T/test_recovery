@@ -1,0 +1,11 @@
+-- name: test_set_partition_version @native
+
+CREATE TABLE t (a int);
+
+insert into t values(1);
+
+select * from t;
+
+admin set table t partition(t) version to 1;
+
+select * from t;

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算两个日期表达式的秒数差（expr1 − expr2），精确到秒。"
 ---
 
 # seconds_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差多少秒 (`expr1` − `expr2`)。
 

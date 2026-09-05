@@ -1,12 +1,14 @@
 ---
-displayed_sidebar: "Chinese"
+sidebar_position: 150
+displayed_sidebar: docs
+description: "在导入过程中实现数据转换：列映射、过滤条件及派生列表达式在多种导入方式中的应用。"
 ---
 
 # 导入过程中实现数据转换
 
 StarRocks 支持在导入数据的过程中实现数据转换。
 
-目前支持的导入方式有 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。暂不支持 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入方式。
+目前支持的导入方式有 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 和 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。暂不支持 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入方式。
 
 > **注意**
 >
@@ -38,16 +40,6 @@ StarRocks 支持在导入数据的过程中实现数据转换。
   
   支持 Apache Hive™ 分区路径命名方式，使 StarRocks 能够从文件路径中获取分区列的内容。
 
-## 前提条件
-
-### Broker Load
-
-参见[从 HDFS 导入](../loading/hdfs_load.md)或[从云存储导入](../loading/cloud_storage_load.md)中的“背景信息”小节。
-
-### Routine Load
-
-如果使用 [Routine Load](./RoutineLoad.md) 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署两个 Topic，分别为 `topic1` 和 `topic2`。
-
 ## 数据样例
 
 1. 在本地文件系统中创建数据文件。
@@ -74,7 +66,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
    > **说明**
    >
-   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    a. 创建一张名为 `table1` 的表，包含 `user_id`、`event_date` 和 `event_type` 三列，如下所示：
 
@@ -132,7 +124,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 #### 从本地文件系统导入
 
-如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](../loading/StreamLoad.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](./StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -147,11 +139,11 @@ curl --location-trusted -u <username>:<password> \
 >
 > `columns` 参数用于对数据文件中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
-如果 `file1.csv` 文件存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](../loading/hdfs_load.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](./hdfs_load.md) 导入作业来实现数据导入：
 
 ```SQL
 LOAD LABEL test_db.label1
@@ -162,18 +154,18 @@ LOAD LABEL test_db.label1
     COLUMNS TERMINATED BY ","
     (user_id, user_gender, event_date, event_type)
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**
 >
 > `column_list` 参数用于对数据文件中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
-如果 `file1.csv` 文件里的数据存储在 Kafka 集群的 `topic1` 中，可以通过如下语句，创建 [Routine Load](../loading/RoutineLoad.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件里的数据存储在 Kafka 集群的 `topic1` 中，可以通过如下语句，创建 [Routine Load](./kafka/RoutineLoad.md) 导入作业来实现数据导入：
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table101 ON table1
@@ -191,7 +183,7 @@ FROM KAFKA
 >
 > `COLUMNS` 参数用于对数据中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -231,7 +223,7 @@ SELECT * FROM table1;
 
 #### 从本地文件系统导入
 
-如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](../loading/StreamLoad.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](./StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -243,11 +235,11 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
-如果 `file1.csv` 文件存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](../loading/hdfs_load.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](./hdfs_load.md) 导入作业来实现数据导入：
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -259,19 +251,19 @@ LOAD LABEL test_db.label2
     (user_id, user_gender, event_date, event_type)
     WHERE event_type = 1
 )
-WITH BROKER
+WITH BROKER;
 ```
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
-如果 `file1.csv` 文件的数据存储在 Kafka 集群的 `topic1` 中，可以通过如下语句，创建 [Routine Load](../loading/RoutineLoad.md) 导入作业来实现导入：
+如果 `file1.csv` 文件的数据存储在 Kafka 集群的 `topic1` 中，可以通过如下语句，创建 [Routine Load](./kafka/RoutineLoad.md) 导入作业来实现导入：
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
 COLUMNS TERMINATED BY ",",
-COLUMNS (user_id, user_gender, event_date, event_type)
+COLUMNS (user_id, user_gender, event_date, event_type),
 WHERE event_type = 1
 FROM KAFKA
 (
@@ -281,7 +273,7 @@ FROM KAFKA
 );
 ```
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -319,7 +311,7 @@ SELECT * FROM table1;
 
 #### 从本地文件系统导入
 
-如果 `file2.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](../loading/StreamLoad.md) 导入作业来实现数据导入：
+如果 `file2.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](./StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -336,11 +328,11 @@ curl --location-trusted -u <username>:<password> \
 >
 > - 不支持 `column_name = function(column_name)` 的形式，需要时可以重命名衍生列之前的列，比如为 `column_name = func(``tempcolumn_name``)`。
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
-如果 `file2.csv` 文存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](../loading/hdfs_load.md) 导入作业来实现数据导入：
+如果 `file2.csv` 文存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](./hdfs_load.md) 导入作业来实现数据导入：
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -352,18 +344,18 @@ LOAD LABEL test_db.label3
     (date)
     SET(year=year(date), month=month(date), day=day(date))
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**
 >
 > 必须先通过 `column_list` 参数声明源数据文件中包含的所有列，然后再通过 SET 子句声明衍生列。如上述示例中，先通过 `column_list` 参数声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再通过 SET 子句声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
-如果 `file2.csv` 文件的数据存储在 Kafka 集群的 `topic2` 中，可以通过如下语句，创建 [Routine Load](../loading/RoutineLoad.md) 导入作业来实现导入：
+如果 `file2.csv` 文件的数据存储在 Kafka 集群的 `topic2` 中，可以通过如下语句，创建 [Routine Load](./kafka/RoutineLoad.md) 导入作业来实现导入：
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table2 ON table2
@@ -381,7 +373,7 @@ FROM KAFKA
 >
 > 必须通过 `COLUMNS` 参数先声明源数据文件中包含的所有列，然后再声明衍生列。如上述示例中，`COLUMNS` 参数中先声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -419,7 +411,7 @@ SELECT * FROM table2;
 
 ### 导入数据
 
-可以通过如下语句，创建 [Broker Load](../loading/hdfs_load.md) 导入作业，获取文件路径 `/user/starrocks/data/input/` 中分区字段 `date` 的信息，并通过使用通配符 (*) 指定将该文件路径下所有数据文件都导入到 `table1` 表中：
+可以通过如下语句，创建 [Broker Load](./hdfs_load.md) 导入作业，获取文件路径 `/user/starrocks/data/input/` 中分区字段 `date` 的信息，并通过使用通配符 (*) 指定将该文件路径下所有数据文件都导入到 `table1` 表中：
 
 ```SQL
 LOAD LABEL test_db.label4
@@ -432,14 +424,14 @@ LOAD LABEL test_db.label4
     COLUMNS FROM PATH AS (date)
     SET(event_date = date)
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**
 >
 > 上述示例中，指定的文件路径中的分区字段 `date` 对应 `table1` 表中的 `event_date` 列，因此需要通过 SET 子句完成 `date` 到 `event_date` 的映射。如果指定的文件路径中的分区字段与其对应的 StarRocks 表中的列名称一样，则不需要通过 SET 子句来指定映射关系。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 ### 查询数据
 

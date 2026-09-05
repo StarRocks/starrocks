@@ -36,27 +36,30 @@ package com.starrocks.alter;
 
 import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class MaterializedViewHandlerTest {
     @Test
-    public void testDifferentBaseTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDifferentBaseTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                        @Injectable Database db,
                                        @Injectable OlapTable olapTable) {
         new Expectations() {
@@ -71,14 +74,14 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "processCreateMaterializedView", createMaterializedViewStmt,
                     db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
     }
 
     @Test
-    public void testNotNormalTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testNotNormalTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                    @Injectable Database db,
                                    @Injectable OlapTable olapTable) {
         final String baseIndexName = "t1";
@@ -96,14 +99,14 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "processCreateMaterializedView", createMaterializedViewStmt,
                     db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
     }
 
     @Test
-    public void testErrorBaseIndexName(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testErrorBaseIndexName(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                        @Injectable Database db,
                                        @Injectable OlapTable olapTable) {
         final String baseIndexName = "t1";
@@ -115,7 +118,7 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
+                olapTable.getIndexMetaIdByName(baseIndexName);
                 result = null;
             }
         };
@@ -123,20 +126,20 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "processCreateMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
     }
 
     @Test
-    public void testRollupReplica(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testRollupReplica(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                   @Injectable Database db,
                                   @Injectable OlapTable olapTable,
-                                  @Injectable Partition partition,
+                                  @Injectable PhysicalPartition partition,
                                   @Injectable MaterializedIndex materializedIndex) {
         final String baseIndexName = "t1";
-        final Long baseIndexId = new Long(1);
+        final Long baseIndexMetaId = Long.valueOf(1);
         new Expectations() {
             {
                 createMaterializedViewStmt.getBaseIndexName();
@@ -145,12 +148,14 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
-                result = baseIndexId;
-                olapTable.getPartitions();
+                olapTable.getIndexMetaIdByName(baseIndexName);
+                result = baseIndexMetaId;
+                olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
-                partition.getIndex(baseIndexId);
+
+                partition.getLatestIndex(baseIndexMetaId);
                 result = materializedIndex;
+
                 materializedIndex.getState();
                 result = MaterializedIndex.IndexState.SHADOW;
             }
@@ -159,14 +164,14 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "processCreateMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
     }
 
     @Test
-    public void testDuplicateMVName(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDuplicateMVName(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                     @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         new Expectations() {
@@ -181,19 +186,19 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
     }
 
     @Test
-    public void testInvalidAggregateType(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testInvalidAggregateType(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                          @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String mvColumName = "mv_sum_k1";
-        MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, Type.BIGINT, AggregateType.SUM, false, null, true,
-                Sets.newHashSet());
+        MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, IntegerType.BIGINT,
+                AggregateType.SUM, null, false, null, true, Sets.newHashSet());
         mvColumnItem.setIsKey(true);
         mvColumnItem.setAggregationType(null, false);
         new Expectations() {
@@ -214,14 +219,14 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
     }
 
     @Test
-    public void testInvalidKeysType(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testInvalidKeysType(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                     @Injectable OlapTable olapTable, @Injectable Database db) {
         new Expectations() {
             {
@@ -236,20 +241,20 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
     }
 
     @Test
-    public void testDuplicateTable(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testDuplicateTable(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                    @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
-        Column baseColumn1 = new Column(columnName1, Type.VARCHAR, false, AggregateType.NONE, "", "");
-        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.VARCHAR, AggregateType.NONE, false, null, true,
-                Sets.newHashSet());
+        Column baseColumn1 = new Column(columnName1, VarcharType.VARCHAR, false, AggregateType.NONE, "", "");
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, VarcharType.VARCHAR, AggregateType.NONE, null,
+                false, null, true, Sets.newHashSet());
 
         mvColumnItem.setIsKey(true);
         mvColumnItem.setAggregationType(null, false);
@@ -272,24 +277,91 @@ public class MaterializedViewHandlerTest {
             List<Column> mvColumns = Deencapsulation.invoke(materializedViewHandler,
                     "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.assertEquals(1, mvColumns.size());
+            Assertions.assertEquals(1, mvColumns.size());
             Column newMVColumn = mvColumns.get(0);
-            Assert.assertEquals(columnName1, newMVColumn.getName());
-            Assert.assertTrue(newMVColumn.isKey());
-            Assert.assertEquals(null, newMVColumn.getAggregationType());
-            Assert.assertEquals(false, newMVColumn.isAggregationTypeImplicit());
-            Assert.assertTrue(newMVColumn.getType().isVarchar());
+            Assertions.assertEquals(columnName1, newMVColumn.getName());
+            Assertions.assertTrue(newMVColumn.isKey());
+            Assertions.assertEquals(null, newMVColumn.getAggregationType());
+            Assertions.assertEquals(false, newMVColumn.isAggregationTypeImplicit());
+            Assertions.assertTrue(newMVColumn.getType().isVarchar());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
     @Test
-    public void checkInvalidPartitionKeyMV(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
+    public void testRollupRejectsJsonKeyColumn(@Injectable OlapTable olapTable, @Injectable Database db) {
+        // Explicit DUPLICATE KEY listing a JSON column must be rejected, mirroring
+        // base-table key validation. Otherwise the JSON column becomes a rollup sort
+        // key and the BE crashes while building the sort-key tuple.
+        final long baseIndexMetaId = 1L;
+        final String rollupName = "r_json_key";
+        Column idColumn = new Column("id", IntegerType.BIGINT, true, AggregateType.NONE, "", "");
+        Column jsonColumn = new Column("j", JsonType.JSON, false, AggregateType.NONE, "", "");
+        AddRollupClause addRollupClause = new AddRollupClause(rollupName,
+                Lists.newArrayList("id", "j"), Lists.newArrayList("id", "j"), null, null);
+        new Expectations() {
+            {
+                olapTable.hasMaterializedIndex(rollupName);
+                result = false;
+                olapTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                olapTable.getSchemaByIndexMetaId(baseIndexMetaId);
+                result = Lists.newArrayList(idColumn, jsonColumn);
+            }
+        };
+        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
+        try {
+            Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
+                    addRollupClause, olapTable, baseIndexMetaId);
+            Assertions.fail("expected DdlException for JSON key column");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Invalid data type of key column 'j'"),
+                    e.getMessage());
+        }
+    }
+
+    @Test
+    public void testRollupDemotesJsonToValueColumn(@Injectable OlapTable olapTable, @Injectable Database db) {
+        // Auto key derivation (no explicit DUPLICATE KEY) must stop promoting keys at a
+        // non-sortable type, so the JSON column is added as a value column rather than a key.
+        final long baseIndexMetaId = 1L;
+        final String rollupName = "r_json_value";
+        Column idColumn = new Column("id", IntegerType.BIGINT, true, AggregateType.NONE, "", "");
+        Column jsonColumn = new Column("j", JsonType.JSON, false, AggregateType.NONE, "", "");
+        AddRollupClause addRollupClause = new AddRollupClause(rollupName,
+                Lists.newArrayList("id", "j"), null, null, null);
+        new Expectations() {
+            {
+                olapTable.hasMaterializedIndex(rollupName);
+                result = false;
+                olapTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                olapTable.getSchemaByIndexMetaId(baseIndexMetaId);
+                result = Lists.newArrayList(idColumn, jsonColumn);
+            }
+        };
+        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
+        try {
+            List<Column> rollupSchema = Deencapsulation.invoke(materializedViewHandler,
+                    "checkAndPrepareMaterializedView", addRollupClause, olapTable, baseIndexMetaId);
+            Assertions.assertEquals(2, rollupSchema.size());
+            Column idResult = rollupSchema.stream().filter(c -> c.getName().equals("id")).findFirst().orElseThrow();
+            Column jsonResult = rollupSchema.stream().filter(c -> c.getName().equals("j")).findFirst().orElseThrow();
+            Assertions.assertTrue(idResult.isKey());
+            Assertions.assertFalse(jsonResult.isKey(), "JSON column must not be a rollup key");
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void checkInvalidPartitionKeyMV(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
                                            @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
-        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.BIGINT, null, false, null, true, Sets.newHashSet());
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, IntegerType.BIGINT, null, null,
+                false, null, true, Sets.newHashSet());
         mvColumnItem.setIsKey(false);
         mvColumnItem.setAggregationType(AggregateType.SUM, false);
         List<String> partitionColumnNames = Lists.newArrayList();
@@ -312,14 +384,14 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
     }
 
     @Test
-    public void testCheckDropMaterializedView(@Injectable OlapTable olapTable, @Injectable Partition partition,
+    public void testCheckDropMaterializedView(@Injectable OlapTable olapTable, @Injectable PhysicalPartition partition,
                                               @Injectable MaterializedIndex materializedIndex,
                                               @Injectable Database db) {
         String mvName = "mv_1";
@@ -331,13 +403,15 @@ public class MaterializedViewHandlerTest {
                 result = "table1";
                 olapTable.hasMaterializedIndex(mvName);
                 result = true;
-                olapTable.getIndexIdByName(mvName);
+                olapTable.getIndexMetaIdByName(mvName);
                 result = 1L;
-                olapTable.getSchemaHashByIndexId(1L);
+                olapTable.getSchemaHashByIndexMetaId(1L);
                 result = 1;
-                olapTable.getPartitions();
+
+                olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
-                partition.getIndex(1L);
+
+                partition.getLatestIndex(1L);
                 result = materializedIndex;
             }
         };
@@ -345,7 +419,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkDropMaterializedView", mvName, olapTable);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
 
     }

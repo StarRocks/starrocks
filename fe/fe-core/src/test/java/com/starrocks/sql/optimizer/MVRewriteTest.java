@@ -39,18 +39,20 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-public class MVRewriteTest {
+public class MVRewriteTest extends StarRocksTestBase {
     private static final String EMPS_TABLE_NAME = "emps";
     private static final String EMPS_MV_NAME = "emps_mv";
     private static final String HR_DB_NAME = "db1";
@@ -68,17 +70,18 @@ public class MVRewriteTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+        Config.enable_virtual_columns = false;
         Config.alter_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
+
         connectContext = UtFrameUtils.createDefaultCtx();
-
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
-        FeConstants.enablePruneEmptyOutputScan = false;
-
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
         starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
@@ -99,9 +102,10 @@ public class MVRewriteTest {
                 "    \"database\" = \"test\",\n" +
                 "    \"table\" = \"ods_order\"\n" +
                 "    )");
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
-    @Before
+    @BeforeEach
     public void beforeMethod() throws Exception {
         String createTableSQL =
                 "create table " + HR_DB_NAME + "." + EMPS_TABLE_NAME + " (time date, empid int, name varchar, "
@@ -127,7 +131,7 @@ public class MVRewriteTest {
         starRocksAssert.withTable(createTableSQL);
     }
 
-    @After
+    @AfterEach
     public void afterMethod() throws Exception {
         starRocksAssert.dropTable(EMPS_TABLE_NAME);
         starRocksAssert.dropTable(DEPTS_TABLE_NAME);
@@ -135,7 +139,7 @@ public class MVRewriteTest {
         starRocksAssert.dropTable("all_type_table");
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         starRocksAssert.dropTable("ods_order");
     }
@@ -316,6 +320,67 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testAggQueryOnAggMVMinMaxSameColumn() throws Exception {
+        // min(salary) and max(salary) reference the SAME base column. Each aggregate produces its
+        // own RewriteContext that shares the base salary column ref but maps to a different rollup
+        // column (mv_min_salary / mv_max_salary). The scan must project BOTH rollup columns. Before
+        // the fix the first applied context removed the shared base column from the scan, so the
+        // second context could no longer locate the scan and its rollup column was never projected;
+        // the rewritten aggregate then referenced a column with no statistics and the optimizer
+        // threw "missing statistic of col: mv_min_salary" while costing the plan.
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME
+                + " as select deptno, min(salary), max(salary) from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, min(salary), max(salary) from " + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL).query(query)
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary", "mv_max_salary");
+    }
+
+    @Test
+    public void testAggQueryOnAggMVMinMaxControls() throws Exception {
+        // Regression controls: none of these throw before the fix, and all must keep hitting the
+        // rollup after it. They differ from the broken case in that no two aggregates share the
+        // same base column (or only a single aggregate references a given column).
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME
+                + " as select deptno, min(salary), max(salary), min(commission), max(commission), sum(salary) from "
+                + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        // single min
+        starRocksAssert.query("select deptno, min(salary) from " + EMPS_TABLE_NAME + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary");
+        // single max
+        starRocksAssert.query("select deptno, max(salary) from " + EMPS_TABLE_NAME + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_max_salary");
+        // min and max on DIFFERENT base columns
+        starRocksAssert.query("select deptno, min(salary), max(commission) from " + EMPS_TABLE_NAME
+                        + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary", "mv_max_commission");
+        // two min on different base columns
+        starRocksAssert.query("select deptno, min(salary), min(commission) from " + EMPS_TABLE_NAME
+                        + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary", "mv_min_commission");
+        // min and sum on the same base column (different functions, both have a rollup column)
+        starRocksAssert.query("select deptno, min(salary), sum(salary) from " + EMPS_TABLE_NAME
+                        + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary", "mv_sum_salary");
+    }
+
+    @Test
+    public void testAggQueryOnAggMVMultiMinMaxPairs() throws Exception {
+        // Two independent shared-column pairs in one query: min/max(salary) and min/max(commission).
+        // Each pair triggers the same sibling-context interaction the fix addresses, so all four
+        // rollup columns must be projected by the scan.
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME
+                + " as select deptno, min(salary), max(salary), min(commission), max(commission) from "
+                + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, min(salary), max(salary), min(commission), max(commission) from "
+                + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL).query(query)
+                .explainContains(QUERY_USE_EMPS_MV,
+                        "mv_min_salary", "mv_max_salary", "mv_min_commission", "mv_max_commission");
+    }
+
+    @Test
     public void testJoinOnLeftProjectToJoin() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME
                 + " as select deptno, sum(salary), sum(commission) from " + EMPS_TABLE_NAME + " group by deptno;";
@@ -485,7 +550,7 @@ public class MVRewriteTest {
         query = "select deptno, sum(if(empid=0,0,1)) from " + EMPS_TABLE_NAME + " group by deptno";
         starRocksAssert.query(query).explainWithout(EMPS_MV_NAME);
     }
-    
+
     @Test
     public void testAggregateMVCalcGroupByQuery1() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, sum(salary) "
@@ -529,8 +594,8 @@ public class MVRewriteTest {
         String query = "select empid, deptno, salary from " + EMPS_TABLE_NAME + " e1 where empid = (select max(empid)"
                 + " from " + EMPS_TABLE_NAME + " where deptno = e1.deptno);";
         String plan = starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainQuery();
-        Assert.assertTrue(plan.contains(QUERY_USE_EMPS_MV));
-        Assert.assertTrue(plan.contains(QUERY_USE_EMPS));
+        Assertions.assertTrue(plan.contains(QUERY_USE_EMPS_MV));
+        Assertions.assertTrue(plan.contains(QUERY_USE_EMPS));
     }
 
     @Test
@@ -637,6 +702,181 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testMvHavingDoesNotRewriteQueryWithWeakerHaving() throws Exception {
+        String tableName = "mv_having_base";
+        String mvName = "mv_having_filter";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, region varchar(32), amount decimal(18, 2) ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(region) " +
+                    "AS SELECT region, SUM(amount) AS s, COUNT(*) AS c " +
+                    "FROM " + tableName + " GROUP BY region HAVING SUM(amount) > 100;";
+            String queryWithoutHaving = "SELECT region, SUM(amount), COUNT(*) FROM " + tableName + " GROUP BY region;";
+            String queryWithWeakerHaving = "SELECT region, SUM(amount), COUNT(*) FROM " + tableName +
+                    " GROUP BY region HAVING SUM(amount) > 0;";
+
+            starRocksAssert.withMaterializedView(createMV).query(queryWithoutHaving).explainWithout(mvName);
+            starRocksAssert.query(queryWithWeakerHaving).explainWithout(mvName);
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
+    public void testMvHavingRewritesQueryWithStrongerHaving() throws Exception {
+        String tableName = "mv_having_filtered_base";
+        String mvName = "mv_having_filtered";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, region varchar(32), amount decimal(18, 2) ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(region) " +
+                    "AS SELECT region, SUM(amount) AS s, COUNT(*) AS c " +
+                    "FROM " + tableName + " GROUP BY region HAVING SUM(amount) > 100;";
+            String queryWithStrongerHaving = "SELECT region, SUM(amount) AS s, COUNT(*) AS c FROM " + tableName +
+                    " GROUP BY region HAVING SUM(amount) > 200;";
+
+            starRocksAssert.withMaterializedView(createMV)
+                    .query(queryWithStrongerHaving)
+                    .explainContains("rollup: " + mvName, "PREDICATES:", "s > 200");
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
+    public void testMvHavingDoesNotRollupRewriteOverFilteredGroups() throws Exception {
+        String tableName = "having_rollup_base";
+        String mvName = "mv_having_rollup";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, region varchar(32), channel varchar(32), amount decimal(18, 2) ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(region) " +
+                    "AS SELECT region, channel, SUM(amount) AS s, COUNT(*) AS c " +
+                    "FROM " + tableName + " GROUP BY region, channel HAVING SUM(amount) > 1;";
+            String query = "SELECT region, SUM(amount) AS s, COUNT(*) AS c FROM " + tableName +
+                    " GROUP BY region HAVING SUM(amount) > 10;";
+
+            starRocksAssert.withMaterializedView(createMV).query(query).explainWithout(mvName);
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
+    public void testQueryHavingRewritesWithMvWithoutHaving() throws Exception {
+        String tableName = "mv_having_complete_base";
+        String mvName = "mv_having_complete";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, region varchar(32), amount decimal(18, 2) ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(region) " +
+                    "AS SELECT region, SUM(amount) AS s, COUNT(*) AS c " +
+                    "FROM " + tableName + " GROUP BY region;";
+            String queryWithHaving = "SELECT region, SUM(amount) AS s, COUNT(*) AS c FROM " + tableName +
+                    " GROUP BY region HAVING SUM(amount) > 100;";
+
+            starRocksAssert.withMaterializedView(createMV)
+                    .query(queryWithHaving)
+                    .explainContains("rollup: " + mvName, "PREDICATES:", "s > 100");
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
+    public void testMvHavingDoesNotFallbackRollupWithAggState() throws Exception {
+        String tableName = "having_state_base";
+        String mvName = "mv_having_state";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "k1 string NOT NULL, k2 decimal(34, 0) ) " +
+                "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(k1) " +
+                    "AS SELECT k1, avg_union(avg_state(k2)) AS s " +
+                    "FROM " + tableName + " GROUP BY k1 HAVING avg(k2) > 10;";
+            String query = "SELECT k1, avg(k2) AS s FROM " + tableName +
+                    " GROUP BY k1 HAVING avg(k2) > 20;";
+
+            starRocksAssert.withMaterializedView(createMV).query(query).explainWithout(mvName);
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
+    public void testMvHavingRandomDistributionRollupWithStrongerHaving() throws Exception {
+        String tableName = "having_random_base";
+        String mvName = "mv_having_random";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, region varchar(32), amount decimal(18, 2) ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY RANDOM " +
+                    "REFRESH MANUAL " +
+                    "AS SELECT region, SUM(amount) AS s, COUNT(*) AS c " +
+                    "FROM " + tableName + " GROUP BY region HAVING SUM(amount) > 100;";
+            String query = "SELECT region, SUM(amount) AS s, COUNT(*) AS c FROM " + tableName +
+                    " GROUP BY region HAVING SUM(amount) > 200;";
+
+            starRocksAssert.withMaterializedView(createMV)
+                    .query(query)
+                    .explainContains("rollup: " + mvName, "PREDICATES:", "s > 200");
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
+    public void testMvHavingDoesNotFallbackRollupAfterProjectionFailure() throws Exception {
+        String tableName = "having_fallback_base";
+        String mvName = "mv_having_fallback";
+        String duplicateTable = "CREATE TABLE " + tableName + " ( " +
+                "id bigint, dt date ) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(duplicateTable);
+        try {
+            String createMV = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(dt) " +
+                    "AS SELECT dt FROM " + tableName + " GROUP BY dt HAVING COUNT(*) > 1;";
+            String query = "SELECT COUNT(dt) FROM " + tableName + " WHERE dt = '2024-11-27';";
+
+            starRocksAssert.withMaterializedView(createMV).query(query).explainWithout(mvName);
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
     public void testAggFunctionInOrder() throws Exception {
         String duplicateTable = "CREATE TABLE " + TEST_TABLE_NAME + " ( k1 int(11) NOT NULL ,  k2  int(11) NOT NULL ,"
                 + "v1  varchar(4096) NOT NULL, v2  float NOT NULL , v3  decimal(20, 7) NOT NULL ) ENGINE=OLAP "
@@ -684,6 +924,39 @@ public class MVRewriteTest {
         String query = "select user_id from " + USER_TAG_TABLE_NAME + " where user_id in (select user_id from " +
                 USER_TAG_TABLE_NAME + " group by user_id having bitmap_union_count(to_bitmap(tag_id)) >1 ) ;";
         starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME, USER_TAG_TABLE_NAME);
+    }
+
+    @Test
+    public void testBitmapUnionInSubqueryAndUnion() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
+                "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s ) t", USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME);
+        }
+
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s union " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+        {
+            String query = String.format("select count(tag_id) from (select tag_id from %s union " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+
+        {
+            String query = String.format("select count(distinct tag_id) from (select tag_id from %s union all " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
+        {
+            String query = String.format("select count(tag_id) from (select tag_id from %s union all " +
+                    "select tag_id from %s where user_id is not null) t", USER_TAG_TABLE_NAME, USER_TAG_TABLE_NAME);
+            starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+        }
     }
 
     @Test
@@ -799,9 +1072,9 @@ public class MVRewriteTest {
                 + USER_TAG_TABLE_NAME + ";";
         try {
             starRocksAssert.withMaterializedView(createMVSQL);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
         }
     }
 
@@ -973,6 +1246,55 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testAggQueryOnAggMV11() throws Exception {
+        String createMVSQL =
+                "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary) "
+                        + "from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, count(distinct salary) from " + EMPS_TABLE_NAME + " group by deptno UNION ALL " +
+                "select deptno, count(distinct salary) from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+        starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);
+    }
+
+    @Test
+    public void testAggQueryOnAggMV12() throws Exception {
+        String createMVSQL =
+                "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary % 10) "
+                        + "from " + EMPS_TABLE_NAME + " group by deptno;";
+        try {
+            starRocksAssert.withMaterializedView(createMVSQL);
+            Assertions.fail();
+        } catch (Exception e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("Create materialized view non-slot ref expression should have an alias:"));
+        }
+    }
+
+    @Test
+    public void testAggQueryOnAggMV13() throws Exception {
+        String createMVSQL =
+                "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary % 10) as bitmap1 "
+                        + "from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno UNION ALL " +
+                "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testAggQueryOnAggMV14() throws Exception {
+        String createMVSQL =
+                "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary) "
+                        + "from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, bitmap_agg(salary) from " + EMPS_TABLE_NAME + " group by deptno UNION ALL " +
+                "select deptno, bitmap_agg(salary) from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+        starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);
+    }
+
+    @Test
     public void testUnionQueryOnProjectionMV() throws Exception {
         String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
                 EMPS_TABLE_NAME + " order by deptno;";
@@ -989,7 +1311,8 @@ public class MVRewriteTest {
         String union = "select a.empid from (select empid from " + EMPS_TABLE_NAME + " where deptno > 300" +
                 " union all select empid from"
                 + " " + EMPS_TABLE_NAME + " where deptno < 200) a group by a.empid";
-        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+        // NOTE: not support agg push down and union push down at the same time.
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainWithout(QUERY_USE_EMPS_MV);
         starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);
     }
 
@@ -1037,13 +1360,14 @@ public class MVRewriteTest {
                 " union all select empid, count(1) as cnt from"
                 + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid) a group by a.empid";
         String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
-        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+        // NOTE: Since `deptno` is key column of the new mv, so use `PREAGGREGATION` instead.
+        Assertions.assertTrue(plan.contains("1:OlapScanNode\n" +
                 "     TABLE: emps\n" +
-                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
+                "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 4: deptno > 300\n" +
                 "     partitions=1/1\n" +
                 "     rollup: emps_mv"));
-        Assert.assertTrue(plan.contains("7:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("7:OlapScanNode\n" +
                 "     TABLE: emps\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 11: deptno < 200\n" +
@@ -1092,7 +1416,7 @@ public class MVRewriteTest {
     }
 
     @Test
-    public void testCaseWhenSelectMV() throws Exception {
+    public void testCaseWhenSelectMV1() throws Exception {
         // NOTE(yan): add a field not used in query, so optimized plan will select mv
         // otherwise I doubt that will use fact table.
         String createTableSQL = "CREATE TABLE kkk (\n" +
@@ -1110,16 +1434,137 @@ public class MVRewriteTest {
                 "select dt, is_finish, bitmap_union(user_id_td)\n" +
                 "FROM kkk AS T1 group by dt, is_finish;";
         starRocksAssert.withMaterializedView(createMVSQL);
-        String query = "SELECT T1.dt AS `c0`,\n" +
-                "       0 AS `c1`,\n" +
-                "       0 AS `c2`,\n" +
-                "       bitmap_count ( BITMAP_UNION (T1.user_id_td)) AS `c3`,\n" +
-                "       bitmap_count ( BITMAP_UNION ( CASE WHEN (T1.is_finish = '1') " +
-                "THEN T1.user_id_td ELSE NULL END)) AS `c4`\n" +
-                "FROM kkk AS T1\n" +
-                "GROUP BY T1.dt";
-        starRocksAssert.query(query).explainContains("rollup: kkk_mv");
+
+        {
+            String query = "SELECT T1.dt AS `c0`,\n" +
+                    "       0 AS `c1`,\n" +
+                    "       0 AS `c2`,\n" +
+                    "       bitmap_count ( BITMAP_UNION ( CASE WHEN (T1.is_finish = '1') " +
+                    "THEN T1.user_id_td ELSE NULL END)) AS `c4`\n" +
+                    "FROM kkk AS T1\n" +
+                    "GROUP BY T1.dt";
+            String plan  = starRocksAssert.query(query).explainQuery();
+            PlanTestBase.assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 3> : 3: dt\n" +
+                    "  |  <slot 6> : if(1: is_finish = '1', 4: user_id_td, NULL)\n");
+            PlanTestBase.assertContains(plan, "     TABLE: kkk\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: kkk_mv");
+        }
+        {
+
+            String query = "SELECT T1.dt AS `c0`,\n" +
+                    "       0 AS `c1`,\n" +
+                    "       0 AS `c2`,\n" +
+                    "       bitmap_count ( BITMAP_UNION (T1.user_id_td)) AS `c3`,\n" +
+                    "       bitmap_count ( BITMAP_UNION ( CASE WHEN (T1.is_finish = '1') " +
+                    "THEN T1.user_id_td ELSE NULL END)) AS `c4`\n" +
+                    "FROM kkk AS T1\n" +
+                    "GROUP BY T1.dt";
+            String plan  = starRocksAssert.query(query).explainQuery();
+            PlanTestBase.assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 3> : 3: dt\n" +
+                    "  |  <slot 5> : 5: mv_bitmap_union_user_id_td\n" +
+                    "  |  <slot 6> : if(1: is_finish = '1', 5: mv_bitmap_union_user_id_td, NULL)");
+            PlanTestBase.assertContains(plan, "     TABLE: kkk\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: kkk_mv");
+        }
+
         starRocksAssert.dropTable("kkk");
+    }
+
+    @Test
+    public void testCaseWhenSelectMV2() throws Exception {
+        String createTableSQL = "create table t1 " +
+                " (`k1` date NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` smallint(6) NULL,\n" +
+                "  `v1` varchar(2048) NULL) \n" +
+                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTableSQL);
+
+        String createMVSQL = "create materialized view test_mv1 as select k1, k2, sum(k3) " +
+                "from t1 group by k1,k2";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select k1, sum(case when(k2=0) then k3 else 0 end) from t1 group by k1";
+        String plan = starRocksAssert.query(query).explainQuery();
+        PlanTestBase.assertContains(plan, "  1:Project\n" +
+                "  |  <slot 1> : 1: k1\n" +
+                "  |  <slot 6> : if(2: k2 = 0, 3: k3, 0)\n");
+        PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                "     PREAGGREGATION: OFF. Reason: The result of ELSE isn't value column\n" +
+                "     partitions=1/1");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    // FAIL:
+    // @Test
+    public void testCaseWhenSelectMV3() throws Exception {
+        String createTableSQL = "create table t1 " +
+                " (`k1` date NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` smallint(6) NULL,\n" +
+                "  `v1` varchar(2048) NULL) \n" +
+                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTableSQL);
+
+        String createMVSQL = "create materialized view test_mv1 as select k1, k2, sum(k3) as sum1 " +
+                "from t1 group by k1,k2";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        // query contains sum1 and sum2, should use mv
+        String query = "select k1, sum(k3) as sum1, sum(case when(k2=0) then k3 else 0 end) as sum2 from t1 group by k1";
+        String plan = starRocksAssert.query(query).explainQuery();
+        PlanTestBase.assertContains(plan, "  1:Project\n" +
+                "  |  <slot 1> : 1: k1\n" +
+                "  |  <slot 5> : 5: mv_sum_k3\n" +
+                "  |  <slot 6> : if(2: k2 = 0, 5: mv_sum_k3, 0)");
+        PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                "     PREAGGREGATION: OFF. Reason: The result of ELSE isn't value column\n" +
+                "     partitions=1/1");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testCaseWhenSelectMV4() throws Exception {
+        String createTableSQL = "create table t1 " +
+                " (`k1` date NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` smallint(6) NULL,\n" +
+                "  `v1` varchar(2048) NULL) \n" +
+                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTableSQL);
+
+        // mv contains complex expression, should use mv
+        String createMVSQL = "create materialized view test_mv1 as select k1, k2, sum(k3) as sum1, sum(k3 + 1) as sum2 " +
+                "from t1 group by k1,k2";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select k1, sum(case when(k2=0) then k3 else 0 end) from t1 group by k1";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+        // TODO: support this for amv
+        PlanTestBase.assertNotContains(plan, "test_mv1)\n");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testCaseWhenSelectMV5() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, time, " +
+                "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id, time;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        String query = "select bitmap_union_count(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+        PlanTestBase.assertContains(plan, USER_TAG_MV_NAME);
+        PlanTestBase.assertContains(plan, "  |  <slot 2> : 2: user_id\n" +
+                "  |  <slot 6> : 5: mv_bitmap_union_tag_id");
+        starRocksAssert.dropMaterializedView(USER_TAG_MV_NAME);
     }
 
     @Test
@@ -1228,9 +1673,9 @@ public class MVRewriteTest {
 
         String createMVSQL = "CREATE MATERIALIZED VIEW partial_order_by_mv AS " +
                 "SELECT k6, k7 FROM all_type_table GROUP BY k6, k7 ORDER BY k6";
-        CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(createMVSQL, starRocksAssert.getCtx());
-        createMaterializedViewStmt.getMVColumnItemList().forEach(k -> Assert.assertTrue(k.isKey()));
+        CreateSyncMVStmt createMaterializedViewStmt =
+                (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(createMVSQL, starRocksAssert.getCtx());
+        createMaterializedViewStmt.getMVColumnItemList().forEach(k -> Assertions.assertTrue(k.isKey()));
 
         starRocksAssert.withMaterializedView(createMVSQL).query(query).explainContains("rollup: partial_order_by_mv");
         starRocksAssert.dropMaterializedView("partial_order_by_mv");
@@ -1284,7 +1729,7 @@ public class MVRewriteTest {
                 + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
         String query = "select * from ods_order where bank_transaction_id " +
                 "not in (select sum(cast(salary as smallint)) as ssalary from " +
-                        EMPS_TABLE_NAME + " group by deptno)";
+                EMPS_TABLE_NAME + " group by deptno)";
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
     }
 
@@ -1483,6 +1928,28 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testSyncMVWithUnionRewrite() throws Exception {
+        String t1 = "CREATE TABLE `t1` (\n" +
+                "  `k1` tinyint(4) NULL,\n" +
+                "  `k2` varchar(64) NULL,\n" +
+                "  `k3` bigint NULL,\n" +
+                "  `k4` varchar(64) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3 \n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n";
+        starRocksAssert.withTable(t1);
+        String mv1 = "CREATE MATERIALIZED VIEW test_mv1\n" +
+                "as select k1, k3 from t1 where k3 > 1;";
+        starRocksAssert.withMaterializedView(mv1);
+
+        String query = "select k1, k3 from t1 ;";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+        PlanTestBase.assertNotContains(plan, "test_mv1");
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
     public void testCaseWhenComplexExpressionMV1() throws Exception {
         String t1 = "CREATE TABLE case_when_t1 (\n" +
                 "    k1 INT,\n" +
@@ -1499,5 +1966,179 @@ public class MVRewriteTest {
 
         String query = "SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_t1;";
         starRocksAssert.query(query).explainContains("case_when_mv1");
+    }
+
+    @Test
+    public void testRewriteWithHashDistribution() throws Exception {
+        String createTableSQL = "create table t1 " +
+                " (`k1` date NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` smallint(6) NULL,\n" +
+                "  `v1` varchar(2048) NULL) \n" +
+                "distributed by hash(k2) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTableSQL);
+
+        // mv contains complex expression, should use mv
+        String createMVSQL = "create materialized view test_mv1 " +
+                "as select k1, sum(k3) as sum1 from t1 group by k1";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+        PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: k1 = '2024-06-12'\n" +
+                "     partitions=1/1\n" +
+                "     rollup: test_mv1");
+        PlanTestBase.assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(5: mv_sum_k3)\n" +
+                "  |  group by: 1: k1");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testRewriteWithRandomDistribution() throws Exception {
+        String createTableSQL = "create table t1 " +
+                " (`k1` date NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` smallint(6) NULL,\n" +
+                "  `v1` varchar(2048) NULL) \n" +
+                "distributed by random properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTableSQL);
+
+        // mv contains complex expression, should use mv
+        String createMVSQL = "create materialized view test_mv1 " +
+                "as select k1, sum(k3) as sum1 from t1 group by k1";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+        PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: k1 = '2024-06-12'\n" +
+                "     partitions=1/1\n" +
+                "     rollup: test_mv1");
+        PlanTestBase.assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(5: mv_sum_k3)\n" +
+                "  |  group by: 1: k1");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testCreateMVWithAggStateRewrite1() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                "SELECT k1, k2, avg_union(avg_state(k3)) as v1 from t1 group by k1, k2;");
+        {
+            String query = "SELECT k1, k2, avg_union(avg_state(k3)) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg_merge(avg_state(k3)) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+
+            String query = "SELECT k1, k2, avg(k3) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
+    public void testCreateMVWithAggStateRewrite2() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                "SELECT k1, k2, avg_union(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;");
+        {
+            String query = "SELECT k1, k2, avg_union(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg_merge(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg(k3 * 2) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k2, avg(k3 * 2) as v1 from t1 group by k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
+    public void testCreateMVWithAggStateRewrite3() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;");
+        {
+            String query = "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg_merge(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k2, avg_merge(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg(k3 * 4) as v1 from t1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k2, avg(k3 * 4) as v1 from t1 where k1 != 'a' group by k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("t1");
     }
 }

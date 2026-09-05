@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "How to set up the StarRocks FE development environment in IntelliJ IDEA on macOS Apple Silicon."
 ---
 
 # Setup StarRocks FE development environment on IDEA
@@ -93,10 +94,12 @@ Many source files in FE need to be generated manually, otherwise IDEA will repor
 Execute the following command to automatically generate:
 
 ```bash
-cd gensrc
-make clean
-make
+make -C gensrc script
+./build.sh --be --configure-only
+cmake --build be/build_Release --target be_proto_codegen be_thrift_codegen
 ```
+
+The generated BE thrift/protobuf C++ files will appear under the active build directory, for example `be/build_Release/gensrc/gen_cpp`.
 
 ## Compile FE
 
@@ -113,7 +116,7 @@ mvn install -DskipTests
 
 2. Add Coding style setting
     To standardize the coding style, you should import the `fe/starrocks_intellij_style.xml` code style file in IDEA.
-![image-20220701193938856](../../assets/IDEA-2.png)
+![image-20220701193938856](../../_assets/IDEA-2.png)
 
 ## Run StarRocks FE in MacOS
 
@@ -141,7 +144,7 @@ mkdir meta
 
 3. Set the environment variable, as shown in the following figure:
 
-![image-20220701193938856](../../assets/IDEA-1.png)
+![image-20220701193938856](../../_assets/IDEA-1.png)
 
 ```bash
 export PID_DIR=/Users/smith/Code/starrocks/fe/bin

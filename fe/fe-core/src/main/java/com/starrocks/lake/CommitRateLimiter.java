@@ -16,6 +16,7 @@ package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
@@ -27,6 +28,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import javax.validation.constraints.NotNull;
 
@@ -100,20 +102,33 @@ public class CommitRateLimiter {
         setAllowCommitTimeOnce(partitionIds);
 
         long txnId = transactionState.getTransactionId();
-        long abortTime = transactionState.getPrepareTime() + transactionState.getTimeoutMs();
+        long abortTime = transactionState.getTimeoutDeadlineMs();
 
         if (transactionState.getAllowCommitTimeMs() >= abortTime) {
+            transactionState.clearTemporaryReason();
             throw new CommitFailedException("Txn " + txnId + " timed out due to ingestion slowdown", txnId);
         }
         if (transactionState.getAllowCommitTimeMs() > currentTimeMs) {
             LOG.info("delay commit of txn {} for {}ms, write took {}ms", transactionState.getTransactionId(),
                     transactionState.getAllowCommitTimeMs() - currentTimeMs,
                     transactionState.getWriteDurationMs());
+            // it will show in `show proc '/transactions/xxx/running'`
+            transactionState.setTemporaryReason("Partition's compaction score is larger than " + slowdownThreshold() +
+                    ", delay commit for " + (transactionState.getAllowCommitTimeMs() - currentTimeMs) + "ms." +
+                    " You can try to increase compaction concurrency.");
             throw new CommitRateExceededException(txnId, transactionState.getAllowCommitTimeMs());
         }
+        transactionState.clearTemporaryReason();
         long upperBound = compactionScoreUpperBound();
-        if (upperBound > 0 && anyCompactionScoreExceedsUpperBound(partitionIds, upperBound)) {
-            throw new CommitRateExceededException(txnId, currentTimeMs + 1000/* delay 1s */);
+        if (upperBound > 0) {
+            Optional<Pair<Long, Double>> partitionAndScore = anyCompactionScoreExceedsUpperBound(partitionIds, upperBound);
+            if (partitionAndScore.isPresent()) {
+                Pair<Long, Double> pair = partitionAndScore.get();
+                throw new CommitFailedException("Failed to load data into partition " + pair.first
+                        + ", because of too large compaction score, current/limit: " + pair.second
+                        + "/" + upperBound + ". You can reduce the loading job concurrency, " 
+                        + "or increase compaction concurrency", txnId);
+            }
         }
     }
 
@@ -143,13 +158,14 @@ public class CommitRateLimiter {
         return compactionScore != null ? compactionScore.getMax() : 0;
     }
 
-    private boolean anyCompactionScoreExceedsUpperBound(@NotNull Set<Long> partitionIds, long upperBound) {
+    // Returns the first partition id and its compaction score that exceeds the upper bound
+    private Optional<Pair<Long, Double>> anyCompactionScoreExceedsUpperBound(@NotNull Set<Long> partitionIds, long upperBound) {
         for (Long partitionId : partitionIds) {
             double compactionScore = getPartitionCompactionScore(partitionId);
             if (compactionScore > upperBound) {
-                return true;
+                return Optional.of(new Pair<>(partitionId, compactionScore));
             }
         }
-        return false;
+        return Optional.empty();
     }
 }

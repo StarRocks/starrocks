@@ -18,10 +18,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.PlanFragment;
@@ -29,18 +31,22 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
+import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.qe.scheduler.LazyWorkerProvider;
+import com.starrocks.qe.scheduler.SkipBlacklistWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
@@ -72,39 +78,45 @@ public class CoordinatorPreprocessor {
     private final ConnectContext connectContext;
 
     private final JobSpec jobSpec;
+    private final boolean enablePhasedSchedule;
     private final ExecutionDAG executionDAG;
 
-    private final WorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
-    private WorkerProvider workerProvider;
+    private final WorkerProvider.Factory workerProviderFactory;
+    private LazyWorkerProvider lazyWorkerProvider;
 
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
-    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
+    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec, boolean enablePhasedSchedule) {
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
-
         this.connectContext = Preconditions.checkNotNull(context);
         this.jobSpec = jobSpec;
+        this.enablePhasedSchedule = enablePhasedSchedule;
         this.executionDAG = ExecutionDAG.build(jobSpec);
-
+        workerProviderFactory = newWorkerProviderFactory();
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
     }
 
     @VisibleForTesting
-    CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
+    CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes, ConnectContext context) {
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
-
-        this.connectContext = StatisticUtils.buildConnectContext();
+        this.connectContext = context;
         this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
+        this.enablePhasedSchedule = false;
         this.executionDAG = ExecutionDAG.build(jobSpec);
+        workerProviderFactory = newWorkerProviderFactory();
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -121,17 +133,40 @@ public class CoordinatorPreprocessor {
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
     }
 
-    public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
+    public static TQueryGlobals genQueryGlobals(Instant startTime, String timezone) {
         TQueryGlobals queryGlobals = new TQueryGlobals();
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        String nowString = DATE_FORMAT.format(startTime.atZone(ZoneId.of(timezone)));
         queryGlobals.setNow_string(nowString);
-        queryGlobals.setTimestamp_ms(startTime);
+        queryGlobals.setTimestamp_ms(startTime.toEpochMilli());
+        queryGlobals.setTimestamp_us(startTime.getEpochSecond() * 1000000 + startTime.getNano() / 1000);
         if (timezone.equals("CST")) {
             queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
         } else {
             queryGlobals.setTime_zone(timezone);
         }
         return queryGlobals;
+    }
+
+    private WorkerProvider.Factory newWorkerProviderFactory() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        boolean skipBlackList = sessionVariable.isSkipBlackList();
+
+        if (RunMode.isSharedDataMode()) {
+            BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy =
+                    sessionVariable.getBlacklistBackupRoutingPolicy();
+            if (skipBlackList) {
+                return new com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider.Factory(
+                        blacklistBackupRoutingPolicy);
+            } else {
+                return new DefaultSharedDataWorkerProvider.Factory(blacklistBackupRoutingPolicy);
+            }
+        } else {
+            if (skipBlackList) {
+                return new SkipBlacklistWorkerProvider.Factory();
+            } else {
+                return new DefaultWorkerProvider.Factory();
+            }
+        }
     }
 
     public TUniqueId getQueryId() {
@@ -159,27 +194,35 @@ public class CoordinatorPreprocessor {
     }
 
     public TNetworkAddress getBrpcAddress(long workerId) {
-        return workerProvider.getWorkerById(workerId).getBrpcAddress();
+        return getWorkerProvider().getWorkerById(workerId).getBrpcAddress();
     }
 
     public TNetworkAddress getBrpcIpAddress(long workerId) {
-        return workerProvider.getWorkerById(workerId).getBrpcIpAddress();
+        return getWorkerProvider().getWorkerById(workerId).getBrpcIpAddress();
     }
 
     public TNetworkAddress getAddress(long workerId) {
-        ComputeNode worker = workerProvider.getWorkerById(workerId);
+        ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
         return worker.getAddress();
     }
 
+    /**
+     * getWorkerProvider will trigger to load compute resource acquire, use LazyWorkerProvider instead if possible.
+     */
+    @Deprecated
     public WorkerProvider getWorkerProvider() {
-        return workerProvider;
+        return lazyWorkerProvider.get();
+    }
+
+    public LazyWorkerProvider getLazyWorkerProvider() {
+        return lazyWorkerProvider;
     }
 
     public TWorkGroup getResourceGroup() {
         return jobSpec.getResourceGroup();
     }
 
-    public void prepareExec() throws Exception {
+    public void prepareExec() throws StarRocksException {
         resetExec();
         computeFragmentInstances();
         traceInstance();
@@ -190,8 +233,10 @@ public class CoordinatorPreprocessor {
      */
     private void resetExec() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }
@@ -221,9 +266,9 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
-    void computeFragmentInstances() throws UserException {
+    void computeFragmentInstances() throws StarRocksException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
-            fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
+            fragmentAssignmentStrategyFactory.create(execFragment, lazyWorkerProvider.get()).assignFragmentToWorker(execFragment);
         }
         if (LOG.isDebugEnabled()) {
             executionDAG.getFragmentsInPreorder().forEach(
@@ -233,7 +278,30 @@ public class CoordinatorPreprocessor {
 
         validateExecutionDAG();
 
+        executionDAG.prepareCaptureVersion(enablePhasedSchedule);
+        executionDAG.preparePreExecutedFragments();
         executionDAG.finalizeDAG();
+    }
+
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws
+            StarRocksException {
+        execFragment.getScanRangeAssignment().clear();
+        for (FragmentInstance instance : execFragment.getInstances()) {
+            instance.resetAllScanRanges();
+        }
+        // Reset bucket-aware state too. BucketAwareBackendSelector reads/writes
+        // colocatedAssignment.seqToScanRange directly, and its `scanRanges.put(scanId, ...)`
+        // only overwrites entries for buckets that appear in the current incremental batch.
+        // Buckets that were present in a previous batch but absent from the current one keep
+        // their stale scan ranges, so those files get re-emitted to the freshly-reset
+        // instance.node2ScanRanges and BE ends up scanning them once per follow-up batch.
+        // seqToWorkerId must be preserved: a bucket's worker assignment has to remain stable
+        // across batches so the bucket's data keeps landing on the same BE.
+        ColocatedBackendSelector.Assignment colocatedAssignment = execFragment.getColocatedAssignment();
+        if (colocatedAssignment != null) {
+            colocatedAssignment.getSeqToScanRange().clear();
+        }
+        fragmentAssignmentStrategyFactory.create(execFragment, lazyWorkerProvider.get()).assignFragmentToWorker(execFragment);
     }
 
     private void validateExecutionDAG() throws StarRocksPlannerException {
@@ -274,33 +342,31 @@ public class CoordinatorPreprocessor {
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
             return null;
         }
-        SessionVariable sessionVariable = connect.getSessionVariable();
+
+        final ResourceGroupMgr resourceGroupMgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
+        final SessionVariable sessionVariable = connect.getSessionVariable();
         TWorkGroup resourceGroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
-            if (rgName.equalsIgnoreCase(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME)) {
-                ResourceGroup defaultMVResourceGroup = new ResourceGroup();
-                defaultMVResourceGroup.setId(ResourceGroup.DEFAULT_MV_WG_ID);
-                defaultMVResourceGroup.setName(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
-                defaultMVResourceGroup.setVersion(ResourceGroup.DEFAULT_MV_VERSION);
-                resourceGroup = defaultMVResourceGroup.toThrift();
-            }
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(connect, rgName);
         }
 
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByID(connect, workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
         if (resourceGroup == null) {
             Set<Long> dbIds = connect.getCurrentSqlDbIds();
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
-                    connect, queryType, dbIds);
+            resourceGroup = resourceGroupMgr.chooseResourceGroup(connect, queryType, dbIds);
+        }
+
+        if (resourceGroup == null) {
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(connect, ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         if (resourceGroup != null) {

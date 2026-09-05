@@ -15,8 +15,8 @@
 package com.starrocks.load.pipe.filelist;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.pipe.PipeFileRecord;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -63,7 +63,7 @@ public class FileListTableRepo extends FileListRepo {
                     "properties('replication_num' = '%d') ";
 
     protected static final String CORRECT_FILE_LIST_REPLICATION_NUM =
-            "ALTER TABLE %s SET ('replication_num'='3')";
+            "ALTER TABLE %s SET ('replication_num'='%d')";
 
     protected static final String ALL_COLUMNS =
             "`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, `staged_time`," +
@@ -115,7 +115,7 @@ public class FileListTableRepo extends FileListRepo {
             List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(batch);
             List<PipeFileRecord> newFiles = ListUtils.subtract(batch, stagedFiles);
             if (CollectionUtils.isEmpty(newFiles)) {
-                return;
+                continue;
             }
             stagingFile.addAll(newFiles);
 
@@ -146,7 +146,13 @@ public class FileListTableRepo extends FileListRepo {
 
     @Override
     public void destroy() {
-        RepoAccessor.getInstance().deleteByPipe(pipeId.getId());
+        try {
+            RepoAccessor.getInstance().deleteByPipe(pipeId.getId());
+        } catch (Exception e) {
+            // Removing the file list is best-effort: dropping the pipe must not be blocked when the
+            // internal bookkeeping table is unavailable, it only leaves stale records behind.
+            LOG.warn("failed to remove the file list of pipe {}", pipeId, e);
+        }
     }
 
     /**
@@ -154,15 +160,14 @@ public class FileListTableRepo extends FileListRepo {
      */
     static class SQLBuilder {
 
-        public static String buildCreateTableSql() {
-            int replica = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+        public static String buildCreateTableSql(int replicationNum) throws StarRocksException {
             return String.format(FILE_LIST_TABLE_CREATE,
-                    CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME), replica);
+                    CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME), replicationNum);
         }
 
-        public static String buildAlterTableSql() {
+        public static String buildAlterTableSql(int replicationNum) {
             return String.format(CORRECT_FILE_LIST_REPLICATION_NUM,
-                    CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME));
+                    CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME), replicationNum);
         }
     }
 

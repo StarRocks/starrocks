@@ -1,22 +1,20 @@
 ---
-displayed_sidebar: "Chinese"
+sidebar_position: 40
+displayed_sidebar: docs
+description: "从 HDFS 导入数据到 StarRocks，支持 Parquet、ORC 和 CSV 等格式。"
+toc_max_heading_level: 4
+keywords: ['Broker Load']
 ---
 
 # 从 HDFS 导入
 
+import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.mdx'
+
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
+
 StarRocks 支持通过以下方式从 HDFS 导入数据：
 
-- 使用 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
-- 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
-- 使用 [Pipe](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md) 进行持续的异步导入。
-
-三种导入方式各有优势，具体将在下面分章节详细阐述。
-
-一般情况下，建议您使用 INSERT+`FILES()`，更为方便易用。
-
-但是，INSERT+`FILES()` 当前只支持 Parquet 和 ORC 文件格式。因此，如果您需要导入其他格式（如 CSV）的数据、或者需要[在导入过程中执行 DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)，可以使用 Broker Load。
-
-如果需要导入超大数据（比如超过 100 GB、特别是 1 TB 以上的数据量），建议您使用 Pipe。Pipe 会按文件数量或大小，自动对目录下的文件进行拆分，将一个大的导入作业拆分成多个较小的串行的导入任务，从而降低出错重试的代价。另外，在进行持续性的数据导入时，也推荐使用 Pipe，它能监听远端存储目录的文件变化，并持续导入有变化的文件数据。
+<LoadMethodIntro />
 
 ## 准备工作
 
@@ -26,7 +24,7 @@ StarRocks 支持通过以下方式从 HDFS 导入数据：
 
 ### 查看权限
 
-导入操作需要目标表的 INSERT 权限。如果您的 StarRocks 用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+<InsertPrivNote />
 
 ### 获取资源访问配置
 
@@ -34,7 +32,7 @@ StarRocks 支持通过以下方式从 HDFS 导入数据：
 
 ## 通过 INSERT+FILES() 导入
 
-该特性从 3.1 版本起支持。当前只支持 Parquet 和 ORC 文件格式。
+该特性从 3.1 版本起支持。当前只支持 Parquet、ORC 和 CSV（自 v3.3.0 起）文件格式。
 
 ### INSERT+FILES() 优势
 
@@ -42,9 +40,9 @@ StarRocks 支持通过以下方式从 HDFS 导入数据：
 
 通过 `FILES()`，您可以：
 
-- 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 HDFS 查询数据。
-- 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
-- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入数据。
+- 使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句直接从 HDFS 查询数据。
+- 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
+- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 导入数据。
 
 ### 操作示例
 
@@ -92,10 +90,10 @@ LIMIT 3;
 
 > **说明**
 >
-> 使用表结构推断功能时，CREATE TABLE 语句不支持设置副本数，因此您需要在建表前把副本数设置好。例如，您可以通过如下命令设置副本数为 `1`：
+> 使用表结构推断功能时，CREATE TABLE 语句不支持设置副本数，因此您需要在建表前把副本数设置好。例如，您可以通过如下命令设置副本数为 `3`：
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
 通过如下语句创建数据库、并切换至该数据库：
@@ -119,7 +117,7 @@ SELECT * FROM FILES
 );
 ```
 
-建表完成后，您可以通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
+建表完成后，您可以通过 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看新建表的表结构：
 
 ```SQL
 DESCRIBE user_behavior_inferred;
@@ -127,25 +125,17 @@ DESCRIBE user_behavior_inferred;
 
 系统返回如下查询结果：
 
-```Plaintext
-+--------------+------------------+------+-------+---------+-------+
-| Field        | Type             | Null | Key   | Default | Extra |
-+--------------+------------------+------+-------+---------+-------+
-| UserID       | bigint           | YES  | true  | NULL    |       |
-| ItemID       | bigint           | YES  | true  | NULL    |       |
-| CategoryID   | bigint           | YES  | true  | NULL    |       |
-| BehaviorType | varchar(1048576) | YES  | false | NULL    |       |
-| Timestamp    | varchar(1048576) | YES  | false | NULL    |       |
-+--------------+------------------+------+-------+---------+-------+
+```Plain
++--------------+-----------+------+-------+---------+-------+
+| Field        | Type      | Null | Key   | Default | Extra |
++--------------+-----------+------+-------+---------+-------+
+| UserID       | bigint    | YES  | true  | NULL    |       |
+| ItemID       | bigint    | YES  | true  | NULL    |       |
+| CategoryID   | bigint    | YES  | true  | NULL    |       |
+| BehaviorType | varbinary | YES  | false | NULL    |       |
+| Timestamp    | varbinary | YES  | false | NULL    |       |
++--------------+-----------+------+-------+---------+-------+
 ```
-
-将系统推断出来的表结构跟手动建表的表结构从以下几个方面进行对比：
-
-- 数据类型
-- 是否允许 `NULL` 值
-- 定义为键的字段
-
-在生产环境中，为更好地控制目标表的表结构、实现更高的查询性能，建议您手动创建表、指定表结构。
 
 您可以查询新建表中的数据，验证数据已成功导入。例如：
 
@@ -179,9 +169,9 @@ SELECT * from user_behavior_inferred LIMIT 3;
 
 该示例主要演示如何根据源 Parquet 格式文件中数据的特点、以及目标表未来的查询用途等对目标表进行定义和创建。在创建表之前，您可以先查看一下保存在 HDFS 中的源文件，从而了解源文件中数据的特点，例如：
 
-- 源文件中包含一个数据类型为 `datetime` 的 `Timestamp` 列，因此建表语句中也应该定义这样一个数据类型为 `datetime` 的 `Timestamp` 列。
+- 源文件中包含一个数据类型为 VARBINARY 的 `Timestamp` 列，因此建表语句中也应该定义这样一个数据类型为 VARBINARY 的 `Timestamp` 列。
 - 源文件中的数据中没有 `NULL` 值，因此建表语句中也不需要定义任何列为允许 `NULL` 值。
-- 根据查询到的数据类型，可以在建表语句中定义 `UserID` 列为排序键和分桶键。根据实际业务场景需要，您还可以定义其他列比如 `ItemID` 或者定义 `UserID` 与其他列的组合作为排序键。
+- 根据未来的查询类型，可以在建表语句中定义 `UserID` 列为排序键和分桶键。根据实际业务场景需要，您还可以定义其他列比如 `ItemID` 或者定义 `UserID` 与其他列的组合作为排序键。
 
 通过如下语句创建数据库、并切换至该数据库：
 
@@ -199,16 +189,43 @@ CREATE TABLE user_behavior_declared
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
+
+通过 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看新建表的表结构：
+
+```sql
+DESCRIBE user_behavior_declared;
+```
+
+```plaintext
++--------------+----------------+------+-------+---------+-------+
+| Field        | Type           | Null | Key   | Default | Extra |
++--------------+----------------+------+-------+---------+-------+
+| UserID       | int            | NO   | true  | NULL    |       |
+| ItemID       | int            | NO   | false | NULL    |       |
+| CategoryID   | int            | NO   | false | NULL    |       |
+| BehaviorType | varchar(65533) | NO   | false | NULL    |       |
+| Timestamp    | varbinary      | NO   | false | NULL    |       |
++--------------+----------------+------+-------+---------+-------+
+5 rows in set (0.00 sec)
+```
+
+:::tip
+
+您可以从以下几个方面来对比手动建表的表结构与 `FILES()` 函数自动推断出来的表结构之间具体有哪些不同:
+
+- 数据类型
+- 是否允许 `NULL` 值
+- 定义为键的字段
+
+在生产环境中，为更好地控制目标表的表结构、实现更高的查询性能，建议您手动创建表、指定表结构。
+
+:::
 
 建表完成后，您可以通过 INSERT INTO SELECT FROM FILES() 向表内导入数据：
 
@@ -244,11 +261,13 @@ SELECT * from user_behavior_declared LIMIT 3;
 
 #### 查看导入进度
 
-通过 `information_schema.loads` 视图查看导入作业的进度。该功能自 3.1 版本起支持。例如：
+通过 StarRocks Information Schema 库中的 `loads` 视图查看导入作业的进度。该功能自 3.1 版本起支持。例如：
 
 ```SQL
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
+
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../sql-reference/information_schema/loads.md)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
@@ -280,8 +299,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../reference/information_schema/loads.md)。
-
 > **NOTE**
 >
 > 由于 INSERT 语句是一个同步命令，因此，如果作业还在运行当中，您需要打开另一个会话来查看 INSERT 作业的执行情况。
@@ -290,22 +307,26 @@ REJECTED_RECORD_PATH: NULL
 
 作为一种异步的导入方式，Broker Load 负责建立与 HDFS 的连接、拉取数据、并将数据存储到 StarRocks 中。
 
-当前支持 Parquet、ORC、及 CSV 三种文件格式。
+当前支持以下文件格式：
+
+- Parquet
+- ORC
+- CSV
+- JSON（自 3.2.3 版本起支持）
 
 ### Broker Load 优势
 
-- Broker Load 支持在导入过程中执行[数据转换](../loading/Etl_in_loading.md)、以及 [UPSERT、DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)。
 - Broker Load 在后台运行，客户端不需要保持连接也能确保导入作业不中断。
 - Broker Load 作业默认超时时间为 4 小时，适合导入数据较大、导入运行时间较长的场景。
-- 除 Parquet 和 ORC 文件格式，Broker Load 还支持 CSV 文件格式。
+- 除 Parquet 和 ORC 文件格式，Broker Load 还支持 CSV 文件格式和 JSON 文件格式（JSON 文件格式自 3.2.3 版本起支持）。
 
 ### 工作原理
 
-![Broker Load 原理图](../assets/broker_load_how-to-work_zh.png)
+![Broker Load 原理图](../_assets/broker_load_how-to-work_zh.png)
 
 1. 用户创建导入作业。
-2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE 执行。
-3. 各个 BE 从数据源拉取数据并把数据导入到 StarRocks 中。
+2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE（或 CN）执行。
+3. 各个 BE（或 CN）从数据源拉取数据并把数据导入到 StarRocks 中。
 
 ### 操作示例
 
@@ -329,15 +350,11 @@ CREATE TABLE user_behavior
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### 提交导入作业
@@ -370,17 +387,17 @@ PROPERTIES
 - `BROKER`：连接数据源的认证信息配置。
 - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 查看导入进度
 
-通过 `information_schema.loads` 视图查看导入作业的进度。该功能自 3.1 版本起支持。
+通过 StarRocks Information Schema 库中的 [`loads`](../sql-reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
 
 ```SQL
 SELECT * FROM information_schema.loads;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../reference/information_schema/loads.md)。
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../sql-reference/information_schema/loads.md)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
@@ -420,11 +437,11 @@ SELECT * from user_behavior LIMIT 3;
 
 ## 通过 Pipe 导入
 
-从 3.2 版本起，StarRocks 支持使用 Pipe 以微批次的方式从 HDFS 持续导入数据，使数据在几分钟内对用户可用，同时您无需按计划手动执行导入命令。适用于大规模批量导入数据、以及持续导入数据的场景。
-
-当前只支持 Parquet 和 ORC 文件格式。
+从 3.2 版本起，StarRocks 提供 Pipe 导入方式，当前只支持 Parquet 和 ORC 文件格式。
 
 ### Pipe 优势
+
+Pipe 适用于大规模批量导入数据、以及持续导入数据的场景：
 
 - **大规模分批导入，降低出错重试成本。**
 
@@ -432,13 +449,15 @@ SELECT * from user_behavior LIMIT 3;
 
 - **不间断持续导入，减少人力操作成本。**
 
-  需要将新增或变化的数据文件写入到某个文件夹下，并且新增的数据需要持续地导入到 StarRocks 中。通过 Pipe，您只需要创建一个基于 Pipe 的持续导入作业，该 Pipe 会持续监控目录下的数据文件变化，将新增或有变动的数据文件自动导入到 StarRocks 目标表中。
+  需要将新增或变化的数据文件写入到某个文件夹下，并且新增的数据需要持续地导入到 StarRocks 中。您只需要创建一个基于 Pipe 的持续导入作业（在语句中指定 `"AUTO_INGEST" = "TRUE"`），该 Pipe 会持续监控该作业中指定的路径下的数据文件变化，将新增或有变动的数据文件自动导入到 StarRocks 目标表中。
 
-- **文件唯一性判断，避免重复数据导入。**
-
-  在导入过程中，Pipe 会根据文件名和文件对应的摘要值判断数据文件是否重复。如果文件名和文件摘要值在同一个 Pipe 导入作业中已经处理过，后续导入会自动跳过已经处理过的文件。注意，HDFS 使用 `LastModifiedTime` 作为文件摘要。
+此外，Pipe 还支持文件唯一性判断，避免重复数据导入。在导入过程中，Pipe 会根据文件名和文件对应的摘要值判断数据文件是否重复。如果文件名和文件摘要值在同一个 Pipe 导入作业中已经处理过，后续导入会自动跳过已经处理过的文件。注意，HDFS 使用 `LastModifiedTime` 作为文件摘要。
 
 导入过程中的文件状态会记录到 `information_schema.pipe_files` 视图下，您可以通过该视图查看 Pipe 导入作业下各文件的导入状态。如果该视图关联的 Pipe 作业被删除，那么该视图下相关的记录也会同步清理。
+
+### 工作原理
+
+![Pipe 工作原理](../_assets/pipe_data_flow.png)
 
 ### Pipe 与 INSERT+FILES() 的区别
 
@@ -468,15 +487,11 @@ CREATE TABLE user_behavior_replica
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### 提交导入作业
@@ -507,11 +522,11 @@ SELECT * FROM FILES
 - `INSERT_SQL`：INSERT INTO SELECT FROM FILES 语句，用于从指定的源数据文件导入数据到目标表。
 - `PROPERTIES`：用于控制 Pipe 执行的一些参数，例如 `AUTO_INGEST`、`POLL_INTERVAL`、`BATCH_SIZE` 和 `BATCH_FILES`，格式为 `"key" = "value"`。
 
-有关详细的语法和参数说明，参见 [CREATE PIPE](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)。
+有关详细的语法和参数说明，参见 [CREATE PIPE](../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)。
 
 #### 查看导入进度
 
-- 通过 [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) 查看当前数据库中的导入作业。
+- 通过 [SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md) 查看当前数据库中的导入作业。
 
   ```SQL
   SHOW PIPES;
@@ -520,7 +535,7 @@ SELECT * FROM FILES
   如果您提交了多个导入作业，您可以通过 `NAME` 过滤出想要查看哪个导入作业。例如：
 
   ```SQL
-  SHOW PIPES WHERE NAME = "user_behavior_replica" \G
+  SHOW PIPES WHERE NAME = 'user_behavior_replica' \G
   *************************** 1. row ***************************
   DATABASE_NAME: mydatabase
         PIPE_ID: 10252
@@ -533,7 +548,7 @@ SELECT * FROM FILES
   1 row in set (0.00 sec)
   ```
 
-- 通过 [`information_schema.pipes`](../reference/information_schema/pipes.md) 视图查看当前数据库中的导入作业。
+- 通过 StarRocks Information Schema 库中的 [`pipes`](../sql-reference/information_schema/pipes.md) 视图查看当前数据库中的导入作业。
 
   ```SQL
   SELECT * FROM information_schema.pipes;
@@ -557,7 +572,7 @@ SELECT * FROM FILES
 
 #### 查看导入的文件信息
 
-您可以通过 [`information_schema.pipe_files`](../reference/information_schema/pipe_files.md) 视图查看导入的文件信息。
+您可以通过 StarRocks Information Schema 库中的 [`pipe_files`](../sql-reference/information_schema/pipe_files.md) 视图查看导入的文件信息。
 
 ```SQL
 SELECT * FROM information_schema.pipe_files;
@@ -585,4 +600,4 @@ FINISH_LOAD_TIME: 2023-11-17 16:13:22
 
 #### 管理导入作业
 
-创建 Pipe 导入作业以后，您可以根据需要对这些作业进行修改、暂停或重新启动、删除、查询、以及尝试重新导入等操作。详情参见 [ALTER PIPE](../sql-reference/sql-statements/data-manipulation/ALTER_PIPE.md)、[SUSPEND or RESUME PIPE](../sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE.md)、[DROP PIPE](../sql-reference/sql-statements/data-manipulation/DROP_PIPE.md)、[SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md)、[RETRY FILE](../sql-reference/sql-statements/data-manipulation/RETRY_FILE.md)。
+创建 Pipe 导入作业以后，您可以根据需要对这些作业进行修改、暂停或重新启动、删除、查询、以及尝试重新导入等操作。详情参见 [ALTER PIPE](../sql-reference/sql-statements/loading_unloading/pipe/ALTER_PIPE.md)、[SUSPEND or RESUME PIPE](../sql-reference/sql-statements/loading_unloading/pipe/SUSPEND_or_RESUME_PIPE.md)、[DROP PIPE](../sql-reference/sql-statements/loading_unloading/pipe/DROP_PIPE.md)、[SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md)、[RETRY FILE](../sql-reference/sql-statements/loading_unloading/pipe/RETRY_FILE.md)。

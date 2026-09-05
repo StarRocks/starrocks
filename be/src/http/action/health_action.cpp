@@ -38,16 +38,20 @@
 #include <string>
 
 #include "common/tracer.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
 
 HealthAction::HealthAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+
+bool HealthAction::need_auth() const {
+    return true;
+}
 
 void HealthAction::handle(HttpRequest* req) {
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_health"));

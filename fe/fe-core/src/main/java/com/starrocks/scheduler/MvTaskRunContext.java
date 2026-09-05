@@ -15,72 +15,88 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Range;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PartitionKey;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
+import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.sql.plan.ExecPlan;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class MvTaskRunContext extends TaskRunContext {
+    public static class MVRefreshRuntimeState {
+        private final Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = Maps.newHashMap();
 
-    // all the RefBaseTable's partition name to its intersected materialized view names.
-    private Map<String, Set<String>> refBaseTableMVIntersectedPartitions;
-    // all the materialized view's partition name to its intersected RefBaseTable's partition names.
-    private Map<String, Set<String>> mvRefBaseTableIntersectedPartitions;
-    // all the RefBaseTable's partition name to its partition key range.
-    private Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap;
-    // all the RefBaseTable's partition name to its list partition keys.
-    private Map<String, List<List<String>>> refBaseTableListPartitionMap;
-    // the external ref base table's mv partition name to original partition names map because external
-    // table supports multi partition columns, one converted partition name(mv partition name) may have
-    // multi original partition names.
-    private Map<String, Set<String>> externalRefBaseTableMVPartitionMap;
+        // Pinned TvrVersionRange per base table, keyed by Table.getTableIdentifier() (stable across
+        // connector getTable() calls, unlike tableId for external tables).
+        private final Map<String, TvrVersionRange> pinnedTvrMap = Maps.newHashMap();
 
-    // The Table which materialized view' partition column comes from is called `RefBaseTable`:
-    // - Materialized View's to-refresh partitions is synced from its `refBaseTable`.
-    private Table refBaseTable;
-    // The `RefBaseTable`'s partition column which materialized view's partition column derives from
-    // is called `refBaseTablePartitionColumn`.
-    private Column refBaseTablePartitionColumn;
+        public Map<Long, BaseTableSnapshotInfo> getSnapshotBaseTables() {
+            return snapshotBaseTables;
+        }
+
+        public void replaceSnapshotBaseTables(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+            this.snapshotBaseTables.clear();
+            this.snapshotBaseTables.putAll(snapshotBaseTables);
+        }
+
+        public Map<String, TvrVersionRange> getPinnedTvrMap() {
+            return pinnedTvrMap;
+        }
+
+        public void reset() {
+            snapshotBaseTables.clear();
+            pinnedTvrMap.clear();
+        }
+    }
+
+    private PCTPartitionTopology partitionTopology;
+    private PCTRefreshScope refreshScope;
 
     private String nextPartitionStart = null;
     private String nextPartitionEnd = null;
+    // The next list partition values to be processed
+    private String nextPartitionValues = null;
     private ExecPlan execPlan = null;
 
     private int partitionTTLNumber = TableProperty.INVALID;
+    private final MVRefreshRuntimeState refreshRuntimeState = new MVRefreshRuntimeState();
+
+    // Set when auto_refresh_partitions_limit excluded older changed partitions from a complete refresh
+    // this batch: the batch then does not cover the whole MV and must not confirm whole-MV freshness.
+    private boolean partitionLimitExcludedPartitions = false;
 
     public MvTaskRunContext(TaskRunContext context) {
-        this.ctx = context.ctx;
-        this.definition = context.definition;
-        this.remoteIp = context.remoteIp;
-        this.properties = context.properties;
-        this.type = context.type;
-        this.status = context.status;
+        super(context);
     }
 
-    public Map<String, Set<String>> getRefBaseTableMVIntersectedPartitions() {
-        return refBaseTableMVIntersectedPartitions;
+    public MVRefreshRuntimeState getRefreshRuntimeState() {
+        return refreshRuntimeState;
     }
 
-    public void setRefBaseTableMVIntersectedPartitions(Map<String, Set<String>> refBaseTableMVIntersectedPartitions) {
-        this.refBaseTableMVIntersectedPartitions = refBaseTableMVIntersectedPartitions;
+    public PCTPartitionTopology getPartitionTopology() {
+        return partitionTopology;
     }
 
-    public Map<String, Set<String>> getMvRefBaseTableIntersectedPartitions() {
-        return mvRefBaseTableIntersectedPartitions;
+    public void setPartitionTopology(PCTPartitionTopology partitionTopology) {
+        this.partitionTopology = partitionTopology;
     }
 
-    public void setMvRefBaseTableIntersectedPartitions(Map<String, Set<String>> mvRefBaseTableIntersectedPartitions) {
-        this.mvRefBaseTableIntersectedPartitions = mvRefBaseTableIntersectedPartitions;
+    public PCTRefreshScope getRefreshScope() {
+        return refreshScope;
+    }
+
+    public void setRefreshScope(PCTRefreshScope refreshScope) {
+        this.refreshScope = refreshScope;
     }
 
     public boolean hasNextBatchPartition() {
-        return nextPartitionStart != null && nextPartitionEnd != null;
+        return (nextPartitionStart != null && nextPartitionEnd != null) || (nextPartitionValues != null);
     }
 
     public String getNextPartitionStart() {
@@ -99,28 +115,12 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
-    public Map<String, Range<PartitionKey>> getRefBaseTableRangePartitionMap() {
-        return refBaseTableRangePartitionMap;
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
     }
 
-    public void setRefBaseTableRangePartitionMap(Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap) {
-        this.refBaseTableRangePartitionMap = refBaseTableRangePartitionMap;
-    }
-
-    public Map<String, List<List<String>>> getRefBaseTableListPartitionMap() {
-        return refBaseTableListPartitionMap;
-    }
-
-    public void setRefBaseTableListPartitionMap(Map<String, List<List<String>>> refBaseTableListPartitionMap) {
-        this.refBaseTableListPartitionMap = refBaseTableListPartitionMap;
-    }
-
-    public Map<String, Set<String>> getExternalRefBaseTableMVPartitionMap() {
-        return externalRefBaseTableMVPartitionMap;
-    }
-
-    public void setExternalRefBaseTableMVPartitionMap(Map<String, Set<String>> externalRefBaseTableMVPartitionMap) {
-        this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
     }
 
     public ExecPlan getExecPlan() {
@@ -143,21 +143,31 @@ public class MvTaskRunContext extends TaskRunContext {
         this.partitionTTLNumber = partitionTTLNumber;
     }
 
-    public Table getRefBaseTable() {
-        return refBaseTable;
+    public boolean isPartitionLimitExcludedPartitions() {
+        return partitionLimitExcludedPartitions;
     }
 
-    public void setRefBaseTable(Table refBaseTable) {
-        Preconditions.checkNotNull(refBaseTable);
-        this.refBaseTable = refBaseTable;
+    public void setPartitionLimitExcludedPartitions(boolean partitionLimitExcludedPartitions) {
+        this.partitionLimitExcludedPartitions = partitionLimitExcludedPartitions;
     }
 
-    public Column getRefBaseTablePartitionColumn() {
-        return refBaseTablePartitionColumn;
-    }
-
-    public void setRefBaseTablePartitionColumn(Column refBaseTablePartitionColumn) {
-        Preconditions.checkNotNull(refBaseTablePartitionColumn);
-        this.refBaseTablePartitionColumn = refBaseTablePartitionColumn;
+    /**
+     * For external table, the partition name is normalized which should convert it into original partition name.
+     * <p>
+     * For multi-partition columns, `refTableAndPartitionNames` is not fully exact to describe which partitions
+     * of ref base table are refreshed, use `getSelectedPartitionInfosOfExternalTable` later if we can solve the multi
+     * partition columns problem.
+     * eg:
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    public Set<String> getExternalTableRealPartitionName(Table table, String mvPartitionName) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            Preconditions.checkState(partitionTopology != null
+                    && partitionTopology.getRefBaseTableToCellMap().containsKey(table));
+            return partitionTopology.getRefBaseTableToCellMap().get(table).getSourceNames(mvPartitionName);
+        } else {
+            return Sets.newHashSet(mvPartitionName);
+        }
     }
 }

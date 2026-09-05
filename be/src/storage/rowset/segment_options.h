@@ -14,46 +14,65 @@
 
 #pragma once
 
-#include <unordered_map>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
-#include "column/column_access_path.h"
-#include "column/datum.h"
-#include "fs/fs.h"
-#include "runtime/global_dict/types.h"
-#include "storage/del_vector.h"
-#include "storage/disjunctive_predicates.h"
-#include "storage/olap_runtime_range_pruner.h"
+#include "column/global_dict/types.h"
+#include "compute_env/runtime_range_pruner.h"
+#include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/seek_range.h"
-#include "storage/tablet_schema.h"
+#include "storage_primitive/disjunctive_predicates.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/range.h"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
-class Condition;
-struct OlapReaderStatistics;
+class ColumnAccessPath;
+class DeltaColumnGroupLoader;
+class DelvecLoader;
+
+namespace lake {
+class IndexDeltaGroupLoader;
+} // namespace lake
+class ObjectPool;
 class RuntimeProfile;
 class TabletSchema;
-class DeltaColumnGroupLoader;
-} // namespace starrocks
-
-namespace starrocks {
-
-class ColumnAccessPath;
-class ColumnPredicate;
-struct RowidRangeOption;
-using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
+class Status;
+struct OlapReaderStatistics;
 struct ShortKeyRangeOption;
+struct VectorSearchOption;
+
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
+
+struct SegmentReadStateCache {
+    // Optional prepared scan state owned by the caller. SegmentIterator only borrows
+    // these ranges while it is initialized, so the owner must outlive the iterator.
+    // The prepared scan_range already has every page filter (zonemap, bloom filter) folded in at
+    // the seed, so a reusing child just applies it and never re-runs a page filter on its sub-range.
+    SparseRangePtr scan_range = nullptr;
+    const std::vector<std::optional<Range<rowid_t>>>* seek_range_rowid_ranges = nullptr;
+    const std::optional<Range<rowid_t>>* tablet_rowid_range = nullptr;
+};
 
 class SegmentReadOptions {
 public:
-    using PredicateList = std::vector<const ColumnPredicate*>;
-
     std::shared_ptr<FileSystem> fs;
 
+    // Specified ranges outside the segment, is used to support parallel-reading within a tablet
     std::vector<SeekRange> ranges;
 
-    std::unordered_map<ColumnId, PredicateList> predicates;
-    std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
+    // Use to filter the data by range distribution key
+    std::optional<SeekRange> tablet_range;
+
+    PredicateTree pred_tree;
+    PredicateTree pred_tree_for_zone_map;
+    RuntimeFilterPredicates runtime_filter_preds;
 
     DisjunctivePredicates delete_predicates;
 
@@ -61,10 +80,21 @@ public:
     std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
+    // Per-segment vector index uid for this segment's .vi path (see SegmentMetadataPB.segment_vector_index_uid);
+    // filled by lake Rowset::read() for vector-indexed segments. -1 = unset (non-lake or no vector
+    // index); the cloud-native ANN read path requires it set.
+    int64_t segment_vector_index_uid = -1;
+    // rowset base segment id
     uint32_t rowset_id = 0;
+    uint32_t dynamic_rss_id_base = 0;
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
+    // Lake-only: resolves IndexDeltaGroup (.idx) entries visible at `version`.
+    // Readers prefer IDG-backed indexes over footer-embedded ones. Nullptr
+    // leaves the reader on the original footer path (existing behaviour).
+    std::shared_ptr<lake::IndexDeltaGroupLoader> idg_loader;
+    std::string rowset_path;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
@@ -72,7 +102,9 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
-    bool fill_data_cache = true;
+    // temporary data does not allow caching
+    bool temporary_data = false;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
@@ -80,25 +112,48 @@ public:
     const ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
-    bool has_delete_pred = false;
-
     /// Mark whether this is the first split of a segment.
     /// A segment may be divided into multiple split to scan concurrently.
     bool is_first_split_of_segment = true;
     SparseRangePtr rowid_range_option = nullptr;
+    SegmentReadStateCache read_state_cache;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     const std::atomic<bool>* is_cancelled = nullptr;
 
-    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
+    std::vector<std::unique_ptr<ColumnAccessPath>>* column_access_paths = nullptr;
 
     RowsetId rowsetid;
 
-    TabletSchemaCSPtr tablet_schema = nullptr;
+    std::shared_ptr<const TabletSchema> tablet_schema = nullptr;
 
     bool asc_hint = true;
+
+    bool prune_column_after_index_filter = false;
+    bool enable_gin_filter = false;
+    bool has_preaggregation = true;
+
+    bool use_vector_index = false;
+    bool belonged_to_cloud_native = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
+
+    // Data sampling by block-level, which is a core-component of TABLE-SAMPLE feature
+    // 1. Regular block smapling: Bernoulli sampling on page-id
+    // 2. Partial-Sorted block: leverage data ordering to improve the evenness
+    TTableSampleOptions sample_options;
+
+    bool enable_join_runtime_filter_pushdown = false;
+    bool enable_predicate_col_late_materialize = false;
+
+    // True when a predicate for this scan is evaluated ABOVE the segment iterator
+    // (OlapChunkSource not_push_down_conjuncts / _non_pushdown_pred_tree). The iterator cannot fold
+    // such a predicate into the ANN candidate, so a segment-level k-limit can under-return; the
+    // vector filter resolver may route these queries to exact brute-force according to the top-k
+    // underfill fallback policy. See design doc §7.
+    bool has_predicate_above_iterator = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

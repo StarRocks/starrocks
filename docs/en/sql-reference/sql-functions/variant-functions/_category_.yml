@@ -1,0 +1,7 @@
+position: 29
+label: 'Variant functions'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: variant-functions

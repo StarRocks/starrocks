@@ -14,10 +14,13 @@
 
 #include "storage/lake/versioned_tablet.h"
 
+#include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/tablet.h"
-#include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_writer.h"
+#include "storage/lake/update_manager.h"
 #include "storage/tablet_schema_map.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks::lake {
 
@@ -25,16 +28,129 @@ VersionedTablet::TabletSchemaPtr VersionedTablet::get_schema() const {
     return GlobalTabletSchemaMap::Instance()->emplace(_metadata->schema()).first;
 }
 
-StatusOr<VersionedTablet::RowsetList> VersionedTablet::get_rowsets() const {
-    std::vector<RowsetPtr> rowsets;
-    rowsets.reserve(_metadata->rowsets_size());
-    Tablet tablet(_tablet_mgr, _metadata->id());
-    for (int i = 0, size = _metadata->rowsets_size(); i < size; ++i) {
-        const auto& rowset_metadata = _metadata->rowsets(i);
-        auto rowset = std::make_shared<Rowset>(tablet, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
-        rowsets.emplace_back(std::move(rowset));
+int64_t VersionedTablet::id() const {
+    return _metadata->id();
+}
+
+int64_t VersionedTablet::version() const {
+    return _metadata->version();
+}
+
+StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer(WriterType type, int64_t txn_id,
+                                                                    uint32_t max_rows_per_segment,
+                                                                    ThreadPool* flush_pool, bool is_compaction) {
+    return new_writer_with_schema(type, txn_id, max_rows_per_segment, flush_pool, is_compaction, get_schema());
+}
+
+StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer_with_schema(
+        WriterType type, int64_t txn_id, uint32_t max_rows_per_segment, ThreadPool* flush_pool, bool is_compaction,
+        const std::shared_ptr<const TabletSchema>& tablet_schema) {
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id, flush_pool,
+                                                              is_compaction);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalPkTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
+                                                            max_rows_per_segment, flush_pool, is_compaction);
+        }
+    } else {
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
+                                                                   is_compaction, flush_pool);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalGeneralTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
+                                                                 max_rows_per_segment, is_compaction, flush_pool);
+        }
     }
-    return rowsets;
+}
+
+StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema) {
+    return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema));
+}
+
+StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(
+        Schema schema, bool could_split, bool could_split_physically,
+        const std::vector<BaseRowsetSharedPtr>& base_rowsets, std::shared_ptr<const TabletSchema> tablet_schema) {
+    std::unique_ptr<TabletReader> res;
+    if (!base_rowsets.empty()) {
+        std::vector<std::shared_ptr<Rowset>> rowsets;
+        rowsets.reserve(base_rowsets.size());
+        for (auto& rowset : base_rowsets) {
+            rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
+        }
+        res = std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
+                                             could_split_physically, rowsets);
+    } else {
+        res = std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
+                                             could_split_physically);
+    }
+    if (tablet_schema) {
+        res->set_tablet_schema(std::move(tablet_schema));
+    }
+    return res;
+}
+
+bool VersionedTablet::has_delete_predicates() const {
+    for (const auto& rowset : _metadata->rowsets()) {
+        if (rowset.has_delete_predicate()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<RowsetPtr> VersionedTablet::get_rowsets() const {
+    return Rowset::get_rowsets(_tablet_mgr, _metadata);
+}
+
+TabletBasicInfo VersionedTablet::get_basic_info() const {
+    int64_t num_rowset = _metadata->rowsets_size();
+    int64_t num_segment = 0;
+    int64_t num_row = 0;
+    int64_t data_size = 0;
+    for (const auto& rowset : _metadata->rowsets()) {
+        num_segment += rowset.segment_metas_size();
+        num_row += rowset.num_rows();
+        data_size += rowset.data_size();
+    }
+
+    auto keys_type = _metadata->schema().keys_type();
+
+    TabletBasicInfo info;
+    // set table_id and partition_id outside
+    info.tablet_id = id();
+    info.num_version = num_rowset;
+    info.max_version = version();
+    info.min_version = 0;
+    info.num_rowset = num_rowset;
+    info.num_segment = num_segment;
+    info.num_row = num_row;
+    info.data_size = data_size;
+    info.create_time = 0;
+    info.state = 1; // running
+    info.type = keys_type;
+    info.data_dir = _tablet_mgr->real_tablet_root_location(id());
+    info.shard_id = id();
+    info.schema_hash = 0;
+    info.medium_type = TStorageMedium::HDD;
+
+    // set pk tablet index_mem and index_disk_usage
+    if (keys_type == KeysType::PRIMARY_KEYS) {
+        info.index_mem = _tablet_mgr->update_mgr()->get_index_memory_size(id());
+
+        // only support cloud native pk index
+        if (_metadata->has_sstable_meta()) {
+            int64_t index_disk_usage = 0;
+            for (const auto& sst : _metadata->sstable_meta().sstables()) {
+                index_disk_usage += sst.filesize();
+            }
+            info.index_disk_usage = index_disk_usage;
+        }
+    }
+
+    return info;
 }
 
 } // namespace starrocks::lake

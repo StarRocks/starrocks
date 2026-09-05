@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Adds hours to a date or datetime."
 ---
 
 # hours_add
 
-## Description
+
 
 Adds hours to a date or datetime.
 

@@ -14,13 +14,24 @@ shell: ossutil64 cp --force ./sql/test_pipe/data/col_not_null.parquet oss://${os
 -- load data
 create table t1 
 properties('replication_num' = '1')
-as select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
+as select * from files(
+    'path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet',
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    'format'='parquet');
 desc t1;
 select count(*) from t1;
 
 create pipe p1 properties('auto_ingest'='false') as 
     insert into t1 
-    select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
+    select * from files(
+        'path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet',
+        'format' = 'parquet',
+        'aws.s3.access_key' = '${oss_ak}',
+        'aws.s3.secret_key' = '${oss_sk}',
+        'aws.s3.endpoint' = '${oss_endpoint}'
+        );
 
 alter pipe p1 suspend;
 select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';

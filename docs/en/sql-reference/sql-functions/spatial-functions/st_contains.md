@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Checks whether the geometric figure shape1 can fully contain shape2."
 ---
 
 # ST_Contains
 
-## Description
+
 
 Checks whether the geometric figure shape1 can fully contain shape2.
 

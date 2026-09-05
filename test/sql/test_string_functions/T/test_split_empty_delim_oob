@@ -1,0 +1,41 @@
+-- name: test_split_empty_delim_oob @sequential
+-- description: Regression for the split / split_part / str_to_map empty-delimiter path,
+--              where a truncated/invalid UTF-8 lead byte at the tail made char_size
+--              (from UTF8_BYTE_LENGTH_TABLE) exceed the remaining bytes -> out-of-bounds
+--              heap read that leaked adjacent row bytes, plus a size_t underflow in
+--              str_to_map (haystack.size - char_size) that triggered a huge allocation.
+--              Results are kept ASCII-safe (hex / sizes) so the raw invalid bytes never
+--              reach the UTF-8 result decoder.
+
+CREATE DATABASE IF NOT EXISTS test_split_empty_delim_oob_db;
+USE test_split_empty_delim_oob_db;
+
+CREATE TABLE t (
+  id INT,
+  s VARCHAR(65533)
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Rows ending in a truncated/invalid UTF-8 lead byte:
+--   F0   -> length table claims 4 bytes, only 1 present
+--   E4   -> claims 3, only 1 present
+--   E4B8 -> claims 3, only 2 present
+--   ok   -> valid ASCII (control)
+INSERT INTO t VALUES (1, unhex('F0')), (2, char(228)), (3, unhex('E4B8')), (4, 'ok');
+
+-- split_part: the first "character" must never be longer than the whole input.
+-- A longer result means it read out of bounds and leaked adjacent row bytes.
+SELECT id, length(s) AS len, length(split_part(s, '', 1)) AS sp_len,
+       length(split_part(s, '', 1)) <= length(s) AS in_bounds
+FROM t ORDER BY id;
+-- Exact bytes of the first part (hex keeps it ASCII-safe); must equal the input prefix.
+SELECT id, hex(split_part(s, '', 1)) AS sp_hex FROM t ORDER BY id;
+
+-- str_to_map empty delimiter: executing it proves the size_t underflow is gone (the
+-- pre-fix path attempted a ~SIZE_MAX allocation). map_size stays a small, sane number.
+SELECT id, map_size(str_to_map(s, ',', '')) AS map_sz FROM t ORDER BY id;
+
+-- split empty delimiter: every element stays within the input; array_length is bounded.
+SELECT id, array_length(split(s, '')) AS n_parts FROM t ORDER BY id;

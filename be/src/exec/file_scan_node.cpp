@@ -18,18 +18,28 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "exec/avro_scanner.h"
-#include "exec/csv_scanner.h"
-#include "exec/json_scanner.h"
-#include "exec/orc_scanner.h"
-#include "exec/parquet_scanner.h"
+#ifndef __APPLE__
+#include "connector/file/scanner/avro_scanner.h"
+#endif
+#include "connector/file/scanner/csv_scanner.h"
+#include "connector/file/scanner/json_scanner.h"
+#ifndef __APPLE__
+#include "connector/file/scanner/orc_scanner.h"
+#endif
+#ifndef __APPLE__
+#include "connector/file/scanner/parquet_scanner.h"
+#endif
+#include "base/utility/defer_op.h"
+#include "common/runtime_profile.h"
+#include "common/thread/thread.h"
+#include "connector/file/file_scan_utils.h"
+#include "connector/file/scanner/arrow_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
@@ -203,15 +213,25 @@ void FileScanNode::debug_string(int ident_level, std::stringstream* out) const {
 
 std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRange& scan_range,
                                                            ScannerCounter* counter) {
-    if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
+    TFileFormatType::type format_type = scan_range.ranges[0].format_type;
+    switch (format_type) {
+#ifndef __APPLE__
+    case TFileFormatType::FORMAT_ORC:
         return std::make_unique<ORCScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_PARQUET) {
+#endif
+#ifndef __APPLE__
+    case TFileFormatType::FORMAT_PARQUET:
         return std::make_unique<ParquetScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
+#endif
+    case TFileFormatType::FORMAT_JSON:
         return std::make_unique<JsonScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
+#ifndef __APPLE__
+    case TFileFormatType::FORMAT_AVRO:
         return std::make_unique<AvroScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else {
+#endif
+    case TFileFormatType::FORMAT_ARROW:
+        return std::make_unique<ArrowScanner>(runtime_state(), runtime_profile(), scan_range, counter);
+    default:
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }
 }
@@ -221,11 +241,8 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
     if (scan_range.ranges.empty()) {
         return Status::EndOfFile("scan range is empty");
     }
-    if (runtime_state()->enable_log_rejected_record() &&
-        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
-        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
-        return Status::InternalError("only support csv/json format to log rejected record");
-    }
+    RETURN_IF_ERROR(check_rejected_record_format_support(runtime_state()->enable_log_rejected_record(),
+                                                         scan_range.ranges[0].format_type));
     //create scanner object and open
     std::unique_ptr<FileScanner> scanner = _create_scanner(scan_range, counter);
     if (scanner == nullptr) {
@@ -253,7 +270,7 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
         runtime_state()->update_num_bytes_load_from_source(temp_chunk->bytes_usage());
 
         // eval conjuncts
-        RETURN_IF_ERROR(eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
         counter->num_rows_unselected += (before_rows - temp_chunk->num_rows());
 
         // Row batch has been filled, push this to the queue
@@ -296,8 +313,8 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
 
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
-    DeferOp close_exprs([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
-    auto status = Expr::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
+    DeferOp close_exprs([this, &scanner_expr_ctxs] { ExprExecutor::close(scanner_expr_ctxs, runtime_state()); });
+    auto status = ExprExecutor::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
 
     if (!status.ok()) {
         LOG(WARNING) << "Clone conjuncts failed.";
@@ -321,8 +338,7 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
 
             // todo: break if failed ?
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(WARNING) << "FileScanner[" << start_idx + i
-                             << "] process failed. status=" << status.get_error_msg();
+                LOG(WARNING) << "FileScanner[" << start_idx + i << "] process failed. status=" << status.message();
                 break;
             }
         }

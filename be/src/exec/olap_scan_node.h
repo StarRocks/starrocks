@@ -22,11 +22,12 @@
 
 #include "column/chunk.h"
 #include "column/column_access_path.h"
-#include "exec/olap_common.h"
-#include "exec/olap_scan_prepare.h"
+#include "common/statusor.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
-#include "runtime/global_dict/parser.h"
+#include "exprs/expr_context.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 namespace starrocks {
 class DescriptorTbl;
@@ -67,7 +68,7 @@ public:
     void close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
-    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges) override;
@@ -79,14 +80,16 @@ public:
 
     Status set_scan_range(const TInternalScanRange& range);
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
 
     int estimated_max_concurrent_chunks() const;
 
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
+    static StatusOr<std::vector<RowsetSharedPtr>> capture_tablet_rowsets(const TabletSharedPtr& tablet,
+                                                                         const TInternalScanRange* scan_range);
+
     static int compute_priority(int32_t num_submitted_tasks);
 
     int io_tasks_per_scan_operator() const override {
@@ -147,7 +150,7 @@ private:
     void _update_status(const Status& status);
     Status _get_status();
 
-    void _fill_chunk_pool(int count, bool force_column_pool);
+    void _fill_chunk_pool(int count);
     bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
 
@@ -169,8 +172,7 @@ private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     TupleDescriptor* _tuple_desc = nullptr;
-    OlapScanConjunctsManager _conjuncts_manager;
-    DictOptimizeParser _dict_optimize_parser;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
     const Schema* _chunk_schema = nullptr;
 
     int32_t _num_scanners = 0;
@@ -209,6 +211,8 @@ private:
 
     std::vector<ExprContext*> _bucket_exprs;
 
+    std::vector<ExprContext*> _partition_exprs;
+
     // profile
     RuntimeProfile* _scan_profile = nullptr;
 
@@ -244,10 +248,36 @@ private:
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+
+    // Gin filter Statistics
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_prefix_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
+
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
+    RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_init_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_searcher_init_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_miss_counter = nullptr;
+    RuntimeProfile::Counter* _vector_search_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+    RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
 };
 
 } // namespace starrocks

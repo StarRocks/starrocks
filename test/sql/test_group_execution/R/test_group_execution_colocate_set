@@ -1,0 +1,73 @@
+-- name: test_group_execution_colocate_set
+set enable_group_execution = true;
+-- result:
+-- !result
+set group_execution_min_scan_rows = 1;
+-- result:
+-- !result
+set pipeline_dop = 2;
+-- result:
+-- !result
+CREATE TABLE `wid_info` (
+  `wid` varchar(64) NULL COMMENT "",
+  `a1` array<varchar(64)> NULL COMMENT "",
+  `a2` array<varchar(64)> NULL COMMENT "",
+  `st` varchar(8) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`wid`)
+DISTRIBUTED BY HASH(`wid`) BUCKETS 32
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `offline_uid` (
+  `user_id` varchar(200) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`user_id`)
+DISTRIBUTED BY HASH(`user_id`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into wid_info SELECT concat('w', generate_series), [concat('u', generate_series % 500)], [concat('u', generate_series % 300)], '1' FROM TABLE(generate_series(1, 20000));
+-- result:
+-- !result
+insert into offline_uid SELECT concat('u', generate_series) FROM TABLE(generate_series(1, 300));
+-- result:
+-- !result
+function: assert_explain_not_contains('select wid, unnest as uid from wid_info, unnest(a1) union select wid, unnest as uid from wid_info, unnest(a2)', 'colocate exec groups')
+-- result:
+None
+-- !result
+select count(*) from (select a.wid from (select wid, unnest as uid from wid_info, unnest(a1) where st = 1 and unnest is not null union select wid, unnest as uid from wid_info, unnest(a2) where st = 1 and unnest is not null) a join (select trim(user_id) as uid from offline_uid group by 1) b on a.uid = b.uid group by a.wid) t;
+-- result:
+19974
+-- !result
+CREATE TABLE `wid_profile` (
+  `seg_id` bigint(20) NULL COMMENT "",
+  `wid` varchar(64) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`seg_id`)
+DISTRIBUTED BY HASH(`seg_id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into wid_profile select 1, a.wid from (select wid, unnest as uid from wid_info, unnest(a1) where st = 1 and unnest is not null union select wid, unnest as uid from wid_info, unnest(a2) where st = 1 and unnest is not null) a join (select trim(user_id) as uid from offline_uid group by 1) b on a.uid = b.uid group by a.wid;
+-- result:
+-- !result
+select count(*) from wid_profile;
+-- result:
+19974
+-- !result
+select count(*) from (select wid, unnest as uid from wid_info, unnest(a1) where unnest is not null intersect select wid, unnest as uid from wid_info, unnest(a2) where unnest is not null) t;
+-- result:
+4199
+-- !result
+select count(*) from (select wid, unnest as uid from wid_info, unnest(a1) where unnest is not null except select wid, unnest as uid from wid_info, unnest(a2) where unnest is not null) t;
+-- result:
+15801
+-- !result

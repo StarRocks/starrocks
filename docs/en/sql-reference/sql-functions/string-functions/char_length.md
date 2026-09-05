@@ -1,12 +1,13 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the number of characters in a string."
 ---
 
 # char_length
 
-## Description
 
-This function returns the length of a string. For multibytes characters, it returns the number of characters. It currently only supports utf8 coding. Note: This function is also named as character_length.
+
+This function returns the length of a string. For multi-byte characters, it returns the number of characters. It currently only supports utf8 coding. Note: This function is also named as character_length.
 
 ## Syntax
 

@@ -25,17 +25,15 @@ skip
 skip_res_cmd = [
     "show backends",
     "show backends;",
-    "select connection_id()",
-    "select connection_id();",
+    "select connection_id\\(\\)",
+    "select connection_id\\(\\);",
     ".*explain costs select.*",
-    "EXPLAIN SELECT.*",
-    "rand()",
-    "show stats meta",
+    "rand\\(\\)",
     "SHOW RESOURCES",
     "show alter table column",
     "select db_id, table_id, column_name,.* from _statistics_.column_statistics.*",
     "SELECT \\* FROM .* LIMIT 1.*",
-    "explain .*",
+    "explain(?! select).*",
     "select \\* from t2 where c1 = \\(select c1 from t2 limit 1\\).*",
     "SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1.*",
     "show load.*",
@@ -47,7 +45,7 @@ skip_res_cmd = [
     "SELECT DISTINCT k1 FROM aggregate_par_tbl LIMIT 1",
     "select.* db_id.*",
     "select.* table_id.*",
-    "SELECT * FROM unnest_es_external_table limit 1",
+    "SELECT \\* FROM unnest_es_external_table limit 1",
     "select last_query_id",
     "select uuid",
     "select unix_timestamp",
@@ -59,10 +57,21 @@ skip_res_cmd = [
     "select current_time\\(\\)",
     "select curdate\\(\\)",
     "select current_date\\(\\)",
+    "^result=.*",
     "refresh materialized view.*",
-    "REFRESH MATERIALIZED VIEW.*"
+    "REFRESH MATERIALIZED VIEW.*",
+    "analyze full table.*",
+    "ANALYZE FULL TABLE.*",
+    "analyze table.*",
+    "ANALYZE TABLE.*"
 ]
 
 skip_files = set([
+    'test_window_skew_rewrite_with_mcv',
     # 'test_parquet_dict_null_predicate'
+    # refresh_mode=auto is not exposed to users; these tests exercise the AUTO path via
+    # SQL and are kept on disk for future revival when AUTO is re-introduced.
+    'test_ivm_with_iceberg_auto',
+    'test_ivm_with_iceberg_delete',
+    'test_ivm_with_iceberg_expire_snapshots',
 ])

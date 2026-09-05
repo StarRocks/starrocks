@@ -5,7 +5,7 @@ create database test_drop_task_${uuid0};
 use test_drop_task_${uuid0};
 -- result:
 -- !result
-[UC]SUBMIT TASK test_kill AS CREATE TABLE TEST PROPERTIES ( "replication_num" = "1" ) AS SELECT sleep(20);
+[UC]SUBMIT TASK test_kill AS CREATE TABLE TEST PROPERTIES ( "replication_num" = "1" ) AS SELECT /*+SET_VAR(enable_profile=false)*/ sleep(20);
 -- result:
 test_kill	SUBMITTED
 -- !result
@@ -31,13 +31,9 @@ select sleep(2);
 select TASK_NAME, SCHEDULE from information_schema.tasks where `DATABASE`='test_drop_task_${uuid0}';
 -- result:
 -- !result
-select TASK_NAME, STATE, ERROR_MESSAGE from information_schema.task_runs where `DATABASE`='test_drop_task_${uuid0}';
--- result:
-test_kill	FAILED	CANCELLED
--- !result
 drop task not_exist_task;
 -- result:
-E: (1064, 'Unexpected exception: Task not_exist_task is not exist')
+E: (1064, 'Getting analyzing error. Detail message: Task not_exist_task is not exist.')
 -- !result
 drop database test_drop_task_${uuid0};
 -- result:

@@ -20,9 +20,9 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -30,7 +30,7 @@ public class PartitionKeyDescTest {
     private List<PartitionValue> values;
 
     // value of key is ["1", "abc"]
-    @Before
+    @BeforeEach
     public void setUp() {
         values = Lists.newArrayList(new PartitionValue("1"), new PartitionValue("abc"));
     }
@@ -39,15 +39,15 @@ public class PartitionKeyDescTest {
     public void testNormal() {
         PartitionKeyDesc desc = new PartitionKeyDesc(values);
 
-        Assert.assertEquals(values, desc.getUpperValues());
-        Assert.assertEquals("('1', 'abc')", desc.toString());
+        Assertions.assertEquals(values, desc.getUpperValues());
+        Assertions.assertEquals("('1', 'abc')", desc.toString());
     }
 
     @Test
     public void testMax() {
         PartitionKeyDesc desc = PartitionKeyDesc.createMaxKeyDesc();
 
-        Assert.assertNull(desc.getUpperValues());
-        Assert.assertEquals("MAXVALUE", desc.toString());
+        Assertions.assertNull(desc.getUpperValues());
+        Assertions.assertEquals("MAXVALUE", desc.toString());
     }
 }

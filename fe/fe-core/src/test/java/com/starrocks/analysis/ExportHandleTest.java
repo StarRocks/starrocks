@@ -25,8 +25,8 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ExportHandleTest {
     @Mocked
@@ -34,6 +34,8 @@ public class ExportHandleTest {
 
     @Test
     public void testCancelExportHandler(@Mocked ExportMgr exportMgr, @Mocked EditLog editLog) {
+
+        DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
 
         new MockUp<ConnectContext>() {
             @Mock
@@ -46,6 +48,9 @@ public class ExportHandleTest {
             {
                 globalStateMgr.getExportMgr();
                 result = exportMgr;
+
+                globalStateMgr.getDdlStmtExecutor();
+                result = ddlStmtExecutor;
             }
         };
 
@@ -53,7 +58,7 @@ public class ExportHandleTest {
             DDLStmtExecutor.execute(new CancelExportStmt("repo", null, NodePosition.ZERO),
                     new ConnectContext());
         } catch (Exception ex) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 }

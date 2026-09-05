@@ -17,7 +17,7 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 
 public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCallback {
     @Override
@@ -31,7 +31,7 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
 
     }
 
@@ -41,8 +41,8 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException {
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
+            throws StarRocksException {
 
     }
 
@@ -52,7 +52,7 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+    public void afterVisible(TransactionState txnState) {
 
     }
 
@@ -67,7 +67,7 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterPrepared(TransactionState txnState) throws StarRocksException {
 
     }
 

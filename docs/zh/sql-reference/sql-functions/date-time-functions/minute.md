@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回指定日期中的分钟部分，取值范围 0 到 59。"
 ---
 
 # minute
 
-## 功能
+
 
 获得日期中的分钟的信息，返回值范围为 0~59。
 

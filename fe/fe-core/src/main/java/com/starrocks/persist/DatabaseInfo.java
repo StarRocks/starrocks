@@ -35,14 +35,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class DatabaseInfo implements Writable {
 
@@ -56,6 +50,8 @@ public class DatabaseInfo implements Writable {
     private String clusterName;
     @SerializedName("qp")
     private QuotaType quotaType;
+    @SerializedName("svId")
+    private String storageVolumeId;
 
     public DatabaseInfo() {
         // for persist
@@ -64,14 +60,38 @@ public class DatabaseInfo implements Writable {
         this.quota = 0;
         this.clusterName = "";
         this.quotaType = QuotaType.DATA;
+        this.storageVolumeId = "";
     }
 
-    public DatabaseInfo(String dbName, String newDbName, long quota, QuotaType quotaType) {
+    public static DatabaseInfo newRenameInfo(String dbName, String newDbName) {
+        return new DatabaseInfo(dbName, newDbName, -1L, QuotaType.NONE, "");
+    }
+
+    public static DatabaseInfo newQuotaUpdateInfo(String dbName, long quota, QuotaType quotaType) {
+        return new DatabaseInfo(dbName, "", quota, quotaType, "");
+    }
+
+    public static DatabaseInfo newStorageVolumeUpdateInfo(String dbName, String storageVolumeId) {
+        return new DatabaseInfo(dbName, "", -1L, QuotaType.NONE, storageVolumeId);
+    }
+
+    /**
+     * Internal constructor used by factory methods to create {@link DatabaseInfo} instances
+     * for different kinds of database metadata updates (rename, quota update, storage volume update).
+     *
+     * @param dbName           original database name
+     * @param newDbName        new database name when renaming, or empty when not applicable
+     * @param quota            database quota value, or -1 when quota is not being modified
+     * @param quotaType        database quota type, or {@link QuotaType#NONE} when quota is not being modified
+     * @param storageVolumeId  storage volume id when updating storage volume, or empty when not applicable
+     */
+    private DatabaseInfo(String dbName, String newDbName, long quota, QuotaType quotaType, String storageVolumeId) {
         this.dbName = dbName;
         this.newDbName = newDbName;
         this.quota = quota;
         this.clusterName = "";
         this.quotaType = quotaType;
+        this.storageVolumeId = storageVolumeId;
     }
 
     public String getDbName() {
@@ -86,38 +106,6 @@ public class DatabaseInfo implements Writable {
         return quota;
     }
 
-    public static DatabaseInfo read(DataInput in) throws IOException {
-        DatabaseInfo dbInfo = new DatabaseInfo();
-        dbInfo.readFields(in);
-        return dbInfo;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // compatible with old version
-        Text.writeString(out, ClusterNamespace.getFullName(dbName));
-        if (newDbName.isEmpty()) {
-            Text.writeString(out, newDbName);
-        } else {
-            Text.writeString(out, ClusterNamespace.getFullName(newDbName));
-        }
-        out.writeLong(quota);
-        Text.writeString(out, this.clusterName);
-        // compatible with dbState
-        Text.writeString(out, "NORMAL");
-        Text.writeString(out, this.quotaType.name());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        this.dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        newDbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        this.quota = in.readLong();
-        this.clusterName = Text.readString(in);
-        // Compatible with dbState
-        Text.readString(in);
-        this.quotaType = QuotaType.valueOf(Text.readString(in));
-    }
-
     public String getClusterName() {
         return clusterName;
     }
@@ -130,4 +118,7 @@ public class DatabaseInfo implements Writable {
         return quotaType;
     }
 
+    public String getStorageVolumeId() {
+        return storageVolumeId;
+    }
 }

@@ -38,37 +38,52 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.OriginStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+// MaterializedIndexMeta is used to store metadata of a materialized index.
+// Previously, there was a one-to-one mapping between materialized index meta and materialized index,
+// therefore, the materialized index id was directly used as the index meta id.
+// To support multi-version materialized indexes for tablet split,
+// a single index meta may correspond to multiple materialized indexes, so the index meta requires its own id.
+// To maintain backward compatibility, the index meta id is initially set to be the same as the index id.
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
-
+    // index meta id, not change the SerializedName for compatibility
     @SerializedName(value = "indexId")
-    private long indexId;
+    private long indexMetaId;
     @SerializedName(value = "schema")
-    private List<Column> schema = Lists.newArrayList();
+    private List<Column> schema;
     @SerializedName(value = "sortKeyIdxes")
-    public List<Integer> sortKeyIdxes = Lists.newArrayList();
+    public List<Integer> sortKeyIdxes;
     @SerializedName(value = "sortKeyUniqueIds")
-    public List<Integer> sortKeyUniqueIds = Lists.newArrayList();
+    public List<Integer> sortKeyUniqueIds;
     @SerializedName(value = "schemaVersion")
-    private int schemaVersion;
+    private int schemaVersion = 0;
+    /**
+     * Historically, after a schema change, a new schemaHash would be added under the tablet directory
+     * instead of creating a new tablet. Currently, schema change creates a new set of tablets,
+     * and only one schema hash may exist under the tablet directory.
+     * For compatibility with historical data, schemaHash is now only used to construct the path
+     * of data files on disk. It is only meaningful in the storage-compute integrated mode,
+     * and has no significance in the shared-nothing mode.
+     */
     @SerializedName(value = "schemaHash")
     private int schemaHash;
+    @SerializedName(value = "schemaId")
+    private long schemaId;
     @SerializedName(value = "shortKeyColumnCount")
     private short shortKeyColumnCount;
     @SerializedName(value = "storageType")
@@ -76,7 +91,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "keysType")
     private KeysType keysType;
     @SerializedName(value = "defineStmt")
-    private OriginStatement defineStmt;
+    private OriginStatementInfo defineStmt;
     @SerializedName(value = "dbId")
     private long dbId;
     @SerializedName(value = "viewDefineSql")
@@ -86,15 +101,25 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     private Expr whereClause;
 
-    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+    // Tracks backends that currently have an in-flight UPDATE_SCHEMA task. Accessed concurrently:
+    // the BE-report send path (add) runs under a shared READ lock at the same time as task-finish
+    // RPCs (remove), so this must be a thread-safe set. It carries no @SerializedName and is skipped
+    // by Gson (see HiddenAnnotationExclusionStrategy), so it is transient runtime state only.
+    private final Set<Long> updateSchemaBackendId = ConcurrentHashMap.newKeySet();
+
+    public MaterializedIndexMeta() {
+    }
+
+    public MaterializedIndexMeta(long indexMetaId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
-        this.indexId = indexId;
+                                 OriginStatementInfo defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
+        this.indexMetaId = indexMetaId;
         Preconditions.checkState(schema != null);
-        Preconditions.checkState(schema.size() != 0);
+        Preconditions.checkState(!schema.isEmpty());
         this.schema = schema;
         this.schemaVersion = schemaVersion;
         this.schemaHash = schemaHash;
+        this.schemaId = indexMetaId;
         this.shortKeyColumnCount = shortKeyColumnCount;
         Preconditions.checkState(storageType != null);
         this.storageType = storageType;
@@ -105,25 +130,25 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.sortKeyUniqueIds = sortKeyUniqueIds;
     }
 
-    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+    public MaterializedIndexMeta(long indexMetaId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
-        this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt,
+                                 OriginStatementInfo defineStmt, List<Integer> sortKeyIdxes) {
+        this(indexMetaId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt,
                 sortKeyIdxes, null);        
     }
 
-    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+    public MaterializedIndexMeta(long indexMetaId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt) {
-        this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt, null);
+                                 OriginStatementInfo defineStmt) {
+        this(indexMetaId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt, null);
     }
 
-    public long getIndexId() {
-        return indexId;
+    public long getIndexMetaId() {
+        return indexMetaId;
     }
 
-    public void setIndexIdForRestore(long indexId) {
-        this.indexId = indexId;
+    public void setIndexMetaIdForRestore(long indexMetaId) {
+        this.indexMetaId = indexMetaId;
     }
 
     public KeysType getKeysType() {
@@ -154,6 +179,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return sortKeyUniqueIds;
     }
 
+    public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
     public int getSchemaHash() {
         return schemaHash;
     }
@@ -162,8 +191,20 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return shortKeyColumnCount;
     }
 
+    public void setShortKeyColumnCount(short shortKeyColumnCount) {
+        this.shortKeyColumnCount = shortKeyColumnCount;
+    }
+
     public int getSchemaVersion() {
         return schemaVersion;
+    }
+
+    public void setSchemaId(long schemaId) {
+        this.schemaId = schemaId;
+    }
+
+    public long getSchemaId() {
+        return schemaId;
     }
 
     public List<Column> getNonAggregatedColumns() {
@@ -179,11 +220,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         }
     }
 
-    public void setDefineStmt(OriginStatement stmt) {
+    public void setDefineStmt(OriginStatementInfo stmt) {
         this.defineStmt = stmt;
     }
 
-    public OriginStatement getDefineStmt() {
+    public OriginStatementInfo getDefineStmt() {
         return this.defineStmt;
     }
 
@@ -219,6 +260,23 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return whereClause;
     }
 
+    /**
+     * Atomically reserves an UPDATE_SCHEMA slot for {@code backendId}. Returns {@code true} if the
+     * backend was newly reserved (the caller should send a task), or {@code false} if a task is
+     * already in flight for this backend (the caller should skip to avoid sending duplicate tasks).
+     *
+     * <p>This collapses the former check-then-act (a membership probe followed by a separate add)
+     * into a single atomic operation, so two senders running concurrently under the shared READ
+     * lock cannot both observe "no task" and both enqueue a duplicate task.
+     */
+    public boolean addUpdateSchemaBackendIfAbsent(Long backendId) {
+        return updateSchemaBackendId.add(backendId);
+    }
+
+    public void removeUpdateSchemaBackend(Long backendId) {
+        updateSchemaBackendId.remove(backendId);
+    }
+
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
     @VisibleForTesting
     public void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
@@ -234,7 +292,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     @Override
     public int hashCode() {
-        return Long.hashCode(indexId);
+        return Long.hashCode(indexMetaId);
     }
 
     public void setSchema(List<Column> newSchema) {
@@ -245,16 +303,39 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.schemaVersion = newSchemaVersion;
     }
 
+    public MaterializedIndexMeta shallowCopy() {
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta();
+        indexMeta.indexMetaId = this.indexMetaId;
+        indexMeta.schema = schema == null ? null : Lists.newArrayList(schema);
+        indexMeta.sortKeyIdxes = sortKeyIdxes == null ? null : Lists.newArrayList(sortKeyIdxes);
+        indexMeta.sortKeyUniqueIds = sortKeyUniqueIds == null ? null : Lists.newArrayList(sortKeyUniqueIds);
+        indexMeta.schemaVersion = this.schemaVersion;
+        indexMeta.schemaHash = this.schemaHash;
+        indexMeta.shortKeyColumnCount = this.shortKeyColumnCount;
+        indexMeta.storageType = this.storageType;
+        indexMeta.keysType = this.keysType;
+        indexMeta.defineStmt = this.defineStmt;
+        indexMeta.dbId = this.dbId;
+        indexMeta.viewDefineSql = this.viewDefineSql;
+        indexMeta.isColocateMVIndex = this.isColocateMVIndex;
+        indexMeta.whereClause = this.whereClause;
+        indexMeta.schemaId = this.schemaId;
+        return indexMeta;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof MaterializedIndexMeta)) {
             return false;
         }
         MaterializedIndexMeta indexMeta = (MaterializedIndexMeta) obj;
-        if (indexMeta.indexId != this.indexId) {
+        if (indexMeta.indexMetaId != this.indexMetaId) {
             return false;
         }
         if (indexMeta.schema.size() != this.schema.size() || !indexMeta.schema.containsAll(this.schema)) {
+            return false;
+        }
+        if (indexMeta.schemaId != this.schemaId) {
             return false;
         }
         if (indexMeta.schemaVersion != this.schemaVersion) {
@@ -284,24 +365,17 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static MaterializedIndexMeta read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MaterializedIndexMeta.class);
-    }
-
-    @Override
     public void gsonPostProcess() throws IOException {
+        if (schemaId <= 0) {
+            schemaId = indexMetaId;
+        }
         // analyze define stmt
         if (defineStmt == null) {
             return;
         }
         Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(defineStmt);
-        if (columnNameToDefineExpr.containsKey(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME)) {
-            whereClause = columnNameToDefineExpr.get(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME);
+        if (columnNameToDefineExpr.containsKey(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME)) {
+            whereClause = columnNameToDefineExpr.get(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME);
         }
         setColumnsDefineExpr(columnNameToDefineExpr);
     }

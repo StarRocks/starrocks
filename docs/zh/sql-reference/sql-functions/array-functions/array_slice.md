@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "根据指定的偏移量和长度从数组中截取片段。"
 ---
 
 # array_slice
 
-## 功能
+
 
 返回数组的一个数组片段。根据 `offset` 指定的位置，从 `input` 中截取长度为 `length` 的数组片段。
 

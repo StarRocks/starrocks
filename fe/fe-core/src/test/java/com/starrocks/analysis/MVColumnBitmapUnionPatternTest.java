@@ -37,13 +37,21 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
-import mockit.Expectations;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.IntegerType;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -53,7 +61,7 @@ public class MVColumnBitmapUnionPatternTest {
     public void testCorrectExpr1() {
         TableName tableName = new TableName("db", "table");
         SlotRef slotRef = new SlotRef(tableName, "c1");
-        Deencapsulation.setField(slotRef, "type", Type.INT);
+        Deencapsulation.setField(slotRef, "type", IntegerType.INT);
         List<Expr> child0Params = Lists.newArrayList();
         child0Params.add(slotRef);
         FunctionCallExpr child0 = new FunctionCallExpr(FunctionSet.TO_BITMAP, child0Params);
@@ -61,14 +69,14 @@ public class MVColumnBitmapUnionPatternTest {
         params.add(child0);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
     public void testCorrectExpr2(@Injectable CastExpr castExpr) {
         TableName tableName = new TableName("db", "table");
         SlotRef slotRef = new SlotRef(tableName, "c1");
-        Deencapsulation.setField(slotRef, "type", Type.INT);
+        Deencapsulation.setField(slotRef, "type", IntegerType.INT);
         List<Expr> child0Params = Lists.newArrayList();
         child0Params.add(castExpr);
         FunctionCallExpr child0 = new FunctionCallExpr(FunctionSet.TO_BITMAP, child0Params);
@@ -76,14 +84,14 @@ public class MVColumnBitmapUnionPatternTest {
         params.add(child0);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
     public void testUpperCaseOfFunction() {
         TableName tableName = new TableName("db", "table");
         SlotRef slotRef = new SlotRef(tableName, "c1");
-        Deencapsulation.setField(slotRef, "type", Type.INT);
+        Deencapsulation.setField(slotRef, "type", IntegerType.INT);
         List<Expr> child0Params = Lists.newArrayList();
         child0Params.add(slotRef);
         FunctionCallExpr child0 = new FunctionCallExpr(FunctionSet.TO_BITMAP.toUpperCase(), child0Params);
@@ -91,7 +99,7 @@ public class MVColumnBitmapUnionPatternTest {
         params.add(child0);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION.toUpperCase(), params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
@@ -104,7 +112,7 @@ public class MVColumnBitmapUnionPatternTest {
         params.add(arithmeticExpr);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertFalse(pattern.match(expr));
+        Assertions.assertFalse(pattern.match(expr));
     }
 
     @Test
@@ -121,14 +129,14 @@ public class MVColumnBitmapUnionPatternTest {
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
         // Support complex expression for now.
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
     public void testIncorrectDecimalSlotRef() {
         TableName tableName = new TableName("db", "table");
         SlotRef slotRef1 = new SlotRef(tableName, "c1");
-        Deencapsulation.setField(slotRef1, "type", Type.DECIMALV2);
+        Deencapsulation.setField(slotRef1, "type", DecimalType.DECIMALV2);
         List<Expr> child0Params = Lists.newArrayList();
         child0Params.add(slotRef1);
         FunctionCallExpr child0 = new FunctionCallExpr(FunctionSet.TO_BITMAP, child0Params);
@@ -137,7 +145,7 @@ public class MVColumnBitmapUnionPatternTest {
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
         // Support complex expression for now.
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
@@ -148,9 +156,9 @@ public class MVColumnBitmapUnionPatternTest {
         List<Expr> params = Lists.newArrayList();
         params.add(slotRef1);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
-        slotRef1.setType(Type.BITMAP);
+        slotRef1.setType(BitmapType.BITMAP);
         slotRef1.setDesc(desc);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 }

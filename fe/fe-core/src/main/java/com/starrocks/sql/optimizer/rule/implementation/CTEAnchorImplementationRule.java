@@ -33,6 +33,13 @@ public class CTEAnchorImplementationRule extends ImplementationRule {
     }
 
     @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        int cteId = ((LogicalCTEAnchorOperator) input.getOp()).getCteId();
+        int consumeNum = context.getCteContext().getCTEConsumeNum(cteId);
+        return consumeNum > 0;
+    }
+
+    @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         int cteId = ((LogicalCTEAnchorOperator) input.getOp()).getCteId();
         int consumeNum = context.getCteContext().getCTEConsumeNum(cteId);

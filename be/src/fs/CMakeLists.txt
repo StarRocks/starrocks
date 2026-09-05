@@ -12,28 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 
-set(EXEC_FILES
-    fd_cache.cpp
+set(FILESYSTEM_FILES
     fs.cpp
-    fs_posix.cpp
-    fs_broker.cpp
+    encrypt_file.cpp
+    bundle_file.cpp
+    fd_cache.cpp
+    fs_options.cpp
     fs_memory.cpp
-    fs_s3.cpp
-    hdfs/fs_hdfs.cpp
-    hdfs/hdfs_fs_cache.cpp
+    fs_factory.cpp
+    fs_posix.cpp
+    fs_registry.cpp
+    fs_scheme.cpp
     fs_util.cpp
-    fs_starlet.cpp
+    fs_options_helper.cpp
+    fs_s3.cpp
+    azure/azblob_uri.cpp
+    azure/fs_azblob.cpp
+    azure/utils.cpp
+    credential/cloud_configuration_factory.cpp
     )
 
-add_library(FileSystem STATIC
-    ${EXEC_FILES}
+ADD_BE_LIB(FileSystem
+    ${FILESYSTEM_FILES}
 )
+
+target_link_libraries(FileSystem PUBLIC IO)

@@ -14,11 +14,18 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
+#include "storage/lake/delta_writer_finish_mode.h"
+#include "storage/memtable_flush_executor.h"
+#include "storage/rowset/segment_file_info.h"
 
 namespace starrocks {
 class MemTracker;
@@ -26,6 +33,9 @@ class SlotDescriptor;
 class Chunk;
 class TabletSchema;
 class ThreadPool;
+struct FileInfo;
+class TxnLogPB;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -34,14 +44,50 @@ class DeltaWriterImpl;
 class TabletManager;
 class TabletWriter;
 
+// Statistics for DeltaWriter
+struct DeltaWriterStat {
+    std::atomic_int32_t task_count = 0;
+    std::atomic_int64_t pending_time_ns = 0;
+
+    // ====== statistics for write()
+
+    // The number of write()
+    std::atomic_int32_t write_count = 0;
+    // The number of rows to write
+    std::atomic_int32_t row_count = 0;
+    // The number of bytes to write (approximate)
+    std::atomic_int64_t input_bytes = 0;
+    // Accumulated time for write()
+    std::atomic_int64_t write_time_ns = 0;
+    // The number that memtable is full
+    std::atomic_int32_t memtable_full_count = 0;
+    // The number that reach memory limit, and each will
+    // trigger memtable flush, and wait for it to finish
+    std::atomic_int32_t memory_exceed_count = 0;
+    // Accumulated time to wait for flush because of reaching memory limit
+    std::atomic_int64_t write_wait_flush_time_ns = 0;
+
+    // ====== statistics for finish_with_txnlog()
+
+    std::atomic_int64_t finish_time_ns = 0;
+    // Time to wait for memtable flush
+    std::atomic_int64_t finish_wait_flush_time_ns = 0;
+    // Time to prepare txn log in
+    std::atomic_int64_t finish_prepare_txn_log_time_ns = 0;
+    // Time to put txn log
+    std::atomic_int64_t finish_put_txn_log_time_ns = 0;
+
+    // ====== statistics for close()
+
+    // Time for close()
+    std::atomic_int64_t close_time_ns = 0;
+};
+
 class DeltaWriter {
     friend class DeltaWriterBuilder;
 
 public:
-    enum FinishMode {
-        kWriteTxnLog,
-        kDontWriteTxnLog,
-    };
+    using TxnLogPtr = std::shared_ptr<const TxnLogPB>;
 
     // Return the thread pool used for performing write IO.
     static ThreadPool* io_threads();
@@ -53,24 +99,40 @@ public:
     DISALLOW_COPY_AND_MOVE(DeltaWriter);
 
     // NOTE: It's ok to invoke this method in a bthread, there is no I/O operation in this method.
-    [[nodiscard]] Status open();
+    Status open();
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status finish(FinishMode mode = kWriteTxnLog);
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
+
+    // Manual flush used by stale memtable flush
+    // different from `flush()`, this method will reduce memory usage in `mem_tracker`
+    Status manual_flush();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush();
+    Status flush();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush_async();
+    Status flush_async();
 
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
+
+    // Cancel the delta writer with the given status.
+    // This method can be called concurrently and it is thread-safe.
+    // After cancellation, subsequent write/flush operations will fail quickly.
+    void cancel(const Status& st);
+
+    // The status passed to the first `cancel()` call, or OK if never cancelled.
+    // Callers use it to report why the writer stopped working instead of a generic error.
+    [[nodiscard]] Status cancel_status() const;
 
     [[nodiscard]] int64_t partition_id() const;
 
@@ -82,9 +144,11 @@ public:
 
     const int64_t queueing_memtable_num() const;
 
-    // Return the list of files created by this DeltaWriter.
+    // Return the list of file infos created by this DeltaWriter.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
-    std::vector<std::string> files() const;
+    const std::vector<SegmentFileInfo>& segments() const;
+
+    const std::vector<FileInfo>& dels() const;
 
     // The sum of all segment file sizes, in bytes.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
@@ -99,6 +163,28 @@ public:
     Status check_immutable();
 
     int64_t last_write_ts() const;
+
+    void update_task_stat(int32_t num_tasks, int64_t pending_time_ns);
+
+    const DeltaWriterStat& get_writer_stat() const;
+
+    const FlushStatistic* get_flush_stats() const;
+
+    // Thread-safe accessor: returns a shared_ptr copy of the FlushToken.
+    // The caller holds the token alive while reading stats, preventing
+    // use-after-free when close() concurrently resets the token.
+    std::shared_ptr<FlushToken> get_flush_token() const;
+
+    bool has_spill_block() const;
+
+    const DictColumnsValidMap* global_dict_columns_valid_info() const;
+    const GlobalDictByNameMaps* global_dict_map() const;
+
+    // Set the finished state. Called after finish task completes to prevent subsequent write/flush tasks.
+    void set_already_finished(bool val);
+
+    // Check if finish() has been called. Used to guard against write/flush tasks after finish.
+    bool already_finished() const;
 
 private:
     DeltaWriterImpl* _impl;
@@ -120,6 +206,11 @@ public:
 
     DeltaWriterBuilder& set_txn_id(int64_t txn_id) {
         _txn_id = txn_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_db_id(int64_t db_id) {
+        _db_id = db_id;
         return *this;
     }
 
@@ -168,8 +259,60 @@ public:
         return *this;
     }
 
-    DeltaWriterBuilder& set_index_id(int64_t index_id) {
-        _index_id = index_id;
+    DeltaWriterBuilder& set_schema_id(int64_t schema_id) {
+        _schema_id = schema_id;
+        return *this;
+    }
+
+    // Pre-set the tablet schema. When provided, DeltaWriter skips the schema lookup that
+    // would otherwise consult TableSchemaService (cache + tablet metadata + FE RPC). Useful
+    // when the caller already holds the exact schema and wants to avoid the dependency on
+    // catalog ids and the schema cache, e.g. lake schema-change rewrites.
+    DeltaWriterBuilder& set_tablet_schema(std::shared_ptr<const TabletSchema> tablet_schema) {
+        _tablet_schema = std::move(tablet_schema);
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_load_id(const PUniqueId& load_id) {
+        _load_id = load_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_profile(RuntimeProfile* profile) {
+        _profile = profile;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_bundle_writable_file_context(BundleWritableFileContext* bundle_writable_file_context) {
+        _bundle_writable_file_context = bundle_writable_file_context;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_global_dicts(GlobalDictByNameMaps* global_dicts) {
+        _global_dicts = global_dicts;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_is_multi_statements_txn(bool is_multi_statements_txn) {
+        _is_multi_statements_txn = is_multi_statements_txn;
+        return *this;
+    }
+
+    // Force the internal TabletWriter to build the vector index inline, overriding async
+    // index_build_mode. Used by lake schema-change conversions (SortedSchemaChange) so the
+    // shadow tablet's existing data is fully indexed within the ALTER, matching DirectSchemaChange.
+    DeltaWriterBuilder& set_force_build_vector_index_inline(bool force_build_vector_index_inline) {
+        _force_build_vector_index_inline = force_build_vector_index_inline;
         return *this;
     }
 
@@ -178,9 +321,10 @@ public:
 private:
     TabletManager* _tablet_mgr{nullptr};
     int64_t _txn_id{0};
+    int64_t _db_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
-    int64_t _index_id{0};
+    int64_t _schema_id{0};
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     std::string _merge_condition{};
@@ -188,6 +332,15 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
+    PUniqueId _load_id;
+    RuntimeProfile* _profile{nullptr};
+    BundleWritableFileContext* _bundle_writable_file_context{nullptr};
+    GlobalDictByNameMaps* _global_dicts = nullptr;
+    bool _is_multi_statements_txn = false;
+    std::shared_ptr<const TabletSchema> _tablet_schema;
+    bool _force_build_vector_index_inline = false;
 };
 
 } // namespace starrocks::lake

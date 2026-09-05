@@ -14,21 +14,27 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants.DefaultViewSqlSecurity;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.ast.TableRef;
+import org.apache.commons.collections4.MapUtils;
 
 import java.util.HashSet;
 import java.util.List;
@@ -40,45 +46,113 @@ public class ViewAnalyzer {
         new ViewAnalyzer.ViewAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
-            // normalize & validate view name
-            stmt.getTableName().normalization(context);
-            final String tableName = stmt.getTableName().getTbl();
+            TableRef tableRef = stmt.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table reference cannot be null");
+            }
+            tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+            stmt.setTableRef(tableRef);
+
+            final String catalog = tableRef.getCatalogName();
+            final String tableName = tableRef.getTableName();
             FeNameFormat.checkTableName(tableName);
 
-            Analyzer.analyze(stmt.getQueryStatement(), context);
+            // When the statement omits the SECURITY clause, fall back to the session-level default characteristic.
+            // An explicit SECURITY NONE / SECURITY INVOKER clause is preserved as parsed.
+            if (!stmt.isSecurityExplicit()) {
+                DefaultViewSqlSecurity defaultSecurity = context.getSessionVariable().getDefaultViewSqlSecurity();
+                stmt.setSecurity(defaultSecurity == DefaultViewSqlSecurity.INVOKER);
+            }
 
+            // Only allow setting properties for Iceberg views
+            if (!MapUtils.isEmpty(stmt.getProperties())) {
+                if (Strings.isNullOrEmpty(catalog) ||
+                        !GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
+                }
+                if (CatalogMgr.isInternalCatalog(catalog) ||
+                        ConnectorType.from(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalog)) !=
+                                ConnectorType.ICEBERG) {
+                    throw new SemanticException("Setting properties is only supported for Iceberg views");
+                }
+            }
+
+            Analyzer.analyze(stmt.getQueryStatement(), context);
+            AnalyzerUtils.prohibitTimeTravelQuery(stmt.getQueryStatement(), "create view");
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
-            String viewSql = AstToSQLBuilder.toSQL(stmt.getQueryStatement());
+
+            // reserve the original view sql
+
+            String viewSql = AstToSQLBuilder.toSQLWithCredential(stmt.getQueryStatement());
             stmt.setInlineViewDef(viewSql);
+            Preconditions.checkArgument(stmt.getOrigStmt() != null, "View's original statement is null");
+            String originalViewDef = stmt.getOrigStmt().originStmt;
+            Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
+            Preconditions.checkArgument(stmt.getQueryStartIndex() >= 0 && stmt.getQueryStopIndex() >= stmt.getQueryStartIndex(),
+                    "View's query start or stop index is invalid");
+            stmt.setOriginalViewDefineSql(originalViewDef.substring(stmt.getQueryStartIndex(), stmt.getQueryStopIndex()));
             return null;
         }
 
         @Override
         public Void visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
-            // normalize & validate view name
-            stmt.getTableName().normalization(context);
-            final String tableName = stmt.getTableName().getTbl();
+            TableRef tableRef = stmt.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table reference cannot be null");
+            }
+            tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+            stmt.setTableRef(tableRef);
+
+            final String catalog = tableRef.getCatalogName();
+            final String dbName = tableRef.getDbName();
+            final String tableName = tableRef.getTableName();
             FeNameFormat.checkTableName(tableName);
 
-            Table table = MetaUtils.getTable(stmt.getTableName());
-            if (!(table instanceof View)) {
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(context, catalog, dbName, tableName);
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", tableName);
+            }
+
+            if (!table.isView()) {
                 throw new SemanticException("The specified table [" + tableName + "] is not a view");
+            }
+
+            if (stmt.getAlterClause() == null) {
+                return null;
             }
 
             AlterClause alterClause = stmt.getAlterClause();
             AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
             Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+            AnalyzerUtils.prohibitTimeTravelQuery(alterViewClause.getQueryStatement(), "alter view");
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
 
             List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
                     alterViewClause.getColWithComments());
             alterViewClause.setColumns(viewColumns);
             String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
             alterViewClause.setInlineViewDef(viewSql);
+            Preconditions.checkArgument(stmt.getOrigStmt() != null, "View's original statement is null");
+            String originalViewDef = stmt.getOrigStmt().originStmt;
+            Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
+            Preconditions.checkArgument(alterViewClause.getQueryStartIndex() >= 0 &&
+                            alterViewClause.getQueryStopIndex() >= alterViewClause.getQueryStartIndex(),
+                    "View's query start or stop index is invalid");
+            alterViewClause.setOriginalViewDefineSql(
+                    originalViewDef.substring(alterViewClause.getQueryStartIndex(), alterViewClause.getQueryStopIndex()));
             return null;
         }
 
@@ -104,8 +178,9 @@ public class ViewAnalyzer {
                 for (int i = 0; i < colWithComments.size(); ++i) {
                     Column col = viewColumns.get(i);
                     ColWithComment colWithComment = colWithComments.get(i);
-                    col.setName(colWithComment.getColName());
-                    col.setComment(colWithComment.getComment());
+                    Column newColumn = new Column(colWithComment.getColName(), col.getType(), col.isAllowNull());
+                    newColumn.setComment(colWithComment.getComment());
+                    viewColumns.set(i, newColumn);
                 }
             }
 

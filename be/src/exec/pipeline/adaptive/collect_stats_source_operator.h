@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 
@@ -51,7 +51,7 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override;
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override;
     void adjust_dop() override;
 
 private:

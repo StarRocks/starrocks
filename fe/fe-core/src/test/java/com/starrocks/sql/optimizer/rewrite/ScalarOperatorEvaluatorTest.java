@@ -15,30 +15,36 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ScalarOperatorEvaluatorTest {
     @Test
     public void evaluationNotConstant() {
-        CallOperator operator = new CallOperator(FunctionSet.IFNULL, Type.INT,
-                Lists.newArrayList(new ColumnRefOperator(1, Type.INT, "test", true), ConstantOperator.createInt(2)));
+        CallOperator operator = new CallOperator(FunctionSet.IFNULL, IntegerType.INT,
+                Lists.newArrayList(new ColumnRefOperator(1, IntegerType.INT, "test", true), ConstantOperator.createInt(2)));
 
         ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
 
@@ -47,11 +53,11 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationNull() {
-        CallOperator operator = new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
-                Lists.newArrayList(ConstantOperator.createVarchar("test"), ConstantOperator.createNull(Type.VARCHAR)));
+        CallOperator operator = new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR,
+                Lists.newArrayList(ConstantOperator.createVarchar("test"), ConstantOperator.createNull(VarcharType.VARCHAR)));
 
-        Function fn =
-                new Function(new FunctionName(FunctionSet.CONCAT), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
+        Function fn = new Function(new FunctionName(FunctionSet.CONCAT),
+                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -68,11 +74,11 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationArrayArgs() {
-        CallOperator operator = new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
+        CallOperator operator = new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR,
                 Lists.newArrayList(ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("123")));
 
-        Function fn =
-                new Function(new FunctionName(FunctionSet.CONCAT), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
+        Function fn = new Function(new FunctionName(FunctionSet.CONCAT),
+                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -88,15 +94,105 @@ public class ScalarOperatorEvaluatorTest {
     }
 
     @Test
+    public void evaluationRegexpReplace() {
+        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, VarcharType.VARCHAR,
+                Lists.newArrayList(
+                        ConstantOperator.createVarchar("a b c"),
+                        ConstantOperator.createVarchar("(b)"),
+                        ConstantOperator.createVarchar("<\\1>")));
+
+        Function fn = new Function(new FunctionName(FunctionSet.REGEXP_REPLACE),
+                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+
+        new Expectations(operator) {
+            {
+                operator.getFunction();
+                result = fn;
+            }
+        };
+
+        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals("a <b> c", ((ConstantOperator) result).getVarchar());
+    }
+
+    @Test
+    public void evaluationRegexpReplaceFallbackToBE() {
+        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, VarcharType.VARCHAR,
+                Lists.newArrayList(
+                        ConstantOperator.createVarchar("abcd"),
+                        ConstantOperator.createVarchar("(unclosed"),
+                        ConstantOperator.createVarchar("xx")));
+
+        Function fn = new Function(new FunctionName(FunctionSet.REGEXP_REPLACE),
+                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+
+        new Expectations(operator) {
+            {
+                operator.getFunction();
+                result = fn;
+            }
+        };
+
+        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
+        assertEquals(operator, result);
+    }
+
+    @Test
+    public void evaluationRegexpReplaceEmptyPatternFallbackToBE() {
+        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, VarcharType.VARCHAR,
+                Lists.newArrayList(
+                        ConstantOperator.createVarchar(""),
+                        ConstantOperator.createVarchar(""),
+                        ConstantOperator.createVarchar("xx")));
+
+        Function fn = new Function(new FunctionName(FunctionSet.REGEXP_REPLACE),
+                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+
+        new Expectations(operator) {
+            {
+                operator.getFunction();
+                result = fn;
+            }
+        };
+
+        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
+        assertEquals(operator, result);
+    }
+
+    @Test
+    public void evaluationRegexpReplaceGlobal() {
+        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, VarcharType.VARCHAR,
+                Lists.newArrayList(
+                        ConstantOperator.createVarchar("xxxx"),
+                        ConstantOperator.createVarchar("xx"),
+                        ConstantOperator.createVarchar("-")));
+
+        Function fn = new Function(new FunctionName(FunctionSet.REGEXP_REPLACE),
+                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+
+        new Expectations(operator) {
+            {
+                operator.getFunction();
+                result = fn;
+            }
+        };
+
+        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals("--", ((ConstantOperator) result).getVarchar());
+    }
+
+    @Test
     public void evaluationFromUtc() {
-        CallOperator operator = new CallOperator(FunctionSet.STR_TO_DATE, Type.VARCHAR, Lists.newArrayList(
+        CallOperator operator = new CallOperator(FunctionSet.STR_TO_DATE, VarcharType.VARCHAR, Lists.newArrayList(
                 ConstantOperator.createVarchar("2003-10-11 23:56:25"),
                 ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")
         ));
 
         Function fn =
-                new Function(new FunctionName(FunctionSet.STR_TO_DATE), new Type[] {Type.VARCHAR, Type.VARCHAR},
-                        Type.DATETIME,
+                new Function(new FunctionName(FunctionSet.STR_TO_DATE), new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR},
+                        DateType.DATETIME,
                         false);
 
         new Expectations(operator) {
@@ -112,11 +208,11 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationNonNullableFunc() {
-        CallOperator operator = new CallOperator(FunctionSet.BITMAP_COUNT, Type.BIGINT,
-                Lists.newArrayList(ConstantOperator.createNull(Type.BITMAP)));
+        CallOperator operator = new CallOperator(FunctionSet.BITMAP_COUNT, IntegerType.BIGINT,
+                Lists.newArrayList(ConstantOperator.createNull(BitmapType.BITMAP)));
 
-        Function fn =
-                new Function(new FunctionName(FunctionSet.BITMAP_COUNT), new Type[] {Type.BITMAP}, Type.BIGINT, false);
+        Function fn = new Function(new FunctionName(FunctionSet.BITMAP_COUNT),
+                new Type[] {BitmapType.BITMAP}, IntegerType.BIGINT, false);
         new Expectations(operator) {
             {
                 operator.getFunction();
@@ -130,17 +226,53 @@ public class ScalarOperatorEvaluatorTest {
     }
 
     @Test
+    public void evaluationVariadicHashFunctions() {
+        ConstantOperator first = ConstantOperator.createVarchar("hello");
+        ConstantOperator second = ConstantOperator.createVarchar("world");
+        ConstantOperator third = ConstantOperator.createVarchar("starrocks");
+
+        CallOperator xxHash32 = constantFunctionCall(FunctionSet.XX_HASH32, IntegerType.INT, first, second, third);
+        Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash32));
+        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(xxHash32);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals(ScalarOperatorFunctions.xxHash32(first, second, third).getInt(),
+                ((ConstantOperator) result).getInt());
+
+        CallOperator xxHash64 = constantFunctionCall(FunctionSet.XX_HASH64, IntegerType.BIGINT, first, second, third);
+        Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash64));
+        result = ScalarOperatorEvaluator.INSTANCE.evaluation(xxHash64);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals(ScalarOperatorFunctions.xxHash64(first, second, third).getBigint(),
+                ((ConstantOperator) result).getBigint());
+
+        CallOperator xxHash3Bigint = constantFunctionCall(
+                FunctionSet.XX_HASH3_64, IntegerType.BIGINT, first, second, third);
+        Assertions.assertTrue(ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(xxHash3Bigint));
+        result = ScalarOperatorEvaluator.INSTANCE.evaluation(xxHash3Bigint);
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals(ScalarOperatorFunctions.xxHash3_64(first, second, third).getBigint(),
+                ((ConstantOperator) result).getBigint());
+    }
+
+    @Test
     public void testCreateConstantValue() {
-        ConstantOperator tinyInt = ConstantOperator.createExampleValueByType(Type.TINYINT);
-        Assert.assertTrue(tinyInt.getTinyInt() == 1);
-        ConstantOperator smallInt = ConstantOperator.createExampleValueByType(Type.SMALLINT);
-        Assert.assertTrue(smallInt.getSmallint() == 1);
-        ConstantOperator intValue = ConstantOperator.createExampleValueByType(Type.INT);
-        Assert.assertTrue(intValue.getInt() == 1);
-        ConstantOperator bigInt = ConstantOperator.createExampleValueByType(Type.BIGINT);
-        Assert.assertTrue(bigInt.getBigint() == 1L);
-        ConstantOperator largeInt = ConstantOperator.createExampleValueByType(Type.LARGEINT);
-        Assert.assertTrue(largeInt.getLargeInt().equals(new BigInteger("1")));
+        ConstantOperator tinyInt = ConstantOperator.createExampleValueByType(IntegerType.TINYINT);
+        Assertions.assertTrue(tinyInt.getTinyInt() == 1);
+        ConstantOperator smallInt = ConstantOperator.createExampleValueByType(IntegerType.SMALLINT);
+        Assertions.assertTrue(smallInt.getSmallint() == 1);
+        ConstantOperator intValue = ConstantOperator.createExampleValueByType(IntegerType.INT);
+        Assertions.assertTrue(intValue.getInt() == 1);
+        ConstantOperator bigInt = ConstantOperator.createExampleValueByType(IntegerType.BIGINT);
+        Assertions.assertTrue(bigInt.getBigint() == 1L);
+        ConstantOperator largeInt = ConstantOperator.createExampleValueByType(IntegerType.LARGEINT);
+        Assertions.assertTrue(largeInt.getLargeInt().equals(new BigInteger("1")));
+    }
+
+    private static CallOperator constantFunctionCall(String fnName, Type returnType, ConstantOperator... args) {
+        Type[] argTypes = Arrays.stream(args).map(ConstantOperator::getType).toArray(Type[]::new);
+        Function fn = new Function(new FunctionName(fnName), argTypes, returnType, false);
+        List<ScalarOperator> arguments = Lists.newArrayList(args);
+        return new CallOperator(fnName, returnType, arguments, fn);
     }
 
 }

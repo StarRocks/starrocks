@@ -16,19 +16,23 @@
 
 #include <vector>
 
+#include "base/debug/trace.h"
+#include "base/time/time.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "column/schema.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
-#include "storage/row_source_mask.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
-#include "util/time.h"
-#include "util/trace.h"
+#include "storage_primitive/row_source_mask_buffer.h"
 
 namespace starrocks {
 
@@ -53,14 +57,14 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
     if (_output_rowset != nullptr) {
         return Status::OK();
     }
-    TRACE("[Compaction] start vertical comapction data");
+    TRACE("[Compaction] start vertical compaction data");
     int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
             config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
 
     std::unique_ptr<RowsetWriter> output_rs_writer;
-    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
-                                                                    _task_info.algorithm, _task_info.output_version,
-                                                                    &output_rs_writer, _tablet_schema));
+    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
+            _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, _task_info.gtid,
+            &output_rs_writer, _tablet_schema));
 
     std::vector<std::vector<uint32_t>> column_groups;
     CompactionUtils::split_column_into_groups(_tablet_schema->num_columns(), _tablet_schema->sort_key_idxes(),
@@ -131,13 +135,14 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
     reader_params.reader_type =
             compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+    reader_params.column_access_paths = &_column_access_paths;
 
     StatusOr<int32_t> ret = _calculate_chunk_size_for_column_group(column_group);
     if (!ret.ok()) {
         return ret.status();
     }
     int32_t chunk_size = ret.value();
-    VLOG(1) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
+    VLOG(2) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
             << ", column group=" << column_group_index << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.open(reader_params));
@@ -192,8 +197,8 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
                                                        std::vector<RowSourceMask>* source_masks) {
     DCHECK(reader);
     size_t output_rows = 0;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
     Status status = Status::OK();
     size_t column_group_del_filtered_rows = 0;

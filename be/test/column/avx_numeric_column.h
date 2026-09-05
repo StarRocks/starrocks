@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #ifdef __x86_64__
 #include <glog/logging.h>
 #include <immintrin.h>
@@ -22,7 +24,7 @@
 namespace starrocks {
 class AvxNumericColumn {
 public:
-    void avx256_filter(const std::vector<int32_t>& data, const std::vector<uint8_t>& filter, size_t result_size_hint,
+    void avx256_filter(const std::vector<int32_t>& data, const Filter& filter, size_t result_size_hint,
                        std::vector<int32_t>& result) {
         const int32_t* d_data = data.data();
         const uint8_t* f_data = filter.data();
@@ -39,7 +41,7 @@ public:
 
         int result_pos = 0;
         for (int i = 0; i < loop; ++i) {
-            __m256i f = _mm256_load_si256(reinterpret_cast<const __m256i*>(f_data + i * batch_nums));
+            __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + i * batch_nums));
 
             __m256i re = _mm256_cmpgt_epi8(f, all0);
             int mask = _mm256_movemask_epi8(re);

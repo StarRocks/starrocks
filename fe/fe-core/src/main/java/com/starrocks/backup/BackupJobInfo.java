@@ -49,7 +49,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -58,8 +57,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -90,6 +87,14 @@ public class BackupJobInfo implements Writable {
     public long dbId;
     @SerializedName(value = "backupTime")
     public long backupTime;
+    @SerializedName(value = "clusterId")
+    public Integer clusterId;
+    @SerializedName(value = "finishTime")
+    public Long finishTime;
+    @SerializedName(value = "ttl")
+    public String ttl;
+    @SerializedName(value = "expireTime")
+    public Long expireTime;
     @SerializedName(value = "tables")
     public Map<String, BackupTableInfo> tables = Maps.newHashMap();
     public boolean success;
@@ -171,9 +176,10 @@ public class BackupJobInfo implements Writable {
 
         public void checkAndRecoverAutoIncrementId(Table tbl) {
             Long newId = tbl.getId();
-    
+
             if (autoIncrementId != null) {
-                GlobalStateMgr.getCurrentState().addOrReplaceAutoIncrementIdByTableId(newId, autoIncrementId);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addOrReplaceAutoIncrementIdByTableId(newId, autoIncrementId);
             }
         }
 
@@ -240,8 +246,6 @@ public class BackupJobInfo implements Writable {
     public static class BackupTabletInfo {
         @SerializedName(value = "id")
         public long id;
-        @SerializedName(value = "files")
-        public List<String> files = Lists.newArrayList();
     }
 
     // eg: __db_10001/__tbl_10002/__part_10003/__idx_10002/__10004
@@ -305,63 +309,48 @@ public class BackupJobInfo implements Writable {
 
         // tbls
         for (Table tbl : tbls) {
-            OlapTable olapTbl = (OlapTable) tbl;
             BackupTableInfo tableInfo = new BackupTableInfo();
             tableInfo.id = tbl.getId();
             tableInfo.name = tbl.getName();
             jobInfo.tables.put(tableInfo.name, tableInfo);
+
+            if (tbl.isOlapView()) {
+                continue;
+            }
+
+            OlapTable olapTbl = (OlapTable) tbl;
             // partitions
             for (Partition partition : olapTbl.getPartitions()) {
                 BackupPartitionInfo partitionInfo = new BackupPartitionInfo();
                 partitionInfo.id = partition.getId();
                 partitionInfo.name = partition.getName();
-                partitionInfo.version = partition.getVisibleVersion();
-                if (partition.getSubPartitions().size() == 1) {
-                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                partitionInfo.version = partition.getDefaultPhysicalPartition().getVisibleVersion();
+
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    BackupPhysicalPartitionInfo physicalPartitionInfo = new BackupPhysicalPartitionInfo();
+                    physicalPartitionInfo.id = physicalPartition.getId();
+                    physicalPartitionInfo.version = physicalPartition.getVisibleVersion();
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         BackupIndexInfo idxInfo = new BackupIndexInfo();
                         idxInfo.id = index.getId();
-                        idxInfo.name = olapTbl.getIndexNameById(index.getId());
-                        idxInfo.schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
-                        partitionInfo.indexes.put(idxInfo.name, idxInfo);
+                        idxInfo.name = olapTbl.getIndexNameByMetaId(index.getMetaId());
+                        idxInfo.schemaHash = olapTbl.getSchemaHashByIndexMetaId(index.getMetaId());
+                        physicalPartitionInfo.indexes.put(idxInfo.name, idxInfo);
                         // tablets
                         for (Tablet tablet : index.getTablets()) {
                             BackupTabletInfo tabletInfo = new BackupTabletInfo();
                             tabletInfo.id = tablet.getId();
-                            if (tbl.isOlapTable()) {
-                                tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
-                            }
                             idxInfo.tablets.add(tabletInfo);
                         }
                     }
-                } else {
-                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        BackupPhysicalPartitionInfo physicalPartitionInfo = new BackupPhysicalPartitionInfo();
-                        physicalPartitionInfo.id = physicalPartition.getId();
-                        physicalPartitionInfo.version = physicalPartition.getVisibleVersion();
-                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            BackupIndexInfo idxInfo = new BackupIndexInfo();
-                            idxInfo.id = index.getId();
-                            idxInfo.name = olapTbl.getIndexNameById(index.getId());
-                            idxInfo.schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
-                            physicalPartitionInfo.indexes.put(idxInfo.name, idxInfo);
-                            // tablets
-                            for (Tablet tablet : index.getTablets()) {
-                                BackupTabletInfo tabletInfo = new BackupTabletInfo();
-                                tabletInfo.id = tablet.getId();
-                                if (tbl.isOlapTable()) {
-                                    tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
-                                }
-                                idxInfo.tablets.add(tabletInfo);
-                            }
-                        }
-                        partitionInfo.subPartitions.put(physicalPartition.getId(), physicalPartitionInfo);
-                    }
+                    partitionInfo.subPartitions.put(physicalPartition.getId(), physicalPartitionInfo);
                 }
                 tableInfo.partitions.put(partitionInfo.name, partitionInfo);
             }
 
             tableInfo.autoIncrementId = null;
-            Long id = GlobalStateMgr.getCurrentState().getCurrentAutoIncrementIdByTableId(tbl.getId());
+            Long id = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getCurrentAutoIncrementIdByTableId(tbl.getId());
             for (Column col : tbl.getBaseSchema()) {
                 if (col.isAutoIncrement() && id != null) {
                     tableInfo.autoIncrementId = id;
@@ -443,9 +432,42 @@ public class BackupJobInfo implements Writable {
             // starrocks_meta_version does not exist
             jobInfo.starrocksMetaVersion = FeConstants.STARROCKS_META_VERSION;
         }
+        // Each retention key is read on its own and left null when it is not there: a file written
+        // before this feature existed has none of them, and a snapshot kept forever has no ttl or
+        // expiration while still recording its cluster and finish time.
+        try {
+            jobInfo.clusterId = root.getInt("cluster_id");
+        } catch (JSONException e) {
+            // cluster_id does not exist, so the snapshot has no known owner
+        }
+        try {
+            jobInfo.finishTime = root.getLong("finish_time");
+        } catch (JSONException e) {
+            // finish_time does not exist
+        }
+        try {
+            jobInfo.ttl = root.getString("ttl");
+        } catch (JSONException e) {
+            // ttl does not exist
+        }
+        try {
+            jobInfo.expireTime = root.getLong("expire_time");
+        } catch (JSONException e) {
+            // expire_time does not exist
+        }
 
         JSONObject backupObjs = root.getJSONObject("backup_objects");
         String[] tblNames = JSONObject.getNames(backupObjs);
+        if (tblNames == null) {
+            // means that pure snapshot for functions
+            String result = root.getString("backup_result");
+            if (result.equals("succeed")) {
+                jobInfo.success = true;
+            } else {
+                jobInfo.success = false;
+            }
+            return;
+        }
         for (String tblName : tblNames) {
             BackupTableInfo tblInfo = new BackupTableInfo();
             tblInfo.name = tblName;
@@ -458,6 +480,11 @@ public class BackupJobInfo implements Writable {
             }
             JSONObject parts = tbl.getJSONObject("partitions");
             String[] partsNames = JSONObject.getNames(parts);
+            if (partsNames == null) {
+                // skip logical view
+                jobInfo.tables.put(tblName, tblInfo);
+                continue;
+            }
             for (String partName : partsNames) {
                 BackupPartitionInfo partInfo = new BackupPartitionInfo();
                 partInfo.name = partName;
@@ -486,10 +513,6 @@ public class BackupJobInfo implements Writable {
                         for (String tabletId : orderedTabletIds) {
                             BackupTabletInfo tabletInfo = new BackupTabletInfo();
                             tabletInfo.id = Long.valueOf(tabletId);
-                            JSONArray files = tablets.getJSONArray(tabletId);
-                            for (Object object : files) {
-                                tabletInfo.files.add((String) object);
-                            }
                             indexInfo.tablets.add(tabletInfo);
                         }
                         partInfo.indexes.put(indexInfo.name, indexInfo);
@@ -526,10 +549,6 @@ public class BackupJobInfo implements Writable {
                                 for (String tabletId : orderedTabletIds) {
                                     BackupTabletInfo tabletInfo = new BackupTabletInfo();
                                     tabletInfo.id = Long.valueOf(tabletId);
-                                    JSONArray files = tablets.getJSONArray(tabletId);
-                                    for (Object object : files) {
-                                        tabletInfo.files.add((String) object);
-                                    }
                                     indexInfo.tablets.add(tabletInfo);
                                 }
                                 subPartInfo.indexes.put(indexInfo.name, indexInfo);
@@ -593,6 +612,11 @@ public class BackupJobInfo implements Writable {
             root.put("id", dbId);
         }
         root.put("backup_time", backupTime);
+        // org.json drops a key whose value is null, which is how an unset retention stays absent.
+        root.put("cluster_id", clusterId);
+        root.put("finish_time", finishTime);
+        root.put("ttl", ttl);
+        root.put("expire_time", expireTime);
         JSONObject backupObj = new JSONObject();
         root.put("backup_objects", backupObj);
         root.put("meta_version", FeConstants.META_VERSION);
@@ -626,9 +650,6 @@ public class BackupJobInfo implements Writable {
                         for (BackupTabletInfo tabletInfo : idxInfo.tablets) {
                             JSONArray files = new JSONArray();
                             tablets.put(String.valueOf(tabletInfo.id), files);
-                            for (String fileName : tabletInfo.files) {
-                                files.put(fileName);
-                            }
                             // to save the order of tablets
                             tabletsOrder.put(String.valueOf(tabletInfo.id));
                         }
@@ -653,9 +674,6 @@ public class BackupJobInfo implements Writable {
                             for (BackupTabletInfo tabletInfo : idxInfo.tablets) {
                                 JSONArray files = new JSONArray();
                                 tablets.put(String.valueOf(tabletInfo.id), files);
-                                for (String fileName : tabletInfo.files) {
-                                    files.put(fileName);
-                                }
                                 // to save the order of tablets
                                 tabletsOrder.put(String.valueOf(tabletInfo.id));
                             }
@@ -692,32 +710,8 @@ public class BackupJobInfo implements Writable {
         return Joiner.on(", ").join(objs);
     }
 
-    public static BackupJobInfo read(DataInput in) throws IOException {
-        BackupJobInfo jobInfo = new BackupJobInfo();
-        jobInfo.readFields(in);
-        return jobInfo;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, toJson(true).toString());
-        out.writeInt(tblAlias.size());
-        for (Map.Entry<String, String> entry : tblAlias.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        genFromJson(json, this);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String tbl = Text.readString(in);
-            String alias = Text.readString(in);
-            tblAlias.put(tbl, alias);
-        }
-    }
 
     @Override
     public String toString() {

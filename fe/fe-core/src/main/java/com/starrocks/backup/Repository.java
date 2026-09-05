@@ -39,24 +39,22 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.backup.SnapshotRetentionCache.SnapshotRetention;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Backend;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -64,8 +62,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.UUID;
+import java.util.function.Function;
 
 /*
  * Repository represents a remote storage for backup to or restore from
@@ -284,6 +284,90 @@ public class Repository implements Writable, GsonPostProcessable {
                 childPath);
     }
 
+    /**
+     * The job info file of the snapshot stored under {@code label}, or null when this repository
+     * holds no finished backup under it: no such label, or one whose job info file is not there yet
+     * because the backup is still running or was interrupted. A repository that cannot be read
+     * answers the same way, and logs why.
+     */
+    public RemoteFile findJobInfoFile(String label) {
+        List<RemoteFile> results = Lists.newArrayList();
+        Status st = storage.list(assembleJobInfoFilePath(label, -1) + "*", results);
+        if (!st.ok()) {
+            LOG.warn("failed to list the job info file of snapshot {} in repo {}: {}", label, name, st.getErrMsg());
+            return null;
+        }
+
+        for (RemoteFile file : results) {
+            // A name without a checksum is not a job info file: eg a leftover __info_xxx.part from
+            // an interrupted upload.
+            if (file.isFile() && decodeFileNameWithChecksum(file.getName()) != null) {
+                return file;
+            }
+        }
+        return null;
+    }
+
+    /** Which backup a job info file belongs to. The file must be one {@link #findJobInfoFile} returned. */
+    public static String jobInfoBackupTimestamp(RemoteFile jobInfoFile) {
+        Pair<String, String> pureFileName = decodeFileNameWithChecksum(jobInfoFile.getName());
+        Preconditions.checkArgument(pureFileName != null, "not a job info file: %s", jobInfoFile.getName());
+        return disjoinPrefix(PREFIX_JOB_INFO, pureFileName.first);
+    }
+
+    /** Downloads and parses a job info file found by {@link #findJobInfoFile}, without listing again. */
+    public Status readJobInfoFile(String label, RemoteFile jobInfoFile, List<BackupJobInfo> infos) {
+        return parseJobInfoFile(infos, local -> downloadListed(assembleSnapshotDirPath(label), jobInfoFile, local));
+    }
+
+    /**
+     * The backup timestamp of the snapshot stored under {@code label}, or null when this repository
+     * holds no finished backup under it.
+     *
+     * <p>That timestamp identifies one particular backup, so re-reading it is how a caller confirms
+     * that what sits under the label now is still the backup it looked at earlier.
+     */
+    public String getSnapshotTimestamp(String label) {
+        RemoteFile jobInfoFile = findJobInfoFile(label);
+        return jobInfoFile == null ? null : jobInfoBackupTimestamp(jobInfoFile);
+    }
+
+    // eg: location/__starrocks_repository_repo_name/__ss_my_ss1
+    public String assembleSnapshotDirPath(String label) {
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
+                joinPrefix(PREFIX_SNAPSHOT_DIR, label));
+    }
+
+    /**
+     * Deletes one snapshot directory and everything under it.
+     *
+     * <p>A single recursive delete is enough: {@code BlobStorage.delete} maps to
+     * {@code FileSystem.delete(path, true)}, which covers HDFS and the object stores reached through
+     * the same abstraction. Deleting an already-deleted path is a no-op, so an interrupted delete is
+     * safe to repeat.
+     *
+     * <p>The label is what the deleted path is built from, so it has to name one snapshot directory:
+     * it must be non-empty and free of path separators.
+     */
+    public Status deleteSnapshot(String label) {
+        if (Strings.isNullOrEmpty(label)) {
+            return new Status(ErrCode.COMMON_ERROR, "snapshot label is empty");
+        }
+        if (label.contains(PATH_DELIMITER)) {
+            return new Status(ErrCode.COMMON_ERROR,
+                    "snapshot label must not contain a path separator: " + label);
+        }
+
+        String snapshotDir = assembleSnapshotDirPath(label);
+        LOG.info("start to delete snapshot dir {} in repo {}", snapshotDir, name);
+        Status st = storage.delete(snapshotDir);
+        if (!st.ok()) {
+            return st;
+        }
+        LOG.info("finished deleting snapshot dir {} in repo {}", snapshotDir, name);
+        return Status.OK;
+    }
+
     // Check if this repo is available.
     // If failed to connect this repo, set errMsg and return false.
     public boolean ping() {
@@ -349,10 +433,17 @@ public class Repository implements Writable, GsonPostProcessable {
 
     public Status getSnapshotInfoFile(String label, String backupTimestamp, List<BackupJobInfo> infos) {
         String remoteInfoFilePath = assembleJobInfoFilePath(label, -1) + backupTimestamp;
+        return parseJobInfoFile(infos, local -> download(remoteInfoFilePath, local));
+    }
+
+    /** Runs {@code downloader} into a scratch file and parses the job info out of what it wrote. */
+    private Status parseJobInfoFile(List<BackupJobInfo> infos, Function<String, Status> downloader) {
+        // Named per read rather than per millisecond: a cleaner scan and a SHOW SNAPSHOT can be
+        // reading different snapshots at the same moment, and each deletes this file when it is done.
         File localInfoFile = new File(BackupHandler.BACKUP_ROOT_DIR + PATH_DELIMITER
-                + "info_" + System.currentTimeMillis());
+                + "info_" + UUID.randomUUID());
         try {
-            Status st = download(remoteInfoFilePath, localInfoFile.getPath());
+            Status st = downloader.apply(localInfoFile.getPath());
             if (!st.ok()) {
                 return st;
             }
@@ -462,23 +553,37 @@ public class Repository implements Writable, GsonPostProcessable {
             return new Status(ErrCode.COMMON_ERROR, "Expected file with path: " + remoteFilePath + ". but get dir");
         }
 
-        String remoteFilePathWithChecksum = replaceFileNameWithChecksumFileName(remoteFilePath,
-                remoteFiles.get(0).getName());
-        LOG.debug("get download filename with checksum: " + remoteFilePathWithChecksum);
-
-        // 1. get checksum from remote file name
-        Pair<String, String> pair = decodeFileNameWithChecksum(remoteFilePathWithChecksum);
-        if (pair == null) {
+        // 1. the listing was a prefix match, so confirm the one file it found is the one that was
+        // asked for rather than a longer name sharing its prefix
+        Pair<String, String> pureFileName = decodeFileNameWithChecksum(remoteFiles.get(0).getName());
+        if (pureFileName == null) {
             return new Status(ErrCode.COMMON_ERROR,
-                    "file name should contains checksum: " + remoteFilePathWithChecksum);
+                    "file name should contains checksum: " + remoteFiles.get(0).getName());
         }
-        if (!remoteFilePath.endsWith(pair.first)) {
+        if (!remoteFilePath.endsWith(PATH_DELIMITER + pureFileName.first)) {
             return new Status(ErrCode.COMMON_ERROR, "File does not exist: " + remoteFilePath);
         }
-        String md5sum = pair.second;
+
+        return downloadListed(parentPath(remoteFilePath), remoteFiles.get(0), localFilePath);
+    }
+
+    /**
+     * {@link #download} for a file the caller has already listed, skipping the listing it starts
+     * with. The listed name is what carries the checksum, so all that is needed alongside it is the
+     * directory it was listed from.
+     */
+    private Status downloadListed(String remoteDirPath, RemoteFile remoteFile, String localFilePath) {
+        // 1. get checksum from remote file name
+        Pair<String, String> pureFileName = decodeFileNameWithChecksum(remoteFile.getName());
+        if (pureFileName == null) {
+            return new Status(ErrCode.COMMON_ERROR, "file name should contains checksum: " + remoteFile.getName());
+        }
+        String md5sum = pureFileName.second;
+        String remoteFilePathWithChecksum = remoteDirPath + PATH_DELIMITER + remoteFile.getName();
+        LOG.debug("get download filename with checksum: {}", remoteFilePathWithChecksum);
 
         // 2. download
-        status = storage.downloadWithFileSize(remoteFilePathWithChecksum, localFilePath, remoteFiles.get(0).getSize());
+        Status status = storage.downloadWithFileSize(remoteFilePathWithChecksum, localFilePath, remoteFile.getSize());
         if (!status.ok()) {
             return status;
         }
@@ -508,7 +613,8 @@ public class Repository implements Writable, GsonPostProcessable {
             return PREFIX_JOB_INFO;
         } else {
             return PREFIX_JOB_INFO
-                    + TimeUtils.longToTimeString(createTime, new SimpleDateFormat(BackupJob.TIMESTAMP_FORMAT));
+                    + TimeUtils.longToTimeString(createTime,
+                    DateTimeFormatter.ofPattern(BackupJob.TIMESTAMP_FORMAT).withZone(TimeUtils.getSystemTimeZone().toZoneId()));
         }
     }
 
@@ -542,14 +648,14 @@ public class Repository implements Writable, GsonPostProcessable {
     }
 
     // in: /path/to/orig_file
-    // out: /path/to/orig_file.BUWDnl831e4nldsf
-    public static String replaceFileNameWithChecksumFileName(String origPath, String fileNameWithChecksum) {
-        return origPath.substring(0, origPath.lastIndexOf(PATH_DELIMITER) + 1) + fileNameWithChecksum;
+    // out: /path/to
+    private static String parentPath(String path) {
+        return path.substring(0, path.lastIndexOf(PATH_DELIMITER));
     }
 
     public Status getBrokerAddress(Long beId, GlobalStateMgr globalStateMgr, List<FsBroker> brokerAddrs) {
         // get backend
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
         if (be == null) {
             return new Status(ErrCode.COMMON_ERROR, "backend " + beId + " is missing. "
                     + "failed to send upload snapshot task");
@@ -559,7 +665,7 @@ public class Repository implements Writable, GsonPostProcessable {
         FsBroker brokerAddr;
         try {
             brokerAddr = globalStateMgr.getBrokerMgr().getBroker(storage.getBrokerName(), be.getHost());
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             return new Status(ErrCode.COMMON_ERROR, "failed to get address of broker "
                     + storage.getBrokerName() + " when try to send upload snapshot task: "
                     + e.getMessage());
@@ -584,15 +690,15 @@ public class Repository implements Writable, GsonPostProcessable {
         return info;
     }
 
-    public List<List<String>> getSnapshotInfos(String snapshotName, String timestamp, List<String> snapshotNames)
-            throws AnalysisException {
+    public List<List<String>> getSnapshotInfos(String snapshotName, String timestamp, List<String> snapshotNames,
+                                              SnapshotRetentionCache retentionCache) {
         List<List<String>> snapshotInfos = Lists.newArrayList();
         if (Strings.isNullOrEmpty(snapshotName)) {
             // get all snapshot infos
             List<String> fullSnapshotNames = Lists.newArrayList();
             Status status = listSnapshots(fullSnapshotNames);
             if (!status.ok()) {
-                throw new AnalysisException(
+                throw new SemanticException(
                         "Failed to list snapshot in repo: " + name + ", err: " + status.getErrMsg());
             }
 
@@ -600,19 +706,20 @@ public class Repository implements Writable, GsonPostProcessable {
                 if (snapshotNames != null && snapshotNames.size() != 0 && !snapshotNames.contains(ssName)) {
                     continue;
                 }
-                List<String> info = getSnapshotInfo(ssName, null /* get all timestamp */);
+                List<String> info = getSnapshotInfo(ssName, null /* get all timestamp */, retentionCache);
                 snapshotInfos.add(info);
             }
         } else {
             // get specified snapshot info
-            List<String> info = getSnapshotInfo(snapshotName, timestamp);
+            List<String> info = getSnapshotInfo(snapshotName, timestamp, retentionCache);
             snapshotInfos.add(info);
         }
 
         return snapshotInfos;
     }
 
-    private List<String> getSnapshotInfo(String snapshotName, String timestamp) {
+    private List<String> getSnapshotInfo(String snapshotName, String timestamp,
+                                         SnapshotRetentionCache retentionCache) {
         List<String> info = Lists.newArrayList();
         if (Strings.isNullOrEmpty(timestamp)) {
             // get all timestamp
@@ -625,10 +732,12 @@ public class Repository implements Writable, GsonPostProcessable {
                 info.add(snapshotName);
                 info.add(FeConstants.NULL_STRING);
                 info.add("ERROR: Failed to get info: " + st.getErrMsg());
+                addRetentionInfo(info, null);
             } else {
                 info.add(snapshotName);
 
                 List<String> tmp = Lists.newArrayList();
+                RemoteFile jobInfoFile = null;
                 for (RemoteFile file : results) {
                     // __info_2018-04-18-20-11-00.Jdwnd9312sfdn1294343
                     Pair<String, String> pureFileName = decodeFileNameWithChecksum(file.getName());
@@ -637,10 +746,16 @@ public class Repository implements Writable, GsonPostProcessable {
                         tmp.add("Invalid: " + file.getName());
                         continue;
                     }
+                    if (jobInfoFile == null) {
+                        jobInfoFile = file;
+                    }
                     tmp.add(disjoinPrefix(PREFIX_JOB_INFO, pureFileName.first));
                 }
                 info.add(Joiner.on("\n").join(tmp));
                 info.add(tmp.isEmpty() ? "ERROR: no snapshot" : "OK");
+                // The listing above is the one the retention lookup would otherwise have to make.
+                addRetentionInfo(info,
+                        jobInfoFile == null ? null : retentionCache.get(this, snapshotName, jobInfoFile));
             }
         } else {
             // get specified timestamp
@@ -655,6 +770,7 @@ public class Repository implements Writable, GsonPostProcessable {
                     info.add(FeConstants.NULL_STRING);
                     info.add(FeConstants.NULL_STRING);
                     info.add("Failed to get info: " + st.getErrMsg());
+                    addRetentionInfo(info, null);
                 } else {
                     try {
                         BackupJobInfo jobInfo = BackupJobInfo.fromFile(localFilePath);
@@ -663,12 +779,15 @@ public class Repository implements Writable, GsonPostProcessable {
                         info.add(jobInfo.dbName);
                         info.add(jobInfo.getBrief());
                         info.add("OK");
+                        addRetentionInfo(info, new SnapshotRetention(timestamp, jobInfo.clusterId,
+                                jobInfo.finishTime, jobInfo.ttl, jobInfo.expireTime));
                     } catch (IOException e) {
                         info.add(snapshotName);
                         info.add(timestamp);
                         info.add(FeConstants.NULL_STRING);
                         info.add(FeConstants.NULL_STRING);
                         info.add("Failed to read info from local file: " + e.getMessage());
+                        addRetentionInfo(info, null);
                     }
                 }
             } finally {
@@ -685,33 +804,19 @@ public class Repository implements Writable, GsonPostProcessable {
         return info;
     }
 
-    public static Repository read(DataInput in) throws IOException {
-        Repository repo = new Repository();
-        repo.readFields(in);
-        return repo;
-    }
+    /**
+     * Appends the ClusterId, FinishTime, TTL and ExpireTime cells of one SHOW SNAPSHOT row.
+     */
+    private void addRetentionInfo(List<String> info, SnapshotRetention retention) {
+        Integer clusterId = retention == null ? null : retention.getClusterId();
+        Long finishTime = retention == null ? null : retention.getFinishTime();
+        String ttl = retention == null ? null : retention.getTtl();
+        Long expireTime = retention == null ? null : retention.getExpireTime();
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(id);
-        Text.writeString(out, name);
-        out.writeBoolean(isReadOnly);
-        Text.writeString(out, location);
-        storage.write(out);
-        out.writeLong(createTime);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        id = in.readLong();
-        name = Text.readString(in);
-        isReadOnly = in.readBoolean();
-        location = Text.readString(in);
-        storage = BlobStorage.read(in);
-        createTime = in.readLong();
-
-        if (!GlobalStateMgr.isCheckpointThread()) {
-            genPrefixRepo();
-        }
+        info.add(clusterId == null ? FeConstants.NULL_STRING : String.valueOf(clusterId));
+        info.add(finishTime == null ? FeConstants.NULL_STRING : TimeUtils.longToTimeString(finishTime));
+        info.add(Strings.isNullOrEmpty(ttl) ? FeConstants.NULL_STRING : ttl);
+        info.add(expireTime == null ? FeConstants.NULL_STRING : TimeUtils.longToTimeString(expireTime));
     }
 
     @Override

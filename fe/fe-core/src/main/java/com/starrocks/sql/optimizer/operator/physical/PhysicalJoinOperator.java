@@ -16,30 +16,33 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected final JoinOperator joinType;
-    protected final ScalarOperator onPredicate;
+    protected ScalarOperator onPredicate;
     protected final String joinHint;
-    protected boolean canLocalShuffle;
+    protected boolean outputRequireHashPartition = true;
 
     protected PhysicalJoinOperator(OperatorType operatorType, JoinOperator joinType,
                                    ScalarOperator onPredicate,
                                    String joinHint,
                                    long limit,
                                    ScalarOperator predicate,
+                                   Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators,
                                    Projection projection) {
         super(operatorType);
         this.joinType = joinType;
@@ -47,6 +50,12 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         this.joinHint = joinHint;
         this.limit = limit;
         this.predicate = predicate;
+        // predicateCommonOperators defines the common sub-expression columns that predicate may reference
+        // (produced by ScalarOperatorsReuseRule). It is coupled to predicate, so it is assigned right next to
+        // predicate here; every join subclass threads it through this constructor, which prevents a caller that
+        // rebuilds a join from keeping the predicate but silently dropping the columns it depends on (which
+        // would fail InputDependenciesChecker).
+        this.predicateCommonOperators = predicateCommonOperators;
         this.projection = projection;
     }
 
@@ -62,6 +71,10 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         return onPredicate;
     }
 
+    public void setOnPredicate(ScalarOperator onPredicate) {
+        this.onPredicate = onPredicate;
+    }
+
     public String getJoinHint() {
         return joinHint;
     }
@@ -69,6 +82,22 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet refs = super.getUsedColumns();
+        if (onPredicate != null) {
+            refs.union(onPredicate.getUsedColumns());
+        }
+        return refs;
+    }
+
+    public ColumnRefSet getJoinConditionUsedColumns() {
+        ColumnRefSet refs = new ColumnRefSet();
+        if (predicate != null) {
+            refs.union(predicate.getUsedColumns());
+        }
+
+        if (predicateCommonOperators != null) {
+            predicateCommonOperators.forEach((k, v) -> refs.union(v.getUsedColumns()));
+        }
+
         if (onPredicate != null) {
             refs.union(onPredicate.getUsedColumns());
         }
@@ -131,11 +160,11 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         }
     }
 
-    public void setCanLocalShuffle(boolean v) {
-        canLocalShuffle = v;
+    public void setOutputRequireHashPartition(boolean v) {
+        outputRequireHashPartition = v;
     }
 
-    public boolean getCanLocalShuffle() {
-        return canLocalShuffle;
+    public boolean getOutputRequireHashPartition() {
+        return outputRequireHashPartition;
     }
 }

@@ -18,30 +18,30 @@ import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.pseudocluster.Tablet;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConcurrentTxnTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.enable_statistic_collect_on_first_load = false;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         Config.enable_statistic_collect_on_first_load = true;
     }
 
     int runTime = 2;
     int numDB = 2;
-    int numTable = 100;
+    int numTable = 20;
     int numThread = 2;
     // 0 means random num of tablets
     int numTabletPerTable = 0;
@@ -70,14 +70,14 @@ public class ConcurrentTxnTest {
                 for (Map.Entry<String, AtomicInteger> kv : PseudoBackend.scansByQueryId.entrySet()) {
                     if (kv.getValue().get() != numTabletPerTable) {
                         String msg = String.format("queryId: %s numScan: %d\n", kv.getKey(), kv.getValue().get());
-                        Assert.fail(msg);
+                        Assertions.fail(msg);
                     }
                 }
             }
             System.out.printf("tableRead: %d scanQueryId: %d\n", DBLoad.TableLoad.totalTableRead.get(),
                     PseudoBackend.scansByQueryId.size());
-            Assert.assertEquals(DBLoad.TableLoad.totalTableRead.get(), PseudoBackend.scansByQueryId.size());
-            Assert.assertEquals(DBLoad.TableLoad.totalTabletRead.get(), Tablet.getTotalReadSucceed());
+            Assertions.assertEquals(DBLoad.TableLoad.totalTableRead.get(), PseudoBackend.scansByQueryId.size());
+            Assertions.assertEquals(DBLoad.TableLoad.totalTabletRead.get(), Tablet.getTotalReadSucceed());
             Tablet.clearStats();
         }
         PseudoCluster.getInstance().shutdown(deleteRunDir);

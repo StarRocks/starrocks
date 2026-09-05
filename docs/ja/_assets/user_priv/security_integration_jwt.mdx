@@ -1,0 +1,52 @@
+### JWT を使用したセキュリティインテグレーションの作成
+
+#### 構文
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name> 
+PROPERTIES (
+    "type" = "authentication_jwt",
+    "jwks_url" = "",
+    "principal_field" = "",
+    "required_issuer" = "",
+    "required_audience" = ""
+    "comment" = ""
+)
+```
+
+#### パラメータ
+
+##### security_integration_name
+
+- 必須: はい
+- 説明: セキュリティインテグレーションの名前。<br />**注意**<br />セキュリティインテグレーション名はグローバルに一意です。このパラメータを `native` として指定することはできません。
+
+##### type
+
+- 必須: はい
+- 説明: セキュリティインテグレーションのタイプ。`jwt` として指定します。
+
+##### jwks_url
+
+- 必須: はい
+- 説明: JSON Web Key Set (JWKS) サービスへの URL または `fe/conf` ディレクトリのローカルファイルへのパス。
+
+##### principal_field
+
+- 必須: はい
+- 説明: JWT 内のサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
+
+##### required_issuer
+
+- 必須: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### required_audience
+
+- 必須: いいえ
+- 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### comment
+
+- 必須: いいえ
+- 説明: セキュリティインテグレーションの説明。

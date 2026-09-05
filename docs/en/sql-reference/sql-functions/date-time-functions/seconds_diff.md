@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the second difference between two date expressions (expr1 − expr2), accurate to the second."
 ---
 
 # seconds_diff
 
-## Description
+
 
 Returns the second difference between two date expressions (`expr1` − `expr2`), accurate to the second.
 

@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -28,10 +29,10 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
+#include "storage/rowset/fill_subfield_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -50,7 +51,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(fs, fname, 1, _dummy_segment_schema, nullptr);
+        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
     }
 
     void test_int_struct() {
@@ -71,11 +72,11 @@ protected:
         auto f2_column = BinaryColumn::create();
         f2_column->append_string("Column2");
 
-        Columns columns;
+        MutableColumns columns;
         columns.emplace_back(std::move(f1_column));
         columns.emplace_back(std::move(f2_column));
 
-        ColumnPtr src_column = StructColumn::create(columns, names);
+        auto src_column = StructColumn::create(std::move(columns), names);
 
         TypeInfoPtr type_info = get_type_info(struct_column);
         ColumnMetaPB meta;
@@ -101,7 +102,7 @@ protected:
             // init integer sub column
             ColumnMetaPB* f1_meta = writer_opts.meta->add_children_columns();
             f1_meta->set_column_id(0);
-            f1_meta->set_unique_id(0);
+            f1_meta->set_unique_id(1);
             f1_meta->set_type(f1_tablet_column.type());
             f1_meta->set_length(f1_tablet_column.length());
             f1_meta->set_encoding(DEFAULT_ENCODING);
@@ -110,7 +111,7 @@ protected:
 
             ColumnMetaPB* f2_meta = writer_opts.meta->add_children_columns();
             f2_meta->set_column_id(0);
-            f2_meta->set_unique_id(0);
+            f2_meta->set_unique_id(2);
             f2_meta->set_type(f2_tablet_column.type());
             f2_meta->set_length(f2_tablet_column.length());
             f2_meta->set_encoding(DEFAULT_ENCODING);
@@ -132,7 +133,9 @@ protected:
 
         LOG(INFO) << "Finish writing";
         // read and check
-        auto res = ColumnReader::create(&meta, segment.get());
+        ColumnMetaPB meta2 = meta;
+        ColumnMetaPB meta3 = meta;
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
 
@@ -152,11 +155,11 @@ protected:
 
             auto dst_f1_column = Int32Column::create();
             auto dst_f2_column = BinaryColumn::create();
-            Columns dst_columns;
-            dst_columns.emplace_back(std::move(dst_f1_column));
-            dst_columns.emplace_back(std::move(dst_f2_column));
+            MutableColumns dst_columns;
+            dst_columns.emplace_back(dst_f1_column);
+            dst_columns.emplace_back(dst_f2_column);
 
-            ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+            auto dst_column = StructColumn::create(std::move(dst_columns), names);
             size_t rows_read = src_column->size();
             st = iter->next_batch(&rows_read, dst_column.get());
             ASSERT_TRUE(st.ok());
@@ -166,14 +169,99 @@ protected:
         }
 
         {
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::FIELD, "f1", 0);
+            TabletColumn new_struct_column = create_struct(0, true);
+            std::vector<std::string> names{"f1", "f3"};
+            TabletColumn f1_tablet_column = create_int_value(1, STORAGE_AGGREGATE_NONE, true);
+            new_struct_column.add_sub_column(f1_tablet_column);
+            // add new field column f3
+            TabletColumn f3_tablet_column = create_int_value(3, STORAGE_AGGREGATE_NONE, true, "2");
+            ASSERT_TRUE(f3_tablet_column.has_default_value());
+            new_struct_column.add_sub_column(f3_tablet_column);
+            {
+                auto f1_meta = meta2.mutable_children_columns(0);
+                f1_meta->set_unique_id(0);
+                auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
+                ASSERT_FALSE(res.ok());
+                f1_meta->set_unique_id(1);
+            }
+            auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
+            ASSERT_TRUE(res.ok());
+            auto struct_reader = std::move(res).value();
+            ASSIGN_OR_ABORT(auto iter, struct_reader->new_iterator(nullptr, &new_struct_column));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
-            ColumnAccessPath path;
-            path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(std::move(child_path));
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
 
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            // sequence read
+            auto st = iter->seek_to_first();
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            auto dst_f1_column = Int32Column::create();
+            auto dst_f3_column = Int32Column::create();
+            MutableColumns dst_columns;
+            dst_columns.emplace_back(std::move(dst_f1_column));
+            dst_columns.emplace_back(std::move(dst_f3_column));
+
+            auto dst_column = StructColumn::create(std::move(dst_columns), names);
+            size_t rows_read = src_column->size();
+            st = iter->next_batch(&rows_read, dst_column.get());
+            ASSERT_TRUE(st.ok());
+            ASSERT_EQ(src_column->size(), rows_read);
+
+            ASSERT_EQ("{f1:1,f3:2}", dst_column->debug_item(0));
+        }
+
+        {
+            TabletColumn new_struct_column = create_struct(0, true);
+            std::vector<std::string> names{"f1", "f3"};
+            TabletColumn f1_tablet_column = create_int_value(1, STORAGE_AGGREGATE_NONE, true, "5");
+            f1_tablet_column.set_unique_id(10);
+            new_struct_column.add_sub_column(f1_tablet_column);
+            // add new field column f3
+            TabletColumn f3_tablet_column = create_int_value(3, STORAGE_AGGREGATE_NONE, true, "2");
+            ASSERT_TRUE(f3_tablet_column.has_default_value());
+            new_struct_column.add_sub_column(f3_tablet_column);
+            auto res = ColumnReader::create(&meta3, segment.get(), &struct_column);
+            ASSERT_TRUE(res.ok());
+            auto struct_reader = std::move(res).value();
+            ASSIGN_OR_ABORT(auto iter, struct_reader->new_iterator(nullptr, &new_struct_column));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            auto st = iter->seek_to_first();
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            auto dst_f1_column = Int32Column::create();
+            auto dst_f3_column = Int32Column::create();
+            MutableColumns dst_columns;
+            dst_columns.emplace_back(std::move(dst_f1_column));
+            dst_columns.emplace_back(std::move(dst_f3_column));
+
+            auto dst_column = StructColumn::create(std::move(dst_columns), names);
+            size_t rows_read = src_column->size();
+            st = iter->next_batch(&rows_read, dst_column.get());
+            ASSERT_TRUE(st.ok());
+            ASSERT_EQ(src_column->size(), rows_read);
+
+            ASSERT_EQ("{f1:5,f3:2}", dst_column->debug_item(0));
+        }
+
+        {
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f1", 0));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -188,31 +276,51 @@ protected:
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 auto dst_f1_column = Int32Column::create();
-                auto dst_f2_column = BinaryColumn::create();
-                Columns dst_columns;
+                MutableColumns dst_columns;
                 dst_columns.emplace_back(std::move(dst_f1_column));
-                dst_columns.emplace_back(std::move(dst_f2_column));
 
-                ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+                auto dst_column = StructColumn::create(std::move(dst_columns), {"f1"});
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:1,f2:CONST: ''}", dst_column->debug_item(0));
+                ASSERT_EQ("{f1:1}", dst_column->debug_item(0));
+            }
+
+            // The predicate-evaluation path: a predicate on a struct subfield reads that column by
+            // rowid through a FillSubfieldIterator, and the caller empties the column first, so every
+            // rowid has to come back as a row. Routing this through fetch_subfield_by_rowid leaves an
+            // already-materialized leaf field untouched -- a scalar iterator inherits a
+            // fetch_subfield_by_rowid that does nothing -- and the segment iterator then rejects the
+            // short column with "col size not equal to ordinal col size".
+            {
+                auto st = iter->seek_to_first();
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                auto dst_f1_column = Int32Column::create();
+                MutableColumns dst_columns;
+                dst_columns.emplace_back(std::move(dst_f1_column));
+                auto dst_column = StructColumn::create(std::move(dst_columns), {"f1"});
+
+                auto rowid_column = FixedLengthColumn<rowid_t>::create();
+                rowid_column->append(0);
+
+                FillSubfieldIterator fill_iter(0, path.get(), iter.get());
+                st = fill_iter.fetch_values_by_rowid_for_predicate_evaluate(*rowid_column, dst_column.get());
+                ASSERT_TRUE(st.ok()) << st.to_string();
+                ASSERT_EQ(rowid_column->size(), dst_column->size());
+                ASSERT_EQ("{f1:1}", dst_column->debug_item(0));
             }
         }
 
         // read and check
         {
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::FIELD, "f2", 1);
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f2", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
 
-            ColumnAccessPath path;
-            path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(std::move(child_path));
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -226,20 +334,45 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto dst_f1_column = Int32Column::create();
                 auto dst_f2_column = BinaryColumn::create();
-                Columns dst_columns;
-                dst_columns.emplace_back(std::move(dst_f1_column));
+                MutableColumns dst_columns;
                 dst_columns.emplace_back(std::move(dst_f2_column));
 
-                ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+                auto dst_column = StructColumn::create(std::move(dst_columns), {"f2"});
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:CONST: 0,f2:'Column2'}", dst_column->debug_item(0));
+                ASSERT_EQ("{f2:'Column2'}", dst_column->debug_item(0));
             }
+        }
+
+        {
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f2", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            auto dst_f1_column = Int32Column::create();
+            auto dst_f2_column = BinaryColumn::create();
+            MutableColumns dst_columns;
+            dst_columns.emplace_back(std::move(dst_f1_column));
+            dst_columns.emplace_back(std::move(dst_f2_column));
+            auto dst_column = StructColumn::create(std::move(dst_columns), names);
+            SparseRange<> range;
+            range.add(Range<>(0, src_column->size()));
+            auto status_or = iter->get_io_range_vec(range, dst_column->as_mutable_raw_ptr());
+            ASSERT_TRUE(status_or.ok());
+            ASSERT_EQ((*status_or).size(), 1);
         }
     }
 

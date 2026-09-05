@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Splits a string by a delimiter and returns the resulting parts as an ARRAY."
 ---
 
 # split
 
-## Description
+
 
 This function splits a given string according to the separators, and returns the split parts in ARRAY.
 

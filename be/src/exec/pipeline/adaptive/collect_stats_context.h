@@ -14,11 +14,13 @@
 
 #pragma once
 
+#include <queue>
+
+#include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "storage/chunk_helper.h"
-#include "util/moodycamel/concurrentqueue.h"
+#include "runtime/chunk_accumulator.h"
 
 namespace starrocks {
 
@@ -78,6 +80,8 @@ public:
 
     const int64_t max_output_amplification_factor() const { return _max_output_amplification_factor; }
 
+    EventPtr blocking_event() const { return _blocking_event; }
+
 private:
     using BufferChunkQueue = std::queue<ChunkPtr>;
 
@@ -109,6 +113,8 @@ private:
     std::vector<uint8_t> _is_finished_per_driver_seq;
 
     RuntimeState* const _runtime_state;
+
+    EventPtr _blocking_event;
 };
 
 class CollectStatsState {

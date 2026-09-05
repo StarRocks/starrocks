@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将字符串或数组反转，返回顺序相反的结果。"
 ---
 
 # reverse
 
-## 功能
+
 
 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。
 

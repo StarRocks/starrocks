@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "如何在 StarRocks 中使用有序流式聚合优化预排序数据的 GROUP BY 查询，降低内存开销。"
+sidebar_position: 90
 ---
 
 # Sorted streaming aggregate
@@ -22,6 +24,7 @@ set enable_sort_aggregate=true;
 
 ## 使用限制
 
+- StarRocks 存算分离集群不支持 sorted streaming aggregate。
 - GROUP BY 里的 key 需要是做好排序的:
   比如表的排序列是 `k1,k2,k3`，那么:
   - `GROUP BY k1` 和 `GROUP BY k1, k2` 是可以的。

@@ -36,20 +36,22 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 public class DiskInfo implements Writable {
     public enum DiskState {
         ONLINE,
-        OFFLINE
+        // Reported from BE, if disk is detected as unavailable, state will be OFFLINE.
+        // Tablets on OFFLINE disk will be dropped.
+        OFFLINE,
+        // Set by user, tablets on DISABLED disk will be dropped.
+        DISABLED,
+        // Set by user, tablets on DECOMMISSIONED disk will be cloned to other backends.
+        // Before the decommission finish, the disk is still usable, i.e. can provide read and write capability.
+        DECOMMISSIONED
     }
 
     private static final Logger LOG = LogManager.getLogger(DiskInfo.class);
@@ -57,16 +59,13 @@ public class DiskInfo implements Writable {
 
     @SerializedName(value = "r")
     private String rootPath;
-    @SerializedName(value = "t")
-    private long totalCapacityB;
-    @SerializedName(value = "u")
-    private long dataUsedCapacityB;
-    @SerializedName(value = "a")
-    private long diskAvailableCapacityB;
     @SerializedName(value = "s")
     private DiskState state;
 
-    // path hash and storage medium are reported from Backend and no need to persist
+    // The following properties are reported from Backend and only used in leader node, so no need to persist
+    private long totalCapacityB;
+    private long dataUsedCapacityB;
+    private long diskAvailableCapacityB;
     private long pathHash = 0;
     private TStorageMedium storageMedium;
 
@@ -129,13 +128,16 @@ public class DiskInfo implements Writable {
         return state;
     }
 
-    // return true if changed
-    public boolean setState(DiskState state) {
-        if (this.state != state) {
-            this.state = state;
-            return true;
-        }
-        return false;
+    public boolean canReadWrite() {
+        return state == DiskState.ONLINE || state == DiskState.DECOMMISSIONED;
+    }
+
+    public boolean canCreateTablet() {
+        return state == DiskState.ONLINE;
+    }
+
+    public void setState(DiskState state) {
+        this.state = state;
     }
 
     public long getPathHash() {
@@ -188,26 +190,7 @@ public class DiskInfo implements Writable {
                 + ", medium: " + storageMedium + "]";
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, rootPath);
-        out.writeLong(totalCapacityB);
-        out.writeLong(dataUsedCapacityB);
-        out.writeLong(diskAvailableCapacityB);
-        Text.writeString(out, state.name());
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        this.rootPath = Text.readString(in);
-        this.totalCapacityB = in.readLong();
-        this.dataUsedCapacityB = in.readLong();
-        this.diskAvailableCapacityB = in.readLong();
-        this.state = DiskState.valueOf(Text.readString(in));
-    }
 
-    public static DiskInfo read(DataInput in) throws IOException {
-        DiskInfo diskInfo = new DiskInfo();
-        diskInfo.readFields(in);
-        return diskInfo;
-    }
+
 }

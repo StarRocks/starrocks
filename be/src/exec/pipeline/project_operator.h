@@ -14,8 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
-#include "runtime/global_dict/parser.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks {
 class ExprContext;
@@ -44,6 +43,8 @@ public:
     bool need_input() const override { return !_is_finished && _cur_chunk == nullptr; }
 
     bool is_finished() const override { return _is_finished && _cur_chunk == nullptr; }
+
+    bool ignore_empty_eos() const override { return false; }
 
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
@@ -101,7 +102,6 @@ private:
 
     std::vector<int32_t> _common_sub_column_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
-    DictOptimizeParser _dict_optimize_parser;
 };
 
 } // namespace pipeline

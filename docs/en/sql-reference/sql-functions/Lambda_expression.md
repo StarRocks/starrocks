@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 0.9
+description: "Lambda expressions are anonymous functions that can be passed as parameters into higher-order SQL functions."
 ---
 
 # Lambda expression

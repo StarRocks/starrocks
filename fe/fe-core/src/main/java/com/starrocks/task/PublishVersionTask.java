@@ -36,23 +36,33 @@ package com.starrocks.task;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.TraceManager;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
+import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionType;
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -64,21 +74,44 @@ public class PublishVersionTask extends AgentTask {
     private final List<Long> errorTablets;
     private Set<Long> errorReplicas;
     private final long commitTimestamp;
+    @IgnoreMemoryTrack
     private final TransactionState txnState;
     private Span span;
     private boolean enableSyncPublish;
+    private TransactionType txnType;
+    private final long globalTransactionId;
+    private boolean isVersionOverwrite = false;
 
-    public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
+    // Per-tablet stats this BE reported for partitions being loaded for the first time, keyed by
+    // physical partition id then tablet id. Filled by the thrift finishTask handler thread and read
+    // by the thread that finishes the transaction, so it is guarded by the task monitor exactly like
+    // errorTablets/errorReplicas. The handler must NOT write these straight into the transaction's
+    // PartitionCommitInfos: that races with the publish daemon snapshotting the transaction state
+    // and used to throw ConcurrentModificationException out of the daemon (issue #77595).
+    private Map<Long, Map<Long, TabletStatPB>> firstLoadTabletStats = Collections.emptyMap();
+
+    public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
-                              long createTime, TransactionState state, boolean enableSyncPublish) {
+                              long createTime, TransactionState state, boolean enableSyncPublish, TransactionType txnType) {
+        this(backendId, transactionId, globalTransactionId, dbId, commitTimestamp, partitionVersionInfos,
+                traceParent, txnSpan, createTime, state, enableSyncPublish, txnType, false);
+    }
+
+    public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
+                              List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
+                              long createTime, TransactionState state, boolean enableSyncPublish,
+                              TransactionType txnType, boolean isVersionOverwrite) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
+        this.globalTransactionId = globalTransactionId;
         this.partitionVersionInfos = partitionVersionInfos;
         this.errorTablets = new ArrayList<>();
         this.isFinished = false;
         this.commitTimestamp = commitTimestamp;
         this.txnState = state;
         this.enableSyncPublish = enableSyncPublish;
+        this.txnType = txnType;
+        this.isVersionOverwrite = isVersionOverwrite;
         if (txnSpan != null) {
             span = TraceManager.startSpan("publish_version_task", txnSpan);
             span.setAttribute("backend_id", backendId);
@@ -94,11 +127,21 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
+        publishVersionRequest.setTxn_type(txnType.toThrift());
+        publishVersionRequest.setGtid(globalTransactionId);
+        if (isVersionOverwrite) {
+            publishVersionRequest.setIs_version_overwrite(isVersionOverwrite);
+        }
+        LOG.debug("publish version request: {}", publishVersionRequest);
         return publishVersionRequest;
     }
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    public long getGlobalTransactionId() {
+        return globalTransactionId;
     }
 
     public TransactionState getTxnState() {
@@ -111,6 +154,54 @@ public class PublishVersionTask extends AgentTask {
 
     public synchronized Set<Long> getErrorReplicas() {
         return errorReplicas;
+    }
+
+    /**
+     * Record the per-tablet stats this BE reported for partitions being loaded for the first time.
+     * <p>
+     * Called from the thrift finishTask handler thread. It deliberately reads nothing but this task's
+     * own immutable partitionVersionInfos, so the handler never touches state the publish daemon owns;
+     * {@link TransactionState#applyPublishTaskTabletStats()} merges the result into the commit infos
+     * on the thread that finishes the transaction.
+     */
+    public void collectFirstLoadTabletStats(List<TTabletInfo> finishTabletInfos) {
+        if (finishTabletInfos == null || finishTabletInfos.isEmpty() || txnState == null ||
+                txnState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+            return;
+        }
+        // partitionVersionInfos carries the same versions as the PartitionCommitInfos this task was
+        // built from, so filtering here is equivalent to checking the commit info's version, and it
+        // keeps us from retaining stats for anything but a first load.
+        Set<Long> firstLoadPartitionIds = new HashSet<>();
+        for (TPartitionVersionInfo versionInfo : partitionVersionInfos) {
+            if (versionInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
+                firstLoadPartitionIds.add(versionInfo.getPartition_id());
+            }
+        }
+        if (firstLoadPartitionIds.isEmpty()) {
+            return;
+        }
+
+        Map<Long, Map<Long, TabletStatPB>> stats = new HashMap<>();
+        for (TTabletInfo tabletInfo : finishTabletInfos) {
+            long partitionId = tabletInfo.getPartition_id();
+            if (!firstLoadPartitionIds.contains(partitionId)) {
+                continue;
+            }
+            TabletStatPB stat = new TabletStatPB();
+            stat.numRows = tabletInfo.getRow_count();
+            stat.dataSize = tabletInfo.getData_size();
+            stats.computeIfAbsent(partitionId, k -> new HashMap<>()).put(tabletInfo.getTablet_id(), stat);
+        }
+        setFirstLoadTabletStats(stats);
+    }
+
+    private synchronized void setFirstLoadTabletStats(Map<Long, Map<Long, TabletStatPB>> stats) {
+        this.firstLoadTabletStats = stats;
+    }
+
+    public synchronized Map<Long, Map<Long, TabletStatPB>> getFirstLoadTabletStats() {
+        return firstLoadTabletStats;
     }
 
     public synchronized void setErrorTablets(List<Long> errorTablets) {
@@ -131,7 +222,7 @@ public class PublishVersionTask extends AgentTask {
     }
 
     private Set<Long> collectErrorReplicas() {
-        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Set<Long> errorReplicas = Sets.newHashSet();
         List<Long> errorTablets = this.getErrorTablets();
         if (errorTablets != null && !errorTablets.isEmpty()) {
@@ -157,14 +248,14 @@ public class PublishVersionTask extends AgentTask {
             span.addEvent("update_replica_version_start");
             span.setAttribute("num_replicas", tabletVersions.size());
         }
-        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         List<Long> tabletIds = tabletVersions.stream().map(tv -> tv.tablet_id).collect(Collectors.toList());
         List<Replica> replicas = tablets.getReplicasOnBackendByTabletIds(tabletIds, backendId);
         if (replicas == null) {
             LOG.warn("backend not found or no replicas on backend, backendid={}", backendId);
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("db not found dbid={}", dbId);
             return;
@@ -178,8 +269,19 @@ public class PublishVersionTask extends AgentTask {
         if (!droppedTablets.isEmpty()) {
             LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
         }
+        // This callback runs on every load transaction's publish completion and only mutates
+        // Replica state of the tables these tablets belong to. Take a table-scoped intensive
+        // lock instead of a full DB-WRITE so unrelated tables in the same DB are not serialized.
+        Set<Long> tableIdSet = new HashSet<>();
+        for (TabletMeta tabletMeta : tablets.getTabletMetaList(tabletIds)) {
+            long tableId = tabletMeta.getTableId();
+            if (tableId != TabletInvertedIndex.NOT_EXIST_VALUE) {
+                tableIdSet.add(tableId);
+            }
+        }
+        List<Long> tableIdList = new ArrayList<>(tableIdSet);
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             // TODO: persistent replica version
             for (int i = 0; i < tabletVersions.size(); i++) {
@@ -188,10 +290,13 @@ public class PublishVersionTask extends AgentTask {
                 if (replica == null) {
                     continue;
                 }
-                replica.updateVersion(tabletVersion.version);
+                long reportedVersion = tabletVersion.version;
+                long minReadableVersion = tabletVersion.isSetMin_readable_version() ?
+                        tabletVersion.getMin_readable_version() : replica.getMinReadableVersion();
+                replica.updateRowCount(reportedVersion, minReadableVersion, replica.getDataSize(), replica.getRowCount());
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
             if (span != null) {
                 span.addEvent("update_replica_version_finish");
             }

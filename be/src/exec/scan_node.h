@@ -35,21 +35,23 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "column/column_access_path.h"
-#include "exec/exec_node.h"
+#include "common/runtime_profile.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
 #include "gen_cpp/InternalService_types.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
 namespace pipeline {
-class MorselQueue;
-using MorselQueuePtr = std::unique_ptr<MorselQueue>;
-class MorselQueueFactory;
-using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
+class MorselQueueBuilder;
+using MorselQueueBuilderPtr = std::unique_ptr<MorselQueueBuilder>;
 } // namespace pipeline
 
 class TScanRange;
@@ -72,7 +74,7 @@ class TScanRange;
 //
 class ScanNode : public ExecNode {
 public:
-    ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
+    ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~ScanNode() override = default;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
@@ -86,9 +88,9 @@ public:
     StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
-            int pipeline_dop, bool enable_tablet_internal_parallel,
-            TTabletInternalParallelMode::type tablet_internal_parallel_mode);
-    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
+            TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan = false);
+    virtual StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges);
@@ -131,6 +133,40 @@ public:
 
     const std::vector<ColumnAccessPathPtr>& column_access_paths() const { return _column_access_paths; }
 
+    bool is_enable_topn_filter_back_pressure() const { return this->_enable_topn_filter_back_pressure; }
+    void set_enable_topn_filter_back_pressure(bool value) { this->_enable_topn_filter_back_pressure = value; }
+    int get_back_pressure_max_rounds() const { return this->_back_pressure_max_rounds; }
+    void set_back_pressure_max_rounds(int value) { this->_back_pressure_max_rounds = value; }
+    size_t get_back_pressure_num_rows() const { return this->_back_pressure_num_rows; }
+    void set_back_pressure_num_rows(size_t value) { this->_back_pressure_num_rows = value; }
+    int64_t get_back_pressure_throttle_time() const { return this->_back_pressure_throttle_time; }
+    void set_back_pressure_throttle_time(int64_t value) { this->_back_pressure_throttle_time = value; }
+    int64_t get_back_pressure_throttle_time_upper_bound() const {
+        return this->_back_pressure_throttle_time_upper_bound;
+    }
+    void set_back_pressure_throttle_time_upper_bound(int64_t value) {
+        this->_back_pressure_throttle_time_upper_bound = value;
+    }
+    // True when FE detected a non-aggregation deterministic pipeline breaker between the TopN RF
+    // builder and this scan: suppress TopN back-pressure (incl. the lake/connector self-enable path).
+    bool is_topn_filter_back_pressure_disabled() const { return this->_topn_filter_back_pressure_disabled; }
+    void set_topn_filter_back_pressure_disabled(bool value) { this->_topn_filter_back_pressure_disabled = value; }
+
+    void set_heavy_expr_slot_ids(std::vector<SlotId>&& slot_ids) { _heavy_expr_slot_ids = std::move(slot_ids); }
+
+    void set_heavy_expr_ctxs(std::vector<ExprContext*>& ctxs) { _heavy_expr_ctxs = std::move(ctxs); }
+
+    std::vector<SlotId>& get_heavy_expr_slot_ids() { return _heavy_expr_slot_ids; }
+
+    std::vector<ExprContext*>& get_heavy_expr_ctxs() { return _heavy_expr_ctxs; }
+
+    // Set once at fragment setup (FragmentExecutor tree walk): true when a row-reducing operator
+    // (e.g. a SELECT for a residual predicate that could not be pushed into this scan) sits ABOVE
+    // this scan but below the TopN limit. An ANN top-k scan reads this so the vector filter resolver
+    // can route to exact brute-force when the top-k underfill fallback is enabled.
+    virtual void set_filtered_above_iterator(bool v) { _filtered_above_iterator = v; }
+    bool is_filtered_above_iterator() const { return _filtered_above_iterator; }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -146,10 +182,23 @@ protected:
     RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
     bool _enable_shared_scan = false;
+    bool _filtered_above_iterator = false;
     int64_t _mem_limit = 0;
-    int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
+    int32_t _io_tasks_per_scan_operator = 0;
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
+
+    bool _enable_topn_filter_back_pressure = false;
+    // Defaults for the FE-driven olap path (upstream values). The lake/connector self-enabled path
+    // takes its throttle parameters from session variables (TQueryOptions) instead, see ScanOperator.
+    int _back_pressure_max_rounds = 5;
+    size_t _back_pressure_num_rows = 10240;
+    int64_t _back_pressure_throttle_time = 500;
+    int64_t _back_pressure_throttle_time_upper_bound = 5000;
+    bool _topn_filter_back_pressure_disabled = false;
+
+    std::vector<SlotId> _heavy_expr_slot_ids;
+    std::vector<ExprContext*> _heavy_expr_ctxs;
 };
 
 } // namespace starrocks

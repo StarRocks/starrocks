@@ -36,16 +36,12 @@ package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.thrift.TMysqlErrorHubInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
 
 public class MysqlLoadErrorHub extends LoadErrorHub {
@@ -120,24 +116,10 @@ public class MysqlLoadErrorHub extends LoadErrorHub {
             return table;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, host);
-            out.writeInt(port);
-            Text.writeString(out, user);
-            Text.writeString(out, passwd);
-            Text.writeString(out, db);
-            Text.writeString(out, table);
-        }
 
-        public void readFields(DataInput in) throws IOException {
-            host = Text.readString(in);
-            port = in.readInt();
-            user = Text.readString(in);
-            passwd = Text.readString(in);
-            db = Text.readString(in);
-            table = Text.readString(in);
-        }
+
+
+
 
         public TMysqlErrorHubInfo toThrift() {
             TMysqlErrorHubInfo info = new TMysqlErrorHubInfo(host, port, user, passwd, db, table);

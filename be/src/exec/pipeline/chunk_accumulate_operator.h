@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -30,6 +30,7 @@ public:
             : Operator(factory, id, "chunk_accumulate", plan_node_id, true, driver_sequence) {}
 
     ~ChunkAccumulateOperator() override = default;
+    Status prepare(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -38,10 +39,13 @@ public:
     bool need_input() const override { return _acc.need_input(); }
     bool is_finished() const override { return _acc.is_finished(); }
 
+    bool ignore_empty_eos() const override { return false; }
+
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
 private:
     ChunkPipelineAccumulator _acc;

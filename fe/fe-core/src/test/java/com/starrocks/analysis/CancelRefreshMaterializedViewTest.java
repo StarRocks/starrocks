@@ -18,14 +18,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class CancelRefreshMaterializedViewTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
@@ -36,9 +36,22 @@ public class CancelRefreshMaterializedViewTest {
         String refreshMvSql = "cancel refresh materialized view test1.mv1";
         CancelRefreshMaterializedViewStmt cancelRefresh =
                 (CancelRefreshMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
-        String dbName = cancelRefresh.getMvName().getDb();
-        String mvName = cancelRefresh.getMvName().getTbl();
-        Assert.assertEquals("test1", dbName);
-        Assert.assertEquals("mv1", mvName);
+        String dbName = cancelRefresh.getDbName();
+        String mvName = cancelRefresh.getMvName();
+        Assertions.assertEquals("test1", dbName);
+        Assertions.assertEquals("mv1", mvName);
+        Assertions.assertFalse(cancelRefresh.isForce());
+    }
+
+    @Test
+    public void testForceRefreshMaterializedView() throws Exception {
+        String refreshMvSql = "cancel refresh materialized view test1.mv1 force";
+        CancelRefreshMaterializedViewStmt cancelRefresh =
+                (CancelRefreshMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
+        String dbName = cancelRefresh.getDbName();
+        String mvName = cancelRefresh.getMvName();
+        Assertions.assertEquals("test1", dbName);
+        Assertions.assertEquals("mv1", mvName);
+        Assertions.assertTrue(cancelRefresh.isForce());
     }
 }

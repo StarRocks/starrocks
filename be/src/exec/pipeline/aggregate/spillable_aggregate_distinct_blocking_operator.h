@@ -16,31 +16,33 @@
 
 #include <utility>
 
-#include "exec/aggregator.h"
+#include "base/concurrency/race_detect.h"
+#include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/source_operator.h"
+#include "exprs/sort_exec_exprs.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
-// TODO: implements reset_state
 class SpillableAggregateDistinctBlockingSinkOperator : public AggregateDistinctBlockingSinkOperator {
 public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
-            : AggregateDistinctBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
+            : AggregateDistinctBlockingSinkOperator(std::move(aggregator), std::forward<Args>(args)...,
                                                     "spillable_aggregate_distinct_blocking_sink") {}
     ~SpillableAggregateDistinctBlockingSinkOperator() override = default;
 
     bool need_input() const override;
     bool is_finished() const override;
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override { return Status::OK(); }
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }
     void set_execute_mode(int performance_level) override {
@@ -60,13 +62,16 @@ public:
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
+    // only the prepare/open phase calls are valid.
+    SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
+
 private:
-    [[nodiscard]] Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
-    [[nodiscard]] Status _spill_aggregated_data(RuntimeState* state);
+    Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
+    Status _spill_aggregated_data(RuntimeState* state);
 
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
-
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
     bool _is_finished = false;
 };
 
@@ -81,9 +86,11 @@ public:
 
     ~SpillableAggregateDistinctBlockingSinkOperatorFactory() override = default;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     ObjectPool _pool;
@@ -96,32 +103,31 @@ private:
     SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
 
-// TODO: implements reset_state
 class SpillableAggregateDistinctBlockingSourceOperator : public AggregateDistinctBlockingSourceOperator {
 public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSourceOperator(AggregatorPtr aggregator,
                                                      SortedStreamingAggregatorPtr stream_aggregator, Args&&... args)
-            : AggregateDistinctBlockingSourceOperator(aggregator, std::forward<Args>(args)...,
+            : AggregateDistinctBlockingSourceOperator(std::move(aggregator), std::forward<Args>(args)...,
                                                       "spillable_aggregate_distinct_blocking_source"),
               _stream_aggregator(std::move(stream_aggregator)) {}
 
     ~SpillableAggregateDistinctBlockingSourceOperator() override = default;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
 
     bool has_output() const override;
     bool is_finished() const override;
 
-    [[nodiscard]] Status set_finished(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
-    [[nodiscard]] StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
+    StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
     bool _is_finished = false;
     bool _has_last_chunk = true;
@@ -138,9 +144,11 @@ public:
 
     ~SpillableAggregateDistinctBlockingSourceOperatorFactory() override = default;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     AggregatorFactoryPtr _hash_aggregator_factory;

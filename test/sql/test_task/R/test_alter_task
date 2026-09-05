@@ -1,0 +1,49 @@
+-- name: test_alter_task
+create database test_alter_task_${uuid0};
+-- result:
+-- !result
+use test_alter_task_${uuid0};
+-- result:
+-- !result
+create table t1(c1 int, c2 int);
+-- result:
+-- !result
+create table t2(c1 int, c2 int);
+-- result:
+-- !result
+insert into t1 values(1, 1);
+-- result:
+-- !result
+submit task alter_task as insert into t2 select * from t1;
+-- result:
+alter_task	SUBMITTED
+-- !result
+alter task alter_task suspend;
+-- result:
+-- !result
+alter task alter_task resume;
+-- result:
+-- !result
+alter task alter_task set ('session.query_timeout'='5000');
+-- result:
+-- !result
+select count(*) from information_schema.tasks where `DATABASE`='test_alter_task_${uuid0}' and task_name='alter_task'
+  and PROPERTIES like '%session.query_timeout''=''5000''%';
+-- result:
+1
+-- !result
+alter task if exists not_exist suspend;
+-- result:
+-- !result
+drop task alter_task;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop database test_alter_task_${uuid0};
+-- result:
+-- !result

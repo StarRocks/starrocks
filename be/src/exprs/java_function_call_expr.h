@@ -17,7 +17,7 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 struct JavaUDFContext;
@@ -29,18 +29,19 @@ public:
     ~JavaFunctionCallExpr() override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new JavaFunctionCallExpr(*this)); }
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
-    [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
-    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
-                              FunctionContext::FunctionStateScope scope) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    Status prepare(RuntimeState* state, ExprContext* context) override;
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     bool is_constant() const override;
 
 private:
+    StatusOr<std::shared_ptr<JavaUDFContext>> _build_udf_func_desc(FunctionContext::FunctionStateScope scope,
+                                                                   const std::string& libpath);
     void _call_udf_close();
     RuntimeState* _runtime_state = nullptr;
     std::shared_ptr<JavaUDFContext> _func_desc;
     std::shared_ptr<UDFFunctionCallHelper> _call_helper;
-    bool _is_returning_random_value;
+    bool _is_returning_random_value = false;
 };
 } // namespace starrocks

@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -31,10 +31,13 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -42,6 +45,8 @@ public class LogicalJoinOperator extends LogicalOperator {
     private JoinOperator joinType;
     private ScalarOperator onPredicate;
     private String joinHint;
+    private ScalarOperator skewColumn;
+    private List<ScalarOperator> skewValues;
     // For mark the node has been push down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
     private boolean hasDeriveIsNotNullPredicate = false;
@@ -123,6 +128,22 @@ public class LogicalJoinOperator extends LogicalOperator {
         return joinHint;
     }
 
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+
+    public void setSkewColumn(ScalarOperator skewColumn) {
+        this.skewColumn = skewColumn;
+    }
+
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
+    }
+
+    public void setSkewValues(List<ScalarOperator> skewValues) {
+        this.skewValues = skewValues;
+    }
+
     public int getTransformMask() {
         return transformMask;
     }
@@ -187,6 +208,16 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        DomainProperty leftDomainProperty = inputs.get(0).getDomainProperty();
+        DomainProperty rightDomainProperty = inputs.get(1).getDomainProperty();
+        return DomainProperty.mergeDomainProperty(List.of(leftDomainProperty, rightDomainProperty));
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalJoin(this, context);
     }
@@ -242,6 +273,8 @@ public class LogicalJoinOperator extends LogicalOperator {
             builder.joinType = joinOperator.joinType;
             builder.onPredicate = joinOperator.onPredicate;
             builder.joinHint = joinOperator.joinHint;
+            builder.skewColumn = joinOperator.skewColumn;
+            builder.skewValues = joinOperator.skewValues;
             builder.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
             builder.hasDeriveIsNotNullPredicate = joinOperator.hasDeriveIsNotNullPredicate;
             builder.originalOnPredicate = joinOperator.originalOnPredicate;
@@ -265,6 +298,16 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         public Builder setJoinHint(String joinHint) {
             builder.joinHint = joinHint;
+            return this;
+        }
+
+        public Builder setSkewColumn(ScalarOperator column) {
+            builder.skewColumn = column;
+            return this;
+        }
+
+        public Builder setSkewValues(List<ScalarOperator> values) {
+            builder.skewValues = values;
             return this;
         }
 

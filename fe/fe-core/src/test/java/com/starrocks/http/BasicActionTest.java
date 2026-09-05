@@ -15,9 +15,10 @@
 
 package com.starrocks.http;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class BasicActionTest {
 
@@ -38,4 +39,22 @@ public class BasicActionTest {
         assertEquals(expect.remoteIp, actual.remoteIp);
         assertEquals(expect.password, actual.password);
     }
+
+    @Test
+    public void testSanitizeHttpReqUri() throws Exception {
+        String uri = "/api/bootstrap?cluster_id=123124&token=98sdf-80sdf";
+        String result = WebUtils.sanitizeHttpReqUri(uri);
+        System.out.println(result);
+        Assertions.assertTrue(result.contains("token=*"));
+        Assertions.assertTrue(result.contains("cluster_id=*"));
+
+        uri = "/api/get_small_file?file_id=123124";
+        result = WebUtils.sanitizeHttpReqUri(uri);
+        Assertions.assertTrue(result.contains("file_id=*"));
+
+        uri = "/api/metrics?all=true";
+        result = WebUtils.sanitizeHttpReqUri(uri);
+        Assertions.assertEquals(uri, result);
+    }
+
 }

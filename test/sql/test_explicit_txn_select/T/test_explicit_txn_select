@@ -1,0 +1,11 @@
+-- name: test_update_then_select_same_table_should_fail
+create database db_${uuid3};
+use db_${uuid3};
+
+create table t1(id int, v int) primary key(id);
+insert into t1 values(1, 1);
+
+begin;
+update t1 set v = 2 where id = 1;
+select * from t1;
+commit;

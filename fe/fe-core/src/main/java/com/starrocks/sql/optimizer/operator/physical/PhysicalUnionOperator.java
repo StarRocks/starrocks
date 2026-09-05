@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -21,23 +22,50 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.List;
 
 public class PhysicalUnionOperator extends PhysicalSetOperation {
     private final boolean isUnionAll;
 
+    // record if this union is derived from IcebergEqualityDeleteRewriteRule
+    private final boolean fromIcebergEqualityDeleteRewrite;
+
+    private List<Pair<Integer, ColumnDict>> globalDicts;
+
+
     public PhysicalUnionOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
                                  boolean isUnionAll,
                                  long limit,
                                  ScalarOperator predicate,
                                  Projection projection) {
+        this(columnRef, childOutputColumns, isUnionAll, limit, predicate, projection, false, List.of());
+    }
+
+    public PhysicalUnionOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
+                                 boolean isUnionAll,
+                                 long limit,
+                                 ScalarOperator predicate,
+                                 Projection projection,
+                                 boolean fromIcebergEqualityDeleteRewrite,
+                                 List<Pair<Integer, ColumnDict>> globalDicts) {
         super(OperatorType.PHYSICAL_UNION, columnRef, childOutputColumns, limit, predicate, projection);
         this.isUnionAll = isUnionAll;
+        this.fromIcebergEqualityDeleteRewrite = fromIcebergEqualityDeleteRewrite;
+        this.globalDicts = globalDicts;
+    }
+
+    public boolean isFromIcebergEqualityDeleteRewrite() {
+        return fromIcebergEqualityDeleteRewrite;
     }
 
     public boolean isUnionAll() {
         return isUnionAll;
+    }
+
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
     }
 
     @Override

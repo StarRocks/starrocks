@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Constructs DOUBLE values as PERCENTILE values."
 ---
 
 # percentile_hash
 
-## Description
+
 
 Constructs DOUBLE values as PERCENTILE values.
 

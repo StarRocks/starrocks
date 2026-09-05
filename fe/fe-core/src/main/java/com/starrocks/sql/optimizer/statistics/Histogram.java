@@ -14,35 +14,90 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.statistic.StatisticUtils;
+
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import javax.annotation.Nonnull;
 
 public class Histogram {
+
     private final List<Bucket> buckets;
     private final Map<String, Long> mcv;
 
     public Histogram(List<Bucket> buckets, Map<String, Long> mcv) {
-        this.buckets = buckets;
-        this.mcv = mcv;
-
+        this.buckets = buckets == null ? List.of() : buckets;
+        this.mcv = mcv == null ? Map.of() : mcv;
     }
 
     public long getTotalRows() {
         long totalRows = 0;
-        if (buckets != null && !buckets.isEmpty()) {
+        if (!buckets.isEmpty()) {
             totalRows += buckets.get(buckets.size() - 1).getCount();
         }
-        if (mcv != null) {
-            totalRows += mcv.values().stream().reduce(Long::sum).orElse(0L);
-        }
-        return totalRows;
+        totalRows += mcv.values().stream().reduce(Long::sum).orElse(0L);
+        return Math.max(1, totalRows);
     }
 
+    @Nonnull
     public List<Bucket> getBuckets() {
         return buckets;
     }
 
+    @Nonnull
     public Map<String, Long> getMCV() {
         return mcv;
+    }
+
+    public String getMcvString() {
+        int printMcvSize = 5;
+        StringBuilder sb = new StringBuilder();
+        sb.append("MCV: [");
+        mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .limit(printMcvSize)
+                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]"));
+        sb.append("]");
+        return sb.toString();
+    }
+
+    public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double totalDistinctCount) {
+        Optional<Double> valueOpt = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(),
+                constantOperator.toString());
+        if (valueOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return getRowCountInBucket(valueOpt.get(), totalDistinctCount, constantOperator.getType().isFixedPointType());
+    }
+
+    public Optional<Long> getRowCountInBucket(double value, double distinctValuesCount, boolean useFixedPointEstimation) {
+        int left = 0;
+        int right = buckets.size() - 1;
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            Bucket bucket = buckets.get(mid);
+
+            long prevRowCount = 0;
+            if (mid > 0) {
+                prevRowCount = buckets.get(mid - 1).getCount();
+            }
+
+            Optional<Long> rowCountOfBucket = bucket.getRowCountInBucket(value, prevRowCount,
+                    distinctValuesCount / buckets.size(), useFixedPointEstimation);
+            if (rowCountOfBucket.isPresent()) {
+                return rowCountOfBucket;
+            }
+
+            if (value < bucket.getLower()) {
+                right = mid - 1;
+            } else {
+                left = mid + 1;
+            }
+        }
+
+        return Optional.empty();
     }
 }

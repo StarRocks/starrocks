@@ -1,0 +1,7 @@
+position: 30 # float position is supported
+label: 'Storage volume'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: storage_volume

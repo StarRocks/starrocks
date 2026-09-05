@@ -38,21 +38,26 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.TreeNode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.TreeNode;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PermutationGenerator;
+import com.starrocks.sql.formatter.ExprExplainVisitor;
+import com.starrocks.sql.formatter.ExprVerboseVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStats;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlan;
@@ -62,6 +67,7 @@ import org.apache.commons.collections.MapUtils;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -88,6 +94,7 @@ import java.util.stream.Collectors;
  * its children (= are bound by tupleIds).
  */
 abstract public class PlanNode extends TreeNode<PlanNode> {
+
     protected String planNodeName;
 
     protected PlanNodeId id;  // unique w/in plan tree; assigned by planner
@@ -115,9 +122,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // sum of tupleIds' avgSerializedSizes; set in computeStats()
     protected float avgRowSize;
 
-    protected int numInstances;
-
     protected Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
+
+    // Where the statistics used to estimate this node come from; set in computeStatistics().
+    // Only meaningful for scan nodes, printed in `explain costs`.
+    protected Statistics.StatsSource statsSource = Statistics.StatsSource.NONE;
+
+    protected Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
 
     // For vector query engine
     // case 1: If agg node hash outer join child
@@ -137,6 +148,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected Set<Integer> localRfWaitingSet = Sets.newHashSet();
     protected ExprSubstitutionMap outputSmap;
 
+    // set if you want to collect execution statistics for this plan node
+    protected boolean needCollectExecStats = false;
+
     protected PlanNode(PlanNodeId id, ArrayList<TupleId> tupleIds, String planNodeName) {
         this.id = id;
         this.limit = -1;
@@ -144,7 +158,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList(tupleIds);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
-        this.numInstances = 1;
     }
 
     protected PlanNode(PlanNodeId id, String planNodeName) {
@@ -153,7 +166,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList();
         this.cardinality = -1;
         this.planNodeName = planNodeName;
-        this.numInstances = 1;
     }
 
     /**
@@ -164,14 +176,17 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.limit = node.limit;
         this.tupleIds = Lists.newArrayList(node.tupleIds);
         this.nullableTupleIds = Sets.newHashSet(node.nullableTupleIds);
-        this.conjuncts = Expr.cloneList(node.conjuncts, null);
+        this.conjuncts = ExprUtils.cloneList(node.conjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
-        this.numInstances = 1;
     }
 
     public List<RuntimeFilterDescription> getProbeRuntimeFilters() {
         return probeRuntimeFilters;
+    }
+
+    public void setProbeRuntimeFilters(List<RuntimeFilterDescription> runtimeFilters) {
+        this.probeRuntimeFilters = runtimeFilters;
     }
 
     public void clearProbeRuntimeFilters() {
@@ -295,15 +310,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         isReplicated = replicated;
     }
 
-    /**
-     * Call computeMemLayout() for all materialized tuples.
-     */
-    protected void computeMemLayout(Analyzer analyzer) {
-        for (TupleId id : tupleIds) {
-            analyzer.getDescTbl().getTupleDesc(id).computeMemLayout();
-        }
-    }
-
     public String getExplainString() {
         return getExplainString("", "", TExplainLevel.VERBOSE);
     }
@@ -401,6 +407,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 expBuilder.append(detailPrefix + "- " + rf.toExplainString(id.asInt()) + "\n");
             }
         }
+        appendStatsSource(expBuilder, detailPrefix);
         // Print the children
         if (traverseChildren) {
             expBuilder.append(detailPrefix).append("\n");
@@ -448,6 +455,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 expBuilder.append(detailPrefix + "- " + rf.toExplainString(id.asInt()) + "\n");
             }
         }
+        appendStatsSource(expBuilder, detailPrefix);
         if (!planNodeName.equals("EXCHANGE")) {
             expBuilder.append(detailPrefix).append("column statistics: \n").append(getColumnStatistics(detailPrefix));
         }
@@ -466,6 +474,16 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return expBuilder.toString();
     }
 
+    // Emit the per-scan StatsSource line (NONE / ANALYZE / TABLE_METADATA) in `explain verbose`
+    // and `explain costs`. Only external/connector scan nodes carry a meaningful source. OlapScanNode
+    // is always ANALYZE and emitting it would churn a large number of existing plan tests, so skip it;
+    // derived (non-scan) operators are skipped as well.
+    private void appendStatsSource(StringBuilder expBuilder, String detailPrefix) {
+        if (this instanceof ScanNode && !(this instanceof OlapScanNode)) {
+            expBuilder.append(detailPrefix).append("stats source: ").append(statsSource).append("\n");
+        }
+    }
+
     protected String getColumnStatistics(String prefix) {
         if (MapUtils.isEmpty(columnStatistics)) {
             return "";
@@ -478,6 +496,18 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             outputBuilder.append(prefix).append("* ").append(key.getName());
             outputBuilder.append("-->").append(value).append("\n");
         });
+
+        if (!multiColumnCombinedStats.isEmpty()) {
+            outputBuilder.append(prefix).append("multi-column statistics: \n");
+            multiColumnCombinedStats.forEach((columns, stats) -> {
+                String columnNames = columns.stream()
+                        .map(ColumnRefOperator::getName)
+                        .collect(Collectors.joining(", "));
+
+                outputBuilder.append(prefix).append("* [").append(columnNames).append("]-->").append(stats).append("\n");
+            });
+        }
+
         return outputBuilder.toString();
     }
 
@@ -515,7 +545,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             msg.addToNullable_tuples(nullableTupleIds.contains(tid));
         }
         for (Expr e : conjuncts) {
-            msg.addToConjuncts(e.treeToThrift());
+            msg.addToConjuncts(ExprToThrift.treeToThrift(e));
         }
         toThrift(msg);
         container.addToNodes(msg);
@@ -540,11 +570,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats() throws StarRocksException {
         for (PlanNode child : children) {
-            child.finalizeStats(analyzer);
+            child.finalizeStats();
         }
-        computeStats(analyzer);
+        computeStats();
     }
 
     /**
@@ -555,7 +585,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * from finalize() (to facilitate inserting additional nodes during plan
      * partitioning w/o the need to call finalize() recursively on the whole tree again).
      */
-    protected void computeStats(Analyzer analyzer) {
+    protected void computeStats() {
         avgRowSize = 0.0F;
         for (TupleId tid : tupleIds) {
             avgRowSize += 4;
@@ -563,62 +593,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public void computeStatistics(Statistics statistics) {
+        if (null == statistics) {
+            return;
+        }
         cardinality = Math.round(statistics.getOutputRowCount());
         avgRowSize = (float) statistics.getColumnStatistics().values().stream().
                 mapToDouble(columnStatistic -> columnStatistic.getAverageRowSize()).sum();
         columnStatistics = statistics.getColumnStatistics();
-    }
-
-    public ExprSubstitutionMap getOutputSmap() {
-        return outputSmap;
-    }
-
-    public void init(Analyzer analyzer) throws UserException {
-    }
-
-    /**
-     * Assign remaining unassigned conjuncts.
-     */
-    protected void assignConjuncts(Analyzer analyzer) {
-        List<Expr> unassigned = analyzer.getUnassignedConjuncts(this.getTupleIds());
-        conjuncts.addAll(unassigned);
-        analyzer.markConjunctsAssigned(unassigned);
-    }
-
-    /**
-     * Returns an smap that combines the childrens' smaps.
-     */
-    protected ExprSubstitutionMap getCombinedChildSmap() {
-        if (getChildren().size() == 0) {
-            return new ExprSubstitutionMap();
-        }
-
-        if (getChildren().size() == 1) {
-            return getChild(0).getOutputSmap();
-        }
-
-        ExprSubstitutionMap result = ExprSubstitutionMap.combine(
-                getChild(0).getOutputSmap(), getChild(1).getOutputSmap());
-
-        for (int i = 2; i < getChildren().size(); ++i) {
-            result = ExprSubstitutionMap.combine(result, getChild(i).getOutputSmap());
-        }
-
-        return result;
-    }
-
-    /**
-     * Sets outputSmap_ to compose(existing smap, combined child smap). Also
-     * substitutes conjuncts_ using the combined child smap.
-     *
-     * @throws AnalysisException
-     */
-    protected void createDefaultSmap(Analyzer analyzer) throws UserException {
-        ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
-        outputSmap =
-                ExprSubstitutionMap.compose(outputSmap, combinedChildSmap, analyzer);
-
-        conjuncts = Expr.substituteList(conjuncts, outputSmap, analyzer, false);
+        multiColumnCombinedStats = statistics.getMultiColumnCombinedStats();
+        statsSource = statistics.getStatsSource();
     }
 
     public void setHasNullableGenerateChild() {
@@ -657,38 +640,34 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return output;
     }
 
-    protected String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
+    protected String getExplainString(List<? extends Expr> exprs) {
         if (exprs == null) {
             return "";
         }
-        StringBuilder output = new StringBuilder();
-        for (int i = 0; i < exprs.size(); ++i) {
-            if (i > 0) {
-                output.append(", ");
-            }
-            if (level.equals(TExplainLevel.NORMAL)) {
-                output.append(exprs.get(i).toSql());
-            } else {
-                output.append(exprs.get(i).explain());
-            }
+        return exprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", "));
+    }
+
+    protected String explainExpr(Expr... exprs) {
+        return explainExpr(TExplainLevel.NORMAL, Arrays.stream(exprs).toList());
+    }
+
+    protected String explainExpr(List<? extends Expr> exprs) {
+        return explainExpr(TExplainLevel.NORMAL, exprs);
+    }
+
+    protected String explainExpr(TExplainLevel level, List<? extends Expr> exprs) {
+        ConnectContext context = ConnectContext.get();
+        FormatOptions options = FormatOptions.allEnable();
+        if (context == null || !context.getSessionVariable().isEnableDesensitizeExplain()) {
+            options.setEnableDigest(false);
         }
-        return output.toString();
-    }
-
-    protected String getExplainString(List<? extends Expr> exprs) {
-        return getVerboseExplain(exprs, TExplainLevel.NORMAL);
-    }
-
-    protected String getVerboseExplain(List<? extends Expr> exprs) {
-        return getVerboseExplain(exprs, TExplainLevel.VERBOSE);
-    }
-
-    public int getNumInstances() {
-        return numInstances;
-    }
-
-    public void setNumInstances(int numInstances) {
-        this.numInstances = numInstances;
+        if (TExplainLevel.VERBOSE.equals(level)) {
+            ExprVerboseVisitor v = new ExprVerboseVisitor(options);
+            return exprs.stream().map(v::visit).collect(Collectors.joining(", "));
+        } else {
+            ExprExplainVisitor v = new ExprExplainVisitor(options);
+            return exprs.stream().map(v::visit).collect(Collectors.joining(", "));
+        }
     }
 
     public void appendTrace(StringBuilder sb) {
@@ -770,26 +749,29 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return candidates;
     }
 
-    public Optional<List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(List<Expr> partitionByExprs) {
+    public Optional<List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(List<Expr> partitionByExprs,
+                                                                            DescriptorTable descTbl) {
         if (CollectionUtils.isEmpty(partitionByExprs)) {
             return Optional.of(Lists.newArrayList());
         }
 
-        // rf be crossed exchange when partitionByExprs are slot refs and bound by the plan node.
-        return candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr());
+        // rf be crossed exchange when partitionByExprs are bound by the plan node.
+        return candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr(descTbl));
     }
 
     /**
      * When push down runtime filter cross exchange, need take care partitionByExprs of exchange.
      */
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
 
         Optional<List<List<Expr>>> optCandidatePartitionByExprs =
-                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+                canPushDownRuntimeFilterCrossExchange(partitionByExprs, descTbl);
         if (!optCandidatePartitionByExprs.isPresent()) {
             return false;
         }
@@ -799,13 +781,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         boolean accept = false;
         for (PlanNode node : children) {
             if (candidatePartitionByExprs.isEmpty()) {
-                if (node.pushDownRuntimeFilters(descTbl, description, probeExpr, Lists.newArrayList())) {
+                if (node.pushDownRuntimeFilters(context, probeExpr, Lists.newArrayList())) {
                     accept = true;
                     break;
                 }
             } else {
                 for (List<Expr> candidateOfPartitionByExprs : candidatePartitionByExprs) {
-                    if (node.pushDownRuntimeFilters(descTbl, description, probeExpr, candidateOfPartitionByExprs)) {
+                    if (node.pushDownRuntimeFilters(context, probeExpr, candidateOfPartitionByExprs)) {
                         accept = true;
                         break;
                     }
@@ -820,7 +802,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (accept) {
             return true;
         }
-        if (isBound && description.canProbeUse(this)) {
+        if (isBound && canEvaluateRuntimeFilter() && description.canProbeUse(this, context)) {
             description.addProbeExpr(id.asInt(), probeExpr);
             description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
             probeRuntimeFilters.add(description);
@@ -828,12 +810,44 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
         return false;
     }
+
     protected Function<Expr, Boolean> couldBound(RuntimeFilterDescription rfDesc, DescriptorTable descTbl) {
-        return (Expr expr) -> couldBound(expr ,rfDesc, descTbl);
+        return (Expr expr) -> couldBound(expr, rfDesc, descTbl);
     }
 
-    protected Function<Expr, Boolean> couldBoundForPartitionExpr() {
-        return (Expr expr) -> expr.isBoundByTupleIds(getTupleIds());
+
+
+
+    /**
+     * Whether a probe runtime filter parked on this node has any effect at runtime. A placement is
+     * useful if the node's operator does either of two things:
+     *
+     * 1. evaluates the global bloom filter -- `Operator::eval_runtime_bloom_filters()` is the only
+     *    consumer of a RuntimeFilterProbeCollector, and only scan, exchange source, aggregate
+     *    source and analytic source operators call it;
+     * 2. consumes a LOCAL runtime in-filter -- `Operator::eval_conjuncts_and_in_filters()`. This
+     *    one matters even when the global filter itself is thrown away: fillLocalRfWaitingSet()
+     *    derives localRfWaitingSet from probeRuntimeFilters, and that set is what tells the
+     *    operator which build node's local in-filter to wait for. Select, repeat and join
+     *    operators rely on this.
+     *
+     * When neither holds, the filter is silently never applied, the pipeline driver still blocks
+     * waiting for the global filter to arrive, and the profile reports a non-zero RuntimeFilterNum.
+     *
+     * Defaults to true so unverified node types keep their current behaviour; override to false
+     * only where the operator is known to do neither.
+     */
+    public boolean canEvaluateRuntimeFilter() {
+        return true;
+    }
+
+    protected Function<Expr, Boolean> couldBoundForPartitionExpr(DescriptorTable descTbl) {
+        // Use the same slot-id based criterion as couldBound(). Tuple-id based binding is wrong
+        // here: a ProjectNode re-resolves a passed-through slot onto its OWN output tuple, so an
+        // expression it produced (typically an implicit widening CAST of a join key) looks
+        // "unbound" to the child even though every slot it uses is available there. That made
+        // runtime filters stop descending at the projection.
+        return (Expr expr) -> getSlotIds(descTbl).contains(ExprUtils.getUsedSlotIds(expr));
     }
 
     private RoaringBitmap cachedSlotIds = null;
@@ -854,19 +868,33 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             SlotRef slotRef = (SlotRef) probeExpr;
             for (TupleId tupleId : getTupleIds()) {
                 for (SlotDescriptor slot : descTbl.getTupleDesc(tupleId).getSlots()) {
-                    // TopN Filter only works in no-nullable column
-                    if (slot.getId().equals(slotRef.getSlotId()) && (!slotRef.isNullable() || rfDesc.isNullLast())) {
-                        return true;
+                    if (!slot.getId().equals(slotRef.getSlotId())) {
+                        continue;
                     }
+                    return true;
                 }
             }
             return false;
         } else {
-            return getSlotIds(descTbl).contains(probeExpr.getUsedSlotIds());
+            return getSlotIds(descTbl).contains(ExprUtils.getUsedSlotIds(probeExpr));
         }
     }
 
-    private boolean tryPushdownRuntimeFilterToChild(DescriptorTable descTbl, RuntimeFilterDescription description,
+    protected boolean canEliminateNull(Expr expr, SlotDescriptor slot) {
+        if (ExprUtils.isBound(expr, slot.getId())) {
+            ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
+            ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
+                    "any", true);
+            return Utils.canEliminateNull(Sets.newHashSet(column), operator);
+        }
+        return false;
+    }
+
+    protected boolean canEliminateNull(SlotDescriptor slot) {
+        return conjuncts.stream().anyMatch(expr -> canEliminateNull(expr, slot));
+    }
+
+    private boolean tryPushdownRuntimeFilterToChild(RuntimeFilterPushDownContext context,
                                                     Optional<List<Expr>> optProbeExprCandidates,
                                                     Optional<List<List<Expr>>> optPartitionByExprsCandidates,
                                                     int childIdx) {
@@ -878,14 +906,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
         for (Expr candidateOfProbeExpr : probeExprCandidates) {
             if (partitionByExprsCandidates.isEmpty()) {
-                if (children.get(childIdx).pushDownRuntimeFilters(descTbl, description, candidateOfProbeExpr,
+                if (children.get(childIdx).pushDownRuntimeFilters(context, candidateOfProbeExpr,
                         Lists.newArrayList())) {
                     return true;
                 }
             } else {
                 for (List<Expr> candidateOfPartitionByExprs : partitionByExprsCandidates) {
                     if (children.get(childIdx)
-                            .pushDownRuntimeFilters(descTbl, description, candidateOfProbeExpr,
+                            .pushDownRuntimeFilters(context, candidateOfProbeExpr,
                                     candidateOfPartitionByExprs)) {
                         return true;
                     }
@@ -899,26 +927,28 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Push down a runtime filter for the specific child with childIdx. `addProbeInfo` indicates whether
      * add runtime filter info into this PlanNode.
      */
-    protected boolean pushdownRuntimeFilterForChildOrAccept(DescriptorTable descTbl,
-                                                            RuntimeFilterDescription description,
+    protected boolean pushdownRuntimeFilterForChildOrAccept(RuntimeFilterPushDownContext context,
                                                             Expr probeExpr,
                                                             Optional<List<Expr>> optProbeExprCandidates,
                                                             List<Expr> partitionByExprs,
                                                             Optional<List<List<Expr>>> optPartitionByExprsCandidates,
                                                             int childIdx,
                                                             boolean addProbeInfo) {
-        boolean accept = tryPushdownRuntimeFilterToChild(descTbl, description, optProbeExprCandidates,
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
+        boolean accept = tryPushdownRuntimeFilterToChild(context, optProbeExprCandidates,
                 optPartitionByExprsCandidates, childIdx);
         RoaringBitmap slotIds = getSlotIds(descTbl);
-        boolean isBound = slotIds.contains(probeExpr.getUsedSlotIds()) &&
-                partitionByExprs.stream().allMatch(expr->slotIds.contains(expr.getUsedSlotIds()));
+        boolean isBound = slotIds.contains(ExprUtils.getUsedSlotIds(probeExpr)) &&
+                partitionByExprs.stream().allMatch(expr -> slotIds.contains(ExprUtils.getUsedSlotIds(expr)));
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }
         if (accept) {
             return true;
         }
-        if (isBound && addProbeInfo && description.canProbeUse(this)) {
+        if (isBound && addProbeInfo && canEvaluateRuntimeFilter()
+                && description.canProbeUse(this, context)) {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);
@@ -984,5 +1014,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // disable optimize depends on physical order
     // eg: sortedStreamingAGG/ PerBucketCompute
     public void disablePhysicalPropertyOptimize() {
+    }
+
+    public void forceCollectExecStats() {
+        this.needCollectExecStats = true;
+    }
+
+    public boolean needCollectExecStats() {
+        return needCollectExecStats;
     }
 }

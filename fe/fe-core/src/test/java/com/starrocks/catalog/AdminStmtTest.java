@@ -35,31 +35,24 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 
 public class AdminStmtTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -68,7 +61,7 @@ public class AdminStmtTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
 
         String sql = "CREATE TABLE test.tbl1 (\n" +
                 "  `id` int(11) NULL COMMENT \"\",\n" +
@@ -80,19 +73,20 @@ public class AdminStmtTest {
                 " \"replication_num\" = \"1\"\n" +
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
 
     @Test
     public void testAdminSetReplicaStatus() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable("tbl1");
-        Assert.assertNotNull(tbl);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Assertions.assertNotNull(db);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Assertions.assertNotNull(tbl);
         // tablet id, backend id
         List<Pair<Long, Long>> tabletToBackendList = Lists.newArrayList();
         for (Partition partition : tbl.getPartitions()) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         tabletToBackendList.add(Pair.create(tablet.getId(), replica.getBackendId()));
@@ -100,57 +94,27 @@ public class AdminStmtTest {
                 }
             }
         }
-        Assert.assertEquals(3, tabletToBackendList.size());
+        Assertions.assertEquals(3, tabletToBackendList.size());
         long tabletId = tabletToBackendList.get(0).first;
         long backendId = tabletToBackendList.get(0).second;
-        Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
-        Assert.assertFalse(replica.isBad());
+        Replica replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
+        Assertions.assertFalse(replica.isBad());
 
         // set replica to bad
         String adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
                 + backendId + "', 'status' = 'bad');";
         AdminSetReplicaStatusStmt stmt =
                 (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
-        GlobalStateMgr.getCurrentState().setReplicaStatus(stmt);
-        replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
-        Assert.assertTrue(replica.isBad());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
+        replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
+        Assertions.assertTrue(replica.isBad());
 
         // set replica to ok
         adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
                 + backendId + "', 'status' = 'ok');";
         stmt = (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
-        GlobalStateMgr.getCurrentState().setReplicaStatus(stmt);
-        replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
-        Assert.assertFalse(replica.isBad());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
+        replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
+        Assertions.assertFalse(replica.isBad());
     }
-
-    @Test
-    public void testSetReplicaStatusOperationLog() throws IOException, AnalysisException {
-        String fileName = "./SetReplicaStatusOperationLog";
-        try {
-            // 1. Write objects to file
-            File file = new File(fileName);
-            file.createNewFile();
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-            SetReplicaStatusOperationLog log = new SetReplicaStatusOperationLog(10000, 100001, Replica.ReplicaStatus.BAD);
-            log.write(out);
-            out.flush();
-            out.close();
-
-            // 2. Read objects from file
-            DataInputStream in = new DataInputStream(new FileInputStream(file));
-
-            SetReplicaStatusOperationLog readLog = SetReplicaStatusOperationLog.read(in);
-            Assert.assertEquals(log.getBackendId(), readLog.getBackendId());
-            Assert.assertEquals(log.getTabletId(), readLog.getTabletId());
-            Assert.assertEquals(log.getReplicaStatus(), readLog.getReplicaStatus());
-
-            in.close();
-        } finally {
-            File file = new File(fileName);
-            file.delete();
-        }
-    }
-
 }

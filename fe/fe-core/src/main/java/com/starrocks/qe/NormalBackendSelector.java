@@ -17,7 +17,7 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.thrift.TNetworkAddress;
@@ -27,6 +27,8 @@ import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
@@ -59,7 +61,7 @@ public class NormalBackendSelector implements BackendSelector {
     }
 
     @Override
-    public void computeScanRangeAssignment() throws UserException {
+    public void computeScanRangeAssignment() throws StarRocksException {
         HashMap<TNetworkAddress, Long> assignedRowCountPerHost = Maps.newHashMap();
         // sort the scan ranges by row count
         // only sort the scan range when it is load job
@@ -71,14 +73,18 @@ public class NormalBackendSelector implements BackendSelector {
         }
 
         for (TScanRangeLocations scanRangeLocations : locations) {
+            // Each scanRangeLocations is corresponding to a tablet.
             // assign this scan range to the host w/ the fewest assigned row count
             Long minRowCount = Long.MAX_VALUE;
             TScanRangeLocation minLocation = null;
+
+            List<Long> unavailableDataNodeIds = new ArrayList<>();
             for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
+                // Each location is corresponding to a replica of the tablet.
                 if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
+                    unavailableDataNodeIds.add(location.getBackend_id());
                     continue;
                 }
-
                 Long assignedBytes = assignedRowCountPerHost.getOrDefault(location.server, 0L);
                 if (assignedBytes < minRowCount) {
                     minRowCount = assignedBytes;
@@ -86,6 +92,29 @@ public class NormalBackendSelector implements BackendSelector {
                 }
             }
 
+            // [Shared-Data Only] If all replicas are in unavailable nodes, a backup node can be selected on behalf of starmgr.
+            if (minLocation == null && workerProvider.allowUsingBackupNode() && !unavailableDataNodeIds.isEmpty()) {
+                Collections.shuffle(unavailableDataNodeIds);
+                for (long unavailableId : unavailableDataNodeIds) {
+                    long backupNodeId = workerProvider.selectBackupWorker(unavailableId);
+                    LOG.debug("Select a backup node:{} for node:{}", backupNodeId, unavailableId);
+                    if (backupNodeId > 0) {
+                        // using the backupNode to generate a new ScanRangeLocation
+                        TScanRangeLocation backupLocation = new TScanRangeLocation();
+                        backupLocation.setBackend_id(backupNodeId);
+                        backupLocation.setServer(workerProvider.getWorkerById(backupNodeId).getAddress());
+                        Long assignedBytes = assignedRowCountPerHost.getOrDefault(backupLocation.server, 0L);
+                        if (assignedBytes < minRowCount) {
+                            minRowCount = assignedBytes;
+                            minLocation = backupLocation;
+                        }
+                        // one backup node is enough
+                        break;
+                    }
+                }
+            }
+
+            // fail eventually if it can't find any location.
             if (minLocation == null) {
                 workerProvider.reportDataNodeNotFoundException();
             }

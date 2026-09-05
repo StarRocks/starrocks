@@ -1,0 +1,142 @@
+name: UNSTABLE CASE PROMOTE-DEMOTE
+
+# Standalone, fully decoupled (own file, manual trigger, no job dependency).
+# Consumes the accumulated PR executed-manifests under
+# <CH>/pr/<branch>/*.executed.jsonl and promotes/demotes PROBATION cases from
+# real PR-concurrency evidence (ci-tool bin/promote_demote_probation.py, P2a),
+# then opens a human-review PR against ci-tool with the updated JSON.
+# Defaults to dry-run: a normal run only prints decisions; flip dry_run=false
+# to actually write + open the PR.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to evaluate (section key <repo>-<branch>)'
+        required: false
+        default: 'main'
+        type: string
+      k:
+        description: 'PROBATION_CLEAN_PRS — consecutive clean distinct PRs to promote'
+        required: false
+        default: '5'
+        type: string
+      min_days:
+        description: 'PROBATION_MIN_DAYS — min span of the clean streak'
+        required: false
+        default: '2'
+        type: string
+      q:
+        description: 'QUARANTINE_ADD_COUNT — add_count at which a case is quarantined'
+        required: false
+        default: '2'
+        type: string
+      target_probation:
+        description: 'PROBATION target watermark — drip fills probation up to this many cases from the recovered pool'
+        required: false
+        default: '30'
+        type: string
+      dry_run:
+        description: 'Only print decisions; do not write files or open a PR'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  promote-demote:
+    name: PROMOTE / DEMOTE
+    runs-on: [self-hosted, ubuntu, ai]
+    env:
+      BRANCH:   ${{ inputs.branch || 'main' }}
+      GH_TOKEN: ${{ secrets.SYNC_PAT }}
+    steps:
+      - name: Evaluate probation cases & (optionally) open PR
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
+          _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
+
+          # Accumulated PR executed-manifests for this branch (the promotion evidence).
+          ch_branch="${BRANCH//\//_}"
+          HIST="/tmp/pd-${GITHUB_RUN_ID}/pr"
+          mkdir -p "${HIST}"
+          ${_oss} cp -r "oss://${bucket}/unstable_case_report/ci-case-history/pr/${ch_branch}/" "${HIST}/" >/dev/null 2>&1 || true
+
+          DRY=""
+          [[ "${{ inputs.dry_run }}" == "false" ]] || DRY="--dry-run"
+
+          python3 bin/promote_demote_probation.py \
+            --pr-history-dir "${HIST}" \
+            --probation files/unstable_case_probation.json \
+            --blacklist files/unstable_case.json \
+            --details   files/unstable_case_details.json \
+            --resolve-record files/unstable_case_resolve_record.json \
+            --repo "${{ github.repository }}" --branch "${BRANCH}" \
+            --k "${{ inputs.k || '5' }}" --min-days "${{ inputs.min_days || '2' }}" --q "${{ inputs.q || '2' }}" \
+            --recovered-pool files/unstable_case_recovered_pool.json \
+            --target-probation "${{ inputs.target_probation || '30' }}" \
+            ${DRY} 2>&1 | tee /tmp/pd-${GITHUB_RUN_ID}.log
+
+          # Surface the decision counts in the run Summary (no need to open logs).
+          {
+            echo "## Probation promote-demote — ${BRANCH} (dry_run=${{ inputs.dry_run }})"
+            echo '```'
+            grep -E '^(PROMOTE|DEMOTE|  of which QUARANTINE|PENDING|STALE|DRIP)' \
+              "/tmp/pd-${GITHUB_RUN_ID}.log" | sed -E 's/: \[.*$//' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -n "${DRY}" ]]; then
+            echo "::notice::dry-run — no files written, no PR. Re-run with dry_run=false to apply."
+            echo "_dry-run — no files written, no PR._" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Apply mode: open a review PR against ci-tool. Fail loudly if we
+          # cannot — a green run that silently did NOT open the requested PR is
+          # exactly the "success with no output" trap. Print the diff for
+          # debugging, then exit non-zero so the operator knows to wire SYNC_PAT.
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "::error::dry_run=false but no SYNC_PAT token — cannot open the PR. (diff below)"
+            echo "⚠️ **changes computed but NO SYNC_PAT — PR not opened.**" >> "$GITHUB_STEP_SUMMARY"
+            git --no-pager diff -- files/ || true
+            exit 1
+          fi
+          if git diff --quiet files/; then
+            echo "No promote/demote changes — skipping PR."
+            echo "_No file changes → no PR opened._" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name  "wanpengfei-git"
+          git config user.email "wanpengfei91@163.com"
+          # Include RUN_ATTEMPT: GITHUB_RUN_ID is stable across re-runs (only
+          # RUN_ATTEMPT increments), so without it a retry after a partial
+          # failure (push ok, pr create failed) reuses the branch name and the
+          # push is rejected non-fast-forward — making the workflow un-retriable.
+          BR="auto/probation-promote-demote-$(date +%Y-%m-%d)-${ch_branch}-r${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT:-1}"
+          git checkout -b "$BR"
+          git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json files/unstable_case_resolve_record.json files/unstable_case_recovered_pool.json
+          git commit -m "[Tool] probation promote/demote ${BRANCH} (auto)"
+          git push origin "$BR"
+          BODY=$(mktemp)
+          cat > "$BODY" <<EOF
+          Auto-generated by [promote-demote run #${GITHUB_RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
+
+          Promotes probation cases with >= ${{ inputs.k || '5' }} clean distinct PRs (>= ${{ inputs.min_days || '2' }} days) to ACTIVE, and demotes any that failed under real PR concurrency back to the blacklist (add_count++, QUARANTINE at >= ${{ inputs.q || '2' }}). Evidence: <CH>/pr/${ch_branch}/.
+
+          Please sanity-check the diff before merging.
+          EOF
+          PR_URL=$(gh pr create --repo StarRocks/ci-tool --base main --head "$BR" \
+            --title "[Tool] probation promote/demote $(date +%Y-%m-%d) (auto)" --body-file "$BODY")
+          rm -f "$BODY"
+          echo "Opened PR: ${PR_URL}"
+          echo "**PR opened:** ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean ENV
+        if: always()
+        run: rm -rf /tmp/pd-${GITHUB_RUN_ID} ${{ github.workspace }}/* || true

@@ -36,21 +36,20 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.TabletStatPB;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 public class PartitionCommitInfo implements Writable {
 
     @SerializedName(value = "partitionId")
-    private long partitionId;
+    private long physicalPartitionId;
     @SerializedName(value = "version")
     private long version;
 
@@ -63,15 +62,21 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "versionTime")
     private long versionTime;
 
+    @SerializedName(value = "dataVersion")
+    private long dataVersion;
+
+    @SerializedName(value = "versionEpoch")
+    private long versionEpoch;
+
     // For low cardinality string column with global dict
     // TODO(KKS): move invalidDictCacheColumns and validDictCacheColumns to TableCommitInfo
     // Currently, for support FE rollback, we persist the invalidDictCacheColumns in PartitionCommitInfo by json,
     // not TableCommitInfo.
 
     @SerializedName(value = "invalidColumns")
-    private List<String> invalidDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> invalidDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "validColumns")
-    private List<String> validDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> validDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "DictCollectedVersion")
     private List<Long> dictCollectedVersions = Lists.newArrayList();
 
@@ -79,23 +84,42 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
+    // Per-tablet stats collected during publish: for lake tables from the publish RPC response
+    // (range-distribution tablets, and any tablet on first import), for shared-nothing tables
+    // from TTabletInfo on first import. Transient (not serialized), leader-only. Consumed for
+    // first-load statistics collection and (lake only) real-time reshard triggering.
+    //
+    // Deliberately an unsynchronized HashMap: exactly one thread may touch a given instance at a
+    // time, and that must stay true.
+    //  - shared-nothing: written only by the thread finishing the transaction, via
+    //    TransactionState.applyPublishTaskTabletStats() under the txn write lock. The thrift
+    //    finishTask handlers write to their own PublishVersionTask, never here.
+    //  - lake: written only by the publish thread that owns this partition, which happens-before
+    //    the finish through the publish CompletableFuture.
+    // Writing this map from a thread that does not own it is a bug, not a tuning question - it is
+    // what made the publish daemon's snapshot throw ConcurrentModificationException in issue #77595.
+    // Leaving it unsynchronized keeps such a mistake loud instead of silently truncating stats.
+    private final Map<Long, TabletStatPB> tabletStats = new HashMap<>();
+
+    private boolean isDoubleWrite = false;
+
     public PartitionCommitInfo() {
 
     }
 
-    public PartitionCommitInfo(long partitionId, long version, long visibleTime) {
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime) {
         super();
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.version = version;
         this.versionTime = visibleTime;
     }
 
-    public PartitionCommitInfo(long partitionId, long version, long visibleTime,
-                               List<String> invalidDictCacheColumns,
-                               List<String> validDictCacheColumns,
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime,
+                               List<ColumnId> invalidDictCacheColumns,
+                               List<ColumnId> validDictCacheColumns,
                                List<Long> dictCollectedVersions) {
         super();
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.version = version;
         this.versionTime = visibleTime;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
@@ -103,23 +127,34 @@ public class PartitionCommitInfo implements Writable {
         this.dictCollectedVersions = dictCollectedVersions;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
-
-    public static PartitionCommitInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PartitionCommitInfo.class);
+    public PartitionCommitInfo(PartitionCommitInfo partitionCommitInfo) {
+        this.physicalPartitionId = partitionCommitInfo.physicalPartitionId;
+        this.version = partitionCommitInfo.version;
+        this.versionTime = partitionCommitInfo.versionTime;
+        this.dataVersion = partitionCommitInfo.dataVersion;
+        this.versionEpoch = partitionCommitInfo.versionEpoch;
+        this.invalidDictCacheColumns = partitionCommitInfo.invalidDictCacheColumns == null
+                ? Lists.newArrayList()
+                : Lists.newArrayList(partitionCommitInfo.invalidDictCacheColumns);
+        this.validDictCacheColumns = partitionCommitInfo.validDictCacheColumns == null
+                ? Lists.newArrayList()
+                : Lists.newArrayList(partitionCommitInfo.validDictCacheColumns);
+        this.dictCollectedVersions = partitionCommitInfo.dictCollectedVersions == null
+                ? Lists.newArrayList()
+                : Lists.newArrayList(partitionCommitInfo.dictCollectedVersions);
+        this.compactionScore = partitionCommitInfo.compactionScore == null
+                ? null
+                : new Quantiles(partitionCommitInfo.compactionScore);
+        this.tabletStats.putAll(partitionCommitInfo.tabletStats);
+        this.isDoubleWrite = partitionCommitInfo.isDoubleWrite;
     }
 
     public void setVersionTime(long time) {
         this.versionTime = time;
     }
 
-    public long getPartitionId() {
-        return partitionId;
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
     }
 
     public long getVersion() {
@@ -134,11 +169,35 @@ public class PartitionCommitInfo implements Writable {
         return versionTime;
     }
 
-    public List<String> getInvalidDictCacheColumns() {
+    public long getDataVersion() {
+        return dataVersion;
+    }
+
+    public void setDataVersion(long dataVersion) {
+        this.dataVersion = dataVersion;
+    }
+
+    public long getVersionEpoch() {
+        return versionEpoch;
+    }
+
+    public void setVersionEpoch(long versionEpoch) {
+        this.versionEpoch = versionEpoch;
+    }
+
+    public void setIsDoubleWrite(boolean isDoubleWrite) {
+        this.isDoubleWrite = isDoubleWrite;
+    }
+
+    public boolean isDoubleWrite() {
+        return isDoubleWrite;
+    }
+
+    public List<ColumnId> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }
 
-    public List<String> getValidDictCacheColumns() {
+    public List<ColumnId> getValidDictCacheColumns() {
         return validDictCacheColumns;
     }
 
@@ -150,6 +209,25 @@ public class PartitionCommitInfo implements Writable {
         this.compactionScore = compactionScore;
     }
 
+    public Map<Long, TabletStatPB> getTabletStats() {
+        return tabletStats;
+    }
+
+    // Single entry point for adding stats, so every writer of tabletStats is greppable and can be
+    // checked against the single-owner-thread rule documented on the field.
+    public void putAllTabletStats(@Nullable Map<Long, TabletStatPB> stats) {
+        if (stats == null) {
+            return;
+        }
+        // Lake entries come straight off a publish RPC response; every consumer null-checks the
+        // value, so drop null stats here instead of storing them.
+        stats.forEach((tabletId, stat) -> {
+            if (stat != null) {
+                tabletStats.put(tabletId, stat);
+            }
+        });
+    }
+
     @Nullable
     public Quantiles getCompactionScore() {
         return compactionScore;
@@ -157,11 +235,11 @@ public class PartitionCommitInfo implements Writable {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("partitionid=");
-        sb.append(partitionId);
+        StringBuilder sb = new StringBuilder("partitionId=");
+        sb.append(physicalPartitionId);
         sb.append(", version=").append(version);
-        sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);
+        sb.append(", isDoubleWrite=").append(isDoubleWrite);
         return sb.toString();
     }
 }

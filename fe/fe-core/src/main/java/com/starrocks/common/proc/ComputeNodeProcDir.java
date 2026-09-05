@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.proc;
 
 import com.google.common.base.Stopwatch;
@@ -20,19 +19,22 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 public class ComputeNodeProcDir implements ProcDirInterface {
@@ -40,17 +42,24 @@ public class ComputeNodeProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(ComputeNodeProcDir.class);
 
     public static final ImmutableList<String> TITLE_NAMES;
+    public static final ImmutableList<String> TITLE_NAMES_SHARED_DATA;
+
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                 .add("ComputeNodeId").add("IP").add("HeartbeatPort")
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
-                .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
-        if (RunMode.allowCreateLakeTable()) {
-            builder.add("StarletPort").add("WorkerId");
-        }
+                .add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+                .add("DataCacheMetrics").add("HasStoragePath").add("StatusCode");
         TITLE_NAMES = builder.build();
+        builder = new ImmutableList.Builder<String>()
+                .addAll(TITLE_NAMES)
+                .add("StarletPort")
+                .add("WorkerId")
+                .add("WarehouseName")
+                .add("TabletNum");
+        TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
     private SystemInfoService clusterInfoService;
@@ -59,11 +68,19 @@ public class ComputeNodeProcDir implements ProcDirInterface {
         this.clusterInfoService = clusterInfoService;
     }
 
+    public static List<String> getMetadata() {
+        if (RunMode.isSharedDataMode()) {
+            return TITLE_NAMES_SHARED_DATA;
+        } else {
+            return TITLE_NAMES;
+        }
+    }
+
     @Override
     public ProcResult fetchResult()
             throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
+        result.setNames(getMetadata());
 
         final List<List<String>> computeNodesInfos = getClusterComputeNodesInfos();
         for (List<String> computeNodesInfo : computeNodesInfos) {
@@ -77,10 +94,9 @@ public class ComputeNodeProcDir implements ProcDirInterface {
     /**
      * get compute nodes of cluster
      * copy from getClusterBackendInfos, It is necessary to refactor the two methods later
-     * @return
      */
     public static List<List<String>> getClusterComputeNodesInfos() {
-        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<List<String>> computeNodesInfos = new LinkedList<>();
         List<Long> computeNodeIds;
         computeNodeIds = clusterInfoService.getComputeNodeIds(false);
@@ -125,19 +141,44 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             computeNodeInfo.add(computeNode.getHeartbeatErrMsg());
             computeNodeInfo.add(computeNode.getVersion());
 
-            computeNodeInfo.add(BackendCoreStat.getCoresOfBe(computeNodeId));
+            computeNodeInfo.add(computeNode.getCpuCores());
+            computeNodeInfo.add(DebugUtil.getPrettyStringBytes(computeNode.getMemLimitBytes()));
 
             computeNodeInfo.add(computeNode.getNumRunningQueries());
             double memUsedPct = computeNode.getMemUsedPct();
             computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             computeNodeInfo.add(String.format("%.1f", computeNode.getCpuUsedPermille() / 10.0) + " %");
 
-            computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
+            Optional<DataCacheMetrics> dataCacheMetrics = computeNode.getDataCacheMetrics();
+            if (dataCacheMetrics.isPresent()) {
+                DataCacheMetrics.Status status = dataCacheMetrics.get().getStatus();
+                if (status != DataCacheMetrics.Status.DISABLED) {
+                    computeNodeInfo.add(String.format("Status: %s, DiskUsage: %s, MemUsage: %s",
+                            dataCacheMetrics.get().getStatus(),
+                            dataCacheMetrics.get().getDiskUsageStr(),
+                            dataCacheMetrics.get().getMemUsageStr()));
+                } else {
+                    // DataCache is disabled
+                    computeNodeInfo.add(String.format("Status: %s", DataCacheMetrics.Status.DISABLED));
+                }
+            } else {
+                // Didn't receive any datacache report from be
+                computeNodeInfo.add("N/A");
+            }
 
-            if (RunMode.allowCreateLakeTable()) {
+            computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
+            computeNodeInfo.add(computeNode.getStatus().name());
+
+            if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(computeNode.getWarehouseId());
+                computeNodeInfo.add(wh.getName());
+
+                String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
+                long tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
+                computeNodeInfo.add(tabletNum);
             }
 
             comparableComputeNodeInfos.add(computeNodeInfo);

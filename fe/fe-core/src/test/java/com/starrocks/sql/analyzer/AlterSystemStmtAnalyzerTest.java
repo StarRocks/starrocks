@@ -15,82 +15,181 @@
 
 package com.starrocks.sql.analyzer;
 
-
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.UpdateBackendInfo;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.net.InetAddress;
-import java.net.UnknownHostException;
+import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class AlterSystemStmtAnalyzerTest {
-    @BeforeClass
+public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
+    private static StarRocksAssert starRocksAssert;
+    private static ConnectContext connectContext;
+
+
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        starRocksAssert = new StarRocksAssert(connectContext);
         AnalyzeTestUtil.init();
-    }
 
-    @Mocked
-    InetAddress addr1;
-
-    private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr1;
-            }
-        };
+        UtFrameUtils.setUpForPersistTest();
     }
 
     @Test
-    public void testVisitModifyBackendHostClause() {
-        mockNet();
-        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
-                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test", "fqdn");
-        Void resutl = visitor.visitModifyBackendHostClause(clause, null);
-        Assert.assertTrue(resutl == null);
+    public void testVisitModifyBackendClause() {
+        InetAddress mockAddr = Mockito.mock(InetAddress.class);
+        try (MockedStatic<InetAddress> mocked = Mockito.mockStatic(InetAddress.class)) {
+            mocked.when(() -> InetAddress.getByName(Mockito.anyString())).thenReturn(mockAddr);
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyBackendClause clause = new ModifyBackendClause("test", "fqdn");
+            visitor.visitModifyBackendClause(clause, null);
+        }
     }
 
     @Test
     public void testVisitModifyFrontendHostClause() {
-        mockNet();
-        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
-                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
-        Void resutl = visitor.visitModifyFrontendHostClause(clause, null);
-        Assert.assertTrue(resutl == null);
+        InetAddress mockAddr = Mockito.mock(InetAddress.class);
+        try (MockedStatic<InetAddress> mocked = Mockito.mockStatic(InetAddress.class)) {
+            mocked.when(() -> InetAddress.getByName(Mockito.anyString())).thenReturn(mockAddr);
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
+            visitor.visitModifyFrontendHostClause(clause, null);
+        }
     }
 
-    @Test(expected = SemanticException.class)
-    public void testVisitModifyBackendHostClauseException() {
-        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
-                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.2", "127.0.0.1");
-        visitor.visitModifyBackendHostClause(clause, null);
+    @Test
+    public void testVisitModifyBackendClauseException() {
+        assertThrows(SemanticException.class, () -> {
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyBackendClause clause = new ModifyBackendClause("127.0.0.2", "127.0.0.1");
+            visitor.visitModifyBackendClause(clause, null);
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testVisitModifyFrontendHostClauseException() {
-        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
-                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
-        visitor.visitModifyFrontendHostClause(clause, null);
+        assertThrows(SemanticException.class, () -> {
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
+            visitor.visitModifyFrontendHostClause(clause, null);
+        });
     }
 
     @Test
     public void testAnalyzeCancelAlterSystem() {
         CancelAlterSystemStmt cancelAlterSystemStmt = (CancelAlterSystemStmt) analyzeSuccess(
                 "CANCEL DECOMMISSION BACKEND \"127.0.0.1:8080\", \"127.0.0.2:8080\"");
-        Assert.assertEquals("[127.0.0.1:8080, 127.0.0.2:8080]", cancelAlterSystemStmt.getHostPortPairs().toString());
+        Assertions.assertEquals("[127.0.0.1:8080, 127.0.0.2:8080]", cancelAlterSystemStmt.getHostPortPairs().toString());
+    }
+
+    @Test
+    public void testAnalyzeModifyBackendProp() {
+        String[] testLocs = {"*", "a:*", "bcd_123:*", "123bcd_:val_123", "invalidFormat",
+                ":", "aa_123:*", "*:123", "a:b,c:d", "a: b", "  a  :  b  ", "   ", "a:b*"};
+        Boolean[] analyzeSuccess = {false, false, false, true, false, false,
+                false, false, false, true, true, false, false};
+        int i = 0;
+        for (String loc : testLocs) {
+            String stmtStr = "alter system modify backend '127.0.0.1:9091' set ('" +
+                    AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + loc + "')";
+            logSysInfo(stmtStr);
+            try {
+                UtFrameUtils.parseStmtWithNewParser(stmtStr, connectContext);
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertFalse(analyzeSuccess[i++]);
+                continue;
+            }
+
+            Assertions.assertTrue(analyzeSuccess[i++]);
+        }
+
+        String stmtStr = "alter system modify backend '127.0.0.1:9091'" +
+                " set ('invalid_prop_key' = 'val', '" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION +  "' = 'a:b')";
+        logSysInfo(stmtStr);
+        try {
+            UtFrameUtils.parseStmtWithNewParser(stmtStr, connectContext);
+        } catch (Exception e) {
+            logSysInfo(e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("unsupported property: invalid_prop_key"));
+        }
+    }
+
+    private void modifyBackendLocation(String location) throws Exception {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        logSysInfo(systemInfoService.getBackends());
+        List<Long> backendIds = systemInfoService.getBackendIds();
+        Backend backend = systemInfoService.getBackend(backendIds.get(0));
+        String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                ":" + backend.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + location + "')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
+    }
+
+    @Test
+    public void testShowBackendLocation() throws Exception {
+        modifyBackendLocation("a:b");
+        String showBackendLocationSqlStr = "show backends";
+        ShowBackendsStmt showBackendsStmt = (ShowBackendsStmt) UtFrameUtils.parseStmtWithNewParser(showBackendLocationSqlStr,
+                connectContext);
+        ShowResultSet showResultSet = ShowExecutor.execute(showBackendsStmt, connectContext);
+        logSysInfo(showResultSet.getResultRows());
+        Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("a:b"));
+    }
+
+    @Test
+    public void testModifyBackendLocationPersistence() throws Exception {
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(initialImage.getImageWriter());
+
+        modifyBackendLocation("c:d");
+
+        // make final image
+        UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(finalImage.getImageWriter());
+
+        // test replay
+        NodeMgr nodeMgrFollower = new NodeMgr();
+        nodeMgrFollower.load(initialImage.getMetaBlockReader());
+        UpdateBackendInfo info =
+                (UpdateBackendInfo) UtFrameUtils.PseudoJournalReplayer
+                        .replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        nodeMgrFollower.getClusterInfo().replayBackendStateChange(info);
+        Assertions.assertEquals("{c=d}",
+                nodeMgrFollower.getClusterInfo().getBackend(info.getId()).getLocation().toString());
+
+        // test restart
+        NodeMgr nodeMgrLeader = new NodeMgr();
+        nodeMgrLeader.load(finalImage.getMetaBlockReader());
+        Assertions.assertEquals("{c=d}",
+                nodeMgrLeader.getClusterInfo().getBackend(info.getId()).getLocation().toString());
     }
 }

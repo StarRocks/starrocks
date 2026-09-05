@@ -15,54 +15,78 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
+import com.starrocks.connector.trino.TrinoParserUnsupportedException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
-import io.trino.sql.parser.ParsingException;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.DefaultErrorStrategy;
-import org.antlr.v4.runtime.InputMismatchException;
-import org.antlr.v4.runtime.NoViableAltException;
-import org.antlr.v4.runtime.Parser;
-import org.antlr.v4.runtime.RecognitionException;
-import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.TokenStream;
-import org.antlr.v4.runtime.Vocabulary;
-import org.antlr.v4.runtime.misc.Interval;
-import org.antlr.v4.runtime.misc.IntervalSet;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.text.similarity.JaroWinklerDistance;
+import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.atn.LexerATNSimulator;
+import org.antlr.v4.runtime.atn.ParserATNSimulator;
+import org.antlr.v4.runtime.atn.PredictionContextCache;
+import org.antlr.v4.runtime.atn.PredictionMode;
+import org.antlr.v4.runtime.dfa.DFA;
+import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
-import java.util.StringJoiner;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.parser.AstBuilderUtils.createPos;
+import static com.starrocks.sql.parser.AstBuilderUtils.getIdentifier;
 
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
-
     private static final String EOF = "<EOF>";
+    private static final int MIN_TOKEN_LIMIT = 100;
+    private final AstBuilder.AstBuilderFactory astBuilderFactory;
+
+    public SqlParser(AstBuilder.AstBuilderFactory astBuilderFactory) {
+        this.astBuilderFactory = astBuilderFactory;
+    }
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
-        if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
-            return parseWithTrinoDialect(sql, sessionVariable);
-        } else {
-            return parseWithStarRocksDialect(sql, sessionVariable);
+        try {
+            if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
+                return parseWithTrinoDialect(sql, sessionVariable);
+            } else {
+                return parseWithStarRocksDialect(sql, sessionVariable);
+            }
+        } catch (OutOfMemoryError e) {
+            LOG.warn("parser out of memory, sql is:" + sql);
+            throw e;
         }
     }
 
@@ -70,25 +94,42 @@ public class SqlParser {
         List<StatementBase> statements = Lists.newArrayList();
         try {
             StatementSplitter splitter = new StatementSplitter(sql);
-            for (StatementSplitter.Statement statement : splitter.getCompleteStatements()) {
-                statements.add(TrinoParserUtils.toStatement(statement.statement(), sessionVariable.getSqlMode()));
+            for (int idx = 0; idx < splitter.getCompleteStatements().size(); ++idx) {
+                StatementSplitter.Statement statement = splitter.getCompleteStatements().get(idx);
+                StatementBase statementBase = TrinoParserUtils.toStatement(statement.statement(),
+                        sessionVariable.getSqlMode());
+                statementBase.setOrigStmt(new OriginStatement(sql, idx));
+                statements.add(statementBase);
             }
             if (!splitter.getPartialStatement().isEmpty()) {
-                statements.add(TrinoParserUtils.toStatement(splitter.getPartialStatement(),
-                        sessionVariable.getSqlMode()));
+                StatementBase statement = TrinoParserUtils.toStatement(splitter.getPartialStatement(),
+                        sessionVariable.getSqlMode());
+                statement.setOrigStmt(new OriginStatement(sql, splitter.getCompleteStatements().size()));
+                statements.add(statement);
             }
             if (ConnectContext.get() != null) {
                 ConnectContext.get().setRelationAliasCaseInSensitive(true);
             }
         } catch (ParsingException e) {
-            // we only support trino partial syntax, use StarRocks parser to parse now
+            // In Trino parser AstBuilder, it could throw ParsingException for unexpected exception,
+            // use StarRocks parser to parse now.
+            LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
+        } catch (io.trino.sql.parser.ParsingException e) {
+            // This sql does not use Trino syntax，use StarRocks parser to parse now.
             if (sql.toLowerCase().contains("select")) {
                 LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
             }
-            return parseWithStarRocksDialect(sql, sessionVariable);
-        } catch (UnsupportedOperationException e) {
-            // For unsupported statement, use StarRocks parser to parse
-            return parseWithStarRocksDialect(sql, sessionVariable);
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
+        } catch (TrinoParserUnsupportedException e) {
+            // We only support Trino partial syntax now, and for Trino parser unsupported statement,
+            // try to use StarRocks parser to parse
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
+        } catch (UnsupportedException e) {
+            // For unsupported statement, it can not be parsed by trino or StarRocks parser, both parser
+            // can not support it now, we just throw the exception here to give user more information
+            LOG.warn("Sql [{}] are not supported by trino parser, cause by {}", sql, e);
+            throw e;
         }
         if (statements.isEmpty() || statements.stream().anyMatch(Objects::isNull)) {
             return parseWithStarRocksDialect(sql, sessionVariable);
@@ -96,13 +137,50 @@ public class SqlParser {
         return statements;
     }
 
+    private static List<StatementBase> rollbackStarRocksDialect(String sql, SessionVariable sessionVariable,
+                                                                RuntimeException exception) {
+        if (ConnectContext.get() != null) {
+            ConnectContext.get().setRelationAliasCaseInSensitive(false);
+        }
+        if (sessionVariable.isEnableDialectDowngrade()) {
+            return tryParseWithStarRocksDialect(sql, sessionVariable, exception);
+        }
+        throw exception;
+    }
+
+    private static List<StatementBase> tryParseWithStarRocksDialect(String sql, SessionVariable sessionVariable,
+                                                                    Exception trinoException) {
+        try {
+            return parseWithStarRocksDialect(sql, sessionVariable);
+        } catch (Exception starRocksException) {
+            LOG.warn("StarRocks parse sql [{}] error, cause by {}", sql, starRocksException);
+            if (trinoException instanceof UnsupportedException) {
+                throw unsupportedException(String.format("Trino parser parse sql error: [%s], " +
+                        "and StarRocks parser also can not parse: [%s]", trinoException, starRocksException));
+            } else {
+                throw new StarRocksPlannerException(ErrorType.USER_ERROR,
+                        String.format("Trino parser parse sql error: [%s], and StarRocks parser also can not parse: [%s]",
+                                trinoException, starRocksException));
+            }
+        }
+    }
+
     private static List<StatementBase> parseWithStarRocksDialect(String sql, SessionVariable sessionVariable) {
         List<StatementBase> statements = Lists.newArrayList();
-        StarRocksParser parser = parserBuilder(sql, sessionVariable);
-        List<StarRocksParser.SingleStatementContext> singleStatementContexts =
-                parser.sqlStatements().singleStatement();
+        Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> pair =
+                invokeParser(sql, sessionVariable, com.starrocks.sql.parser.StarRocksParser::sqlStatements);
+        com.starrocks.sql.parser.StarRocksParser.SqlStatementsContext sqlStatementsContext =
+                (com.starrocks.sql.parser.StarRocksParser.SqlStatementsContext) pair.first;
+        List<com.starrocks.sql.parser.StarRocksParser.SingleStatementContext> singleStatementContexts =
+                sqlStatementsContext.singleStatement();
         for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
-            AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode());
+            // collect hint info
+            HintCollector collector = new HintCollector((CommonTokenStream) pair.second.getTokenStream(), sessionVariable);
+            collector.collect(singleStatementContexts.get(idx));
+            AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory.create(
+                    sessionVariable.getSqlMode(),
+                    GlobalVariable.enableTableNameCaseInsensitive,
+                    collector.getContextWithHintMap());
             StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
             if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
                     && !(statement instanceof PrepareStmt)) {
@@ -113,10 +191,15 @@ public class SqlParser {
             }
             statements.add(statement);
         }
-        if (ConnectContext.get() != null) {
-            ConnectContext.get().setRelationAliasCaseInSensitive(false);
-        }
         return statements;
+    }
+
+    public static Expr parseExpression(String expressionSql, SessionVariable sessionVariable) {
+        ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
+                com.starrocks.sql.parser.StarRocksParser::expressionSingleton).first;
+        return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sessionVariable.getSqlMode(), GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>())
+                .visit(expressionContext);
     }
 
     /**
@@ -160,157 +243,145 @@ public class SqlParser {
     public static Expr parseSqlToExpr(String expressionSql, long sqlMode) {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlMode(sqlMode);
+        ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
+                com.starrocks.sql.parser.StarRocksParser::expressionSingleton).first;
+        return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sqlMode, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>()).visit(expressionContext);
+    }
 
-        return (Expr) new AstBuilder(sqlMode)
-                .visit(parserBuilder(expressionSql, sessionVariable).expressionSingleton().expression());
+    public static List<Expr> parseSqlToExprs(String expressions, SessionVariable sessionVariable) {
+        com.starrocks.sql.parser.StarRocksParser.ExpressionListContext expressionListContext =
+                (com.starrocks.sql.parser.StarRocksParser.ExpressionListContext)
+                        invokeParser(expressions, sessionVariable,
+                                com.starrocks.sql.parser.StarRocksParser::expressionList).first;
+        AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sessionVariable.getSqlMode(), GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>());
+        return expressionListContext.expression().stream()
+                .map(e -> (Expr) astBuilder.visit(e))
+                .collect(Collectors.toList());
     }
 
     public static ImportColumnsStmt parseImportColumns(String expressionSql, long sqlMode) {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlMode(sqlMode);
-
-        return (ImportColumnsStmt) new AstBuilder(sqlMode)
-                .visit(parserBuilder(expressionSql, sessionVariable).importColumns());
+        ParserRuleContext importColumnsContext = invokeParser(expressionSql, sessionVariable,
+                com.starrocks.sql.parser.StarRocksParser::importColumns).first;
+        return (ImportColumnsStmt) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sqlMode, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>())
+                .visit(importColumnsContext);
     }
 
-    private static StarRocksParser parserBuilder(String sql, SessionVariable sessionVariable) {
-        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+    public static List<Column> parseFilesSchema(String schemaStr) {
+        SessionVariable sv = ConnectContext.get() != null
+                ? ConnectContext.get().getSessionVariable()
+                : new SessionVariable();
+        com.starrocks.sql.parser.StarRocksParser.FilesSchemaContext ctx =
+                (com.starrocks.sql.parser.StarRocksParser.FilesSchemaContext)
+                        invokeParser(schemaStr, sv,
+                                com.starrocks.sql.parser.StarRocksParser::filesSchema).first;
+
+        List<Column> cols = new ArrayList<>(ctx.filesSchemaColumn().size());
+        Set<String> seenNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (com.starrocks.sql.parser.StarRocksParser.FilesSchemaColumnContext colCtx
+                : ctx.filesSchemaColumn()) {
+            String name = getIdentifier(colCtx.identifier()).getValue();
+            if (!seenNames.add(name)) {
+                throw new ParsingException(
+                        "duplicate column in 'schema': " + name,
+                        createPos(colCtx.identifier()));
+            }
+            Type type;
+            try {
+                type = TypeParser.getType(colCtx.type());
+                // Mirror ColumnDefAnalyzer: bare CHAR/VARCHAR (no explicit length) defaults to length 1.
+                if (type.isScalarType()) {
+                    ScalarType st = (ScalarType) type;
+                    if (st.getPrimitiveType().isStringType() && st.getLength() <= 0) {
+                        st.setLength(1);
+                    }
+                }
+                TypeDefAnalyzer.analyze(new TypeDef(type, createPos(colCtx.type())));
+            } catch (SemanticException | IllegalArgumentException e) {
+                throw new ParsingException(
+                        String.format("invalid type for column '%s' in 'schema': %s", name, e.getMessage()),
+                        createPos(colCtx.type()));
+            }
+            rejectMetricTypes(type, name, createPos(colCtx.type()));
+            cols.add(new Column(name, type, /*isNullable=*/ true));
+        }
+        return cols;
+    }
+
+    private static void rejectMetricTypes(Type type, String columnName, NodePosition pos) {
+        if (type.isHllType() || type.isBitmapType() || type.isPercentile()) {
+            throw new ParsingException(
+                    String.format(
+                            "type %s is not supported in 'schema' for column '%s': "
+                                    + "HLL/BITMAP/PERCENTILE have no representation in Parquet/ORC/Avro/CSV",
+                            type.toSql(), columnName),
+                    pos);
+        }
+        if (type instanceof ArrayType) {
+            rejectMetricTypes(((ArrayType) type).getItemType(), columnName, pos);
+        } else if (type instanceof MapType) {
+            MapType mt = (MapType) type;
+            rejectMetricTypes(mt.getKeyType(), columnName, pos);
+            rejectMetricTypes(mt.getValueType(), columnName, pos);
+        } else if (type instanceof StructType) {
+            for (StructField f : ((StructType) type).getFields()) {
+                rejectMetricTypes(f.getType(), columnName, pos);
+            }
+        }
+    }
+
+    private static Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> invokeParser(
+            String sql, SessionVariable sessionVariable,
+            Function<com.starrocks.sql.parser.StarRocksParser, ParserRuleContext> parseFunction) {
+        com.starrocks.sql.parser.StarRocksLexer lexer =
+                new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
+        if (Config.enable_concurrent_parse_optimization) {
+            DFA[] lexerDecisionDFA = new DFA[StarRocksLexer._ATN.getNumberOfDecisions()];
+            for (int i = 0; i < StarRocksLexer._ATN.getNumberOfDecisions(); i++) {
+                lexerDecisionDFA[i] = new DFA(StarRocksLexer._ATN.getDecisionState(i), i);
+            }
+            lexer.setInterpreter(new LexerATNSimulator(
+                    lexer,
+                    StarRocksLexer._ATN,
+                    lexerDecisionDFA,
+                    new PredictionContextCache()
+            ));
+        }
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        StarRocksParser parser = new StarRocksParser(tokenStream);
-
-        // Unify the error message
-        parser.setErrorHandler(new DefaultErrorStrategy() {
-            @Override
-            public Token recoverInline(Parser recognizer)
-                    throws RecognitionException {
-                if (nextTokensContext == null) {
-                    throw new InputMismatchException(recognizer);
-                } else {
-                    throw new InputMismatchException(recognizer, nextTokensState, nextTokensContext);
-                }
-            }
-
-            @Override
-            public void reportNoViableAlternative(Parser recognizer, NoViableAltException e) {
-                TokenStream tokens = recognizer.getInputStream();
-                String input;
-                if (tokens != null) {
-                    if (e.getStartToken().getType() == Token.EOF) {
-                        input = EOF;
-                    } else {
-                        input = tokens.getText(e.getStartToken(), e.getOffendingToken());
-                    }
-                } else {
-                    input = "<unknown input>";
-                }
-                String msg = PARSER_ERROR_MSG.noViableStatement(input);
-                recognizer.notifyErrorListeners(e.getOffendingToken(), msg, e);
-            }
-
-            @Override
-            public void reportInputMismatch(Parser recognizer, InputMismatchException e) {
-                Token t = e.getOffendingToken();
-                String tokenName = getTokenDisplay(t);
-                IntervalSet expecting = getExpectedTokens(recognizer);
-                String expects = filterExpectingToken(tokenName, expecting, recognizer.getVocabulary());
-                String msg = PARSER_ERROR_MSG.unexpectedInput(tokenName, expects);
-                recognizer.notifyErrorListeners(e.getOffendingToken(), msg, e);
-            }
-
-            @Override
-            public void reportUnwantedToken(Parser recognizer) {
-                if (inErrorRecoveryMode(recognizer)) {
-                    return;
-                }
-                beginErrorCondition(recognizer);
-                Token t = recognizer.getCurrentToken();
-                String tokenName = getTokenDisplay(t);
-                IntervalSet expecting = getExpectedTokens(recognizer);
-                String expects = filterExpectingToken(tokenName, expecting, recognizer.getVocabulary());
-                String msg = PARSER_ERROR_MSG.unexpectedInput(tokenName, expects);
-                recognizer.notifyErrorListeners(t, msg, null);
-            }
-
-            private String filterExpectingToken(String token, IntervalSet expecting, Vocabulary vocabulary) {
-                List<String> symbols = Lists.newArrayList();
-                List<String> words = Lists.newArrayList();
-
-                List<String> result = Lists.newArrayList();
-                StringJoiner joiner = new StringJoiner(", ", "{", "}");
-                JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
-
-                if (expecting.isNil()) {
-                    return joiner.toString();
-                }
-
-                Iterator<Interval> iter = expecting.getIntervals().iterator();
-                while (iter.hasNext()) {
-                    Interval interval = iter.next();
-                    int a = interval.a;
-                    int b = interval.b;
-                    if (a == b) {
-                        addToken(vocabulary, a, symbols, words);
-                    } else {
-                        for (int i = a; i <= b; i++) {
-                            addToken(vocabulary, i, symbols, words);
-                        }
-                    }
-                }
-
-                // if there exists an expect word in nonReserved words, there should be a legal identifier.
-                if (words.contains("'ACCESS'")) {
-                    result.add("a legal identifier");
-                } else {
-                    String upperToken = StringUtils.upperCase(token);
-                    Collections.sort(words, Comparator.comparingDouble(s -> jaroWinklerDistance.apply(s, upperToken)));
-                    int limit = Math.min(5, words.size());
-                    result.addAll(words.subList(0, limit));
-                    result.addAll(symbols);
-                }
-
-                result.forEach(joiner::add);
-                return joiner.toString();
-            }
-
-            private void addToken(Vocabulary vocabulary, int a, Collection<String> symbols, Collection<String> words) {
-                if (a == Token.EOF) {
-                    symbols.add(EOF);
-                } else if (a == Token.EPSILON) {
-                    // do nothing
-                } else {
-                    String token = vocabulary.getDisplayName(a);
-                    // ensure it's a word
-                    if (token.length() > 1 && token.charAt(1) >= 'A' && token.charAt(1) <= 'Z') {
-                        words.add(token);
-                    } else {
-                        symbols.add(token);
-                    }
-                }
-            }
-        });
-
+        int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
+        int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
+        com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
-                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
-        return parser;
-    }
-
-    public static String getTokenDisplay(Token t) {
-        if (t == null) {
-            return "<no token>";
-        }
-
-        String s = t.getText();
-        if (s == null) {
-            if (t.getType() == Token.EOF) {
-                s = EOF;
-            } else {
-                s = "<" + t.getType() + ">";
+        parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
+        if (!Config.enable_parser_context_cache || Config.enable_concurrent_parse_optimization) {
+            DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
+            for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
+                decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
             }
+            parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
         }
-        return s;
+
+        try {
+            // inspire by https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
+            // try SLL mode with BailErrorStrategy firstly
+            parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+            parser.setErrorHandler(new StarRocksBailErrorStrategy());
+            return Pair.create(parseFunction.apply(parser), parser);
+        } catch (ParseCancellationException e) {
+            // if we fail, parse with LL mode with our own error strategy
+            // rewind input stream
+            tokenStream.seek(0);
+            parser.reset();
+            parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+            parser.setErrorHandler(new StarRocksDefaultErrorStrategy());
+            return Pair.create(parseFunction.apply(parser), parser);
+        }
     }
 }

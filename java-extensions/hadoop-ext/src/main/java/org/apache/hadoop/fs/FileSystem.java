@@ -35,8 +35,6 @@
 package org.apache.hadoop.fs;
 
 import com.starrocks.connector.hadoop.HadoopExt;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -46,6 +44,7 @@ import org.apache.hadoop.fs.Options.ChecksumOpt;
 import org.apache.hadoop.fs.Options.HandleOpt;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.impl.AbstractFSBuilderImpl;
+import org.apache.hadoop.fs.impl.DefaultBulkDeleteOperation;
 import org.apache.hadoop.fs.impl.FutureDataInputStreamBuilderImpl;
 import org.apache.hadoop.fs.impl.OpenFileParameters;
 import org.apache.hadoop.fs.permission.AclEntry;
@@ -62,8 +61,8 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.DelegationTokenIssuer;
 import org.apache.hadoop.security.token.Token;
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.util.Preconditions;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.tracing.TraceScope;
 import org.apache.hadoop.tracing.Tracer;
 import org.apache.hadoop.util.ClassUtil;
@@ -104,6 +103,7 @@ import java.util.Stack;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 
@@ -197,7 +197,8 @@ import static org.apache.hadoop.util.Preconditions.checkArgument;
 @InterfaceAudience.Public
 @InterfaceStability.Stable
 public abstract class FileSystem extends Configured
-        implements Closeable, DelegationTokenIssuer, PathCapabilities {
+        implements Closeable, DelegationTokenIssuer,
+            PathCapabilities, BulkDeleteSource {
     public static final String FS_DEFAULT_NAME_KEY =
             CommonConfigurationKeys.FS_DEFAULT_NAME_KEY;
     public static final String DEFAULT_FS =
@@ -208,7 +209,7 @@ public abstract class FileSystem extends Configured
      * so must be considered something to only be changed with care.
      */
     @InterfaceAudience.Private
-    public static final Log LOG = LogFactory.getLog(FileSystem.class);
+    public static final Logger LOG = LoggerFactory.getLogger(FileSystem.class);
 
     /**
      * The SLF4J logger to use in logging within the FileSystem class itself.
@@ -331,7 +332,7 @@ public abstract class FileSystem extends Configured
      * @return the uri of the default filesystem
      */
     public static URI getDefaultUri(Configuration conf) {
-        URI uri = URI.create(fixName(conf.get(FS_DEFAULT_NAME_KEY, DEFAULT_FS)));
+        URI uri = URI.create(fixName(conf.getTrimmed(FS_DEFAULT_NAME_KEY, DEFAULT_FS)));
         if (uri.getScheme() == null) {
             throw new IllegalArgumentException("No scheme in default FS: " + uri);
         }
@@ -593,18 +594,12 @@ public abstract class FileSystem extends Configured
             }
         }
 
-        HadoopExt.getInstance().rewriteConfiguration(conf);
-        UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
-        FileSystem fs = HadoopExt.getInstance().doAs(ugi, () -> {
-            String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
-            if (conf.getBoolean(disableCacheName, false)) {
-                LOGGER.debug("Bypassing cache to create filesystem {}", uri);
-                return createFileSystem(uri, conf);
-            }
-            return CACHE.get(uri, conf);
-        });
-        FileSystem fs2 = HadoopExt.getInstance().bindUGIToFileSystem(fs, ugi);
-        return fs2;
+        String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
+        if (conf.getBoolean(disableCacheName, false)) {
+            LOGGER.debug("Bypassing cache to create filesystem {}", uri);
+            return createFileSystem(uri, conf);
+        }
+        return CACHE.get(uri, conf);
     }
 
     /**
@@ -2979,7 +2974,7 @@ public abstract class FileSystem extends Configured
             if (perm.getUserAction().implies(mode)) {
                 return;
             }
-        } else if (ugi.getGroups().contains(stat.getGroup())) {
+        } else if (ugi.getGroupsSet().contains(stat.getGroup())) {
             if (perm.getGroupAction().implies(mode)) {
                 return;
             }
@@ -3619,6 +3614,10 @@ public abstract class FileSystem extends Configured
     public boolean hasPathCapability(final Path path, final String capability)
             throws IOException {
         switch (validatePathCapabilityArgs(makeQualified(path), capability)) {
+            case CommonPathCapabilities.BULK_DELETE:
+                // bulk delete has default implementation which
+                // can called on any FileSystem.
+                return true;
             case CommonPathCapabilities.FS_SYMLINKS:
                 // delegate to the existing supportsSymlinks() call.
                 return supportsSymlinks() && areSymlinksEnabled();
@@ -3664,15 +3663,7 @@ public abstract class FileSystem extends Configured
                             LOGGER.info("Full exception loading: {}", fs, e);
                         }
                     } catch (ServiceConfigurationError ee) {
-                        LOG.warn("Cannot load filesystem: " + ee);
-                        Throwable cause = ee.getCause();
-                        // print all the nested exception messages
-                        while (cause != null) {
-                            LOG.warn(cause.toString());
-                            cause = cause.getCause();
-                        }
-                        // and at debug: the full stack
-                        LOG.debug("Stack Trace", ee);
+                        LOGGER.warn("Cannot load filesystem", ee);
                     }
                 }
                 FILE_SYSTEMS_LOADED = true;
@@ -3718,7 +3709,15 @@ public abstract class FileSystem extends Configured
             throw new UnsupportedFileSystemException("No FileSystem for scheme "
                     + "\"" + scheme + "\"");
         }
-        LOGGER.debug("FS for {} is {}", scheme, clazz);
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("FS for {} is {}", scheme, clazz);
+            final String jarLocation = ClassUtil.findContainingJar(clazz);
+            if (jarLocation != null) {
+                LOGGER.debug("Jar location for {} : {}", clazz, jarLocation);
+            } else {
+                LOGGER.debug("Class location for {} : {}", clazz, ClassUtil.findClassLocation(clazz));
+            }
+        }
         return clazz;
     }
 
@@ -3731,7 +3730,7 @@ public abstract class FileSystem extends Configured
      * @return the initialized filesystem.
      * @throws IOException problems loading or initializing the FileSystem
      */
-    private static FileSystem createFileSystem(URI uri, Configuration conf)
+    private static FileSystem createFileSystemInternal(URI uri, Configuration conf)
             throws IOException {
         LOGGER.info(String.format("%s FileSystem.createFileSystem", HadoopExt.LOGGER_MESSAGE_PREFIX));
         Tracer tracer = FsTracer.get(conf);
@@ -3757,6 +3756,14 @@ public abstract class FileSystem extends Configured
             }
             return fs;
         }
+    }
+
+    private static FileSystem createFileSystem(URI uri, Configuration conf)
+            throws IOException {
+        HadoopExt.getInstance().rewriteConfiguration(conf);
+        UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
+        FileSystem fs = HadoopExt.getInstance().doAs(ugi, () -> createFileSystemInternal(uri, conf));
+        return fs;
     }
 
     /**
@@ -4094,51 +4101,50 @@ public abstract class FileSystem extends Configured
          * need.
          */
         public static class StatisticsData {
-            private volatile long bytesRead;
-            private volatile long bytesWritten;
-            private volatile int readOps;
-            private volatile int largeReadOps;
-            private volatile int writeOps;
-            private volatile long bytesReadLocalHost;
-            private volatile long bytesReadDistanceOfOneOrTwo;
-            private volatile long bytesReadDistanceOfThreeOrFour;
-            private volatile long bytesReadDistanceOfFiveOrLarger;
-            private volatile long bytesReadErasureCoded;
+            private final AtomicLong bytesRead = new AtomicLong();
+            private final AtomicLong bytesWritten = new AtomicLong();
+            private final AtomicInteger readOps = new AtomicInteger();
+            private final AtomicInteger largeReadOps = new AtomicInteger();
+            private final AtomicInteger writeOps = new AtomicInteger();
+            private final AtomicLong bytesReadLocalHost = new AtomicLong();
+            private final AtomicLong bytesReadDistanceOfOneOrTwo = new AtomicLong();
+            private final AtomicLong bytesReadDistanceOfThreeOrFour = new AtomicLong();
+            private final AtomicLong bytesReadDistanceOfFiveOrLarger = new AtomicLong();
+            private final AtomicLong bytesReadErasureCoded = new AtomicLong();
+            private final AtomicLong remoteReadTimeMS = new AtomicLong();
 
             /**
              * Add another StatisticsData object to this one.
              */
             void add(StatisticsData other) {
-                this.bytesRead += other.bytesRead;
-                this.bytesWritten += other.bytesWritten;
-                this.readOps += other.readOps;
-                this.largeReadOps += other.largeReadOps;
-                this.writeOps += other.writeOps;
-                this.bytesReadLocalHost += other.bytesReadLocalHost;
-                this.bytesReadDistanceOfOneOrTwo += other.bytesReadDistanceOfOneOrTwo;
-                this.bytesReadDistanceOfThreeOrFour +=
-                        other.bytesReadDistanceOfThreeOrFour;
-                this.bytesReadDistanceOfFiveOrLarger +=
-                        other.bytesReadDistanceOfFiveOrLarger;
-                this.bytesReadErasureCoded += other.bytesReadErasureCoded;
+                this.bytesRead.addAndGet(other.bytesRead.get());
+                this.bytesWritten.addAndGet(other.bytesWritten.get());
+                this.readOps.addAndGet(other.readOps.get());
+                this.largeReadOps.addAndGet(other.largeReadOps.get());
+                this.writeOps.addAndGet(other.writeOps.get());
+                this.bytesReadLocalHost.addAndGet(other.bytesReadLocalHost.get());
+                this.bytesReadDistanceOfOneOrTwo.addAndGet(other.bytesReadDistanceOfOneOrTwo.get());
+                this.bytesReadDistanceOfThreeOrFour.addAndGet(other.bytesReadDistanceOfThreeOrFour.get());
+                this.bytesReadDistanceOfFiveOrLarger.addAndGet(other.bytesReadDistanceOfFiveOrLarger.get());
+                this.bytesReadErasureCoded.addAndGet(other.bytesReadErasureCoded.get());
+                this.remoteReadTimeMS.addAndGet(other.remoteReadTimeMS.get());
             }
 
             /**
              * Negate the values of all statistics.
              */
             void negate() {
-                this.bytesRead = -this.bytesRead;
-                this.bytesWritten = -this.bytesWritten;
-                this.readOps = -this.readOps;
-                this.largeReadOps = -this.largeReadOps;
-                this.writeOps = -this.writeOps;
-                this.bytesReadLocalHost = -this.bytesReadLocalHost;
-                this.bytesReadDistanceOfOneOrTwo = -this.bytesReadDistanceOfOneOrTwo;
-                this.bytesReadDistanceOfThreeOrFour =
-                        -this.bytesReadDistanceOfThreeOrFour;
-                this.bytesReadDistanceOfFiveOrLarger =
-                        -this.bytesReadDistanceOfFiveOrLarger;
-                this.bytesReadErasureCoded = -this.bytesReadErasureCoded;
+                this.bytesRead.set(-this.bytesRead.get());
+                this.bytesWritten.set(-this.bytesWritten.get());
+                this.readOps.set(-this.readOps.get());
+                this.largeReadOps.set(-this.largeReadOps.get());
+                this.writeOps.set(-this.writeOps.get());
+                this.bytesReadLocalHost.set(-this.bytesReadLocalHost.get());
+                this.bytesReadDistanceOfOneOrTwo.set(-this.bytesReadDistanceOfOneOrTwo.get());
+                this.bytesReadDistanceOfThreeOrFour.set(-this.bytesReadDistanceOfThreeOrFour.get());
+                this.bytesReadDistanceOfFiveOrLarger.set(-this.bytesReadDistanceOfFiveOrLarger.get());
+                this.bytesReadErasureCoded.set(-this.bytesReadErasureCoded.get());
+                this.remoteReadTimeMS.set(-this.remoteReadTimeMS.get());
             }
 
             @Override
@@ -4149,43 +4155,47 @@ public abstract class FileSystem extends Configured
             }
 
             public long getBytesRead() {
-                return bytesRead;
+                return bytesRead.get();
             }
 
             public long getBytesWritten() {
-                return bytesWritten;
+                return bytesWritten.get();
             }
 
             public int getReadOps() {
-                return readOps;
+                return readOps.get();
             }
 
             public int getLargeReadOps() {
-                return largeReadOps;
+                return largeReadOps.get();
             }
 
             public int getWriteOps() {
-                return writeOps;
+                return writeOps.get();
             }
 
             public long getBytesReadLocalHost() {
-                return bytesReadLocalHost;
+                return bytesReadLocalHost.get();
             }
 
             public long getBytesReadDistanceOfOneOrTwo() {
-                return bytesReadDistanceOfOneOrTwo;
+                return bytesReadDistanceOfOneOrTwo.get();
             }
 
             public long getBytesReadDistanceOfThreeOrFour() {
-                return bytesReadDistanceOfThreeOrFour;
+                return bytesReadDistanceOfThreeOrFour.get();
             }
 
             public long getBytesReadDistanceOfFiveOrLarger() {
-                return bytesReadDistanceOfFiveOrLarger;
+                return bytesReadDistanceOfFiveOrLarger.get();
             }
 
             public long getBytesReadErasureCoded() {
-                return bytesReadErasureCoded;
+                return bytesReadErasureCoded.get();
+            }
+
+            public long getRemoteReadTimeMS() {
+                return remoteReadTimeMS.get();
             }
         }
 
@@ -4233,6 +4243,7 @@ public abstract class FileSystem extends Configured
             STATS_DATA_CLEANER.
                     setName(StatisticsDataReferenceCleaner.class.getName());
             STATS_DATA_CLEANER.setDaemon(true);
+            STATS_DATA_CLEANER.setContextClassLoader(null);
             STATS_DATA_CLEANER.start();
         }
 
@@ -4347,7 +4358,7 @@ public abstract class FileSystem extends Configured
          * @param newBytes the additional bytes read
          */
         public void incrementBytesRead(long newBytes) {
-            getThreadStatistics().bytesRead += newBytes;
+            getThreadStatistics().bytesRead.addAndGet(newBytes);
         }
 
         /**
@@ -4356,7 +4367,7 @@ public abstract class FileSystem extends Configured
          * @param newBytes the additional bytes written
          */
         public void incrementBytesWritten(long newBytes) {
-            getThreadStatistics().bytesWritten += newBytes;
+            getThreadStatistics().bytesWritten.addAndGet(newBytes);
         }
 
         /**
@@ -4365,7 +4376,7 @@ public abstract class FileSystem extends Configured
          * @param count number of read operations
          */
         public void incrementReadOps(int count) {
-            getThreadStatistics().readOps += count;
+            getThreadStatistics().readOps.addAndGet(count);
         }
 
         /**
@@ -4374,7 +4385,7 @@ public abstract class FileSystem extends Configured
          * @param count number of large read operations
          */
         public void incrementLargeReadOps(int count) {
-            getThreadStatistics().largeReadOps += count;
+            getThreadStatistics().largeReadOps.addAndGet(count);
         }
 
         /**
@@ -4383,7 +4394,7 @@ public abstract class FileSystem extends Configured
          * @param count number of write operations
          */
         public void incrementWriteOps(int count) {
-            getThreadStatistics().writeOps += count;
+            getThreadStatistics().writeOps.addAndGet(count);
         }
 
         /**
@@ -4392,7 +4403,7 @@ public abstract class FileSystem extends Configured
          * @param newBytes the additional bytes read
          */
         public void incrementBytesReadErasureCoded(long newBytes) {
-            getThreadStatistics().bytesReadErasureCoded += newBytes;
+            getThreadStatistics().bytesReadErasureCoded.addAndGet(newBytes);
         }
 
         /**
@@ -4407,22 +4418,30 @@ public abstract class FileSystem extends Configured
         public void incrementBytesReadByDistance(int distance, long newBytes) {
             switch (distance) {
                 case 0:
-                    getThreadStatistics().bytesReadLocalHost += newBytes;
+                    getThreadStatistics().bytesReadLocalHost.addAndGet(newBytes);
                     break;
                 case 1:
                 case 2:
-                    getThreadStatistics().bytesReadDistanceOfOneOrTwo += newBytes;
+                    getThreadStatistics().bytesReadDistanceOfOneOrTwo.addAndGet(newBytes);
                     break;
                 case 3:
                 case 4:
-                    getThreadStatistics().bytesReadDistanceOfThreeOrFour += newBytes;
+                    getThreadStatistics().bytesReadDistanceOfThreeOrFour.addAndGet(newBytes);
                     break;
                 default:
-                    getThreadStatistics().bytesReadDistanceOfFiveOrLarger += newBytes;
+                    getThreadStatistics().bytesReadDistanceOfFiveOrLarger.addAndGet(newBytes);
                     break;
             }
         }
 
+        /**
+         * Increment the time taken to read bytes from remote in the statistics.
+         *
+         * @param durationMS time taken in ms to read bytes from remote
+         */
+        public void increaseRemoteReadTime(final long durationMS) {
+            getThreadStatistics().remoteReadTimeMS.addAndGet(durationMS);
+        }
         /**
          * Apply the given aggregator to all StatisticsData objects associated with
          * this Statistics object.
@@ -4453,7 +4472,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    bytesRead += data.bytesRead;
+                    bytesRead += data.bytesRead.get();
                 }
 
                 public Long aggregate() {
@@ -4473,7 +4492,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    bytesWritten += data.bytesWritten;
+                    bytesWritten += data.bytesWritten.get();
                 }
 
                 public Long aggregate() {
@@ -4493,8 +4512,8 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    readOps += data.readOps;
-                    readOps += data.largeReadOps;
+                    readOps += data.readOps.get();
+                    readOps += data.largeReadOps.get();
                 }
 
                 public Integer aggregate() {
@@ -4515,7 +4534,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    largeReadOps += data.largeReadOps;
+                    largeReadOps += data.largeReadOps.get();
                 }
 
                 public Integer aggregate() {
@@ -4536,7 +4555,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    writeOps += data.writeOps;
+                    writeOps += data.writeOps.get();
                 }
 
                 public Integer aggregate() {
@@ -4577,6 +4596,25 @@ public abstract class FileSystem extends Configured
         }
 
         /**
+         * Get total time taken in ms for bytes read from remote.
+         * @return time taken in ms for remote bytes read.
+         */
+        public long getRemoteReadTime() {
+            return visitAll(new StatisticsAggregator<Long>() {
+                private long remoteReadTimeMS = 0;
+
+                @Override
+                public void accept(StatisticsData data) {
+                    remoteReadTimeMS += data.remoteReadTimeMS.get();
+                }
+
+                public Long aggregate() {
+                    return remoteReadTimeMS;
+                }
+            });
+        }
+
+        /**
          * Get all statistics data.
          * MR or other frameworks can use the method to get all statistics at once.
          *
@@ -4608,7 +4646,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    bytesReadErasureCoded += data.bytesReadErasureCoded;
+                    bytesReadErasureCoded += data.bytesReadErasureCoded.get();
                 }
 
                 public Long aggregate() {
@@ -5107,6 +5145,24 @@ public abstract class FileSystem extends Configured
     }
 
     /**
+     * Return path of the enclosing root for a given path.
+     * The enclosing root path is a common ancestor that should be used for temp and staging dirs
+     * as well as within encryption zones and other restricted directories.
+     *
+     * Call makeQualified on the param path to ensure its part of the correct filesystem.
+     *
+     * @param path file path to find the enclosing root path for
+     * @return a path to the enclosing root
+     * @throws IOException early checks like failure to resolve path cause IO failures
+     */
+    @InterfaceAudience.Public
+    @InterfaceStability.Unstable
+    public Path getEnclosingRoot(Path path) throws IOException {
+        this.makeQualified(path);
+        return this.makeQualified(new Path("/"));
+    }
+
+    /**
      * Create a multipart uploader.
      *
      * @param basePath file path under which all files are uploaded
@@ -5119,5 +5175,20 @@ public abstract class FileSystem extends Configured
             throws IOException {
         methodNotSupported();
         return null;
+    }
+
+    /**
+     * Create a bulk delete operation.
+     * The default implementation returns an instance of {@link DefaultBulkDeleteOperation}.
+     *
+     * @param path base path for the operation.
+     * @return an instance of the bulk delete.
+     * @throws IllegalArgumentException any argument is invalid.
+     * @throws IOException              if there is an IO problem.
+     */
+    @Override
+    public BulkDelete createBulkDelete(Path path)
+            throws IllegalArgumentException, IOException {
+        return new DefaultBulkDeleteOperation(path, this);
     }
 }

@@ -16,8 +16,8 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
@@ -84,15 +84,18 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
                     rewriter.rewrite(bpo, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
         }
+        simplifiedPredicate.setJoinDerived(true);
 
         // IN to SEMI-JOIN
         // NOT IN to ANTI-JOIN or NULL_AWARE_LEFT_ANTI_JOIN
         OptExpression joinExpression;
         if (isNotIn) {
             //@TODO: if will can filter null, use left-anti-join
+            List<ScalarOperator> correlatedConjuncts = Utils.extractConjuncts(apply.getCorrelationConjuncts());
+            correlatedConjuncts.forEach(conjunct -> conjunct.setCorrelated(true));
             joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN,
                     Utils.compoundAnd(simplifiedPredicate,
-                            Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate()))));
+                            Utils.compoundAnd(Utils.compoundAnd(correlatedConjuncts), apply.getPredicate()))));
         } else {
             joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
                     Utils.compoundAnd(simplifiedPredicate,

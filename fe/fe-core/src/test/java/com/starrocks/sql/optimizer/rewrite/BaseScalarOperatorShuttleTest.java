@@ -17,8 +17,7 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -31,16 +30,20 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -50,12 +53,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import static com.starrocks.catalog.Type.ARRAY_TINYINT;
-import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.catalog.Type.STRING;
-import static com.starrocks.catalog.Type.TINYINT;
-import static org.junit.Assert.assertNotEquals;
+import static com.starrocks.type.ArrayType.ARRAY_TINYINT;
+import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.IntegerType.TINYINT;
+import static com.starrocks.type.StringType.STRING;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class BaseScalarOperatorShuttleTest {
 
@@ -84,7 +89,8 @@ class BaseScalarOperatorShuttleTest {
     @Test
     void visitCollectionElement() {
         ArrayOperator arrayOperator = new ArrayOperator(ARRAY_TINYINT, true, Lists.newArrayList(ConstantOperator.createInt(3)));
-        CollectionElementOperator operator = new CollectionElementOperator(STRING, arrayOperator, ConstantOperator.createInt(0));
+        CollectionElementOperator operator =
+                new CollectionElementOperator(STRING, arrayOperator, ConstantOperator.createInt(0), false);
         {
             ScalarOperator newOperator = shuttle.visitCollectionElement(operator, null);
             assertEquals(operator, newOperator);
@@ -329,7 +335,7 @@ class BaseScalarOperatorShuttleTest {
 
     @Test
     void visitCaseWhenOperator_1() {
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
         BinaryPredicateOperator whenOperator1 =
                 new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                         ConstantOperator.createInt(1));
@@ -340,11 +346,11 @@ class BaseScalarOperatorShuttleTest {
         ConstantOperator constantOperator2 = ConstantOperator.createChar("2");
 
         CaseWhenOperator operator =
-                new CaseWhenOperator(Type.VARCHAR, null, ConstantOperator.createChar("others", Type.VARCHAR),
+                new CaseWhenOperator(VarcharType.VARCHAR, null, ConstantOperator.createChar("others", VarcharType.VARCHAR),
                         ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
 
         CaseWhenOperator otherOperator =
-                new CaseWhenOperator(Type.VARCHAR, null, null,
+                new CaseWhenOperator(VarcharType.VARCHAR, null, null,
                         ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
 
         BaseScalarOperatorShuttle testShuttle = new BaseScalarOperatorShuttle() {
@@ -450,6 +456,104 @@ class BaseScalarOperatorShuttleTest {
         argumentsList.add(Arguments.of(operator, "1: id NOT IN (1, 2, cast(a as int(11))) " +
                 "OR 1: id IN (1, 2, cast(a as int(11))) IS NULL"));
         return argumentsList.stream();
+    }
+
+
+    @Test
+    void testDictionaryGetOperator() {
+        ColumnRefOperator col1 = new ColumnRefOperator(1, INT, "col1", true);
+        DictionaryGetOperator operator = new DictionaryGetOperator(
+                Lists.newArrayList(col1, ConstantOperator.createInt(0)),
+                INT, 100L, 200L, 1, true);
+        {
+            ScalarOperator newOperator = shuttle.visitDictionaryGetOperator(operator, null);
+            assertEquals(operator, newOperator);
+        }
+        {
+            ScalarOperator newOperator = shuttle2.visitDictionaryGetOperator(operator, null);
+            assertEquals(operator, newOperator);
+        }
+    }
+
+    @Test
+    void testDictionaryGetOperatorChildUpdate() {
+        ColumnRefOperator col1 = new ColumnRefOperator(1, INT, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(2, INT, "col2", true);
+        DictionaryGetOperator dictGet = new DictionaryGetOperator(
+                Lists.newArrayList(col1, ConstantOperator.createInt(0)),
+                INT, 100L, 200L, 1, true);
+        SubfieldOperator subfield = new SubfieldOperator(dictGet, INT, Lists.newArrayList("mapping_id"));
+
+        BaseScalarOperatorShuttle replaceShuttle = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                if (variable.getId() == 1) {
+                    return col2;
+                }
+                return variable;
+            }
+        };
+
+        ScalarOperator result = replaceShuttle.visitSubfield(subfield, null);
+        assertNotEquals(subfield, result);
+        assert result instanceof SubfieldOperator;
+        SubfieldOperator newSubfield = (SubfieldOperator) result;
+        assert newSubfield.getChild(0) instanceof DictionaryGetOperator;
+        DictionaryGetOperator newDictGet = (DictionaryGetOperator) newSubfield.getChild(0);
+        assertEquals(col2, newDictGet.getChild(0));
+        assertEquals(100L, newDictGet.getDictionaryId());
+    }
+
+    @Test
+    void testLargeInPredicateChildUpdatePreservesMetadata() {
+        ColumnRefOperator originalColumn = new ColumnRefOperator(1, INT, "original", true);
+        ColumnRefOperator replacementColumn = new ColumnRefOperator(2, INT, "replacement", true);
+        List<Object> rawConstants = Lists.newArrayList(1, 2);
+        LargeInPredicateOperator predicate = new LargeInPredicateOperator(
+                "1, 2", rawConstants, 2, true, INT, List.of(originalColumn));
+        BaseScalarOperatorShuttle replaceShuttle = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                return variable.equals(originalColumn) ? replacementColumn : variable;
+            }
+        };
+
+        LargeInPredicateOperator rewritten = assertInstanceOf(
+                LargeInPredicateOperator.class, predicate.accept(replaceShuttle, null));
+        assertSame(replacementColumn, rewritten.getCompareExpr());
+        assertEquals(predicate.getRawText(), rewritten.getRawText());
+        assertSame(rawConstants, rewritten.getRawConstantList());
+        assertEquals(predicate.getConstantCount(), rewritten.getConstantCount());
+        assertEquals(predicate.isNotIn(), rewritten.isNotIn());
+        assertEquals(predicate.getConstantType(), rewritten.getConstantType());
+    }
+
+
+    @Test
+    void testDictionaryGetOperatorRewriteNullIfNotExist() {
+        ColumnRefOperator key = new ColumnRefOperator(1, INT, "key", true);
+        DictionaryGetOperator dictGet = new DictionaryGetOperator(
+                Lists.newArrayList(
+                        ConstantOperator.createVarchar("test_db.user_mapping_dict"),
+                        key,
+                        ConstantOperator.createBoolean(true)),
+                INT, 100L, 200L, 1, true);
+
+        BaseScalarOperatorShuttle toggleBool = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitConstant(ConstantOperator literal, Void context) {
+                if (literal.getType().isBoolean() && !literal.isNull()) {
+                    return ConstantOperator.createBoolean(!literal.getBoolean());
+                }
+                return literal;
+            }
+        };
+
+        ScalarOperator result = toggleBool.visitDictionaryGetOperator(dictGet, null);
+        assert result instanceof DictionaryGetOperator;
+        DictionaryGetOperator rewritten = (DictionaryGetOperator) result;
+        assertEquals(ConstantOperator.FALSE, rewritten.getChild(2));
+        assertEquals(false, rewritten.getNullIfNotExist());
     }
 
 }

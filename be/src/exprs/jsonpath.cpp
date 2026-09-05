@@ -21,12 +21,14 @@
 #include <boost/tokenizer.hpp>
 #include <memory>
 
+#include "base/format.h"
 #include "column/column_viewer.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
+#include "types/json_value.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -52,13 +54,23 @@ bool ArraySelectorSlice::match(const std::string& input) {
 }
 
 void ArraySelectorSingle::iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) {
-    try {
-        callback(array_slice.at(index));
-    } catch (const vpack::Exception& e) {
-        if (e.errorCode() == vpack::Exception::IndexOutOfBounds) {
-            callback(noneJsonSlice());
+    // Bounds-check up front instead of relying on velocypack to throw. Slice::at() raises IndexOutOfBounds
+    // for every row whose array is shorter than the index, and a C++ throw per row is extremely expensive:
+    // the unwinder serializes on a process-wide lock, so a scan over millions of short/empty arrays turns
+    // into a lock convoy that burns most of the node's CPU in the kernel. The try/catch stays as a safety
+    // net for malformed data (it costs nothing unless something is actually thrown); in the common
+    // out-of-range case it is never reached.
+    vpack::Slice item = noneJsonSlice();
+    if (array_slice.isArray() && index >= 0) {
+        try {
+            if (static_cast<vpack::ValueLength>(index) < array_slice.length()) {
+                item = array_slice.at(index);
+            }
+        } catch (const vpack::Exception&) {
+            item = noneJsonSlice();
         }
     }
+    callback(item);
 }
 
 void ArraySelectorWildcard::iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) {
@@ -145,9 +157,9 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
         if (i == 0) {
             std::shared_ptr<ArraySelector> selector(new ArraySelectorNone());
             if (current != "$") {
-                parsed_paths->emplace_back(JsonPathPiece("", std::move(selector)));
+                parsed_paths->emplace_back("$", std::move(selector));
             } else {
-                parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
+                parsed_paths->emplace_back("$", std::move(selector));
                 continue;
             }
         }
@@ -159,7 +171,7 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
             // No array selector
             std::unique_ptr<ArraySelector> selector;
             RETURN_IF_ERROR(ArraySelector::parse(array_pieces, &selector));
-            parsed_paths->emplace_back(JsonPathPiece(variable, std::move(selector)));
+            parsed_paths->emplace_back(variable, std::move(selector));
         } else {
             // Cosume multiple array selector
             re2::StringPiece array_piece(array_pieces);
@@ -167,7 +179,7 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
             while (RE2::Consume(&array_piece, ARRAY_INDEX_PATTERN, &single_piece)) {
                 std::unique_ptr<ArraySelector> selector;
                 RETURN_IF_ERROR(ArraySelector::parse(single_piece, &selector));
-                parsed_paths->emplace_back(JsonPathPiece(variable, std::move(selector)));
+                parsed_paths->emplace_back(variable, std::move(selector));
                 variable = "";
             }
         }
@@ -228,7 +240,9 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
                 builder->clear();
                 vpack::ArrayBuilder ab(builder);
                 array_selector->iterate(next_item, [&](vpack::Slice array_item) {
-                    auto sub = extract(array_item, jsonpath, i + 1, builder);
+                    vpack::Builder tmpBuilder;
+                    tmpBuilder.clear();
+                    auto sub = extract(array_item, jsonpath, i + 1, &tmpBuilder);
                     if (!sub.isNone()) {
                         builder->add(sub);
                     }
@@ -262,4 +276,84 @@ vpack::Slice JsonPath::extract(const JsonValue* json, const JsonPath& jsonpath, 
     return JsonPathPiece::extract(json, jsonpath.paths, b);
 }
 
+std::string JsonPath::to_string() const {
+    std::string result = "$";
+    for (size_t i = 0; i < paths.size(); i++) {
+        const auto& piece = paths[i];
+        if (!piece.key.empty() && piece.key != "$") {
+            result += "." + piece.key;
+        }
+        if (piece.array_selector) {
+            result += piece.array_selector->to_string();
+        }
+    }
+    return result;
+}
+
+bool JsonPath::starts_with(const JsonPath* other) const {
+    if (other->paths.size() > paths.size()) {
+        // this: a.b, other: a.b.c.d
+        return false;
+    }
+
+    size_t i = 0;
+    bool eq_key = true;
+    for (; i < other->paths.size(); i++) {
+        auto& this_path = paths[i];
+        auto& other_path = other->paths[i];
+        if (this_path.key != other_path.key) {
+            eq_key = false;
+            break;
+        }
+        if (!this_path.array_selector->match(*other_path.array_selector)) {
+            break;
+        }
+    }
+
+    if (i == 0) {
+        return false;
+    }
+    return eq_key;
+}
+
+StatusOr<JsonPath*> JsonPath::relativize(const JsonPath* other, JsonPath* output_root) const {
+    if (other->paths.size() > paths.size()) {
+        // this: a.b, other: a.b.c.d
+        return Status::InvalidArgument("Unsupported rollup json path");
+    }
+
+    size_t i = 0;
+    for (; i < other->paths.size(); ++i) {
+        auto& this_path = paths[i];
+        auto& other_path = other->paths[i];
+        if (this_path.key != other_path.key) {
+            break;
+        }
+        if (!this_path.array_selector->match(*other_path.array_selector)) {
+            if (UNLIKELY(NONE != other_path.array_selector->type)) {
+                return Status::InvalidArgument(
+                        fmt::format("Unsupported json path type: {}", other_path.array_selector->type));
+            }
+            output_root->paths.emplace_back("", this_path.array_selector);
+            i++; // to next
+            break;
+        }
+    }
+
+    for (; i < paths.size(); ++i) {
+        output_root->paths.emplace_back(paths[i]);
+    }
+
+    if (this->paths[0].key == "$" && !output_root->paths.empty()) {
+        output_root->paths.insert(output_root->paths.cbegin(), this->paths[0]);
+    }
+    return output_root;
+}
+
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::ArraySelectorType>::format(const starrocks::ArraySelectorType value,
+                                                          format_context& ctx) const -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::ArraySelectorType>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
+}

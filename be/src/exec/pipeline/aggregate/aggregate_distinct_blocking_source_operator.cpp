@@ -14,7 +14,7 @@
 
 #include "aggregate_distinct_blocking_source_operator.h"
 
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 
 namespace starrocks::pipeline {
 
@@ -27,12 +27,19 @@ bool AggregateDistinctBlockingSourceOperator::is_finished() const {
 }
 
 Status AggregateDistinctBlockingSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_sink();
     return _aggregator->set_finished();
 }
 
 void AggregateDistinctBlockingSourceOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
     SourceOperator::close(state);
+}
+
+Status AggregateDistinctBlockingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _aggregator->attach_source_observer(state, this->_observer);
+    return Status::OK();
 }
 
 StatusOr<ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {

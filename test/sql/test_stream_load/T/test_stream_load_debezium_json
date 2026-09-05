@@ -1,0 +1,149 @@
+-- name: test_stream_load_debezium
+create database db_${uuid0};
+use db_${uuid0};
+
+-- test_debezium_payload
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -d '{"payload":{"before":null,"after":{"id":1,"name":"Alice","age":25},"op":"c"}} {"payload":{"before":null,"after":{"id":2,"name":"Bob","age":30},"op":"r"}} {"payload":{"before":{"id":3,"name":"Old","age":0},"after":{"id":3,"name":"Charlie","age":35},"op":"u"}}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+sync;
+
+select * from t1 order by id;
+
+drop table t1;
+
+
+-- test_debezium_no_payload
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -d '{"before":null,"after":{"id":1,"name":"Alice","age":25},"op":"c"} {"before":null,"after":{"id":2,"name":"Bob","age":30},"op":"r"} {"before":{"id":3,"name":"Old","age":0},"after":{"id":3,"name":"Charlie","age":35},"op":"u"}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+sync;
+
+select * from t1 order by id;
+
+drop table t1;
+
+
+-- test_debezium_delete
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t1 VALUES (1,'Alice',25),(2,'Bob',30),(3,'Charlie',35);
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -d '{"payload":{"before":{"id":2,"name":"Bob","age":30},"after":null,"op":"d"}}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+sync;
+
+select * from t1 order by id;
+
+drop table t1;
+
+
+-- test_debezium_jsonpaths
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100)
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -H "jsonpaths: [\"$.id\",\"$.name\"]" -d '{"payload":{"before":null,"after":{"id":1,"name":"Alice","age":25},"op":"c"}} {"payload":{"before":null,"after":{"id":2,"name":"Bob","age":30},"op":"r"}} {"payload":{"before":{"id":3,"name":"Old","age":0},"after":{"id":3,"name":"Charlie","age":35},"op":"u"}}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+sync;
+
+select * from t1 order by id;
+
+drop table t1;
+
+
+-- test_debezium_tombstone
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -d '{"payload":null} {"payload":{"before":null,"after":{"id":10,"name":"Eve","age":28},"op":"c"}}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+sync;
+
+select * from t1 order by id;
+
+drop table t1;
+
+
+-- test_debezium_error_missing_op
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -d '{"payload":{"before":null,"after":{"id":1,"name":"test","age":1}}}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+drop table t1;
+
+
+-- test_debezium_error_unknown_op
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -d '{"payload":{"before":null,"after":{"id":1,"name":"test","age":1},"op":"x"}}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+drop table t1;
+
+
+-- test_debezium_error_null_after
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -d '{"payload":{"before":null,"after":null,"op":"c"}}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+drop table t1;
+
+
+-- test_debezium_error_null_before
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+shell: curl -s --location-trusted -u root: -H "Expect:100-continue" -H "format: json" -H "envelope: debezium" -d '{"payload":{"before":null,"after":null,"op":"d"}}' -XPUT ${url}/api/db_${uuid0}/t1/_stream_load | jq -r '.Status'
+
+drop database db_${uuid0};

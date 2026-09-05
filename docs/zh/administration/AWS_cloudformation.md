@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "AWS CloudFormation 与 StarRocks 集成，支持在 AWS 上快速部署并管理 StarRocks 集群。"
 ---
 
 # 在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群
@@ -25,13 +26,13 @@ AWS CloudFormation 是 AWS 提供的一项服务，支持简单且快速地对 A
 1. 登录 [AWS CloudFormation 控制台](https://console.aws.amazon.com/cloudformation/)。
 
 2. 选择**创建堆栈** > **使用新资源(标准)。** <br />
-   ![使用新资源](../assets/8.1.3-1.png)
+   ![使用新资源](../_assets/8.1.3-1.png)
 3. 按照如下步骤，指定模板。
-   ![指定模板](../assets/8.1.3-2.png)
+   ![指定模板](../_assets/8.1.3-2.png)
    1. 在**先决条件-准备模版**部分，选择**模板已就绪。**
    2. 在**指定模版**部分，选择**模版源**为**Amazon S3 URL**。并在 **Amazon S3 URL** 中输入如下网址：
       `https://cf-templates-1euv6e68138u2-us-east-1.s3.amazonaws.com/templates/starrocks.template.yaml`
-      > 说明：您也可以选择**模版源**为**上传模版文件**，然后单击**选择文件**，上传 **starrocks.template.yaml** 文件。文件下载地址，请参见 StarRocks 项目中 [aws-cloudformation 仓库](https://github.com/StarRocks/aws-cloudformation)。![starrocks.template.yaml 文件](../assets/8.1.3-3.png)
+      > 说明：您也可以选择**模版源**为**上传模版文件**，然后单击**选择文件**，上传 **starrocks.template.yaml** 文件。文件下载地址，请参见 StarRocks 项目中 [aws-cloudformation 仓库](https://github.com/StarRocks/aws-cloudformation)。![starrocks.template.yaml 文件](../_assets/8.1.3-3.png)
 
    3. 单击**下一步**。
 
@@ -57,17 +58,17 @@ AWS CloudFormation 是 AWS 提供的一项服务，支持简单且快速地对 A
       |                    | Meta data dir                                                | FE 元数据存储路径，且必须为绝对路径。默认为 **feDefaultMetaPath**，表示使用默认路径 **/home/starrocks/StarRocks/fe/meta**。 |
       | BE 配置项          | Dir to save be sys log                                       | BE 日志的存储路径，必须填写绝对路径。                        |
       |                    | Sys Log Level                                                | BE 日志级别，默认值为 **INFO**，取值为 **INFO**、**WARN**、 **ERROR**、**FATAL**。 |
-      |                    | Volume type of Be nodes                                      | Amazon EBS 卷类型。Amazon EBS 卷（简称 EBS 卷）是块存储卷，挂载至Amazon EC2 实例上。更多介绍和类型说明，请参见[Amazon EBS 卷](https://docs.aws.amazon.com/zh_cn/AWSEC2/latest/UserGuide/ebs-volumes.html)。 |
+      |                    | Volume type of Be nodes                                      | Amazon EBS 卷类型。Amazon EBS 卷（简称 EBS 卷）是块存储卷，挂载至Amazon EC2 实例上。更多介绍和类型说明，请参见[Amazon EBS 卷](https://docs.aws.amazon.com/zh_cn/ebs/latest/userguide/ebs-volumes.html)。 |
       |                    | Volume size of Be nodes                                      | EBS 卷中可用于 BE 节点存储数据的容量，单位为 GB。            |
 
-5. 设置堆栈更多选项。更多说明，请参见[设置 AWS CloudFormation 堆栈选项](https://docs.aws.amazon.com/zh_cn/AWSCloudFormation/latest/UserGuide/cfn-console-add-tags.html)。
+5. 设置堆栈更多选项。更多说明，请参见[设置 AWS CloudFormation 堆栈选项](https://docs.aws.amazon.com/zh_cn/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html)。
 
     设置完成后，单击**下一步**。
 
-6. 审核前面设置的堆栈信息，包括模板、详细信息、更多选项。并且，评估堆栈成本。更多说明，请参见[审查堆栈信息并评估堆栈成本](https://docs.aws.amazon.com/zh_cn/AWSCloudFormation/latest/UserGuide/cfn-using-console-create-stack-review.html)。
+6. 审核前面设置的堆栈信息，包括模板、详细信息、更多选项。并且，评估堆栈成本。更多说明，请参见[审查堆栈信息并评估堆栈成本](https://docs.aws.amazon.com/zh_cn/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html)。
 
    > 说明：如果需要修改堆栈信息，请单击对应部分右上角的**编辑**，以返回相关页面。
 
 7. 勾选如下两个复选框，并单击**创建堆栈**。
 
-![创建堆栈](../assets/8.1.3-4.png)
+![创建堆栈](../_assets/8.1.3-4.png)

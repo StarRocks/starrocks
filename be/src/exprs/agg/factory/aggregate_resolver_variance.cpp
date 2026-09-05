@@ -24,7 +24,7 @@ namespace starrocks {
 struct StdDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_numeric<lt>) {
+        if constexpr (lt_is_numeric<lt> && lt != TYPE_DECIMAL256) {
             using VarState = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultLT<lt>>>;
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
                     "variance", true, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
@@ -34,9 +34,11 @@ struct StdDispatcher {
                     "var_pop", true, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
 
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "variance_samp", true, AggregateFactory::MakeVarianceAggregateFunction<lt, true>());
+                    "variance_samp", true, AggregateFactory::MakeVarianceAggregateFunction<lt, true>(),
+                    typename VarianceAggregateFunction<lt, true>::AggNullPred());
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "var_samp", true, AggregateFactory::MakeVarianceAggregateFunction<lt, true>());
+                    "var_samp", true, AggregateFactory::MakeVarianceAggregateFunction<lt, true>(),
+                    typename VarianceAggregateFunction<lt, true>::AggNullPred());
 
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
                     "stddev", true, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
@@ -45,7 +47,8 @@ struct StdDispatcher {
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
                     "stddev_pop", true, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "stddev_samp", true, AggregateFactory::MakeStddevAggregateFunction<lt, true>());
+                    "stddev_samp", true, AggregateFactory::MakeStddevAggregateFunction<lt, true>(),
+                    typename StddevAggregateFunction<lt, true>::AggNullPred());
         }
     }
 };
@@ -53,17 +56,19 @@ struct StdDispatcher {
 struct CorVarDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_numeric<lt>) {
+        if constexpr (lt_is_numeric<lt> && lt != TYPE_DECIMAL256) {
             using VarState = CovarianceCorelationAggregateState<false>;
             resolver->add_aggregate_mapping_variadic<lt, TYPE_DOUBLE, VarState>(
                     "covar_pop", true, AggregateFactory::MakeCovarianceAggregateFunction<lt, false>());
 
             resolver->add_aggregate_mapping_variadic<lt, TYPE_DOUBLE, VarState>(
-                    "covar_samp", true, AggregateFactory::MakeCovarianceAggregateFunction<lt, true>());
+                    "covar_samp", true, AggregateFactory::MakeCovarianceAggregateFunction<lt, true>(),
+                    typename CorVarianceAggregateFunction<lt, true>::AggNullPred());
 
             using CorrState = CovarianceCorelationAggregateState<true>;
             resolver->add_aggregate_mapping_variadic<lt, TYPE_DOUBLE, CorrState>(
-                    "corr", true, AggregateFactory::MakeCorelationAggregateFunction<lt>());
+                    "corr", true, AggregateFactory::MakeCorelationAggregateFunction<lt>(),
+                    typename CorelationAggregateFunction<lt>::AggNullPred());
         }
     }
 };

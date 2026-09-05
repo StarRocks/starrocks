@@ -31,7 +31,7 @@
 #include "formats/parquet/file_writer.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 
@@ -48,7 +48,7 @@ struct TableInfo {
 
 class RollingAsyncParquetWriter {
 public:
-    RollingAsyncParquetWriter(TableInfo tableInfo, const std::vector<ExprContext*>& output_expr_ctxs,
+    RollingAsyncParquetWriter(TableInfo tableInfo, std::vector<ExprContext*> output_expr_ctxs,
                               RuntimeProfile* parent_profile,
                               std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func,
                               RuntimeState* state, int32_t driver_id);
@@ -72,7 +72,7 @@ public:
 private:
     std::string _new_file_location();
 
-    Status _new_file_writer();
+    Status _new_file_writer(RuntimeState* state);
     Status close_current_writer(RuntimeState* state);
 
 private:

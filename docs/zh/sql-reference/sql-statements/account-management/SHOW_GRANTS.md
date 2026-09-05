@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "SHOW GRANTS displays all the privileges that have been granted to a user or role."
 ---
 
 # SHOW GRANTS
@@ -8,18 +9,24 @@ displayed_sidebar: "Chinese"
 
 查看当前用户，指定用户，或指定角色的权限信息。
 
-> 说明：每个用户都有权限查看自己和自己所拥有角色的权限信息。只有 `user_admin` 角色可以查看指定用户或角色的权限信息。
+:::tip
+
+每个用户都可以查看自己和自己所拥有角色的权限信息。只有拥有 `user_admin` 角色的用户才可以查看指定用户或角色的权限信息。
+
+:::
 
 ## 语法
 
 ```SQL
 SHOW GRANTS; -- 查看当前用户的权限信息。
+SHOW GRANTS FOR CURRENT_USER[()]; -- 查看当前用户的权限信息（MySQL 兼容语法）。
 SHOW GRANTS FOR ROLE <role_name>; -- 查看指定角色的权限信息。
 SHOW GRANTS FOR <user_identity>; -- 查看指定用户的权限信息。
 ```
 
 ## 参数说明
 
+- `CURRENT_USER[()]`：返回当前会话用户的权限信息，括号可省略。该语法与 `SHOW GRANTS` 等价，用于兼容在连接初始化时自动发送该语句的 MySQL 客户端（如 Metabase、DBeaver 等）。
 - role_name：角色名
 - user_identity：用户标识
 
@@ -54,12 +61,19 @@ mysql> SHOW GRANTS;
 | 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
 +--------------+---------+----------------------------------------+
 
+mysql> SHOW GRANTS FOR CURRENT_USER();
++--------------+---------+----------------------------------------+
+| UserIdentity | Catalog | Grants                                 |
++--------------+---------+----------------------------------------+
+| 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
++--------------+---------+----------------------------------------+
+
 mysql> SHOW GRANTS FOR 'user_g'@'%';
 +-------------+-------------+-----------------------------------------------------------------------------------------------+
 |UserIdentity |Catalog      |Grants                                                                                         |
 +-------------+-------------------------------------------------------------------------------------------------------------+
 |'user_g'@'%' |NULL         |GRANT role_g, public to `user_g`@`%`;                                                          | 
-|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON `user_a`@`%`, `user_b`@`%`TO `user_g`@`%`;                                | 
+|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON USER `user_a`@`%` TO USER `user_g`@`%`;                                | 
 |'user_g'@'%' |default      |GRANT CREATE DATABASE ON CATALOG default_catalog TO USER `user_g`@`%`;                         |
 |'user_g'@'%' |default      |GRANT ALTER, DROP, CREATE_TABLE ON DATABASE db1 TO USER `user_g`@`%`;                          |
 |'user_g'@'%' |default      |GRANT CREATE_VIEW ON DATABASE db1 TO USER `user_g`@`%` WITH GRANT OPTION;                      |

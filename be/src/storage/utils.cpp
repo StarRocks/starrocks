@@ -35,35 +35,30 @@
 #include "storage/utils.h"
 
 #include <bvar/bvar.h>
-#include <dirent.h>
 #include <fmt/format.h>
-#include <lz4/lz4.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <atomic>
 #include <boost/regex.hpp>
 #include <cerrno>
 #include <chrono>
-#include <cstdarg>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
-#include <mutex>
 #include <string>
 #include <vector>
 
+#include "base/string/string_parser.hpp"
+#include "base/system/errno.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/storage_define.h"
+#include "common/system/cpu_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
-#include "storage/olap_define.h"
-#include "util/errno.h"
-#include "util/string_parser.hpp"
+#include "runtime/mem_tracker.h"
 
 using std::string;
 using std::set;
@@ -82,11 +77,11 @@ Status gen_timestamp_string(string* out_string) {
     tm local_tm;
 
     if (localtime_r(&now, &local_tm) == nullptr) {
-        return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
+        return Status::InternalError(fmt::format("localtime_r: {} ", std::strerror(errno)));
     }
     char time_suffix[16] = {0}; // Example: 20150706111404
     if (strftime(time_suffix, sizeof(time_suffix), "%Y%m%d%H%M%S", &local_tm) == 0) {
-        return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
+        return Status::InternalError(fmt::format("localtime_r: {}", std::strerror(errno)));
     }
 
     *out_string = time_suffix;
@@ -124,66 +119,6 @@ Status move_to_trash(const std::filesystem::path& file_path) {
     auto t1 = std::chrono::steady_clock::now();
     g_move_trash << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
     return st;
-}
-
-Status read_write_test_file(const string& test_file_path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(test_file_path));
-
-    if (fs->path_exists(test_file_path).ok()) {
-        RETURN_IF_ERROR(fs->delete_file(test_file_path));
-    }
-
-    const size_t TEST_FILE_BUF_SIZE = 4096;
-    const size_t DIRECT_IO_ALIGNMENT = 512;
-    char* write_test_buff = nullptr;
-    char* read_test_buff = nullptr;
-    if (posix_memalign((void**)&write_test_buff, DIRECT_IO_ALIGNMENT, TEST_FILE_BUF_SIZE) != 0) {
-        LOG(WARNING) << "fail to allocate write buffer memory. size=" << TEST_FILE_BUF_SIZE;
-        return Status::Corruption("Fail to allocate write buffer memory");
-    }
-    std::unique_ptr<char, decltype(&std::free)> write_buff(write_test_buff, &std::free);
-    if (posix_memalign((void**)&read_test_buff, DIRECT_IO_ALIGNMENT, TEST_FILE_BUF_SIZE) != 0) {
-        LOG(WARNING) << "fail to allocate read buffer memory. size=" << TEST_FILE_BUF_SIZE;
-        return Status::Corruption("Fail to allocate write buffer memory");
-    }
-    std::unique_ptr<char, decltype(&std::free)> read_buff(read_test_buff, &std::free);
-    // generate random numbers
-    auto rand_seed = static_cast<uint32_t>(time(nullptr));
-    for (size_t i = 0; i < TEST_FILE_BUF_SIZE; ++i) {
-        int32_t tmp_value = rand_r(&rand_seed);
-        write_test_buff[i] = static_cast<char>(tmp_value);
-    }
-
-    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(opts, test_file_path));
-    RETURN_IF_ERROR(wf->append(Slice(write_buff.get(), TEST_FILE_BUF_SIZE)));
-    RETURN_IF_ERROR(wf->close());
-
-    ASSIGN_OR_RETURN(auto rf, fs->new_sequential_file(test_file_path));
-    RETURN_IF_ERROR(rf->read_fully(read_buff.get(), TEST_FILE_BUF_SIZE));
-    rf.reset();
-    RETURN_IF_ERROR(fs->delete_file(test_file_path));
-
-    if (memcmp(write_buff.get(), read_buff.get(), TEST_FILE_BUF_SIZE) != 0) {
-        LOG(WARNING) << "the test file write_buf and read_buf not equal, [filename = " << test_file_path << "]";
-        return Status::InternalError("test file write_buf and read_buf not equal");
-    }
-    return Status::OK();
-}
-
-bool check_datapath_rw(const string& path) {
-    if (!fs::path_exist(path)) return false;
-    string file_path = path + "/.read_write_test_file";
-    try {
-        Status res = read_write_test_file(file_path);
-        return res.ok();
-    } catch (...) {
-        // do nothing
-    }
-    LOG(WARNING) << "error when try to read and write temp file under the data path and return "
-                    "false. [path="
-                 << path << "]";
-    return false;
 }
 
 Status copy_dir(const string& src_dir, const string& dst_dir) {
@@ -244,10 +179,19 @@ const char* Errno::str() {
 }
 
 const char* Errno::str(int no) {
+#if defined(__APPLE__)
+    // macOS: strerror_r returns int, 0 on success
+    if (strerror_r(no, _buf, BUF_SIZE) != 0) {
+        LOG(WARNING) << "fail to get errno string. no=" << no << " errno=" << errno;
+        snprintf(_buf, BUF_SIZE, "unknown errno");
+    }
+#else
+    // Linux: strerror_r returns char* pointer
     if (nullptr != strerror_r(no, _buf, BUF_SIZE)) {
         LOG(WARNING) << "fail to get errno string. no=" << no << " errno=" << errno;
         snprintf(_buf, BUF_SIZE, "unknown errno");
     }
+#endif
 
     return _buf;
 }
@@ -329,7 +273,7 @@ bool valid_decimal(const string& value_str, uint32_t precision, uint32_t frac) {
 bool valid_datetime(const string& value_str) {
     const char* datetime_pattern =
             "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
-            "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2}))?";
+            "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2})(\\.(\\d{1,6}))?)?";
     boost::regex e(datetime_pattern);
     boost::smatch what;
 
@@ -395,6 +339,21 @@ std::string parent_name(const std::string& fullpath) {
 std::string file_name(const std::string& fullpath) {
     std::filesystem::path path(fullpath);
     return path.filename().string();
+}
+
+bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio) {
+    hard_limit_ratio = std::max(hard_limit_ratio, 1.0);
+    return tracker->limit_exceeded_by_ratio((int64_t)(hard_limit_ratio * 100)) ||
+           (tracker->parent() != nullptr && tracker->parent()->limit_exceeded());
+}
+
+int caculate_delta_writer_thread_num(int thread_num_from_config) {
+    if (thread_num_from_config > 0) {
+        return thread_num_from_config;
+    }
+
+    // The minimum value 16 is for compatibility with previous versions.
+    return std::max<int>(CpuInfo::num_cores() / 2, 16);
 }
 
 } // namespace starrocks

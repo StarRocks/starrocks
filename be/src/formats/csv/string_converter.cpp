@@ -14,30 +14,30 @@
 
 #include "formats/csv/string_converter.h"
 
+#include "base/string/utf8.h"
 #include "column/binary_column.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 
-Status StringConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status StringConverter::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                      const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    auto& bytes = binary->get_bytes();
-    auto& offsets = binary->get_offset();
+    auto bytes = binary->get_immutable_bytes();
+    const auto& offsets = binary->get_offset();
 
     Slice s(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
     // TODO(zhuming): escape delimiter characters.
     return os->write(s);
 }
 
-Status StringConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status StringConverter::write_quoted_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                             const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    auto& bytes = binary->get_bytes();
-    auto& offsets = binary->get_offset();
+    auto bytes = binary->get_immutable_bytes();
+    const auto& offsets = binary->get_offset();
 
     Slice s(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
     // TODO(zhuming): escape delimiter characters.
@@ -55,30 +55,23 @@ Status StringConverter::write_quoted_string(OutputStream* os, const Column& colu
 }
 
 bool StringConverter::read_string(Column* column, const Slice& s, const Options& options) const {
-    int max_size = 0;
+    size_t max_size = 0;
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
     }
 
-    bool length_check_status = true;
-    // Hive table, not limit string length <= 1mb anymore
     if (options.is_hive) {
-        if (UNLIKELY(max_size > 0 && s.size > max_size)) {
-            length_check_status = false;
-        }
+        // truncate directly, support for utf-8 encoding
+        down_cast<BinaryColumn*>(column)->append(truncate_utf8(s, max_size));
     } else {
-        if ((config::enable_check_string_lengths &&
-             ((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size)))) {
-            length_check_status = false;
+        if (config::enable_check_string_lengths &&
+            ((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size))) {
+            VLOG(3) << strings::Substitute("Column [$0]'s length exceed max varchar length. str_size($1), max_size($2)",
+                                           column->get_name(), s.size, max_size);
+            return false;
         }
+        down_cast<BinaryColumn*>(column)->append(s);
     }
-    if (!length_check_status) {
-        VLOG(3) << strings::Substitute("Column [$0]'s length exceed max varchar length. str_size($1), max_size($2)",
-                                       column->get_name(), s.size, max_size);
-        return false;
-    }
-
-    down_cast<BinaryColumn*>(column)->append(s);
     return true;
 }
 

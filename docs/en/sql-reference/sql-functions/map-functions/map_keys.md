@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns an array of all the keys in the specified map."
 ---
 
 # map_keys
 
-## Description
+
 
 Returns an array of all the keys in the specified map.
 

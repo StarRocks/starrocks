@@ -16,9 +16,10 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
+import com.google.common.collect.Lists;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -27,25 +28,26 @@ public class CTETransformerContext {
 
     // cteMould -> current cte ref
     private final Map<Integer, Integer> cteRefIdMapping;
+
+    // Records the total number of OptExpression nodes for each CTE Producer.
+    // When the node count of cte is 0, disable the force reuse optimization.
+    // cte id -> node count
+    private final Map<Integer, Integer> cteIdToNodeCount;
+    
     private final AtomicInteger uniqueId;
 
     private final int cteMaxLimit;
 
+    // Stores CTEs specified with MATERIALIZED in the query string
+    private final List<Integer> forceCTEList;
+
     public CTETransformerContext(int cteMaxLimit) {
         this.cteExpressions = new HashMap<>();
         this.cteRefIdMapping = new HashMap<>();
+        this.cteIdToNodeCount = new HashMap<>();
         this.uniqueId = new AtomicInteger();
         this.cteMaxLimit = cteMaxLimit;
-    }
-
-    public CTETransformerContext(CTETransformerContext other) {
-        // This must be a copy of the context, because the new Relation may contain cte with the same name,
-        // and the internal cte with the same name will overwrite the original mapping
-        this.cteExpressions = Maps.newHashMap(other.cteExpressions);
-        // must use one instance
-        this.cteRefIdMapping = other.cteRefIdMapping;
-        this.uniqueId = other.uniqueId;
-        this.cteMaxLimit = other.cteMaxLimit;
+        this.forceCTEList = Lists.newArrayList();
     }
 
     public Map<Integer, ExpressionMapping> getCteExpressions() {
@@ -93,6 +95,14 @@ public class CTETransformerContext {
         return cteRefIdMapping.get(cteMouldId);
     }
 
+    public void recordCteNodeCount(int cteId, int nodeCount) {
+        cteIdToNodeCount.put(cteId, nodeCount);
+    }
+
+    public Integer getCteNodeCount(int cteId) {
+        return cteIdToNodeCount.get(cteId);
+    }
+
     public boolean hasRegisteredCte(int cteMouldId) {
         return cteRefIdMapping.containsKey(cteMouldId);
     }
@@ -104,5 +114,13 @@ public class CTETransformerContext {
 
     public boolean isForceInline() {
         return cteRefIdMapping.size() > cteMaxLimit;
+    }
+
+    public void addForceCTE(int cteId) {
+        forceCTEList.add(cteId);
+    }
+
+    public boolean isForceCTE(int cteId) {
+        return forceCTEList.contains(cteId);
     }
 }

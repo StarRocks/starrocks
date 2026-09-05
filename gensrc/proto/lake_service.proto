@@ -14,7 +14,7 @@
 //
 syntax="proto2";
 
-package starrocks.lake;
+package starrocks;
 option java_package = "com.starrocks.proto";
 message StatusPB {
     required int32 status_code = 1;
@@ -22,14 +22,17 @@ message StatusPB {
 }
 
 import "types.proto";
+import "lake_types.proto";
 import "status.proto";
+import "tablet_schema.proto";
 
 
 option cc_generic_services = true;
 
 message PublishVersionRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;
+    // This field is deprecated now, use |txn_infos| instead.
+    repeated int64 txn_ids = 2; // deprecated
     // |base_version| would be |new_version - txn_ids_size()| now, define
     // it explicitly for more clarity and better forward compatibility.
     optional int64 base_version = 3;
@@ -37,18 +40,94 @@ message PublishVersionRequest {
     // Commit time of the transaction to be published.
     // If the size of txn_ids is greater than 1, commit_time should be the commit time of the last transaction.
     // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC)
-    optional int64 commit_time = 5;
+    optional int64 commit_time = 5; // deprecated
+    optional int64 timeout_ms = 6;
+    repeated TxnInfoPB txn_infos = 7;
+    repeated int64 rebuild_pindex_tablet_ids = 8;
+    optional bool enable_aggregate_publish = 9;
+    // This field is used for 2 cases to specify the resharding tablets info (not included in tablet_ids):
+    // 1. The split or merge tablet transaction, in which the txn type in txn_infos is TXN_TABLET_RESHARD.
+    // 2. The nornal write transaction but need cross-publish during tablet splitting or merging.
+    repeated ReshardingTabletInfoPB resharding_tablet_infos = 10;
+    // Async vector index build: tablet_id -> builtVersion from FE pending set.
+    // BE writes max(pre_metadata_bv, this_value) into new metadata to prevent stale FE values
+    // from overwriting the real watermark after FE leader change.
+    map<int64, int64> tablet_built_versions = 11;
+}
+
+// Per-tablet stats returned by the lake publish RPC. The FE also reuses this as a plain in-process
+// {num_rows, data_size} holder on the shared-nothing first-load path (built from TTabletInfo in
+// LeaderImpl), so first-load statistics collection is unified across both architectures.
+message TabletStatPB {
+    optional int64 num_rows = 1;
+    optional int64 data_size = 2;
 }
 
 message PublishVersionResponse {
     repeated int64 failed_tablets = 1;
     // Mapping from tablet id to compaction score.
     map<int64, double> compaction_scores = 2;
+    optional StatusPB status = 3;
+    // Legacy first-import row counts. A new FE derives first-load statistics from |tablet_stats|
+    // (field 8) and ignores this field. BE still populates it for base_version == 1 so that an OLD
+    // FE during a BE-before-FE rolling upgrade keeps collecting first-load statistics: the old FE
+    // reads ordinal 4 (original json_name "tablet_row_nums"). Once all FEs are upgraded this field
+    // is dead. Do not reuse ordinal 4.
+    map<int64, int64> deprecated_tablet_row_nums = 4 [json_name = "tablet_row_nums"];
+    map<int64, TabletMetadataPB> tablet_metas = 5;
+    // New tablet ranges for tablet splitting
+    map<int64, TabletRangePB> tablet_ranges = 6;
+    // Tablets that have async vector indexes and were published in this batch.
+    // FE uses this to register new pending build tasks.
+    repeated VectorIndexBuildInfoPB vector_index_build_infos = 7;
+    // Per-tablet aggregate stats. Returned for range-distribution tablets on every
+    // publish so FE can trigger split/merge in real time, and for any tablet on first
+    // import (base_version == 1) so FE can collect first-load statistics (supersedes the
+    // deprecated_tablet_row_nums field). No entry is emitted for non-range tablets after
+    // their first import.
+    map<int64, TabletStatPB> tablet_stats = 8;
+}
+
+message VectorIndexBuildInfoPB {
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
+    // Whether this version actually needs an async vector index build. False for
+    // bundle/below-threshold segments that intentionally skip the inline .vi: the FE
+    // can advance built_version directly without dispatching a CN build. When absent
+    // (older BE), the FE treats it as true and falls back to enqueueing a build.
+    optional bool build_needed = 3;
+}
+
+message ComputeNodePB {
+    optional string host = 1;
+    optional int32 brpc_port = 2;
+    optional int64 id = 3;
+}
+
+message AggregatePublishVersionRequest {
+    repeated ComputeNodePB compute_nodes = 1;
+    repeated PublishVersionRequest publish_reqs = 2;
+    // Transitional read metadata for an ORDER BY range-tablet split. The aggregator
+    // rebuilds each parent from the already-published child metadata and stores the
+    // result in the same bundle. Omitted by the final unshare-compaction publish,
+    // which is the atomic cutover to reading the children directly.
+    repeated ParentTabletPublishInfoPB parent_tablet_publish_infos = 3;
+}
+
+message ParentTabletPublishInfoPB {
+    optional int64 parent_tablet_id = 1;
+    // One child means an identical-tablet replacement; multiple children mean a split family.
+    repeated int64 child_tablet_ids = 2;
 }
 
 message AbortTxnRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;    
+    repeated int64 txn_ids = 2; // deprecated
+    // Whether need to clean up the txn logs
+    optional bool skip_cleanup = 3;
+    // Should have the save size with txn_ids or 0
+    repeated TxnTypePB txn_types = 4; // deprecated
+    repeated TxnInfoPB txn_infos = 5;
 }
 
 message AbortTxnResponse {
@@ -58,6 +137,14 @@ message AbortTxnResponse {
 message DeleteTabletRequest {
     // All tablets must be in the same partition.
     repeated int64 tablet_ids = 1;
+    // Whether these tablets belong to a range-distributed table. Such a table's tablets share physical
+    // data files with the tablets a reshard (tablet split / merge) produced, instead of the reshard
+    // rewriting the data, so BE must not delete their data files -- the tablets that inherited them are
+    // still reading them. BE can otherwise only infer this from a dropped tablet's own metadata, which a
+    // reshard leaves behind and vacuum then removes; once it is gone the tablet looks non-range and its
+    // still-shared files get deleted. FE reads the table definition, so its answer survives that.
+    // Absent from an older FE, which leaves BE on the metadata-derived answer it used before.
+    optional bool is_range_distribution = 2;
 }
 
 message DeleteTabletResponse {
@@ -65,10 +152,79 @@ message DeleteTabletResponse {
     optional StatusPB status = 2;
 }
 
+message DeleteTxnLogRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2; // deprecated 
+    repeated TxnInfoPB txn_infos = 3;
+}
+
+message DeleteTxnLogResponse {
+    optional StatusPB status = 1;
+}
+
+// Configuration for per-tablet parallel compaction
+message TabletParallelConfig {
+    // Enable parallel compaction within a single tablet
+    optional bool enable_parallel = 1 [default = false];
+    // Maximum number of parallel compaction tasks per tablet
+    optional int32 max_parallel_per_tablet = 2 [default = 3];
+    // Maximum data volume (bytes) per subtask
+    optional int64 max_bytes_per_subtask = 3 [default = 1073741824]; // 1GB
+}
+
 message CompactRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
     optional int64 version = 3;
+    optional int64 timeout_ms = 4;
+    optional bool allow_partial_success = 5;
+    optional bytes encryption_meta = 6;
+    optional bool force_base_compaction = 7;
+    optional bool skip_write_txnlog = 8;
+    
+    // Configuration for per-tablet parallel compaction
+    optional TabletParallelConfig parallel_config = 13;
+    // Rewrites every complete rowset containing at least one explicitly shared
+    // segment. Used once after a range-tablet split to make all child files private.
+    optional bool unshare_segments = 14 [default = false];
+}
+
+message AggregateCompactRequest {
+    repeated ComputeNodePB compute_nodes = 1;
+    repeated CompactRequest requests = 2;
+    optional int64 partition_id = 3;
+}
+
+message CompactStat {
+    // basic
+    optional int64 tablet_id = 1;
+
+    // read
+    optional int64 read_time_remote = 11; // ns
+    optional int64 read_bytes_remote = 12;
+    optional int64 read_time_local = 13; // ns
+    optional int64 read_bytes_local = 14;
+    optional int64 total_compact_input_file_size = 15;
+    optional int64 read_segment_count = 16;
+
+    // write
+    optional int64 write_segment_count = 31;
+    optional int64 write_segment_bytes = 32;
+    optional int64 write_time_remote = 33; // ns
+
+    // other
+    optional int32 sub_task_count = 51; // tablet count in this compaction request
+    optional int32 in_queue_time_sec = 52;
+}
+
+// Subtask status for parallel compaction
+message TabletSubtaskStatus {
+    optional int64 tablet_id = 1;
+    optional int32 subtask_id = 2;
+    repeated uint32 input_rowset_ids = 3;
+    optional int64 input_bytes = 4;
+    optional int64 output_bytes = 5;
+    optional StatusPB status = 6;
 }
 
 message CompactResponse {
@@ -79,22 +235,35 @@ message CompactResponse {
     // optional int64 num_output_bytes = 5;
     // optional int64 num_output_rows = 6;
     optional StatusPB status = 7;
+    repeated CompactStat compact_stats = 8;
+    optional int64 success_compaction_input_file_size = 9;
+    repeated TxnLogPB txn_logs = 10;
+    
+    // Subtask statuses for parallel compaction
+    repeated TabletSubtaskStatus subtask_statuses = 11;
 }
 
 message DropTableRequest {
     // tablet_id can be the id of any of the tablet belongs to the table to be dropped.
     optional int64 tablet_id = 1;
+    optional string path = 2;
 }
 
 message DropTableResponse {
     // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
     optional int32 pad = 1;
+    optional StatusPB status = 2;
 }
 
 message DeleteDataRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
     optional DeletePredicatePB delete_predicate = 3;
+    // Schema key identifying the table schema. The delete predicate is generated
+    // based on this schema. This key is used for fast schema evolution v2 during
+    // delete operation, allowing the backend to update tablet metadata schema 
+    // during transaction publishing if needed.
+    optional TableSchemaKeyPB schema_key = 4;
 }
 
 message DeleteDataResponse {
@@ -108,6 +277,7 @@ message TabletStatRequest {
     }
 
     repeated TabletInfo tablet_infos = 1;
+    optional int64 timeout_ms = 2;
 }
 
 message TabletStatResponse {
@@ -123,14 +293,16 @@ message TabletStatResponse {
 // Rename file txn_{tablet_id}_{txn_id} to vtxn_{tablet_id}_{version}
 message PublishLogVersionRequest {
     repeated int64 tablet_ids = 1;
-    optional int64 txn_id = 2;
+    optional int64 txn_id = 2; // deprecated
     optional int64 version = 3;
+    optional TxnInfoPB txn_info = 4;
 }
 
 message PublishLogVersionBatchRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;
+    repeated int64 txn_ids = 2; // deprecated
     repeated int64 versions = 3;
+    repeated TxnInfoPB txn_infos = 4;
 }
 
 message PublishLogVersionResponse {
@@ -191,6 +363,41 @@ message RestoreSnapshotsResponse {
     optional int32 pad = 1;
 }
 
+// Extension point for TabletDataSnapshotPB. DO NOT MODIFY: do not add fields
+// here, and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New
+// TabletDataSnapshotPB fields belong on TabletDataSnapshotPB itself, whose
+// remaining numbers are free.
+message TabletDataSnapshotExtPB {
+}
+
+// Placeholder for external cluster snapshot feature.
+message TabletDataSnapshotPB {
+    optional int64 tablet_id = 1;
+    repeated string new_data_files = 2;
+    repeated string new_metadata_files = 3;
+    repeated string new_schema_files = 4;
+    optional TabletDataSnapshotExtPB ext = 5;
+}
+
+// Placeholder for external cluster snapshot feature.
+message UploadSnapshotFilesRequestPB {
+    optional int64 job_id = 1;
+    optional int64 db_id = 2;
+    optional int64 table_id = 3;
+    optional int64 partition_id = 4;
+    optional int64 physical_partition_id = 5;
+    optional int64 dest_tablet_id = 6;
+    repeated TabletDataSnapshotPB tablet_snapshots = 7;
+}
+
+// Placeholder for external cluster snapshot feature.
+message UploadSnapshotFilesResponsePB {
+    optional StatusPB status = 1;
+    repeated int64 failed_tablets = 2;
+}
+
 message AbortCompactionRequest {
     optional int64 txn_id = 1;
 }
@@ -199,9 +406,67 @@ message AbortCompactionResponse {
     optional StatusPB status = 1;
 }
 
+message TabletInfoPB {
+    optional int64 tablet_id = 1;
+    optional int64 min_version = 2;
+}
+
+// The resumable, per-pass state of the incremental (range-based) vacuum protocol; see
+// VacuumRequest.max_versions_per_round. It round-trips between FE and BE as ONE unit: in a VacuumRequest
+// it is the range the previous round proposed (for this round to commit) plus the resume cursor and the
+// pass retain floor; in a VacuumResponse it is the range this round newly proposed. The FE persists it
+// per partition (one edit log per round), which is why it is grouped into a single message and tracked
+// per partition -- not per tablet: version NUMBERS are partition-wide (every publish advances the whole
+// partition's version), so one range and one cursor describe every tablet and the persisted state stays
+// O(1) per partition. The per-tablet metadata SNAPSHOTS, however, need not exist at every version: a
+// normal publish writes each tablet's metadata forward (a bundled file (0, v) or per-tablet (tablet_id,
+// v)), but batch publish folds a run of txns into a single snapshot at the batch's final version, so a
+// given partition version can be absent (a "hole") on some tablets. The BE walk tolerates that by
+// anchoring each tablet's chain to its nearest existing snapshot.
+message VacuumStatePB {
+    // The partition-version range [to_delete_low, to_delete_high) -- low inclusive, high EXCLUSIVE.
+    // to_delete_high is the intersection retained floor (the MIN over the partition's tablets of their
+    // grace/min_retain boundary), so every version strictly below it is deletable by every tablet. A
+    // commit does not delete to_delete_high itself; it derives the band's top real chain node from it
+    // (the node just below the floor for a fresh band, or to_delete_high - 1 for a resume band) -- and if
+    // that version was folded away on a tablet (a batch-publish hole), steps down to that tablet's nearest
+    // existing version to anchor -- then walks each tablet's prev_garbage_version chain down to
+    // to_delete_low collecting the garbage data files,
+    // then deletes the bundled (or per-tablet) metadata in the range. Deletion is ascending and
+    // idempotent: a version with no file is treated as already deleted. Both 0/unset means "no range" (a
+    // fresh round, nothing proposed, or just reset).
+    optional int64 to_delete_low = 1;
+    optional int64 to_delete_high = 2;
+    // The partition version the chain walk resumes from. Unset/0 means "start a fresh pass from
+    // min_retain_version" (the first round of a pass, or right after the old chain was fully cleaned). In
+    // a VacuumResponse, 0 is also the sentinel for "the chain bottom was reached -- the pass has drained".
+    optional int64 next_propose_start_version = 3;
+    // The pass retain floor: the LOWEST partition version this whole pass keeps (everything below it is
+    // deleted band by band; it and above are retained for the pass). It is fixed for the entire pass --
+    // the fresh round computes it as the lowest surviving version (the MIN over tablets of their
+    // grace/min_retain boundary) and returns it here; the FE persists it as a pass constant and replays
+    // it on every commit round, resetting only when the next fresh round starts a new pass. The commit
+    // reads this version's metadata to spare the shared data files still referenced by surviving tablets.
+    //
+    // CONTRACT (the FE MUST honor this): on every round of a pass -- the fresh round AND every resume
+    // round -- this field carries the value the BE returned for THAT pass's fresh round (the round whose
+    // next_propose_start_version was 0/unset). It is a per-pass constant. The FE must NOT set it to the
+    // current round's to_delete_high, nor recompute it per round. The BE distinguishes a fresh-band
+    // commit from a resume-band commit by whether to_delete_high equals this field, and reads exactly
+    // this version for shared-file liveness; replaying to_delete_high instead would misdrive both.
+    //
+    // Why the MIN (unlike legacy one-shot vacuum which reads the MAX retain boundary): a shared file can
+    // be garbage for one tablet yet still referenced by another at this floor, so reading any version
+    // higher than the floor could dangle that reference. Reading the floor is safe because lake versions
+    // are partition-wide and incremental vacuum only deletes strictly below the floor, so the floor's
+    // metadata survives for every tablet throughout the pass. The two coincide when tablets are
+    // version-synchronized (the normal case). In a VacuumResponse, set only on a fresh round.
+    optional int64 pass_start_version = 4;
+}
+
 message VacuumRequest {
-    // All tablets must be in the same partition.
-    repeated int64 tablet_ids = 1;
+    // This field is deprecated, use |tablet_infos| instead.
+    repeated int64 tablet_ids = 1; // deprecated
     // Tablet metadata files with version numbers greater than or equals to min_retain_version
     // will NOT be vacuumed. For tablet metadata files with version numbers less than
     // min_retain_version, decide whether they should be deleted by comparing the create time
@@ -218,6 +483,47 @@ message VacuumRequest {
     optional bool delete_txn_log = 5;
     // ID of the partition the tablet belongs to.
     optional int64 partition_id = 6;
+    // The tablet infos to be vacuumed.
+    repeated TabletInfoPB tablet_infos = 7;
+    // Whether enable file bundling
+    optional bool enable_file_bundling = 8;
+    // retain version info of tablet metadata
+    // The version here means the version of tablet metadata or the physical partition version
+    // (because vacuun request is send by <node, physical partition>)
+    // All tablet metadata and their data files of these verisons should be retained and can not be
+    // vaccummed.
+    repeated int64 retain_versions = 9;
+    // Whether enable shared file cleanup in vacuum.
+    // This flag is used for both file-bundling tables and range-distribution tables.
+    optional bool enable_shared_file_cleanup = 10;
+    // The maximum duration the FE caller waits for this request, measured from the time
+    // the request is received. After it elapses the FE has given up, so the BE task
+    // should abort itself proactively instead of keeping a vacuum worker occupied.
+    optional int64 timeout_ms = 11;
+
+    // ---- Incremental (range-based, resumable) vacuum protocol. ----
+    // Upper bound on how many partition versions a single round may advance the chain walk, so one round
+    // cannot run long enough to hit the RPC timeout wall. Its PRESENCE (set, > 0) is also what selects
+    // the incremental protocol: when set, the BE commits the previously proposed range carried in
+    // vacuum_state, walks at most this many versions further down from its
+    // next_propose_start_version, and returns the newly proposed range in VacuumResponse. When unset the
+    // BE keeps the legacy behavior of walking the whole chain in one round -- an old FE never sets it, so
+    // an upgraded BE transparently falls back and no FE/BE pair can disagree about the protocol in effect.
+    optional int64 max_versions_per_round = 12;
+    // The state the previous round proposed and the FE persisted: the range this round should commit, the
+    // cursor to resume the walk from, and the pass retain floor. See VacuumStatePB.
+    optional VacuumStatePB vacuum_state = 13;
+    // Upper bound on how many missing versions the propose walk may step through, BEFORE it anchors, while
+    // searching for the nearest existing version below the resume cursor. The only legitimate run of missing
+    // versions is a batch-publish hole (consecutive txns folded into one metadata version), which spans at
+    // most lake_batch_publish_max_version_num versions -- so the FE feeds that config here. A tablet that
+    // cannot anchor within this many step-downs is not in a batch-publish hole but lagging / cross-generation
+    // (its versions all sit below the band being proposed), so it contributes nothing this round; stop early
+    // instead of grinding all the way to max_versions_per_round, which against a cross-generation tablet set
+    // is pure wasted remote reads. Bounds ONLY the pre-anchor step-down; the post-anchor chain walk and the
+    // band width stay bounded by max_versions_per_round. Unset / <= 0 (an old FE) falls back to
+    // max_versions_per_round, preserving the previous behavior.
+    optional int64 max_empty_walk_versions = 14;
 }
 
 message VacuumResponse {
@@ -226,13 +532,48 @@ message VacuumResponse {
     optional int64 vacuumed_files = 2;
     // The total size of files vacuumed, value undefined if status is not ok.
     optional int64 vacuumed_file_size = 3;
+    // The versions before vacuumed_version are vacuumed
+    optional int64 vacuumed_version = 4;
+    // The tablet infos of vacuumed tablets.
+    repeated TabletInfoPB tablet_infos = 5;
+    // The total file size need to be vacuumed
+    optional int64 extra_file_size = 6;
+
+    // ---- Incremental vacuum protocol result. ----
+    // The next-round state the FE must persist atomically in a single edit log: persisting it both
+    // acknowledges that the range the FE sent in this request has been committed and records the newly
+    // proposed range to commit next round (plus the resume cursor and, on a fresh round, the pass retain
+    // floor). Empty / unset means nothing new was proposed. See VacuumStatePB.
+    optional VacuumStatePB vacuum_state = 7;
 }
 
+// 1. Before the orphaned data file cleanup starts, VacuumFull will delete metadata files which satisfy the following:
+// (commit_time < grace_timestamp)
+// 2. Then, orphaned data files will be determined. We use min_active_txn_id to filter out new data files, then we open
+// any remaining metadata files and note that the data files referenced are not orphans.
+// 3. all tabletMetadata with versions in retain_versions should be retained when try to vaccum to meta which have
+// commit_time < grace_timestamp. retain_versions must contains the lastest visible version.
+// 4. all tabletMetadata with versions NOT in [min_check_version, max_check_version) should not be vacuumed.
 message VacuumFullRequest {
-    repeated int64 tablet_ids = 1;
-    optional int64 min_check_version = 2;
-    optional int64 max_check_version = 3;
-    optional int64 min_active_txn_id = 4;
+    // The id of the partition to vacuum
+    optional int64 partition_id = 1;
+    // tablet_id can be the id of any of the tablet belongs to the table to be dropped.
+    optional int64 tablet_id = 2;
+    optional int64 min_check_version = 3;
+    optional int64 max_check_version = 4;
+    // Don't delete files with txn_id >= min_active_txn_id
+    optional int64 min_active_txn_id = 5;
+    // Delete metadata files with commit_time < grace_timestamp (set by FE)
+    optional int64 grace_timestamp = 6;
+    // retain version info of tablet metadata
+    // The version here means the version of tablet metadata or the physical partition version
+    // (because vacuun request is send by <node, physical partition>)
+    // All tablet metadata and their data files of these verisons should be retained and can not be
+    // vaccummed.
+    repeated int64 retain_versions = 7;
+    // Opt-in switch for vacuum_full to reclaim the legacy load_spill layout
+    // `<root>/load_spill/<load_id_uuid>/`
+    optional bool cleanup_legacy_load_spill = 8;
 }
 
 message VacuumFullResponse {
@@ -241,10 +582,97 @@ message VacuumFullResponse {
     optional int64 vacuumed_file_size = 3;
 }
 
+message DropTabletCacheMeta {
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
+}
+
+message DropTabletCacheRequest {
+    repeated DropTabletCacheMeta tablets = 1;
+}
+
+message DropTabletCacheResponse {
+    optional StatusPB status = 1;
+}
+
+message GetTabletMetadatasRequest {
+    // all tablets in one physical partition
+    repeated int64 tablet_ids = 1;
+    // included
+    optional int64 max_version = 2;
+    // included
+    optional int64 min_version = 3;
+    // whether check missing files, like segment, delete vector, pk index sst, cols file
+    optional bool check_missing_files = 4;
+}
+
+message TabletMetadataEntry {
+    optional TabletMetadataPB metadata = 1;
+    // segment, delete vector, cols, pk index sst file
+    repeated string missing_files = 2;
+}
+
+message TabletResult {
+    optional int64 tablet_id = 1;
+    // tablet-level status
+    optional StatusPB status = 2;
+    // multi-version tablet metadatas
+    repeated TabletMetadataEntry metadata_entries = 3;
+}
+
+message GetTabletMetadatasResponse {
+    // rpc-level status
+    optional StatusPB status = 1;
+    repeated TabletResult tablet_results = 2;
+}
+
+message RepairTabletMetadataRequest {
+    // all tablet metadatas with the same version in one physical partition
+    repeated TabletMetadataPB tablet_metadatas = 1;
+    // whether enable file bundling
+    optional bool enable_file_bundling = 2;
+    // whether write bundling file
+    // only one node needs to write bundling tablet metadata file for all tablets in one physical partition
+    optional bool write_bundling_file = 3;
+}
+
+message TabletMetadataRepairStatus {
+    optional int64 tablet_id = 1;
+    // tablet-level status
+    optional StatusPB status = 2;
+}
+
+message RepairTabletMetadataResponse {
+    // rpc-level status
+    optional StatusPB status = 1;
+    repeated TabletMetadataRepairStatus tablet_repair_statuses = 2;
+}
+
+message BuildVectorIndexRequest {
+    optional int64 tablet_id = 1;
+    // The visible version to load tablet metadata from.
+    optional int64 version = 2;
+    // Max number of rowsets to process per batch. CN returns after processing this many
+    // unbuilt rowsets so FE can do multi-round scheduling. Default: 5.
+    optional int32 max_rowsets_per_batch = 3;
+    // FE-side built version watermark. CN uses max(metadata_bv, this) to skip
+    // already-built rowsets, avoiding redundant S3 existence checks.
+    optional int64 built_version = 4;
+}
+
+message BuildVectorIndexResponse {
+    optional StatusPB status = 1;
+    // The max end_version among all rowsets whose .vi files were built in this batch.
+    // FE uses this to advance the builtVersion watermark.
+    optional int64 new_built_version = 2;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
+    rpc aggregate_publish_version(AggregatePublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
     rpc publish_log_version_batch(PublishLogVersionBatchRequest) returns (PublishLogVersionResponse);
+    rpc delete_txn_log(DeleteTxnLogRequest) returns (DeleteTxnLogResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
     rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);
@@ -258,5 +686,11 @@ service LakeService {
     rpc abort_compaction(AbortCompactionRequest) returns (AbortCompactionResponse);
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
+    rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
+    rpc drop_tablet_cache(DropTabletCacheRequest) returns (DropTabletCacheResponse);
+    rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
+    rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
+    // Placeholder for external cluster snapshot feature.
+    rpc upload_snapshot_files(UploadSnapshotFilesRequestPB) returns (UploadSnapshotFilesResponsePB);
+    rpc build_vector_index(BuildVectorIndexRequest) returns (BuildVectorIndexResponse);
 }
-

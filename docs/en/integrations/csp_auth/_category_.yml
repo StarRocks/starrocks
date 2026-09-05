@@ -1,0 +1,8 @@
+position: 10
+label: 'Cloud Authentication'
+description: 'Use AWS, Azure, or GCP authentication'
+collapsible: true
+collapsed: true
+link:
+  id: csp_auth
+  type: doc

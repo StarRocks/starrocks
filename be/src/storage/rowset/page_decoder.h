@@ -34,15 +34,16 @@
 
 #pragma once
 
+#include "cache/mem_cache/page_handle_fwd.h"
+#include "column/nullable_column.h"
 #include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
-#include "storage/range.h"
-#include "storage/rowset/page_pointer.h"
-#include "types/timestamp_value.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
+class ColumnPredicate;
 class Column;
-}
+} // namespace starrocks
 
 namespace starrocks {
 
@@ -55,7 +56,7 @@ public:
 
     // Call this to do some preparation for decoder.
     // eg: parse data page header
-    [[nodiscard]] virtual Status init() = 0;
+    virtual Status init() = 0;
 
     // Seek the decoder to the given positional index of the page.
     // For example, seek_to_position_in_page(0) seeks to the first
@@ -63,7 +64,7 @@ public:
     //
     // It is an error to call this with a value larger than Count().
     // Doing so has undefined results.
-    [[nodiscard]] virtual Status seek_to_position_in_page(uint32_t pos) = 0;
+    virtual Status seek_to_position_in_page(uint32_t pos) = 0;
 
     // Seek the decoder to the given value in the page, or the
     // lowest value which is greater than the given value.
@@ -79,16 +80,45 @@ public:
     //
     // This will only return valid results when the data page
     // consists of values in sorted order.
-    [[nodiscard]] virtual Status seek_at_or_after_value(const void* value, bool* exact_match) {
+    virtual Status seek_at_or_after_value(const void* value, bool* exact_match) {
         return Status::NotSupported("seek_at_or_after_value"); // FIXME
     }
 
-    [[nodiscard]] virtual Status next_batch(size_t* n, Column* column) {
+    virtual Status next_batch(size_t* n, Column* column) {
         return Status::NotSupported("vectorized not supported yet");
     }
 
-    [[nodiscard]] virtual Status next_batch(const SparseRange<>& range, Column* column) {
+    virtual Status next_batch(const SparseRange<>& range, Column* column) {
         return Status::NotSupported("PageDecoder Not Support");
+    }
+
+    // given a set of ranges in page, apply compound and predicates on it, and only return filtered data
+    // since null data is separate from actually data page, we need pass the null data by caller if this is a nullable column
+    // null_data is the null-flag array of the WHOLE page, indexed by the in-page ordinal: null_data[ord] tells whether
+    // the row at ordinal `ord` is null (1 for null, 0 for not null). It is NOT relative to `range.begin()`, and it is
+    // NOT packed by the rows of `range`: `range` may be sparse (several non-adjacent sub-ranges of the same page), so
+    // the callee must look up null_data[r.begin() + i] for each sub-range `r` instead of walking null_data linearly.
+    // nullptr means the page has no null at all.
+    // callee is responsible to handle null column and append null data into dst column if selected
+    virtual Status next_batch_with_filter(Column* column, const SparseRange<>& range,
+                                          const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                          const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) {
+        return Status::NotSupported("PageDecoder Not Support next_batch_with_filter");
+    }
+
+    /**
+     * rowids and count represent a rowId vector
+     * read_by_rowids read selected rows in rowId vector
+     *  and return row numbers it read by 'count'
+     */
+    virtual Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                                  Column* column) {
+        return Status::NotSupported("PageDecoder Not Support");
+    }
+
+    virtual Status read_dict_codes_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                             size_t* count, Column* dst) {
+        return Status::NotSupported("PageDecoder Doesn't Support read_dict_codes_by_rowids");
     }
 
     // Return the number of elements in this page.
@@ -104,19 +134,27 @@ public:
     // the codec algorithm then switched to plain encoding when the dictionary page is full.
     virtual EncodingTypePB encoding_type() const = 0;
 
-    [[nodiscard]] virtual Status next_dict_codes(size_t* n, Column* dst) {
+    virtual Status next_dict_codes(size_t* n, Column* dst) {
         return Status::NotSupported("next_dict_codes() not supported");
     }
 
-    [[nodiscard]] virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) {
+    virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) {
         return Status::NotSupported("next_dict_codes() not supported");
     }
 
     virtual const PageDecoder* dict_page_decoder() const { return nullptr; }
 
-private:
     PageDecoder(const PageDecoder&) = delete;
     const PageDecoder& operator=(const PageDecoder&) = delete;
+
+    void set_page_handle(const std::shared_ptr<PageHandle>& page_handle) { _page_handle = page_handle; }
+
+    virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
+
+    virtual bool supports_read_by_rowids() const { return false; }
+
+protected:
+    std::shared_ptr<PageHandle> _page_handle;
 };
 
 } // namespace starrocks

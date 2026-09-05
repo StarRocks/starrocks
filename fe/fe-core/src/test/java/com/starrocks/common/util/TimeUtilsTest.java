@@ -17,55 +17,44 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import mockit.Expectations;
-import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.type.DateType;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+
+import static com.starrocks.common.util.TimeUtils.DATETIME_WITH_TIME_ZONE_PATTERN;
 
 public class TimeUtilsTest {
 
-    @Mocked
-    TimeUtils timeUtils;
-
-    @Before
-    public void setUp() {
-        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
-        new Expectations(timeUtils) {
-            {
-                TimeUtils.getTimeZone();
-                minTimes = 0;
-                result = tz;
-            }
-        };
-    }
-
     @Test
     public void testNormal() {
-        Assert.assertNotNull(TimeUtils.getCurrentFormatTime());
-        Assert.assertTrue(TimeUtils.getEstimatedTime(0L) > 0);
+        Assertions.assertNotNull(TimeUtils.getCurrentFormatTime());
+        Assertions.assertTrue(TimeUtils.getEstimatedTime(0L) > 0);
 
-        Assert.assertEquals(-62167420800000L, TimeUtils.MIN_DATE.getTime());
-        Assert.assertEquals(253402185600000L, TimeUtils.MAX_DATE.getTime());
-        Assert.assertEquals(-62167420800000L, TimeUtils.MIN_DATETIME.getTime());
-        Assert.assertEquals(253402271999000L, TimeUtils.MAX_DATETIME.getTime());
+        Assertions.assertEquals(LocalDate.of(0, 1, 1), TimeUtils.MIN_DATE);
+        Assertions.assertEquals(LocalDate.of(9999, 12, 31), TimeUtils.MAX_DATE);
+        Assertions.assertEquals(LocalDateTime.of(0, 1, 1, 0, 0, 0), TimeUtils.MIN_DATETIME);
+        Assertions.assertEquals(LocalDateTime.of(9999, 12, 31, 23, 59, 59), TimeUtils.MAX_DATETIME);
     }
 
     @Test
     public void testDateParse() {
-        // date
         List<String> validDateList = new LinkedList<>();
         validDateList.add("2013-12-02");
         validDateList.add("2013-12-02");
@@ -77,11 +66,11 @@ public class TimeUtilsTest {
         validDateList.add("0000-01-01");
         for (String validDate : validDateList) {
             try {
-                TimeUtils.parseDate(validDate, PrimitiveType.DATE);
+                TimeUtils.parseDate(validDate);
             } catch (AnalysisException e) {
                 e.printStackTrace();
                 System.out.println(validDate);
-                Assert.fail();
+                Assertions.fail();
             }
         }
 
@@ -95,14 +84,16 @@ public class TimeUtilsTest {
         invalidDateList.add("2013-2-28 2:3:4");
         for (String invalidDate : invalidDateList) {
             try {
-                TimeUtils.parseDate(invalidDate, PrimitiveType.DATE);
-                Assert.fail();
+                TimeUtils.parseDate(invalidDate);
+                Assertions.fail();
             } catch (AnalysisException e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid"));
+                Assertions.assertTrue(e.getMessage().contains("Invalid"));
             }
         }
+    }
 
-        // datetime
+    @Test
+    public void testDateTimeParse() {
         List<String> validDateTimeList = new LinkedList<>();
         validDateTimeList.add("2013-12-02 13:59:59");
         validDateTimeList.add("2013-12-2 13:59:59");
@@ -116,11 +107,11 @@ public class TimeUtilsTest {
         validDateTimeList.add("0000-01-01 00:00:00");
         for (String validDateTime : validDateTimeList) {
             try {
-                TimeUtils.parseDate(validDateTime, PrimitiveType.DATETIME);
+                TimeUtils.parseDateTime(validDateTime);
             } catch (AnalysisException e) {
                 e.printStackTrace();
                 System.out.println(validDateTime);
-                Assert.fail();
+                Assertions.fail();
             }
         }
 
@@ -135,44 +126,52 @@ public class TimeUtilsTest {
         invalidDateTimeList.add("2013-13-01 12:12:12");
         for (String invalidDateTime : invalidDateTimeList) {
             try {
-                TimeUtils.parseDate(invalidDateTime, PrimitiveType.DATETIME);
-                Assert.fail();
+                TimeUtils.parseDateTime(invalidDateTime);
+                Assertions.fail();
             } catch (AnalysisException e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid"));
+                Assertions.assertTrue(e.getMessage().contains("Invalid"));
             }
         }
     }
 
     @Test
     public void testDateTrans() throws AnalysisException {
-        Assert.assertEquals(FeConstants.NULL_STRING, TimeUtils.longToTimeString(-2));
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+            }
+        };
+
+        Assertions.assertEquals(FeConstants.NULL_STRING, TimeUtils.longToTimeString(-2));
 
         long timestamp = 1426125600000L;
-        Assert.assertEquals("2015-03-12 10:00:00", TimeUtils.longToTimeString(timestamp));
+        Assertions.assertEquals("2015-03-12 10:00:00", TimeUtils.longToTimeString(timestamp));
 
-        DateLiteral date = new DateLiteral("2015-03-01", ScalarType.DATE);
-        Assert.assertEquals(20150301000000L, date.getLongValue());
+        DateLiteral date = new DateLiteral(DateUtils.parseStrictDateTime("2015-03-01"), DateType.DATE);
+        Assertions.assertEquals(20150301000000L, date.getLongValue());
 
-        DateLiteral datetime = new DateLiteral("2015-03-01 12:00:00", ScalarType.DATETIME);
-        Assert.assertEquals(20150301120000L, datetime.getLongValue());
+        DateLiteral datetime = new DateLiteral(DateUtils.parseStrictDateTime("2015-03-01 12:00:00"),
+                DateType.DATETIME);
+        Assertions.assertEquals(20150301120000L, datetime.getLongValue());
     }
 
     @Test
     public void testTimezone() throws AnalysisException {
         try {
-            Assert.assertEquals("CST", TimeUtils.checkTimeZoneValidAndStandardize("CST"));
-            Assert.assertEquals("+08:00", TimeUtils.checkTimeZoneValidAndStandardize("+08:00"));
-            Assert.assertEquals("+08:00", TimeUtils.checkTimeZoneValidAndStandardize("+8:00"));
-            Assert.assertEquals("-08:00", TimeUtils.checkTimeZoneValidAndStandardize("-8:00"));
-            Assert.assertEquals("+08:00", TimeUtils.checkTimeZoneValidAndStandardize("8:00"));
+            Assertions.assertEquals("CST", TimeUtils.checkTimeZoneValidAndStandardize("CST"));
+            Assertions.assertEquals("+08:00", TimeUtils.checkTimeZoneValidAndStandardize("+08:00"));
+            Assertions.assertEquals("+08:00", TimeUtils.checkTimeZoneValidAndStandardize("+8:00"));
+            Assertions.assertEquals("-08:00", TimeUtils.checkTimeZoneValidAndStandardize("-8:00"));
+            Assertions.assertEquals("+08:00", TimeUtils.checkTimeZoneValidAndStandardize("8:00"));
         } catch (DdlException ex) {
-            Assert.fail();
+            Assertions.fail();
         }
         try {
             TimeUtils.checkTimeZoneValidAndStandardize("FOO");
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException ex) {
-            Assert.assertTrue(ex.getMessage().contains("Unknown or incorrect time zone: 'FOO'"));
+            Assertions.assertTrue(ex.getMessage().contains("Unknown or incorrect time zone: 'FOO'"));
         }
     }
 
@@ -185,13 +184,13 @@ public class TimeUtilsTest {
         long milRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.MILLISECONDS);
         long micRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.MICROSECONDS);
         long nanoRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.NANOSECONDS);
-        Assert.assertEquals(dayRes, 2 * 24 * 60 * 60);
-        Assert.assertEquals(hourRes, 2 * 60 * 60);
-        Assert.assertEquals(minuteRes, 2 * 60);
-        Assert.assertEquals(secondRes, 2);
-        Assert.assertEquals(milRes, 2 / 1000);
-        Assert.assertEquals(micRes, 2 / 1000 / 1000);
-        Assert.assertEquals(nanoRes, 2 / 1000 / 1000 / 1000);
+        Assertions.assertEquals(dayRes, 2 * 24 * 60 * 60);
+        Assertions.assertEquals(hourRes, 2 * 60 * 60);
+        Assertions.assertEquals(minuteRes, 2 * 60);
+        Assertions.assertEquals(secondRes, 2);
+        Assertions.assertEquals(milRes, 2 / 1000);
+        Assertions.assertEquals(micRes, 2 / 1000 / 1000);
+        Assertions.assertEquals(nanoRes, 2 / 1000 / 1000 / 1000);
     }
 
     @Test
@@ -203,51 +202,175 @@ public class TimeUtilsTest {
         try {
             TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond, 2, TimeUnit.NANOSECONDS);
         } catch (DdlException e) {
-            Assert.assertEquals("Can not get next valid time second," +
+            Assertions.assertEquals("Can not get next valid time second," +
                     "startTimeSecond:1650545111 period:2 timeUnit:NANOSECONDS", e.getMessage());
         }
         try {
             TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond, 2, TimeUnit.MILLISECONDS);
         } catch (DdlException e) {
-            Assert.assertEquals("Can not get next valid time second," +
+            Assertions.assertEquals("Can not get next valid time second," +
                     "startTimeSecond:1650545111 period:2 timeUnit:MILLISECONDS", e.getMessage());
         }
         try {
             // 2022-04-21 23:32:12
-            Assert.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     1000, TimeUnit.MILLISECONDS));
             // 2022-04-21 23:32:12
-            Assert.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     1, TimeUnit.SECONDS));
             // 2022-04-21 23:32:16
-            Assert.assertEquals(1650555136L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650555136L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     5, TimeUnit.SECONDS));
             // 2022-04-21 23:32:15
-            Assert.assertEquals(1650555135L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650555135L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     7, TimeUnit.SECONDS));
             // 2022-04-21 23:32:12
-            Assert.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     11, TimeUnit.SECONDS));
             // 2022-04-21 23:33:31
-            Assert.assertEquals(1650555211L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650555211L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     101, TimeUnit.SECONDS));
             // 2022-04-21 23:48:20
-            Assert.assertEquals(1650556100L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650556100L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     999, TimeUnit.SECONDS));
             // 2022-04-21 23:45:11
-            Assert.assertEquals(1650555911L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650555911L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     3, TimeUnit.HOURS));
             // 2022-04-22 03:45:11
-            Assert.assertEquals(1650570311L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1650570311L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     7, TimeUnit.HOURS));
             // 2022-04-30 20:45:11
-            Assert.assertEquals(1651322711L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
+            Assertions.assertEquals(1651322711L, TimeUtils.getNextValidTimeSecond(startTimeSecond, targetTimeSecond,
                     9, TimeUnit.DAYS));
             // 2022-04-21 23:32:18
-            Assert.assertEquals(1650555138L, TimeUtils.getNextValidTimeSecond(1650555138L, targetTimeSecond,
+            Assertions.assertEquals(1650555138L, TimeUtils.getNextValidTimeSecond(1650555138L, targetTimeSecond,
                     9, TimeUnit.DAYS));
         } catch (DdlException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testDateTimeWithTimeZonePattern() {
+        // Case1: date time string is '2024-09-10 Asia/Shanghai'
+        String value1 = "2024-09-10 Asia/Shanghai";
+        Matcher matcher1 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value1);
+        Assertions.assertTrue(matcher1.matches());
+        Assertions.assertEquals("2024", matcher1.group("year"));
+        Assertions.assertEquals("09", matcher1.group("month"));
+        Assertions.assertEquals("10", matcher1.group("day"));
+        Assertions.assertEquals("Asia/Shanghai", matcher1.group("timezone"));
+        Assertions.assertNull(matcher1.group("hour"));
+        Assertions.assertNull(matcher1.group("minute"));
+        Assertions.assertNull(matcher1.group("second"));
+        Assertions.assertNull(matcher1.group("fraction"));
+
+        // Case2: date time string is '2024-09-10 01:01:01.123 Asia/Shanghai'
+        String value2 = "2024-09-10 01:01:01.123 Asia/Shanghai";
+        Matcher matcher2 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value2);
+        Assertions.assertTrue(matcher2.matches());
+        Assertions.assertEquals("2024", matcher2.group("year"));
+        Assertions.assertEquals("09", matcher2.group("month"));
+        Assertions.assertEquals("10", matcher2.group("day"));
+        Assertions.assertEquals("01", matcher2.group("hour"));
+        Assertions.assertEquals("01", matcher2.group("minute"));
+        Assertions.assertEquals("01", matcher2.group("second"));
+        Assertions.assertEquals("123", matcher2.group("fraction"));
+        Assertions.assertEquals("Asia/Shanghai", matcher2.group("timezone"));
+
+        // Case3: date time string is ' 2024-09-10'. It will not match
+        String value3 = " 2024-09-10";
+        Matcher matcher3 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value3);
+        Assertions.assertFalse(matcher3.matches());
+    }
+
+    // Regressions introduced by the java.time refactor in PR #66360.
+    // These tests fail on the unfixed code and pass after the fix.
+
+    @Test
+    public void testLongToTimeStringHonorsSessionTimeZone() {
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneOffset.UTC);
+            }
+        };
+        // 1426125600000L = 2015-03-12 10:00:00 +08:00 = 2015-03-12 02:00:00 UTC
+        long timestamp = 1426125600000L;
+        Assertions.assertEquals("2015-03-12 02:00:00", TimeUtils.longToTimeString(timestamp));
+    }
+
+    @Test
+    public void testTimeStringToLongHonorsSessionTimeZone() {
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneOffset.UTC);
+            }
+        };
+        // "2015-03-12 02:00:00" interpreted as UTC -> 1426125600000L
+        Assertions.assertEquals(1426125600000L, TimeUtils.timeStringToLong("2015-03-12 02:00:00"));
+    }
+
+    @Test
+    public void testTimeStringToLongInStorageZoneParsesAsShanghai() {
+        // Parses a legacy wall-clock string as fixed +08:00, independent of any
+        // mocked session timezone. This is the only remaining use case after
+        // BackendStatus stopped round-tripping through a wall-clock string.
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneOffset.UTC);
+            }
+        };
+        // "2015-03-12 10:00:00" interpreted as +08:00 -> 1426125600000L
+        Assertions.assertEquals(1426125600000L,
+                TimeUtils.timeStringToLongInStorageZone("2015-03-12 10:00:00"));
+    }
+
+    @Test
+    public void testGetCurrentFormatTimeUsesFixedShanghaiTimeZone() {
+        // Pin Instant.now() so the assertion is deterministic; do not rely on wall-clock
+        // tolerance windows. Setting the JVM default to UTC simultaneously guards
+        // against a regression to LocalDateTime.now() (which would silently follow the
+        // JVM default zone instead of the fixed storage zone).
+        Instant fixed = Instant.parse("2024-06-15T07:30:45Z");
+        new MockUp<Instant>() {
+            @Mock
+            public Instant now() {
+                return fixed;
+            }
+        };
+        TimeZone original = TimeZone.getDefault();
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone(ZoneOffset.UTC));
+            // 2024-06-15 07:30:45 UTC = 2024-06-15 15:30:45 +08:00.
+            Assertions.assertEquals("2024-06-15 15:30:45", TimeUtils.getCurrentFormatTime());
+        } finally {
+            TimeZone.setDefault(original);
+        }
+    }
+
+    @Test
+    public void testParseSupportsYearZero() {
+        Assertions.assertEquals(LocalDate.of(0, 1, 1),
+                Assertions.assertDoesNotThrow(() -> TimeUtils.parseDate("0000-01-01")));
+        Assertions.assertEquals(LocalDateTime.of(0, 1, 1, 0, 0, 0),
+                Assertions.assertDoesNotThrow(() -> TimeUtils.parseDateTime("0000-01-01 00:00:00")));
+        Assertions.assertNotEquals(-1L, TimeUtils.timeStringToLong("0000-01-01 00:00:00"));
+    }
+
+    @Test
+    public void testMinMaxConstantsAreTimezoneIndependent() {
+        TimeZone original = TimeZone.getDefault();
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone(ZoneOffset.UTC));
+            Assertions.assertEquals(LocalDate.of(0, 1, 1), TimeUtils.MIN_DATE);
+            Assertions.assertEquals(LocalDate.of(9999, 12, 31), TimeUtils.MAX_DATE);
+            Assertions.assertEquals(LocalDateTime.of(0, 1, 1, 0, 0, 0), TimeUtils.MIN_DATETIME);
+            Assertions.assertEquals(LocalDateTime.of(9999, 12, 31, 23, 59, 59), TimeUtils.MAX_DATETIME);
+        } finally {
+            TimeZone.setDefault(original);
         }
     }
 }

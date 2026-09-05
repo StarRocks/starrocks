@@ -1,4 +1,7 @@
--- name: testGrant
+-- name: testGrant @sequential
+ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="false");
+-- result:
+-- !result
 CREATE USER rose IDENTIFIED BY '123456';
 -- result:
 -- !result
@@ -18,3 +21,8 @@ drop storage volume storage_volume_grant;
 drop user rose;
 -- result:
 -- !result
+CLEANUP {
+ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
+DROP STORAGE VOLUME IF EXISTS storage_volume_grant;
+DROP USER IF EXISTS rose;
+} END CLEANUP

@@ -16,6 +16,7 @@
 
 #include <gen_cpp/Descriptors_types.h>
 
+#include "common/statusor.h"
 #include "exec/lake_meta_scanner.h"
 #include "exec/meta_scan_node.h"
 
@@ -32,8 +33,7 @@ public:
         *out << "vectorized:LakeMetaScanNode";
     }
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     friend class LakeMetaScanner;

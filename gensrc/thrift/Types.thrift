@@ -35,12 +35,14 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "CloudConfiguration.thrift"
 
 typedef i64 TTimestamp
 typedef i32 TPlanNodeId
 typedef i32 TTupleId
 typedef i32 TSlotId
 typedef i64 TTableId
+typedef i64 TDatabaseId
 typedef i64 TTabletId
 typedef i64 TVersion
 typedef i64 TVersionHash
@@ -100,7 +102,10 @@ enum TPrimitiveType {
   DECIMAL128,
   JSON,
   FUNCTION,
-  VARBINARY
+  VARBINARY,
+  DECIMAL256,
+  INT256,
+  VARIANT
 }
 
 enum TTypeNodeType {
@@ -119,6 +124,13 @@ struct TScalarType {
     // Only set for DECIMAL
     3: optional i32 precision
     4: optional i32 scale
+
+    // Only meaningful for DATETIME read from lake formats that distinguish
+    // timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    // as metadata and does NOT affect type identity. Default (false) means the value is a
+    // UTC instant that must be shifted into the session timezone (Hive/Iceberg/Paimon LTZ);
+    // Paimon TIMESTAMP sets it to true so the reader keeps the wall clock unshifted.
+    5: optional bool datetime_is_ntz
 }
 
 // Represents a field in a STRUCT type.
@@ -126,6 +138,11 @@ struct TScalarType {
 struct TStructField {
     1: optional string name
     2: optional string comment
+    3: optional i32 id
+    // physical_name is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    4: optional string physical_name
 }
 
 struct TTypeNode {
@@ -162,7 +179,8 @@ enum TAggregationType {
     NONE,
     BITMAP_UNION,
     REPLACE_IF_NOT_NULL,
-    PERCENTILE_UNION
+    PERCENTILE_UNION,
+    AGG_STATE_UNION
 }
 
 enum TPushType {
@@ -204,6 +222,13 @@ enum TTaskType {
     // this use for calculate enum count
     DROP_AUTO_INCREMENT_MAP,
     COMPACTION,
+    REMOTE_SNAPSHOT,
+    REPLICATE_SNAPSHOT,
+    UPDATE_SCHEMA,
+    COMPACTION_CONTROL,
+    EXTERNAL_CLUSTER_SNAPSHOT,
+    // Placeholder for external cluster snapshot feature.
+    TABLET_RESTORE,
     NUM_TASK_TYPE
 }
 
@@ -274,7 +299,17 @@ enum TFunctionBinaryType {
   IR,
 
   // StarRocks customized UDF in jar.
-  SRJAR
+  SRJAR,
+  
+  // 
+  PYTHON,
+
+  // AI functions executed by the asynchronous AI runtime.
+  AI
+}
+
+enum TAIModelSource {
+  SYSTEM
 }
 
 // Represents a fully qualified function name.
@@ -316,6 +351,16 @@ struct TAggregateFunction {
 struct TTableFunction {
   1: required list<TTypeDesc> ret_types
   2: optional string symbol
+  // Table function left join
+  3: optional bool is_left_join
+}
+
+struct TAggStateDesc {
+    1: optional string agg_func_name
+    2: optional list<TTypeDesc> arg_types
+    3: optional TTypeDesc ret_type
+    4: optional bool result_nullable
+    5: optional i32 func_version
 }
 
 // Represents a function in the Catalog.
@@ -350,6 +395,7 @@ struct TFunction {
 
   11: optional i64 id
   12: optional string checksum
+  13: optional TAggStateDesc agg_state_desc
 
   // Builtin Function id, used to mark the function in the vectorization engine,
   // and it's different with `id` because `id` is use for serialized and cache
@@ -360,6 +406,14 @@ struct TFunction {
 
   // Ignore nulls
   33: optional bool ignore_nulls
+  34: optional bool isolated
+  35: optional string input_type
+  36: optional string content
+  37: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+  // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects
+  // to this external worker instead of spawning a local one (see CREATE FUNCTION "service_url").
+  38: optional string service_url
+  39: optional TAIModelSource ai_model_source
 }
 
 enum TLoadJobState {
@@ -377,23 +431,44 @@ enum TEtlState {
     UNKNOWN
 }
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TTableType {
-    MYSQL_TABLE,
-    OLAP_TABLE,
-    SCHEMA_TABLE,
-    KUDU_TABLE, // Deprecated
-    BROKER_TABLE,
-    ES_TABLE,
-    HDFS_TABLE,
-    ICEBERG_TABLE,
-    HUDI_TABLE,
-    JDBC_TABLE,
-    PAIMON_TABLE,
+    MYSQL_TABLE = 0,
+    OLAP_TABLE = 1,
+    SCHEMA_TABLE = 2,
+    KUDU_TABLE = 3, // Deprecated
+    BROKER_TABLE = 4,
+    ES_TABLE = 5,
+    HDFS_TABLE = 6,
+    ICEBERG_TABLE = 7,
+    HUDI_TABLE = 8,
+    JDBC_TABLE = 9,
+    PAIMON_TABLE = 10,
     VIEW = 20,
-    MATERIALIZED_VIEW,
-    FILE_TABLE,
-    DELTALAKE_TABLE,
-    TABLE_FUNCTION_TABLE
+    MATERIALIZED_VIEW = 21,
+    FILE_TABLE = 22,
+    DELTALAKE_TABLE = 23,
+    TABLE_FUNCTION_TABLE = 24,
+    ODPS_TABLE = 25,
+    LOGICAL_ICEBERG_METADATA_TABLE = 26,
+    ICEBERG_REFS_TABLE = 27,
+    ICEBERG_HISTORY_TABLE = 28,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE = 29,
+    ICEBERG_SNAPSHOTS_TABLE = 30,
+    ICEBERG_MANIFESTS_TABLE = 31,
+    ICEBERG_FILES_TABLE = 32,
+    ICEBERG_PARTITIONS_TABLE = 33,
+    BENCHMARK_TABLE = 34,
+    ICEBERG_PROPERTIES_TABLE = 35,
+    LANCE_TABLE = 36,
+    FLUSS_TABLE = 37
 }
 
 enum TKeysType {
@@ -401,6 +476,12 @@ enum TKeysType {
     DUP_KEYS,
     UNIQUE_KEYS,
     AGG_KEYS
+}
+
+enum TPrimaryKeyEncodingType {
+    PK_ENCODING_TYPE_NONE = 0,
+    PK_ENCODING_TYPE_V1 = 1,
+    PK_ENCODING_TYPE_V2 = 2
 }
 
 enum TPriority {
@@ -494,6 +575,7 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
     BROTLI = 12;
+    AUTO = 13;
 }
 
 enum TWriteQuorumType {
@@ -536,6 +618,20 @@ struct TIcebergColumnStats {
     6: optional map<i32, binary> upper_bounds;
 }
 
+enum TIcebergFileContent {
+    DATA,
+    POSITION_DELETES,
+    EQUALITY_DELETES,
+}
+
+// Extension point for TIcebergDataFile. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TIcebergDataFile
+// fields belong on TIcebergDataFile itself, whose remaining numbers are free.
+struct TIcebergDataFileExt {
+}
+
 struct TIcebergDataFile {
     1: optional string path
     2: optional string format
@@ -544,6 +640,10 @@ struct TIcebergDataFile {
     5: optional string partition_path;
     6: optional list<i64> split_offsets;
     7: optional TIcebergColumnStats column_stats;
+    8: optional string partition_null_fingerprint;
+    9: optional TIcebergFileContent file_content;
+    10: optional string referenced_data_file;
+    11: optional TIcebergDataFileExt ext;
 }
 
 struct THiveFileInfo {
@@ -553,6 +653,14 @@ struct THiveFileInfo {
     5: optional i64 file_size_in_bytes
 }
 
+// Extension point for TSinkCommitInfo. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TSinkCommitInfo
+// fields belong on TSinkCommitInfo itself, whose remaining numbers are free.
+struct TSinkCommitInfoExt {
+}
+
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     2: optional THiveFileInfo hive_file_info
@@ -560,4 +668,63 @@ struct TSinkCommitInfo {
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
+    102: optional bool is_rewrite;
+    103: optional TSinkCommitInfoExt ext;
+}
+
+struct TSnapshotInfo {
+    1: optional TBackend backend
+    2: optional string snapshot_path
+    3: optional bool incremental_snapshot
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TClusterSnapshotPartitionSpec {
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 partition_id
+    4: optional i64 physical_partition_id
+}
+
+enum TTxnType {
+    TXN_NORMAL = 0,
+    TXN_REPLICATION = 1
+}
+
+enum TNodeType {
+    Backend = 0,
+    Compute = 1
+}
+
+struct TParquetOptions {
+    // parquet row group max size in bytes
+    1: optional i64 parquet_max_group_bytes
+    2: optional TCompressionType compression_type
+    3: optional bool use_dict
+    // for files table function
+    4: optional string version
+}
+
+enum TVariantType {
+    NORMAL_VALUE = 0,
+    NULL_VALUE = 1,
+    MINIMUM = 2,
+    MAXIMUM = 3,
+}
+
+struct TVariant {
+    1: optional TTypeDesc type
+    2: optional string value
+    3: optional TVariantType variant_type
+}
+
+struct TTuple {
+    1: optional list<TVariant> values
+}
+
+struct TTabletRange {
+    1: optional TTuple lower_bound
+    2: optional TTuple upper_bound
+    3: optional bool lower_bound_included
+    4: optional bool upper_bound_included
 }

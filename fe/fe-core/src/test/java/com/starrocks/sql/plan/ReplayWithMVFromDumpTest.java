@@ -14,173 +14,263 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.StarRocksTestExtension;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.util.Set;
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
+@ExtendWith(StarRocksTestExtension.class)
+@TestMethodOrder(MethodName.class)
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
-        connectContext.getSessionVariable().setEnableQueryDebugTrace(true);
-
-        new MockUp<MaterializedView>() {
-            @Mock
-            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
-                                                           boolean isQueryRewrite) {
-                return true;
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        FeConstants.isReplayFromQueryDump = true;
+        MVTestBase.disableMVRewriteConsiderDataLayout();
     }
 
-    @Before
-    public void before() {
-        super.before();
-    }
+    @Override
+    public String getPlanFragment(String fileName, TExplainLevel explainLevel) throws Exception {
+        String fileContent = getDumpInfoFromFile(fileName);
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setMaterializedViewRewriteMode("force");
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        sessionVariable.setEnableViewBasedMvRewrite(true);
+        sessionVariable.setOptimizerExecuteTimeout(120 * 1000);
+        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(120 * 1000);
+        sessionVariable.setEnableMaterializedViewTextMatchRewrite(false);
+        sessionVariable.setTraceLogLevel(10);
 
-    @After
-    public void after() {
+        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        sessionVariable.setQueryDebugOptions(queryDebugOptions.toString());
+        Pair<QueryDumpInfo, String> result = getPlanFragment(fileContent, sessionVariable, explainLevel);
+        return result.second;
     }
 
     @Test
     public void testMV_JoinAgg1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
+        String plan = getPlanFragment("query_dump/materialized-view/join_agg1", TExplainLevel.COSTS);
+        assertContains(plan, "table: mv1, rollup: mv1");
     }
 
     @Test
     public void testMock_MV_JoinAgg1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/mock_join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("table: tbl_mock_001, rollup: tbl_mock_001"));
-        FeConstants.isReplayFromQueryDump = false;
+        String plan = getPlanFragment("query_dump/materialized-view/mock_join_agg1", TExplainLevel.COSTS);
+        // Rewrite OK when enhance rule based mv rewrite.
+        assertContains(plan, "table: test_mv0, rollup: test_mv0");
     }
 
     @Test
     public void testMV_JoinAgg2() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
-        connectContext.getSessionVariable()
-                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        String pr = Tracers.printLogs();
-        System.out.println(pr);
-        Tracers.close();
-        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
+        String plan = getPlanFragment("query_dump/materialized-view/join_agg2", TExplainLevel.COSTS);
+        assertContains(plan, "table: mv1, rollup: mv1");
     }
 
     @Test
     public void testMV_JoinAgg3() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
         // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg3"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
+        String plan =
+                getPlanFragment("query_dump/materialized-view/join_agg3", TExplainLevel.NORMAL);
+        assertContains(plan, "line_order_flat_mv");
     }
 
     @Test
     public void testMV_JoinAgg4() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode(
-                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE.toString());
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
+        String plan =
+                getPlanFragment("query_dump/materialized-view/join_agg4", TExplainLevel.NORMAL);
+        assertContains(plan, "line_order_flat_mv");
     }
 
     @Test
     public void testMV_MVOnMV1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv1"),
-                        null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("mv2"));
-        FeConstants.isReplayFromQueryDump = false;
+        String plan = getPlanFragment("query_dump/materialized-view/mv_on_mv1", TExplainLevel.NORMAL);
+        assertContains(plan, "mv2");
     }
 
     @Test
     public void testMock_MV_MVOnMV1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_mv_on_mv1"),
-                        null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("tbl_mock_017"));
-        FeConstants.isReplayFromQueryDump = false;
+        String plan = getPlanFragment("query_dump/materialized-view/mock_mv_on_mv1", TExplainLevel.NORMAL);
+        assertContains(plan, "tbl_mock_017");
     }
 
     @Test
     public void testMVOnMV2() throws Exception {
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("test_mv2"));
+        String plan = getPlanFragment("query_dump/materialized-view/mv_on_mv2", TExplainLevel.NORMAL);
+        assertContains(plan, "test_mv2");
     }
 
     @Test
     public void testMV_AggWithHaving1() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
+        String plan =
+                getPlanFragment("query_dump/materialized-view/agg_with_having1", TExplainLevel.NORMAL);
+        assertContains(plan, "TEST_MV_2");
     }
 
     @Test
     public void testMV_AggWithHaving2() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having2"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
+        String plan =
+                getPlanFragment("query_dump/materialized-view/agg_with_having2", TExplainLevel.NORMAL);
+        assertContains(plan, "TEST_MV_2");
     }
 
     @Test
     public void testMV_AggWithHaving3() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having3"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("TEST_MV_2"));
+        String plan = getPlanFragment("query_dump/materialized-view/agg_with_having3", TExplainLevel.NORMAL);
+        assertContains(plan, "TEST_MV_2");
     }
 
     @Test
     public void testMock_MV_AggWithHaving3() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("tbl_mock_021"));
+        String plan = getPlanFragment("query_dump/materialized-view/mock_agg_with_having3", TExplainLevel.NORMAL);
+        // Rewrite OK since rule based mv is enhanced
+        assertContains(plan, "test_mv2");
+    }
+
+    @Test
+    public void testMock_MV_CostBug() throws Exception {
+        String plan = getPlanFragment("query_dump/materialized-view/mv_with_cost_bug1",
+                TExplainLevel.NORMAL);
+        assertContains(plan, "mv_35");
+    }
+
+    @Test
+    public void testMVWithDictRewrite() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            String plan = getPlanFragment("query_dump/tpch_query11_mv_rewrite", TExplainLevel.COSTS);
+            assertContains(plan, "DictDecode([79: n_name, INT, false], [<place-holder> = 'GERMANY'])");
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
+
+    /**
+     * Test synchronous materialized view rewrite with global dict optimization.
+     */
+    @Test
+    public void testSyncMVRewriteWithDict() throws Exception {
+        String plan = getPlanFragment("query_dump/materialized-view/mv_rewrite_with_dict_opt1",
+                TExplainLevel.NORMAL);
+        // TODO: support synchronous materialized view in query dump
+        // String sql = "create materialized view mv_tbl_mock_001 " +
+        //        "as select nmock_002, nmock_003, nmock_004, " +
+        //        "nmock_005, nmock_006, nmock_007, nmock_008, nmock_009, nmock_010, " +
+        //        "nmock_011, nmock_012, nmock_013, nmock_014, nmock_015, nmock_016, " +
+        //        "nmock_017, nmock_018, nmock_019, nmock_020, nmock_021, nmock_022, nmock_023, " +
+        //        "nmock_024, nmock_025, nmock_026, nmock_027, nmock_028, nmock_029, nmock_030, nmock_031, " +
+        //        "nmock_032, nmock_033, nmock_034, nmock_035, nmock_036, nmock_037, nmock_038, nmock_039, " +
+        //        "nmock_040, nmock_041 from tbl_mock_001 order by nmock_002;";
+        assertNotContains(plan, "mv_tbl_mock_001");
+    }
+
+    @Test
+    public void testViewDeltaRewriter() throws Exception {
+        String plan = getPlanFragment("query_dump/view_delta", TExplainLevel.NORMAL);
+        assertContains(plan, "mv_yyf_trade_water3");
+    }
+
+    @Test
+    public void testMV_CountStarRewrite() throws Exception {
+        String plan = getPlanFragment("query_dump/materialized-view/count_star_rewrite",
+                TExplainLevel.NORMAL);
+        assertContains(plan, "tbl_mock_067");
+        // NOTE: OUTPUT EXPRS must refer to coalesce column ref
+        assertContains(plan, " OUTPUT EXPRS:59: count\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 59> : coalesce(80: count, 0)");
+    }
+
+    @Test
+    public void testViewBasedRewrite1() throws Exception {
+        String plan = getPlanFragment("query_dump/materialized-view/view_based_rewrite1", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "tbl_mock_255", "MaterializedView: true");
+    }
+
+    @Test
+    public void testViewBasedRewrite2() throws Exception {
+        String plan = getPlanFragment("query_dump/materialized-view/view_based_rewrite2", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "tbl_mock_239", "MaterializedView: true");
+    }
+
+    @Test
+    public void testViewBasedRewrite3() throws Exception {
+        String plan = getPlanFragment("query_dump/view_based_rewrite1", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
+    }
+
+    @Test
+    public void testChooseBest() throws Exception {
+        String plan = getPlanFragment("query_dump/materialized-view/choose_best_mv1", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "rocketview_v4_mv1");
+    }
+
+    @Test
+    public void testZ_AggPushDownRewriteBugs1() throws Exception {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        String plan = getPlanFragment("query_dump/materialized-view/mv_rewrite_bugs1", TExplainLevel.COSTS);
+        assertContains(plan, "mv_fact_table1");
+        assertContains(plan, "  14:Project\n" +
+                "  |  output columns:\n" +
+                "  |  179 <-> [209: sum, DOUBLE, true] / cast([210: sum, BIGINT, true] as DOUBLE)");
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+    }
+
+    @Test
+    public void testForceRuleBasedRewrite() throws Exception {
+        String plan =
+                getPlanFragment("query_dump/force_rule_based_mv_rewrite", TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks_dates");
+    }
+
+    @Test
+    public void testForceRuleBasedRewriteMonth() throws Exception {
+        String plan =
+                getPlanFragment("query_dump/force_rule_based_mv_rewrite_month", TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks_roll_month");
+    }
+
+    @Test
+    public void testForceRuleBasedRewriteYear() throws Exception {
+        String plan =
+                getPlanFragment("query_dump/force_rule_based_mv_rewrite_year", TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "flat_consumptions_drinks_dates_roll_year");
+    }
+
+
+    @Test
+    public void testCBONestedMvRewriteDrinks() throws Exception {
+        String plan =
+                getPlanFragment("query_dump/force_rule_based_mv_rewrite_drinks", TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "partition_flat_consumptions_partition_drinks");
+    }
+
+    @Test
+    public void testAggPushDownRewriteBugs6() throws Exception {
+        String plan = getPlanFragment("query_dump/materialized-view/mv_rewrite_bugs6", TExplainLevel.COSTS);
+        assertContains(plan, "mv_f_driver_online_detail_h_6");
     }
 }

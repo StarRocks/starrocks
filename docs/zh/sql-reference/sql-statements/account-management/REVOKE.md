@@ -1,17 +1,20 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "Use REVOKE to remove specific privileges or roles from a user or a role."
 ---
 
 # REVOKE
 
 ## 功能
 
-从用户或角色中撤销指定的权限或角色。有关 StarRocks 支持的权限项，参见 [权限项](../../../administration/privilege_item.md)。
+从用户或角色中撤销指定的权限或角色。有关 StarRocks 支持的权限项，参见 [权限项](../../../administration/user_privs/authorization/privilege_item.md)。
 
-> **注意**
->
-> - 普通用户可以将自身拥有的授权中带有 WITH GRANT OPTION 关键字的权限从其他用户或角色处收回。关于 WITH GRANT OPTION，参见 [GRANT](GRANT.md)。
-> - 只有拥有 `user_admin` 角色的用户才可以收回其他用户的权限。
+:::tip
+
+- 普通用户可以将自身拥有的授权中带有 WITH GRANT OPTION 关键字的权限从其他用户或角色处收回。关于 WITH GRANT OPTION，参见 [GRANT](GRANT.md)。
+- 只有拥有 `user_admin` 角色的用户才可以收回其他用户的权限。
+
+:::
 
 ## 语法
 
@@ -23,7 +26,7 @@ displayed_sidebar: "Chinese"
 
 ```SQL
 REVOKE
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE } 
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME } 
     ON SYSTEM
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
@@ -49,7 +52,7 @@ REVOKE
 #### User 相关
 
 ```SQL
-REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>
+REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity_1>
 ```
 
 #### 全局 UDF 相关
@@ -57,7 +60,7 @@ REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>
 ```SQL
 REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name> [, <function_name>,...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
@@ -147,7 +150,7 @@ REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_ide
 ```SQL
 REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name> [, < function_name >,...]
+    ON { FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]
        ｜ ALL FUNCTIONS } IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
@@ -156,20 +159,15 @@ REVOKE
 注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `db.function` 的方式来表示。
 
 ```SQL
-REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+REVOKE <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) FROM {ROLE <role_name> | USER <user_identity>}
 ```
 
 #### Storage volume 相关
 
 ```SQL
-REVOKE  
-    CREATE STORAGE VOLUME 
-    ON SYSTEM
-    FROM { ROLE | USER} {<role_name>|<user_identity>}
-
 REVOKE
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
-    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 

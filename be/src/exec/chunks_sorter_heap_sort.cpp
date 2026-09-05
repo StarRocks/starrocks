@@ -18,16 +18,17 @@
 #include <memory>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exec/sorting/merge.h"
-#include "exprs/runtime_filter.h"
+#include "compute_env/sorting/merge.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type_infra.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -160,7 +161,7 @@ Status ChunksSorterHeapSort::get_next(ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPool* pool) {
+std::vector<RuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPool* pool) {
     if (_sort_heap == nullptr || _sort_heap->size() < _number_of_rows_to_sort()) {
         return nullptr;
     }
@@ -174,20 +175,22 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
     const int cursor_rid = top_cursor.row_id();
     const auto& top_cursor_column = top_cursor.data_segment()->order_by_columns[0];
     bool is_close_interval = _sort_desc.num_columns() != 1;
-
-    if (top_cursor_column->is_null(cursor_rid)) {
-        return nullptr;
-    }
+    bool asc = _sort_desc.descs[0].asc_order();
+    bool null_first = _sort_desc.descs[0].is_null_first();
 
     if (_runtime_filter.empty()) {
-        auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
-                (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
-                top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order(), is_close_interval);
-        _runtime_filter.emplace_back(rf);
+        auto rf = type_dispatch_predicate<RuntimeFilter*>((*_sort_exprs)[0]->root()->type().type, false,
+                                                          detail::SortRuntimeFilterBuilder(), pool, top_cursor_column,
+                                                          cursor_rid, asc, null_first, is_close_interval);
+        if (rf == nullptr) {
+            return nullptr;
+        } else {
+            _runtime_filter.emplace_back(rf);
+        }
     } else {
         type_dispatch_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
                                                 detail::SortRuntimeFilterUpdater(), _runtime_filter.back(),
-                                                top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order());
+                                                top_cursor_column, cursor_rid, asc, null_first, is_close_interval);
     }
     return &_runtime_filter;
 }
@@ -215,15 +218,15 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         }
     } else if (top_cursor_column->is_nullable()) {
         bool top_is_null = top_cursor_column->is_null(cursor_rid);
-        const auto& need_filter_data =
-                ColumnHelper::cast_to_raw<TYPE>(down_cast<NullableColumn*>(top_cursor_column.get())->data_column())
-                        ->get_data()[cursor_rid];
+        const auto& need_filter_data = ColumnHelper::cast_to_raw<TYPE>(
+                                               down_cast<const NullableColumn*>(top_cursor_column.get())->data_column())
+                                               ->immutable_data()[cursor_rid];
 
-        const auto& order_by_null_column = down_cast<NullableColumn*>(input_column.get())->null_column();
-        const auto& order_by_data_column = down_cast<NullableColumn*>(input_column.get())->data_column();
+        const auto& order_by_null_column = down_cast<const NullableColumn*>(input_column.get())->null_column();
+        const auto& order_by_data_column = down_cast<const NullableColumn*>(input_column.get())->data_column();
 
-        const auto* null_data = order_by_null_column->get_data().data();
-        const auto* order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->get_data().data();
+        const auto* null_data = order_by_null_column->immutable_data().data();
+        const auto& order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->immutable_data();
         auto* __restrict__ filter_data = filter->data();
 
         // null compare flag
@@ -248,20 +251,36 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         }
 
     } else {
-        const auto& need_filter_data = ColumnHelper::cast_to_raw<TYPE>(top_cursor_column)->get_data()[cursor_rid];
+        const auto& need_filter_data = ColumnHelper::cast_to_raw<TYPE>(top_cursor_column)->immutable_data()[cursor_rid];
         auto* order_by_column = ColumnHelper::cast_to_raw<TYPE>(input_column);
 
-        const auto* __restrict__ order_by_data = order_by_column->get_data().data();
         auto* __restrict__ filter_data = filter->data();
         int sort_order_flag = _sort_desc.get_column_desc(0).sort_order;
 
-        if (sort_order_flag > 0) {
-            for (int i = 0; i < row_sz; ++i) {
-                filter_data[i] = order_by_data[i] < need_filter_data;
+        if constexpr (lt_is_object_family<TYPE>) {
+            // Order by object values is not supported now, fe will report an error:
+            // Type (nested) percentile/hll/bitmap/json/struct/map not support order-by.
+            // So this code block will not be executed.
+            const auto& order_by_data = order_by_column->immutable_data();
+            if (sort_order_flag > 0) {
+                for (int i = 0; i < row_sz; ++i) {
+                    filter_data[i] = (*order_by_data[i]) < (*need_filter_data);
+                }
+            } else {
+                for (int i = 0; i < row_sz; ++i) {
+                    filter_data[i] = (*order_by_data[i]) > (*need_filter_data);
+                }
             }
         } else {
-            for (int i = 0; i < row_sz; ++i) {
-                filter_data[i] = order_by_data[i] > need_filter_data;
+            const auto& order_by_data = order_by_column->immutable_data();
+            if (sort_order_flag > 0) {
+                for (int i = 0; i < row_sz; ++i) {
+                    filter_data[i] = order_by_data[i] < need_filter_data;
+                }
+            } else {
+                for (int i = 0; i < row_sz; ++i) {
+                    filter_data[i] = order_by_data[i] > need_filter_data;
+                }
             }
         }
     }

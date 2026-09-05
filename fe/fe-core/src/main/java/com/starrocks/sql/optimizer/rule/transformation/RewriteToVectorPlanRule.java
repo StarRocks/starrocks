@@ -1,0 +1,580 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package com.starrocks.sql.optimizer.rule.transformation;
+
+import com.google.common.base.Enums;
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Index;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.VectorIndexParams;
+import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.FunctionSet.APPROX_COSINE_SIMILARITY;
+import static com.starrocks.catalog.FunctionSet.APPROX_INNER_PRODUCT;
+import static com.starrocks.catalog.FunctionSet.APPROX_L2_DISTANCE;
+import static com.starrocks.sql.ast.expression.BinaryType.GE;
+import static com.starrocks.sql.ast.expression.BinaryType.LE;
+
+public class RewriteToVectorPlanRule extends TransformationRule {
+
+    public RewriteToVectorPlanRule() {
+        super(RuleType.TF_VECTOR_REWRITE_RULE,
+                Pattern.create(OperatorType.LOGICAL_TOPN)
+                        .addChildren(Pattern.create(OperatorType.LOGICAL_OLAP_SCAN)));
+    }
+
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalTopNOperator topNOp = (LogicalTopNOperator) input.getOp();
+        LogicalOlapScanOperator scanOp = (LogicalOlapScanOperator) input.getInputs().get(0).getOp();
+
+        if (scanOp.getProjection() == null) {
+            return false;
+        }
+
+        if (topNOp.getLimit() <= 0 || topNOp.getOrderByElements().size() != 1) {
+            return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        LogicalTopNOperator topNOp = (LogicalTopNOperator) input.getOp();
+        LogicalOlapScanOperator scanOp = (LogicalOlapScanOperator) input.getInputs().get(0).getOp();
+        VectorSearchOptions opts = scanOp.getVectorSearchOptions();
+
+        Optional<VectorFuncInfo> optionalInfo = extractOrderByVectorFuncInfo(topNOp, scanOp);
+        if (optionalInfo.isEmpty()) {
+            return List.of();
+        }
+        VectorFuncInfo info = optionalInfo.get();
+
+        int dim =
+                Integer.parseInt(info.index.getProperties().get(VectorIndexParams.CommonIndexParamKey.DIM.name().toLowerCase()));
+        if (info.vectorQuery.size() != dim) {
+            throw new SemanticException(
+                    String.format("The vector query size (%s) is not equal to the vector index dimension (%d)",
+                            info.vectorQuery, dim));
+        }
+
+        // Refine only matters for a quantized index (its index distance is lossy); for a non-quantized
+        // index the distance is already exact, so refine would be wasted work and is skipped.
+        boolean doRefine = context.getSessionVariable().isEnableVectorIndexRefine() && isQuantizedIndex(info.index);
+
+        // Split the scan predicate into the vector-distance-range part (folded into the ANN range) and the
+        // residual scalar part. The residual is kept on the scan; the BE pre/post-filters it against the ANN
+        // (SegmentIterator::_get_row_ranges_by_vector_index). A non-range predicate (e.g. category = 'x') no
+        // longer disables the vector index -- it used to bail out here to a brute-force full scan.
+        ScalarOperator predicate = scanOp.getPredicate();
+        if (predicate != null) {
+            PredicateSplit split = splitVectorRangeAndResidual(predicate, info);
+            // A distance predicate that is not a valid range bound disables the vector index (as before).
+            if (split == null) {
+                return List.of();
+            }
+            split.range.ifPresent(opts::setPredicateRange);
+            // Trust path (refine off): the distance-range bound is folded into the ANN range_search, which
+            // enforces it on the lossy index distance and accepts that (lossy) result, so it is dropped from
+            // the scan, leaving only the residual. Refine path (refine on): ALSO keep the distance bound on
+            // the scan as a Filter. range_search still prefilters on the lossy distance, then this kept
+            // conjunct re-applies the bound on the recomputed exact distance above the scan -- a precision
+            // recheck that removes false positives the lossy prefilter let through, and that also bounds
+            // segments whose .vi is still missing (those skip range_search and are scanned in full).
+            predicate = doRefine ? predicate : split.residual;
+        }
+
+        // Note: a residual that the optimizer cannot push into the scan (e.g. cat + tag > 50) ends up
+        // as a SELECT above the ANN scan. The BE detects that from the execution tree (FragmentExecutor
+        // walk -> ScanNode::is_filtered_above_iterator) and applies the configured underfill fallback
+        // policy, so the rewrite does not need to predict it here.
+
+        opts.setEnableUseANN(true);
+        opts.setRefineDistance(doRefine);
+        opts.setLimitK(topNOp.getLimit());
+        opts.setResultOrder(info.isAscending);
+        opts.setDistanceColumnName("__vector_" + info.outColumnRef.getName());
+        opts.setQueryVector(info.vectorQuery);
+
+        if (doRefine) {
+            // Refine path: keep the distance function so the TopN above the scan recomputes the exact
+            // distance on the full-precision vectors and re-ranks; the index only generates candidates.
+            LogicalOlapScanOperator newScanOp = LogicalOlapScanOperator.builder()
+                    .withOperator(scanOp)
+                    .setPredicate(predicate)
+                    .build();
+            return List.of(OptExpression.create(topNOp, OptExpression.create(newScanOp)));
+        }
+
+        return List.of(rewriteOptByDistanceColumn(topNOp, scanOp, context, predicate, info, opts));
+    }
+
+    // A vector index is quantized when it stores compressed codes whose distances are approximate:
+    // IVFPQ (always), or HNSW with a non-flat quantizer (sq4/sq8/pq).
+    private boolean isQuantizedIndex(Index index) {
+        String indexType =
+                index.getProperties().get(VectorIndexParams.CommonIndexParamKey.INDEX_TYPE.name().toLowerCase());
+        if (VectorIndexParams.VectorIndexType.IVFPQ.name().equalsIgnoreCase(indexType)) {
+            return true;
+        }
+        if (VectorIndexParams.VectorIndexType.HNSW.name().equalsIgnoreCase(indexType)) {
+            String quantizer =
+                    index.getProperties().get(VectorIndexParams.IndexParamsKey.QUANTIZER.name().toLowerCase());
+            return quantizer != null && !VectorIndexParams.QuantizerType.FLAT.name().equalsIgnoreCase(quantizer);
+        }
+        return false;
+    }
+
+    private OptExpression rewriteOptByDistanceColumn(LogicalTopNOperator topNOp,
+                                                     LogicalOlapScanOperator scanOp,
+                                                     OptimizerContext context,
+                                                     ScalarOperator newPredicate,
+                                                     VectorFuncInfo info,
+                                                     VectorSearchOptions opts) {
+        // The distance column is per-query synthetic state: it only needs to live in the scan operator's
+        // colRef maps below (PlanFragmentBuilder builds the scan slot's Column from colRefToColumnMetaMap).
+        // It must NOT be added to the shared catalog table's fullSchema. Table.addColumn appends to
+        // fullSchema (a List that does not dedup) while only nameToColumn dedups, so adding it here
+        // appended a duplicate "__vector_*" column on every vector query that planned on the live table
+        // (the whole-phase-lock path). Once two duplicates accumulated, building the Column-keyed map in
+        // RelationTransformer threw "Multiple entries with same key" for any later statement on the table.
+        String distanceColumnName = scanOp.getVectorSearchOptions().getDistanceColumnName();
+        Column distanceColumn = new Column(distanceColumnName, FloatType.FLOAT);
+
+        ColumnRefOperator distanceColRef = context.getColumnRefFactory().create(distanceColumnName, FloatType.FLOAT, false);
+        Map<ColumnRefOperator, Column> newColRefToColumnMetaMap = new HashMap<>(scanOp.getColRefToColumnMetaMap());
+        newColRefToColumnMetaMap.put(distanceColRef, distanceColumn);
+
+        Map<Column, ColumnRefOperator> newColumnMetaToColRefMap = new HashMap<>(scanOp.getColumnMetaToColRefMap());
+        newColumnMetaToColRefMap.put(distanceColumn, distanceColRef);
+
+        opts.setDistanceSlotId(distanceColRef.getId());
+
+        // Replace the original function call by the distance column ref.
+        Map<ColumnRefOperator, ScalarOperator> newScanProjectMap = scanOp.getProjection().getColumnRefMap().entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> rewriteScalarOperatorByDistanceColumn(entry.getValue(), info, distanceColRef)
+                ));
+
+        LogicalOlapScanOperator newScanOp = LogicalOlapScanOperator.builder()
+                .withOperator(scanOp)
+                .setProjection(new Projection(newScanProjectMap))
+                .setPredicate(newPredicate)
+                .setColRefToColumnMetaMap(newColRefToColumnMetaMap)
+                .setColumnMetaToColRefMap(newColumnMetaToColRefMap)
+                .build();
+
+        return OptExpression.create(topNOp, OptExpression.create(newScanOp));
+    }
+
+    ScalarOperator rewriteScalarOperatorByDistanceColumn(ScalarOperator scalarOperator, VectorFuncInfo info,
+                                                         ColumnRefOperator distanceColRef) {
+        if (scalarOperator.equals(info.vectorFuncCallOperator)) {
+            return distanceColRef;
+        }
+
+        for (int i = 0; i < scalarOperator.getChildren().size(); i++) {
+            ScalarOperator child = scalarOperator.getChild(i);
+            scalarOperator.setChild(i, rewriteScalarOperatorByDistanceColumn(child, info, distanceColRef));
+        }
+
+        return scalarOperator;
+    }
+
+
+    /**
+     * Check if the operator matches the specific vector function call.
+     *
+     * <p> For example, assume that `vectorFuncCallOperator` is `approx_l2_distance(v1, [1,2,3])`,
+     * then the following operators match:
+     * - `approx_l2_distance(v1, [1,2,3])`
+     * - `cast(approx_l2_distance(v1, [1,2,3]) as float)`
+     * - `cast(approx_l2_distance(v1, [1,2,3]) as double)`
+     */
+    private boolean matchesVectorFuncCall(CallOperator vectorFuncCallOperator, ScalarOperator operator) {
+        if (operator instanceof CastOperator) {
+            CastOperator castOperator = (CastOperator) operator;
+            return castOperator.getType().isFloatingPointType() &&
+                    matchesVectorFuncCall(vectorFuncCallOperator, castOperator.getChild(0));
+        }
+
+        if (operator instanceof CallOperator) {
+            return vectorFuncCallOperator.equals(operator);
+        }
+
+        return false;
+    }
+
+    /**
+     * Split the scan predicate into a vector-distance-range part and a residual scalar part.
+     *
+     * <p> A conjunct is a distance-range part when it is "&lt;approx_func&gt; &lt;=|&gt;= const" matching the
+     * ORDER BY function and direction (see {@link #parseVectorRangeFromBinaryPredicate}); such conjuncts are
+     * combined into a single tightest range and folded into the ANN as vector_range. Every other conjunct is
+     * residual and kept on the scan, where the BE pre/post-filters it against the ANN. So, unlike the old
+     * all-or-nothing extraction, a predicate like "category = 'x'" (or "v1 <= 10 AND c1 < 10") no longer
+     * disables the vector index.
+     *
+     * <p> Examples (v1 = vector distance, isAscending = true): "v1 <= 10" -> range 10, residual null;
+     * "v1 <= 10 AND v1 < 20" -> range 10, residual null; "c1 = 5" -> range empty, residual "c1 = 5";
+     * "v1 <= 10 AND c1 < 10" -> range 10, residual "c1 < 10".
+     */
+    private PredicateSplit splitVectorRangeAndResidual(ScalarOperator predicate, VectorFuncInfo info) {
+        Optional<Double> range = Optional.empty();
+        List<ScalarOperator> residuals = new ArrayList<>();
+        for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
+            Optional<Double> childValue = parseVectorRangeFromBinaryPredicate(conjunct, info);
+            if (childValue.isPresent()) {
+                range = range.isEmpty() ? childValue
+                        : Optional.of(info.isAscending ? Math.min(range.get(), childValue.get())
+                                                       : Math.max(range.get(), childValue.get()));
+            } else if (referencesVectorDistanceFunc(conjunct)) {
+                // A conjunct that involves the vector distance but is not a valid range bound (wrong
+                // direction/op/column, or wrapped in another expression) cannot be pushed to the index nor
+                // safely kept as a residual -> signal that the vector index cannot be used.
+                return null;
+            } else {
+                residuals.add(conjunct);
+            }
+        }
+        return new PredicateSplit(range, residuals.isEmpty() ? null : Utils.compoundAnd(residuals));
+    }
+
+    // Whether the operator tree references a vector distance function in any position.
+    private boolean referencesVectorDistanceFunc(ScalarOperator op) {
+        if (op instanceof CallOperator) {
+            String fnName = ((CallOperator) op).getFnName();
+            if (fnName.equalsIgnoreCase(APPROX_L2_DISTANCE) ||
+                    fnName.equalsIgnoreCase(APPROX_COSINE_SIMILARITY) ||
+                    fnName.equalsIgnoreCase(APPROX_INNER_PRODUCT)) {
+                return true;
+            }
+        }
+        for (ScalarOperator child : op.getChildren()) {
+            if (referencesVectorDistanceFunc(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final class PredicateSplit {
+        final Optional<Double> range;
+        final ScalarOperator residual;
+
+        PredicateSplit(Optional<Double> range, ScalarOperator residual) {
+            this.range = range;
+            this.residual = residual;
+        }
+    }
+
+    private Optional<Double> parseVectorRangeFromBinaryPredicate(ScalarOperator predicate, VectorFuncInfo info) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryType binaryType = ((BinaryPredicateOperator) predicate).getBinaryType();
+            ScalarOperator lhs = predicate.getChild(0);
+            ScalarOperator rhs = predicate.getChild(1);
+
+            if (rhs instanceof ConstantOperator && matchesVectorFuncCall(info.vectorFuncCallOperator, lhs) &&
+                    (((binaryType.equals(LE)) && info.isAscending) || ((binaryType.equals(GE)) && !info.isAscending))) {
+                return Optional.of((double) ((ConstantOperator) rhs).getValue());
+            } else if (lhs instanceof ConstantOperator && matchesVectorFuncCall(info.vectorFuncCallOperator, rhs) &&
+                    (((binaryType.equals(GE)) && info.isAscending) || ((binaryType.equals(LE)) && !info.isAscending))) {
+                return Optional.of((double) ((ConstantOperator) lhs).getValue());
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * Extract the vector function information. If the vector index can be used, the following requirements need to be met:
+     * 1. The first column of the ordering is the <approx_distance> function.
+     * 2. The <approx_distance> function needs to match the metric_type and isAscending of the vector index.
+     * - If the metric_type is L2_DISTANCE, then the <approx_distance> function is approx_l2_distance, and the order is ASC.
+     * - If the metric_type is COSINE_SIMILARITY, then the <approx_distance> function is cosine_similarity, and the order is DESC.
+     * - If the metric_type is INNER_PRODUCT, then the <approx_distance> function is approx_inner_product, and the order is DESC.
+     * 3. The arguments of the <approx_distance> function are the vector index column and a constant array.
+     *
+     * @return the vector function information if the ordering column is matched, otherwise empty.
+     */
+    private Optional<VectorFuncInfo> extractOrderByVectorFuncInfo(LogicalTopNOperator topNOp, LogicalOlapScanOperator scanOp) {
+        OlapTable table = (OlapTable) scanOp.getTable();
+        Index index = table.getIndexes().stream()
+                .filter(i -> i.getIndexType() == IndexDef.IndexType.VECTOR)
+                .findFirst()
+                .orElse(null);
+        if (index == null) {
+            return Optional.empty();
+        }
+
+        ColumnRefOperator outColRef = topNOp.getOrderByElements().get(0).getColumnRef();
+        final boolean isAscending = topNOp.getOrderByElements().get(0).isAscending();
+
+        String rawMetricType = index.getProperties().get(VectorIndexParams.CommonIndexParamKey.METRIC_TYPE.name().toLowerCase());
+        VectorIndexParams.MetricsType metricType =
+                Enums.getIfPresent(VectorIndexParams.MetricsType.class, StringUtils.upperCase(rawMetricType)).orNull();
+        Preconditions.checkNotNull(metricType, "Invalid metric type [" + rawMetricType + "] for vector index");
+
+        // 1. Check: it is a matched vector function.
+        ScalarOperator inOperator = scanOp.getProjection().getColumnRefMap().get(outColRef);
+        if (!(inOperator instanceof CallOperator)) {
+            return Optional.empty();
+        }
+        CallOperator inCallOperator = (CallOperator) inOperator;
+
+        boolean matchedFunc;
+        switch (metricType) {
+            case L2_DISTANCE:
+                matchedFunc = inCallOperator.getFnName().equalsIgnoreCase(APPROX_L2_DISTANCE) && isAscending;
+                break;
+            case COSINE_SIMILARITY:
+                matchedFunc = inCallOperator.getFnName().equalsIgnoreCase(APPROX_COSINE_SIMILARITY) && !isAscending;
+                break;
+            case INNER_PRODUCT:
+                matchedFunc = inCallOperator.getFnName().equalsIgnoreCase(APPROX_INNER_PRODUCT) && !isAscending;
+                break;
+            default:
+                matchedFunc = false;
+        }
+        if (!matchedFunc) {
+            return Optional.empty();
+        }
+
+        // 2. Check: the vector function's arguments are column ref and constant.
+        ScalarOperator lhs = inCallOperator.getChild(0);
+        ScalarOperator rhs = inCallOperator.getChild(1);
+        ColumnRefOperator colRefArgument;
+        if (isConstantArrayFloat(lhs) && rhs.isColumnRef()) {
+            colRefArgument = (ColumnRefOperator) rhs;
+        } else if (isConstantArrayFloat(rhs) && lhs.isColumnRef()) {
+            colRefArgument = (ColumnRefOperator) lhs;
+        } else {
+            return Optional.empty();
+        }
+
+        // 3. Check: the column ref argument of the vector function matches the index column.
+        Column column = scanOp.getColRefToColumnMetaMap().get(colRefArgument);
+        if (column == null) {
+            return Optional.empty();
+        }
+
+        ColumnId indexColumnId = index.getColumns().get(0);
+        if (!column.getColumnId().equals(indexColumnId)) {
+            return Optional.empty();
+        }
+
+        // 4. Parse query vector values.
+        List<String> vectorQuery = new ArrayList<>();
+        extractValuesFromConstantArray(inCallOperator, vectorQuery);
+
+        return Optional.of(
+                new VectorFuncInfo(index, colRefArgument, outColRef, inCallOperator, metricType, vectorQuery, isAscending));
+    }
+
+    /**
+     * Whether the scalar operator is a constant array of float, which is represented as
+     * `ArrayOperator(type=ArrayType(float))` or
+     * `CastOperator(child=ArrayOperator(type=ArrayType(numeric_type)), type=ArrayType(float))` or
+     * `CastOperator(child=ConstantOperator(VARCHAR, "[...]"), type=ArrayType(float))`
+     * (the last form is used by prepared statements that send the array as a string parameter,
+     * via `CAST(? AS ARRAY<FLOAT>)`).
+     */
+    private boolean isConstantArrayFloat(ScalarOperator scalarOperator) {
+        if (!scalarOperator.isConstant()) {
+            return false;
+        }
+
+        if (scalarOperator instanceof CastOperator) {
+            if (!scalarOperator.getType().isArrayType()) {
+                return false;
+            }
+            ArrayType arrayType = (ArrayType) scalarOperator.getType();
+            if (!arrayType.getItemType().isFloatingPointType()) {
+                return false;
+            }
+            // Prepared-statement form: CAST(StringLiteral AS ARRAY<FLOAT>).
+            if (isCastStringToArrayFloat(scalarOperator)) {
+                return true;
+            }
+
+            return scalarOperator.getChildren().stream().allMatch(this::isConstantArrayFloat);
+        } else if (scalarOperator instanceof ArrayOperator) {
+            if (!scalarOperator.getType().isArrayType()) {
+                return false;
+            }
+            ArrayType innerArrayType = (ArrayType) scalarOperator.getType();
+            return innerArrayType.getItemType().isNumericType();
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * True iff {@code op} is {@code CastOperator(ConstantOperator(VARCHAR/CHAR, "[..]"), ARRAY<FLOAT>)}.
+     */
+    private static boolean isCastStringToArrayFloat(ScalarOperator op) {
+        if (!(op instanceof CastOperator) || !op.getType().isArrayType()) {
+            return false;
+        }
+        ArrayType arrayType = (ArrayType) op.getType();
+        if (!arrayType.getItemType().isFloatingPointType()) {
+            return false;
+        }
+        if (op.getChildren().size() != 1) {
+            return false;
+        }
+        ScalarOperator child = op.getChild(0);
+        return child instanceof ConstantOperator && child.getType() != null && child.getType().isStringType();
+    }
+
+    private void extractValuesFromConstantArray(ScalarOperator scalarOperator, List<String> vectorQuery) {
+        if (scalarOperator instanceof ColumnRefOperator) {
+            return;
+        }
+
+        // CAST(StringLiteral AS ARRAY<FLOAT>) form: parse the string as a comma-separated
+        // float list and append each value. Used by prepared-statement vector queries.
+        if (isCastStringToArrayFloat(scalarOperator)) {
+            ConstantOperator stringConst = (ConstantOperator) scalarOperator.getChild(0);
+            String literal = String.valueOf(stringConst.getValue());
+            parseStringAsFloatList(literal, vectorQuery);
+            return;
+        }
+
+        if (scalarOperator instanceof ConstantOperator) {
+            vectorQuery.add(String.valueOf(((ConstantOperator) scalarOperator).getValue()));
+            return;
+        }
+
+        for (ScalarOperator child : scalarOperator.getChildren()) {
+            extractValuesFromConstantArray(child, vectorQuery);
+        }
+    }
+
+    /** Parse {@code "[f1, f2, ..., fN]"} into N decimal-string tokens appended to {@code out}. */
+    private static void parseStringAsFloatList(String literal, List<String> out) {
+        if (literal == null) {
+            throw new SemanticException("Vector array literal cannot be null");
+        }
+        String trimmed = literal.trim();
+        int open = trimmed.indexOf('[');
+        int close = trimmed.lastIndexOf(']');
+        if (open < 0 || close <= open) {
+            throw new SemanticException("Vector array literal must be enclosed in [..]: " + literal);
+        }
+        String body = trimmed.substring(open + 1, close);
+        int n = body.length();
+        int i = 0;
+        boolean expectAnother = false;
+        while (i < n) {
+            while (i < n && Character.isWhitespace(body.charAt(i))) {
+                i++;
+            }
+            if (i >= n) {
+                break;
+            }
+            int tokStart = i;
+            while (i < n && body.charAt(i) != ',') {
+                i++;
+            }
+            String tok = body.substring(tokStart, i).trim();
+            if (tok.isEmpty()) {
+                throw new SemanticException("Empty element in vector array literal: " + literal);
+            }
+            double parsed;
+            try {
+                parsed = Double.parseDouble(tok);
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Invalid float in vector array literal: '" + tok + "'");
+            }
+            // BE cast_expr rejects NaN/Inf when casting string to float; mirror that here so
+            // `CAST(? AS ARRAY<FLOAT>)` has identical semantics regardless of whether the
+            // rewrite rule fires (cf. be/src/exprs/cast_expr.cpp string -> float).
+            if (!Double.isFinite(parsed)) {
+                throw new SemanticException("Non-finite float in vector array literal: '" + tok + "'");
+            }
+            out.add(tok);
+            if (i < n && body.charAt(i) == ',') {
+                i++;
+                expectAnother = true;
+            } else {
+                expectAnother = false;
+            }
+        }
+        if (expectAnother) {
+            throw new SemanticException("Trailing comma in vector array literal: " + literal);
+        }
+    }
+
+    private static class VectorFuncInfo {
+        private final Index index;
+        // vector index column
+        private final ColumnRefOperator inColumnRef;
+        // The column ref of the first ordering column, which is obtained by vectorFuncCallOperator `<approx_distance>(inColumnRef, vectorQuery)`.
+        // - If metricType is L2_DISTANCE, then <approx_distance> function is `approx_l2_distance`, and the order is ASC.
+        // - If metricType is COSINE_SIMILARITY, the function is `approx_cosine_similarity`, and the order is DESC.
+        // - If metricType is INNER_PRODUCT, the function is `approx_inner_product`, and the order is DESC.
+        private final ColumnRefOperator outColumnRef;
+        private final CallOperator vectorFuncCallOperator;
+        private final VectorIndexParams.MetricsType metricType;
+        // The constant vector argument value of the <approx_distance> function
+        private final List<String> vectorQuery;
+        private final boolean isAscending;
+
+        public VectorFuncInfo(Index index, ColumnRefOperator inColumnRef, ColumnRefOperator outColumnRef,
+                              CallOperator vectorFuncCallOperator,
+                              VectorIndexParams.MetricsType metricType, List<String> vectorQuery, boolean isAscending) {
+            this.index = index;
+            this.inColumnRef = inColumnRef;
+            this.outColumnRef = outColumnRef;
+            this.vectorFuncCallOperator = vectorFuncCallOperator;
+            this.metricType = metricType;
+            this.vectorQuery = vectorQuery;
+            this.isAscending = isAscending;
+        }
+    }
+}

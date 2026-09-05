@@ -21,29 +21,17 @@
 # architecure-related.
 #####################################################
 
-# HADOOP
-HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6-aarch64.tar.gz"
-HADOOP_NAME="hadoop-3.3.6-aarch64.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.6"
-HADOOP_MD5SUM="369f899194a920e0d1c3c3bc1718b3b5"
+# OPEN JDK FOR aarch64
+JDK_DOWNLOAD="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_NAME="OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_SOURCE="jdk-17.0.13+11"
+JDK_MD5SUM="2e942562e2ffa7378c4948041911c3bb"
 
-# OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
-JDK_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_NAME="bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_SOURCE="bisheng-jdk1.8.0_262"
-JDK_MD5SUM="a1254dea3728e0a86e53a55d8debfbeb"
-
-# HYPERSCAN for aarch64, provided by huawei kunpeng.
-HYPERSCAN_DOWNLOAD="https://github.com/kunpengcompute/hyperscan/archive/refs/tags/v5.3.0.aarch64.tar.gz"
-HYPERSCAN_NAME="hyperscan-5.3.0.aarch64.tar.gz"
-HYPERSCAN_SOURCE="hyperscan-5.3.0.aarch64"
-HYPERSCAN_MD5SUM="ef337257bde6583242a739fab6fb161f"
-
-# async-profiler
-ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v2.9/async-profiler-2.9-linux-arm64.tar.gz"
-ASYNC_PROFILER_NAME="async-profiler-2.9-linux-arm64.tar.gz"
-ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-arm64"
-ASYNC_PROFILER_MD5SUM="d31a70d2c176146a46dffc15948040ed"
+# HYPERSCAN for aarch64, provided by vectorscan.
+HYPERSCAN_DOWNLOAD="https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.12.tar.gz"
+HYPERSCAN_NAME="vectorscan-5.4.12.tar.gz"
+HYPERSCAN_SOURCE="vectorscan-vectorscan-5.4.12"
+HYPERSCAN_MD5SUM="384eab5b23831993df96e5fa55f9951e"
 
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
@@ -51,8 +39,25 @@ JINDOSDK_NAME="jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
 JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
 
+# tenann
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-rc2/tenann-v0.5.1-rc2-nosve-arm64.tar.gz"
+TENANN_NAME="tenann-v0.5.1-rc2-nosve-arm64.tar.gz"
+TENANN_SOURCE="tenann-v0.5.1-rc2-nosve"
+TENANN_MD5SUM="6f3b7f3c8144f855edfd8a9abf04f82e"
+# uncomment this for SVE version for better performance on ARM servers with SVE support
+#TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-rc2/tenann-v0.5.1-rc2-arm64.tar.gz"
+#TENANN_NAME="tenann-v0.5.1-rc2-arm64.tar.gz"
+#TENANN_SOURCE="tenann-v0.5.1-rc2"
+#TENANN_MD5SUM="8b056305af24dab45ad21f6a037163b8"
+
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v2.0.2/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc2/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="e76dfea7046424db19d18c71fae6a061"
+STARCACHE_MD5SUM="3cfef8be7a06a71108174599eac6a9c9"
+
+# pprof
+PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260814/pprof-linux-arm64"
+PPROF_NAME="pprof"
+PPROF_SOURCE="pprof"
+PPROF_MD5SUM="06ec565a9f6b417adfdf70f885214b9e"

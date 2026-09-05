@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -56,7 +56,7 @@ message PStructField {
 
 message PTypeNode {
     // TTypeNodeType(SCALAR, ARRAY, MAP, STRUCT)
-    required int32 type = 1; 
+    required int32 type = 1;
     // only set for scalar types
     optional PScalarType scalar_type = 2;
     // only used for structs; has struct_fields.size() corresponding child types
@@ -103,6 +103,49 @@ enum WriteQuorumTypePB {
     ALL = 2;
 }
 
+enum TxnTypePB {
+     TXN_NORMAL = 0;
+     TXN_REPLICATION = 1;
+     TXN_EMPTY = 2;
+     TXN_TABLET_RESHARD = 3;
+     TXN_SHADOW_REWRITE = 4;   // Range-rewrite flip publish: anchor op_write as op_schema_change@alter_version
+}
+
+enum ReplicationTxnStatePB {
+    TXN_PREPARED = 0;
+    TXN_SNAPSHOTED = 1;
+    TXN_REPLICATED = 2;
+    TXN_PUBLISHED = 3;
+}
+
+enum IndexType {
+    BITMAP = 0;
+    GIN = 1;
+    INDEX_UNKNOWN = 2;
+    NGRAMBF = 3;
+    VECTOR = 4;
+    // Plain (non-ngram) bloom filter. Used as an IDG key tag only — there is
+    // no TabletIndexPB entry for plain bloom filter on a column; the source
+    // of truth for "column c has a plain bloom filter" remains
+    // ColumnPB.is_bf_column. This enum value lets the lake ADD INDEX fast
+    // path identify IDG .idx payloads that carry plain-BF data separately
+    // from NGRAMBF ones (whose IndexType is NGRAMBF).
+    BLOOM_FILTER = 5;
+}
+
+ message ReplicationTxnMetaPB {
+     optional int64 txn_id = 1;
+     optional ReplicationTxnStatePB txn_state = 2;
+     optional int64 tablet_id = 3;
+     optional int64 visible_version = 4;
+     optional string src_backend_host = 5;
+     optional int32 src_backend_port = 6;
+     optional string src_snapshot_path = 7;
+     optional int64 snapshot_version = 8;
+     optional bool incremental_snapshot = 9;
+     optional int64 data_version = 10;
+ }
+
 // Used to store additional information about a txn when it is finished/visible
 // It will be serialized with TransactionState
 message TxnFinishStatePB {
@@ -145,4 +188,61 @@ message BinaryPredicatePB {
 message IsNullPredicatePB {
     optional string column_name = 1;
     optional bool is_not_null = 2;
+}
+
+message IndexValueWithVerPB {
+    // will be set after mvcc support
+    optional int64 version = 1;
+    // rowset id & segment id
+    optional uint32 rssid = 2;
+    optional uint32 rowid = 3;
+}
+
+message IndexValuesWithVerPB {
+    repeated IndexValueWithVerPB values = 1;
+}
+
+enum TransactionStatusPB {
+    TRANS_UNKNOWN = 0;
+    TRANS_PREPARE = 1;
+    TRANS_COMMITTED = 2;
+    TRANS_VISIBLE = 3;
+    TRANS_ABORTED = 4;
+    TRANS_PREPARED = 5;
+}
+
+message TransactionStatePB {
+    optional int64 txn_id = 1;
+    optional TransactionStatusPB status = 2;
+    optional string reason = 3;
+}
+
+enum VariantTypePB {
+    NORMAL_VALUE = 0;
+    NULL_VALUE = 1;
+    MINIMUM = 2;
+    MAXIMUM = 3;
+}
+
+message VariantPB {
+    optional PTypeDesc type = 1;
+    optional string value = 2;
+    optional VariantTypePB variant_type = 3;
+}
+
+message TuplePB {
+    repeated VariantPB values = 1;
+}
+
+message TabletRangePB {
+    optional TuplePB lower_bound = 1;
+    optional TuplePB upper_bound = 2;
+    optional bool lower_bound_included = 3;
+    optional bool upper_bound_included = 4;
+}
+
+enum PrimaryKeyEncodingTypePB {
+    PK_ENCODING_TYPE_NONE = 0;
+    PK_ENCODING_TYPE_V1 = 1;
+    PK_ENCODING_TYPE_V2 = 2;
 }

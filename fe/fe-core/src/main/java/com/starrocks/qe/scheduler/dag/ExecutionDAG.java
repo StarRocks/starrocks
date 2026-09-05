@@ -17,17 +17,29 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
+import com.starrocks.planner.FetchNode;
+import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SplitCastDataSink;
+import com.starrocks.planner.SplitCastPlanFragment;
+import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.qe.QueryStatisticsItem;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.SchedulerException;
+import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
@@ -66,6 +78,8 @@ public class ExecutionDAG {
 
     private final JobSpec jobSpec;
     private final List<ExecutionFragment> fragments;
+    private final List<ExecutionFragment> preExecutedFragments;
+    private ExecutionFragment captureVersionFragment = null;
     private final Map<PlanFragmentId, ExecutionFragment> idToFragment;
 
     /**
@@ -78,7 +92,8 @@ public class ExecutionDAG {
     /**
      * The executions will be added to {@code indexInJobToExecState}, when it is deploying.
      */
-    private final ConcurrentMap<Integer, FragmentInstanceExecState> indexInJobToExecState = new ConcurrentSkipListMap<>();
+    private final ConcurrentMap<Integer, FragmentInstanceExecState> indexInJobToExecState =
+            new ConcurrentSkipListMap<>();
 
     /**
      * Backend which state need to be checked when joining this coordinator.
@@ -94,6 +109,7 @@ public class ExecutionDAG {
     private ExecutionDAG(JobSpec jobSpec) {
         this.jobSpec = jobSpec;
         this.fragments = Lists.newArrayList();
+        this.preExecutedFragments = Lists.newArrayList();
         this.idToFragment = Maps.newHashMap();
         this.instanceIdToInstance = Maps.newHashMap();
     }
@@ -102,6 +118,7 @@ public class ExecutionDAG {
         ExecutionDAG executionDAG = new ExecutionDAG(jobSpec);
 
         executionDAG.attachFragments(jobSpec.getFragments());
+        executionDAG.attachPreExecutedFragments(jobSpec.getPreExecutedFragments());
 
         return executionDAG;
     }
@@ -112,6 +129,21 @@ public class ExecutionDAG {
             fragments.add(fragment);
             idToFragment.put(planFragment.getFragmentId(), fragment);
         }
+    }
+
+    private void attachPreExecutedFragments(List<PlanFragment> preExecutedPlanFragments) {
+        for (PlanFragment planFragment : preExecutedPlanFragments) {
+            ExecutionFragment fragment = new ExecutionFragment(this, planFragment, fragments.size());
+            preExecutedFragments.add(fragment);
+        }
+    }
+
+    ExecutionFragment getCaptureVersionFragment() {
+        return captureVersionFragment;
+    }
+
+    List<ExecutionFragment> getPreExecutedFragments() {
+        return preExecutedFragments;
     }
 
     public Set<TUniqueId> getInstanceIds() {
@@ -134,6 +166,10 @@ public class ExecutionDAG {
         return fragments.stream()
                 .flatMap(fragment -> fragment.getScanNodes().stream())
                 .collect(Collectors.toList());
+    }
+
+    public int getWorkerNum() {
+        return workerIdToNumInstances.size();
     }
 
     public List<ExecutionFragment> getFragmentsInCreatedOrder() {
@@ -184,6 +220,12 @@ public class ExecutionDAG {
         // `queue` contains the fragments need to visit its in-edges.
         inDegrees.put(root, 0);
         queue.add(root);
+
+        for (ExecutionFragment fragment : preExecutedFragments) {
+            inDegrees.put(fragment, 0);
+            queue.add(fragment);
+        }
+
         while (!queue.isEmpty()) {
             ExecutionFragment fragment = queue.poll();
             for (int i = 0; i < fragment.childrenSize(); i++) {
@@ -208,12 +250,19 @@ public class ExecutionDAG {
             throw new StarRocksPlannerException("Some fragments do not belong to the fragment tree",
                     ErrorType.INTERNAL_ERROR);
         }
+        int numOutputFragments = 0;
+        List<List<ExecutionFragment>> groups = Lists.newArrayList();
+        if (!preExecutedFragments.isEmpty()) {
+            List<ExecutionFragment> group = new ArrayList<>(preExecutedFragments.size());
+            group.addAll(preExecutedFragments);
+            groups.add(group);
+            numOutputFragments += group.size();
+        }
+        
 
         // Compute fragment groups by BFS.
         // `queue` contains the fragments whose in-degree is zero.
         queue.add(root);
-        List<List<ExecutionFragment>> groups = Lists.newArrayList();
-        int numOutputFragments = 0;
         while (!queue.isEmpty()) {
             int groupSize = queue.size();
             List<ExecutionFragment> group = new ArrayList<>(groupSize);
@@ -256,6 +305,29 @@ public class ExecutionDAG {
         return fragments.get(0).getPlanFragment().getDataPartition() == DataPartition.UNPARTITIONED;
     }
 
+    public void prepareCaptureVersion(boolean isPhasedSchedule) {
+        if (!isPhasedSchedule) {
+            return;
+        }
+        final CaptureVersionFragmentBuilder builder =
+                new CaptureVersionFragmentBuilder(fragments);
+        final ExecutionFragment build = builder.build(this);
+        if (build != null) {
+            captureVersionFragment = build;
+            fragments.add(build);
+            idToFragment.put(captureVersionFragment.getFragmentId(), captureVersionFragment);
+        }
+    }
+
+    public void preparePreExecutedFragments() {
+        PreExecutionFragmentBuilder builder = new PreExecutionFragmentBuilder(fragments);
+        builder.build(this);
+        for (ExecutionFragment fragment : preExecutedFragments) {
+            fragments.add(fragment);
+            idToFragment.put(fragment.getFragmentId(), fragment);
+        }
+    }
+
     /**
      * Do the finalize work after all the fragment instances have already been added to the DAG, including:
      *
@@ -282,6 +354,8 @@ public class ExecutionDAG {
         for (ExecutionFragment fragment : fragments) {
             connectFragmentToDestFragments(fragment);
         }
+
+        computeFetchFragmentForLookUpNode();
 
         workerIdToNumInstances = fragments.stream()
                 .flatMap(fragment -> fragment.getInstances().stream())
@@ -374,14 +448,68 @@ public class ExecutionDAG {
      */
     private void connectFragmentToDestFragments(ExecutionFragment execFragment) throws SchedulerException {
         if (execFragment.getPlanFragment() instanceof MultiCastPlanFragment) {
-            connectMultiCastFragmentToDestFragments(execFragment, (MultiCastPlanFragment) execFragment.getPlanFragment());
+            connectMultiCastFragmentToDestFragments(execFragment,
+                    (MultiCastPlanFragment) execFragment.getPlanFragment());
+        } else if (execFragment.getPlanFragment() instanceof SplitCastPlanFragment) {
+            connectSplitFragmentToDestFragments(execFragment, (SplitCastPlanFragment) execFragment.getPlanFragment());
         } else {
             connectNormalFragmentToDestFragments(execFragment);
         }
     }
 
+    // Compute fetch fragments for each lookup node
+    private void computeFetchFragmentForLookUpNode() {
+
+        if (preExecutedFragments.isEmpty()) {
+            return;
+        }
+
+        // collect all look-up fragments
+        Map<PlanNodeId, ExecutionFragment> lookUpFragments = Maps.newHashMap();
+        Map<PlanNodeId, List<ExecutionFragment>> peerFragments = Maps.newHashMap();
+
+        for (ExecutionFragment fragment : preExecutedFragments) {
+            final List<PlanNode> nodes = fragment.getPlanFragment().collectNodes();
+            final List<PlanNode> lookUpNodes = nodes.stream().filter(n -> n instanceof LookUpNode).toList();
+            for (PlanNode lookUpNode : lookUpNodes) {
+                lookUpFragments.put(lookUpNode.getId(), fragment);
+            }
+        }
+
+        for (ExecutionFragment fragment : fragments) {
+            final List<PlanNode> nodes = fragment.getPlanFragment().collectNodes();
+            final List<PlanNode> fetchNodes = nodes.stream().filter(n -> n instanceof FetchNode).toList();
+            for (PlanNode fetchNode : fetchNodes) {
+                final PlanNodeId targetNodeId = ((FetchNode) fetchNode).getTargetNodeId();
+                peerFragments.computeIfAbsent(targetNodeId, n -> Lists.newArrayList());
+                peerFragments.get(targetNodeId).add(fragment);
+            }
+        }
+
+        final Set<Map.Entry<PlanNodeId, ExecutionFragment>> entries = lookUpFragments.entrySet();
+        for (Map.Entry<PlanNodeId, ExecutionFragment> entry : entries) {
+            final ExecutionFragment lookUpFragment = entry.getValue();
+            final PlanNodeId lookUpKeyId = entry.getKey();
+            int numPeerFragment;
+            final List<ExecutionFragment> fragments = peerFragments.get(lookUpKeyId);
+            numPeerFragment = fragments.stream().mapToInt(fragment -> fragment.getInstances().size()).sum();
+            final Map<Integer, Integer> numFetchersPerLookUp = lookUpFragment.getNumFetchersPerLookUp();
+            numFetchersPerLookUp.putIfAbsent(lookUpKeyId.asInt(), 0);
+            numFetchersPerLookUp.compute(lookUpKeyId.asInt(), (k, v) -> v + numPeerFragment);
+        }
+
+    }
+
     private boolean needScheduleByLocalBucketShuffleJoin(ExecutionFragment destFragment, DataSink sourceSink) {
         if (destFragment.isLocalBucketShuffleJoin() && sourceSink instanceof DataStreamSink) {
+            DataStreamSink streamSink = (DataStreamSink) sourceSink;
+            return streamSink.getOutputPartition().isBucketShuffle();
+        }
+        return false;
+    }
+
+    private boolean needScheduleByLocalBucketShuffleSet(ExecutionFragment destFragment, DataSink sourceSink) {
+        if (destFragment.isColocateSet() && sourceSink instanceof DataStreamSink) {
             DataStreamSink streamSink = (DataStreamSink) sourceSink;
             return streamSink.getOutputPartition().isBucketShuffle();
         }
@@ -418,6 +546,7 @@ public class ExecutionDAG {
             if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
                 throw new NonRecoverableException("CTE consumer fragment cannot be bucket shuffle join");
             } else {
+                Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
                 // add destination host to this fragment's destination
                 for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
@@ -448,6 +577,7 @@ public class ExecutionDAG {
 
         // Set params for pipeline level shuffle.
         fragment.getDestNode().setPartitionType(fragment.getOutputPartition().getType());
+        int destDop = destFragment.getPipelineDop();
         if (sink instanceof DataStreamSink) {
             DataStreamSink dataStreamSink = (DataStreamSink) sink;
             dataStreamSink.setExchDop(destFragment.getPipelineDop());
@@ -465,7 +595,8 @@ public class ExecutionDAG {
         });
 
         // We can only handle unpartitioned (= broadcast) and hash-partitioned output at the moment.
-        if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
+        if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink) ||
+                needScheduleByLocalBucketShuffleSet(destExecFragment, sink)) {
             Map<Integer, FragmentInstance> bucketSeqToDestInstance = Maps.newHashMap();
             for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                 for (int bucketSeq : destInstance.getBucketSeqs()) {
@@ -475,6 +606,7 @@ public class ExecutionDAG {
 
             TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
             int bucketNum = destExecFragment.getBucketNum();
+            Preconditions.checkArgument(bucketNum != 0);
             for (int bucketSeq = 0; bucketSeq < bucketNum; bucketSeq++) {
                 TPlanFragmentDestination dest = new TPlanFragmentDestination();
 
@@ -495,12 +627,13 @@ public class ExecutionDAG {
 
                     int driverSeq = destInstance.getDriverSeqOfBucketSeq(bucketSeq);
                     if (driverSeq != FragmentInstance.ABSENT_DRIVER_SEQUENCE) {
-                        dest.setPipeline_driver_sequence(driverSeq);
+                        dest.setPipeline_driver_sequence(driverSeq % destDop);
                     }
                 }
                 execFragment.addDestination(dest);
             }
         } else {
+            Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
             // add destination host to this fragment's destination
             for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                 TPlanFragmentDestination dest = new TPlanFragmentDestination();
@@ -516,6 +649,49 @@ public class ExecutionDAG {
         }
     }
 
+    private void connectSplitFragmentToDestFragments(ExecutionFragment execFragment, SplitCastPlanFragment fragment)
+            throws SchedulerException {
+        Preconditions.checkState(fragment.getSink() instanceof SplitCastDataSink);
+        SplitCastDataSink splitSink = (SplitCastDataSink) fragment.getSink();
+
+        // set # of senders
+        int numDestinations = fragment.getDestFragmentList().size();
+        for (int i = 0; i < numDestinations; i++) {
+            PlanFragment destFragment = fragment.getDestFragmentList().get(i);
+
+            Preconditions.checkState(destFragment != null);
+
+            ExecutionFragment destExecFragment = idToFragment.get(destFragment.getFragmentId());
+            DataStreamSink sink = splitSink.getDataStreamSinks().get(i);
+
+            // Set params for pipeline level shuffle.
+            fragment.getDestNode(i).setPartitionType(fragment.getOutputPartitions().get(i).getType());
+            sink.setExchDop(destFragment.getPipelineDop());
+
+            Integer exchangeId = sink.getExchNodeId().asInt();
+
+            destExecFragment.getNumSendersPerExchange().put(exchangeId, execFragment.getInstances().size());
+
+            if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
+                throw new NonRecoverableException("Split fragment cannot be bucket shuffle join");
+            } else {
+                Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
+                // add destination host to this fragment's destination
+                for (FragmentInstance destInstance : destExecFragment.getInstances()) {
+                    TPlanFragmentDestination dest = new TPlanFragmentDestination();
+
+                    dest.setFragment_instance_id(destInstance.getInstanceId());
+                    ComputeNode worker = destInstance.getWorker();
+                    // NOTE(zc): can be removed in version 4.0
+                    dest.setDeprecated_server(worker.getAddress());
+                    dest.setBrpc_server(worker.getBrpcIpAddress());
+
+                    splitSink.getDestinations().get(i).add(dest);
+                }
+            }
+        }
+    }
+
     private void setInstanceId(FragmentInstance instance) {
         TUniqueId jobId = jobSpec.getQueryId();
         TUniqueId instanceId = new TUniqueId();
@@ -524,6 +700,34 @@ public class ExecutionDAG {
 
         instance.setInstanceId(instanceId);
         instanceIdToInstance.put(instanceId, instance);
+    }
+
+    public void cancelQueryContext(PPlanFragmentCancelReason cancelReason, String errorMessage) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("cancel query context id:{} reason:{} error:{}", DebugUtil.printId(jobSpec.getQueryId()),
+                    cancelReason.name(), errorMessage);
+        }
+
+        Set<ComputeNode> workers = Sets.newHashSet();
+        for (FragmentInstanceExecState execution : this.getExecutions()) {
+            final ComputeNode worker = execution.getWorker();
+            workers.add(worker);
+        }
+
+        final TUniqueId dummyInstanceId = new TUniqueId(0, 0);
+
+        for (ComputeNode worker : workers) {
+            TNetworkAddress brpcAddress = worker.getBrpcAddress();
+            try {
+                BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
+                        jobSpec.getQueryId(), dummyInstanceId, cancelReason,
+                        jobSpec.isEnablePipeline(), errorMessage);
+            } catch (RpcException e) {
+                LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
+                        brpcAddress.getPort(), e);
+                SimpleScheduler.addToBlocklist(worker.getId());
+            }
+        }
     }
 
 }

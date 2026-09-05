@@ -14,8 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
 
@@ -27,6 +26,8 @@ public class JoinRelation extends Relation {
     private Relation right;
     private Expr onPredicate;
     private String joinHint = "";
+    private Expr skewColumn;
+    private List<Expr> skewValues;
     private boolean lateral;
     private boolean isImplicit;
 
@@ -91,6 +92,22 @@ public class JoinRelation extends Relation {
         return joinHint;
     }
 
+    public void setSkewColumn(Expr column) {
+        this.skewColumn = column;
+    }
+
+    public Expr getSkewColumn() {
+        return skewColumn;
+    }
+
+    public void setSkewValues(List<Expr> values) {
+        this.skewValues = values;
+    }
+
+    public List<Expr> getSkewValues() {
+        return skewValues;
+    }
+
     public boolean isLateral() {
         return lateral;
     }
@@ -113,6 +130,6 @@ public class JoinRelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitJoin(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitJoin(this, context);
     }
 }

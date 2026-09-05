@@ -17,50 +17,69 @@
 
 package com.starrocks.journal;
 
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 public interface Journal {
 
     // Open the journal environment
-    public void open() throws InterruptedException, JournalException;
+    void open() throws InterruptedException, JournalException;
 
     // Roll Edit file or database
-    public void rollJournal(long journalId) throws JournalException;
+    void rollJournal(long journalId) throws JournalException;
 
     // Get the newest journal id 
-    public long getMaxJournalId();
+    long getMaxJournalId();
+
+    // Return (oldest journal id, newest journal id).
+    default Pair<Long, Long> getJournalIdRange() {
+        List<Long> databaseNames = getDatabaseNames();
+        long minJournalId = databaseNames == null || databaseNames.isEmpty() ? -1L : databaseNames.get(0);
+        return Pair.create(minJournalId, getMaxJournalId());
+    }
 
     // Close the environment
-    public void close();
+    void close();
 
     // Get all the journals whose id: fromKey <= id <= toKey
     // toKey = -1 means toKey = Long.Max_Value
-    public JournalCursor read(long fromKey, long toKey)
+    JournalCursor read(long fromKey, long toKey)
             throws JournalException, JournalInconsistentException, InterruptedException;
 
     // Delete journals whose max id is less than deleteToJournalId
-    public void deleteJournals(long deleteJournalToId);
+    void deleteJournals(long deleteJournalToId);
+
+    default long deleteJournalsAndGetMinJournalId(long deleteJournalToId) {
+        deleteJournals(deleteJournalToId);
+        List<Long> databaseNames = getDatabaseNames();
+        return databaseNames == null || databaseNames.isEmpty() ? -1L : databaseNames.get(0);
+    }
 
     // Current db's min journal id - 1
-    public long getFinalizedJournalId();
+    long getFinalizedJournalId();
 
     // Get all the dbs' name
-    public List<Long> getDatabaseNames();
+    List<Long> getDatabaseNames();
 
     // only support batch write
     // start batch write
-    public void batchWriteBegin() throws InterruptedException, JournalException;
+    void batchWriteBegin() throws InterruptedException, JournalException;
 
     // append buffer to current batch
-    public void batchWriteAppend(long journalId, DataOutputBuffer buffer) throws InterruptedException, JournalException;
+    void batchWriteAppend(long journalId, DataOutputBuffer buffer) throws InterruptedException, JournalException;
 
     // persist current batch
-    public void batchWriteCommit() throws InterruptedException, JournalException;
+    void batchWriteCommit() throws InterruptedException, JournalException;
+
+    default void batchWriteCommit(BooleanSupplier shouldRetry) throws InterruptedException, JournalException {
+        batchWriteCommit();
+    }
 
     // abort current batch
-    public void batchWriteAbort() throws InterruptedException, JournalException;
+    void batchWriteAbort() throws InterruptedException, JournalException;
 
-    public String getPrefix();
+    String getPrefix();
 }

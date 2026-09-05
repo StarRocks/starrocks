@@ -27,6 +27,7 @@ public enum EngineType {
     ICEBERG,
     HUDI,
     JDBC,
+    ODPS,
     FILE;
 
     public static Set<EngineType> SUPPORT_NOT_NULL_SET = ImmutableSet.of(

@@ -1,0 +1,17 @@
+-- name: test_hll_deserialize_sparse_oob @sequential
+-- Regression: hll_deserialize() deserializes user-supplied bytes directly. A SPARSE
+-- payload (type 0x02) whose register index is >= HLL_REGISTERS_COUNT (16384) wrote
+-- past the end of the 16384-byte register array (heap out-of-bounds write). A single
+-- row silently corrupted memory; in bulk it crashed the BE. The fix bound-checks the
+-- register index in both HyperLogLog::deserialize and HyperLogLog::is_valid.
+-- Blob 0201000000FFFF01 = SPARSE, num_registers=1, register_idx=0xFFFF, value=0x01.
+CREATE TABLE t_hll (k INT, b VARBINARY)
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+INSERT INTO t_hll SELECT generate_series, unhex("0201000000FFFF01") FROM TABLE(generate_series(1, 20000));
+-- malformed SPARSE bytes must not crash the BE (deserialize rejects the bad index)
+[UC] SELECT count(hll_cardinality(hll_deserialize(b))) FROM t_hll;
+-- a valid serialize/deserialize roundtrip still works
+SELECT hll_cardinality(hll_deserialize(hll_serialize(hll_hash(123))));
+-- BE must still be serving queries
+SELECT count(*) FROM t_hll;

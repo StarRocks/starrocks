@@ -54,11 +54,13 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 /*
  * This is the bdb implementation of Journal interface.
  * First, we open() this journal, then read from or write to the bdb environment
- * We can also get journal id information by calling get***Id functions.
+ * We can also get journal id information by calling getXXXId functions.
  * Finally, close this journal.
  * This class encapsulates the read, write APIs of bdbje
  */
@@ -67,14 +69,14 @@ public class BDBJEJournal implements Journal {
     static int RETRY_TIME = 3;
     static int SLEEP_INTERVAL_SEC = 5;
 
-    private BDBEnvironment bdbEnvironment = null;
+    private BDBEnvironment bdbEnvironment;
     protected CloseSafeDatabase currentJournalDB = null;
-    protected Transaction currentTrasaction = null;
+    protected Transaction currentTransaction = null;
     // used to distinguish different module's db in BDB, must be empty or end with '_'
     private final String prefix;
 
     // store uncommitted kv, used for rebuilding txn on commit fails
-    private List<Pair<DatabaseEntry, DatabaseEntry>> uncommitedDatas = new ArrayList<>();
+    private final List<Pair<DatabaseEntry, DatabaseEntry>> uncommittedEntries = new ArrayList<>();
 
     @VisibleForTesting
     public BDBJEJournal(BDBEnvironment bdbEnvironment, CloseSafeDatabase currentJournalDB) {
@@ -139,27 +141,28 @@ public class BDBJEJournal implements Journal {
 
     @Override
     public long getMaxJournalId() {
-        long ret = -1;
+        return getJournalIdRange().second;
+    }
+
+    @Override
+    public Pair<Long, Long> getJournalIdRange() {
         if (bdbEnvironment == null) {
-            return ret;
+            return Pair.create(-1L, -1L);
         }
         List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
-        if (dbNames == null || dbNames.size() == 0) {
-            return ret;
+        if (dbNames == null || dbNames.isEmpty()) {
+            return Pair.create(-1L, -1L);
         }
 
+        long minJournalId = dbNames.get(0);
         int index = dbNames.size() - 1;
         String dbName = getFullDatabaseName(dbNames.get(index));
         long dbNumberName = dbNames.get(index);
         // open database temporarily and close after count
-        Database database = bdbEnvironment.openDatabase(dbName).getDb();
-        try {
-            ret = dbNumberName + database.count() - 1;
-        } finally {
-            database.close();
+        try (Database database = bdbEnvironment.openDatabase(dbName).getDb()) {
+            long maxJournalId = dbNumberName + database.count() - 1;
+            return Pair.create(minJournalId, maxJournalId);
         }
-
-        return ret;
     }
 
     @Override
@@ -172,13 +175,13 @@ public class BDBJEJournal implements Journal {
 
     /**
      * open the bdbje environment, and get the current journal database
-     * This function is only called if master is transfered, and is used for write journal
+     * This function is only called if master is transferred, and is used for write journal
      * So there's no need to catch RestartRequiredException
      */
     @Override
     public void open() throws InterruptedException, JournalException {
         // Open a new journal database or get last existing one as current journal database
-        List<Long> dbNames = null;
+        List<Long> dbNames;
         JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
@@ -191,8 +194,8 @@ public class BDBJEJournal implements Journal {
                 if (dbNames == null) {  // bdb environment is closing
                     throw new JournalException("fail to get dbNames while open bdbje journal. will exit");
                 }
-                String dbName = null;
-                if (dbNames.size() == 0) {
+                String dbName;
+                if (dbNames.isEmpty()) {
                     /*
                      *  This is the very first time to open. Usually, we will open a new database named "1".
                      *  But when we start cluster with an image file copied from other cluster,
@@ -236,31 +239,39 @@ public class BDBJEJournal implements Journal {
      */
     @Override
     public void deleteJournals(long deleteToJournalId) {
+        deleteJournalsAndGetMinJournalId(deleteToJournalId);
+    }
+
+    @Override
+    public long deleteJournalsAndGetMinJournalId(long deleteToJournalId) {
         List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
-        if (dbNames == null) {
+        if (dbNames == null || dbNames.isEmpty()) {
             LOG.info("delete database names is null.");
-            return;
+            return -1L;
         }
 
-        String msg = "existing database names: ";
+        StringBuilder msg = new StringBuilder("existing database names: ");
         for (long name : dbNames) {
-            msg += name + " ";
+            msg.append(name).append(" ");
         }
-        msg += ", deleteToJournalId is " + deleteToJournalId;
-        LOG.info(msg);
+        msg.append(", deleteToJournalId is ").append(deleteToJournalId);
+        LOG.info(msg.toString());
 
+        int firstRetainedIndex = 0;
         for (int i = 1; i < dbNames.size(); i++) {
             if (deleteToJournalId >= dbNames.get(i)) {
                 long name = dbNames.get(i - 1);
                 String dbName = getFullDatabaseName(name);
                 LOG.info("delete database name {}", dbName);
                 bdbEnvironment.removeDatabase(dbName);
+                firstRetainedIndex = i;
             } else {
                 LOG.info("database name {} is larger than deleteToJournalId {}, not delete",
                         dbNames.get(i), deleteToJournalId);
                 break;
             }
         }
+        return dbNames.get(firstRetainedIndex);
     }
 
     @Override
@@ -268,11 +279,11 @@ public class BDBJEJournal implements Journal {
         List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
         assert (dbNames != null);
 
-        String msg = "database names: ";
+        StringBuilder msg = new StringBuilder("database names: ");
         for (long name : dbNames) {
-            msg += name + " ";
+            msg.append(name).append(" ");
         }
-        LOG.info(msg);
+        LOG.info(msg.toString());
 
         if (dbNames.size() < 2) {
             return 0;
@@ -300,9 +311,9 @@ public class BDBJEJournal implements Journal {
      */
     @Override
     public void batchWriteBegin() throws InterruptedException, JournalException {
-        if (currentTrasaction != null) {
+        if (currentTransaction != null) {
             throw new JournalException(String.format(
-                    "failed to begin batch write because has running txn = %s", currentTrasaction));
+                    "failed to begin batch write because has running txn = %s", currentTransaction));
         }
 
         JournalException exception = null;
@@ -313,7 +324,7 @@ public class BDBJEJournal implements Journal {
                     Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
                 }
 
-                currentTrasaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
+                currentTransaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
                         null, bdbEnvironment.getTxnConfig());
                 return;
             } catch (DatabaseException e) {
@@ -334,7 +345,7 @@ public class BDBJEJournal implements Journal {
      */
     @Override
     public void batchWriteAppend(long journalId, DataOutputBuffer buffer) throws InterruptedException, JournalException {
-        if (currentTrasaction == null) {
+        if (currentTransaction == null) {
             throw new JournalException("failed to append because no running txn!");
         }
         // id is the key
@@ -352,19 +363,19 @@ public class BDBJEJournal implements Journal {
                     Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
                 }
 
-                OperationStatus status = currentJournalDB.put(currentTrasaction, theKey, theData);
+                OperationStatus status = currentJournalDB.put(currentTransaction, theKey, theData);
                 if (status != OperationStatus.SUCCESS) {
                     throw new JournalException(String.format(
                             "failed to append journal after retried %d times! status[%s] db[%s] key[%s] data[%s]",
                             i + 1, status, currentJournalDB, theKey, theData));
                 }
                 // success
-                uncommitedDatas.add(Pair.create(theKey, theData));
+                uncommittedEntries.add(Pair.create(theKey, theData));
                 return;
             } catch (DatabaseException e) {
                 String errMsg = String.format(
                         "failed to append journal after retried %d times! key[%s] value[%s] txn[%s] db[%s]",
-                        i + 1, theKey, theData, currentTrasaction, currentJournalDB);
+                        i + 1, theKey, theData, currentTransaction, currentJournalDB);
                 LOG.error(errMsg, e);
                 exception = new JournalException(errMsg);
                 exception.initCause(e);
@@ -385,7 +396,12 @@ public class BDBJEJournal implements Journal {
      */
     @Override
     public void batchWriteCommit() throws InterruptedException, JournalException {
-        if (currentTrasaction == null) {
+        batchWriteCommit(() -> true);
+    }
+
+    @Override
+    public void batchWriteCommit(BooleanSupplier shouldRetry) throws InterruptedException, JournalException {
+        if (currentTransaction == null) {
             throw new JournalException("failed to commit because no running txn!");
         }
 
@@ -394,16 +410,16 @@ public class BDBJEJournal implements Journal {
             for (int i = 0; i < RETRY_TIME; i++) {
                 // retry cleanups
                 if (i != 0) {
-                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
+                    waitBeforeCommitRetry(shouldRetry, exception, i);
 
-                    if (currentTrasaction == null || !currentTrasaction.isValid()) {
+                    if (currentTransaction == null || !currentTransaction.isValid()) {
                         try {
                             rebuildCurrentTransaction();
                         } catch (JournalException e) {
-                            // failed to rebuild txn, will continune to next attempt
+                            // failed to rebuild txn, will continue to next attempt
                             LOG.warn("failed to commit journal after retried {} times! failed to rebuild txn",
                                     i + 1, e);
-                            currentTrasaction = null;
+                            currentTransaction = null;
                             exception = e;
                             continue;
                         }
@@ -412,16 +428,30 @@ public class BDBJEJournal implements Journal {
 
                 // commit
                 try {
-                    if (currentTrasaction != null) {
-                        currentTrasaction.commit();
+                    if (currentTransaction != null) {
+                        currentTransaction.commit();
                     }
                     return;
-                } catch (DatabaseException e) {
+                } catch (DatabaseException | IllegalStateException e) {
+                    // IllegalStateException: the JE transaction was invalidated/closed before commit() ran
+                    // (e.g. it timed out during a long stall, or leadership was lost). JE's
+                    // Transaction.checkOpen() throws a plain java.lang.IllegalStateException ("Transaction
+                    // has been closed"), which is NOT a DatabaseException. If it escaped, it would bypass
+                    // JournalWriter.writeOneBatch's JournalException handler, the in-flight batch's tasks
+                    // would never be aborted, their waiting callers would block forever, and the leader WAL
+                    // apply fence (EditLog.inFlight) would leak -> demotion's EditLog.awaitWalDrained then
+                    // times out (leader_demotion_drain_timeout_sec) and System.exit(-1)s. Treat it as a
+                    // commit failure so the normal retry/abort path runs.
                     String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
-                            i + 1, currentTrasaction, currentJournalDB);
+                            i + 1, currentTransaction, currentJournalDB);
                     LOG.error(errMsg, e);
                     exception = new JournalException(errMsg);
                     exception.initCause(e);
+                    if (!shouldRetry.getAsBoolean()) {
+                        LOG.warn("skip commit retry because retry predicate is false after {} failed attempts",
+                                i + 1, exception);
+                        throw exception;
+                    }
                 }
             }
             // failed after retried
@@ -430,28 +460,53 @@ public class BDBJEJournal implements Journal {
             }
         } finally {
             // always reset current txn
-            currentTrasaction = null;
-            uncommitedDatas.clear();
+            currentTransaction = null;
+            uncommittedEntries.clear();
         }
+    }
+
+    private void waitBeforeCommitRetry(BooleanSupplier shouldRetry, JournalException exception, int retryIndex)
+            throws InterruptedException, JournalException {
+        long remainingMs = TimeUnit.SECONDS.toMillis(SLEEP_INTERVAL_SEC);
+        while (remainingMs > 0) {
+            if (!shouldRetry.getAsBoolean()) {
+                LOG.warn("skip commit retry {} because retry predicate is false", retryIndex + 1, exception);
+                throw buildRetryDisabledException(exception, retryIndex);
+            }
+            long sleepMs = Math.min(remainingMs, 100L);
+            Thread.sleep(sleepMs);
+            remainingMs -= sleepMs;
+        }
+        if (!shouldRetry.getAsBoolean()) {
+            LOG.warn("skip commit retry {} because retry predicate is false", retryIndex + 1, exception);
+            throw buildRetryDisabledException(exception, retryIndex);
+        }
+    }
+
+    private JournalException buildRetryDisabledException(JournalException exception, int retryIndex) {
+        if (exception != null) {
+            return exception;
+        }
+        return new JournalException("commit retry " + (retryIndex + 1) + " is disabled");
     }
 
     /**
      * txn can be invalid if commit fails on exception
-     * in this case, we rebuild the current transaction with `uncommitedDatas`
+     * in this case, we rebuild the current transaction with `uncommittedEntries`
      * there's no need to retry while we were rebuilding since we have retried outside this function
      */
     private void rebuildCurrentTransaction() throws JournalException {
-        LOG.warn("transaction is invalid, rebuild the txn with {} kvs", uncommitedDatas.size());
+        LOG.warn("transaction is invalid, rebuild the txn with {} kvs", uncommittedEntries.size());
 
         try {
             //  begin transaction
-            currentTrasaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
+            currentTransaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
                     null, bdbEnvironment.getTxnConfig());
             // append
-            for (Pair<DatabaseEntry, DatabaseEntry> kvPair : uncommitedDatas) {
+            for (Pair<DatabaseEntry, DatabaseEntry> kvPair : uncommittedEntries) {
                 DatabaseEntry theKey = kvPair.first;
                 DatabaseEntry theData = kvPair.second;
-                OperationStatus status = currentJournalDB.put(currentTrasaction, theKey, theData);
+                OperationStatus status = currentJournalDB.put(currentTransaction, theKey, theData);
                 if (status != OperationStatus.SUCCESS) {
                     String msg = String.format(
                             "failed to append journal! status[%s] db[%s] key[%s] data[%s]",
@@ -460,9 +515,9 @@ public class BDBJEJournal implements Journal {
                     throw new JournalException(msg);
                 }
             }
-            LOG.info("rebuild txn succeed. new txn {}", currentTrasaction);
+            LOG.info("rebuild txn succeed. new txn {}", currentTransaction);
         } catch (DatabaseException e) {
-            String errMsg = String.format("failed to rebuild txn! txn[%s] db[%s]", currentTrasaction, currentJournalDB);
+            String errMsg = String.format("failed to rebuild txn! txn[%s] db[%s]", currentTransaction, currentJournalDB);
             LOG.error(errMsg, e);
             JournalException exception = new JournalException(errMsg);
             exception.initCause(e);
@@ -475,24 +530,24 @@ public class BDBJEJournal implements Journal {
      * for bdb: abort current transaction.
      */
     @Override
-    public void batchWriteAbort() throws InterruptedException, JournalException {
-        if (currentTrasaction == null) {
+    public void batchWriteAbort() throws JournalException {
+        if (currentTransaction == null) {
             LOG.warn("failed to abort transaction because no running transaction, will just ignore and return.");
             return;
         }
         try {
-            currentTrasaction.abort();
+            currentTransaction.abort();
         } catch (DatabaseException e) {
             JournalException exception = new JournalException(String.format(
-                    "failed to abort batch write! txn[%s] db[%s]", currentTrasaction, currentJournalDB));
+                    "failed to abort batch write! txn[%s] db[%s]", currentTransaction, currentJournalDB));
             exception.initCause(e);
             throw exception;
         } finally {
-            currentTrasaction = null;
+            currentTransaction = null;
         }
     }
 
     private String getFullDatabaseName(long dbId) {
-        return prefix + Long.toString(dbId);
+        return prefix + dbId;
     }
 }

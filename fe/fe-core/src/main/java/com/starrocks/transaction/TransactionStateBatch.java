@@ -15,21 +15,22 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class TransactionStateBatch implements Writable {
@@ -39,15 +40,62 @@ public class TransactionStateBatch implements Writable {
     @SerializedName("transactionStates")
     List<TransactionState> transactionStates = new ArrayList<>();
 
+    // partitionId -> beId -> tabletId
+    // used to clean txnLog when publish succeeded,
+    // no need to persist, just try the best effort,
+    // for vacuum will clean the txnLog finally
+    ConcurrentHashMap<Long, Map<ComputeNode, Set<Long>>> partitionToTablets = new ConcurrentHashMap<>();
+
     public TransactionStateBatch() {
     }
+
     public TransactionStateBatch(List<TransactionState> transactionStates) {
         this.transactionStates = transactionStates;
     }
 
+    public TransactionStateBatch(TransactionStateBatch stateBatch) {
+        this.transactionStates = stateBatch.transactionStates.stream()
+                .map(TransactionState::new)
+                .collect(Collectors.toList());
+        this.partitionToTablets = stateBatch.partitionToTablets;
+    }
+
+    // No concurrency issues.
+    // Because in the case of concurrent calls,
+    // the partitionId will not be the same,
+    // and transactionStates is read-only which will not be changed
     public void setCompactionScore(long tableId, long partitionId, Quantiles quantiles) {
-        transactionStates.stream().forEach(transactionState -> transactionState.getTableCommitInfo(tableId).
-                getPartitionCommitInfo(partitionId).setCompactionScore(quantiles));
+        // commitInfo can be null in a multi-table batch when a txn does not write this table
+        this.transactionStates.stream()
+                .map(transactionState -> transactionState.getTableCommitInfo(tableId))
+                .filter(commitInfo -> commitInfo != null && commitInfo.getPartitionCommitInfo(partitionId) != null)
+                .forEach(commitInfo -> commitInfo.getPartitionCommitInfo(partitionId).setCompactionScore(quantiles));
+    }
+
+    // Fan per-tablet stats onto each batched txn's PartitionCommitInfo for this partition.
+    // Mirrors setCompactionScore; applied (idempotently) in LakeTableTxnLogApplier.applyVisibleLog.
+    public void setTabletStats(long tableId, long partitionId, Map<Long, TabletStatPB> tabletStats) {
+        if (tabletStats == null || tabletStats.isEmpty()) {
+            return;
+        }
+        this.transactionStates.stream()
+                .map(transactionState -> transactionState.getTableCommitInfo(tableId))
+                .filter(commitInfo -> commitInfo != null && commitInfo.getPartitionCommitInfo(partitionId) != null)
+                .forEach(commitInfo ->
+                        commitInfo.getPartitionCommitInfo(partitionId).putAllTabletStats(tabletStats));
+    }
+
+    public void putBeTablets(long partitionId, Map<ComputeNode, List<Long>> nodeToTablets)  {
+        for (Map.Entry<ComputeNode, List<Long>> nodeTablets : nodeToTablets.entrySet()) {
+            Map<ComputeNode, Set<Long>> oneNodeTablets =
+                    partitionToTablets.computeIfAbsent(partitionId, k -> new ConcurrentHashMap<>());
+            Set<Long> tablets = oneNodeTablets.computeIfAbsent(nodeTablets.getKey(), k -> ConcurrentHashMap.newKeySet());
+            tablets.addAll(nodeTablets.getValue());
+        }
+    }
+
+    public ConcurrentHashMap<Long, Map<ComputeNode, Set<Long>>> getPartitionToTablets() {
+        return partitionToTablets;
     }
 
     public void setTransactionVisibleInfo() {
@@ -56,7 +104,6 @@ public class TransactionStateBatch implements Writable {
             transactionState.clearErrorMsg();
             transactionState.setNewFinish();
             transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
-            transactionState.notifyVisible();
         }
     }
 
@@ -69,18 +116,25 @@ public class TransactionStateBatch implements Writable {
     // a proxy method
     public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
         for (TransactionState transactionState : transactionStates) {
-            // after status changed
-            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                    .getCallbackFactory().getCallback(transactionState.getCallbackId());
-            if (callback != null) {
-                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
-                    callback.afterVisible(transactionState, txnOperated);
+            for (Long callbackId : transactionState.getCallbackId()) {
+                // after status changed
+                TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getCallbackFactory().getCallback(callbackId);
+                if (callback != null) {
+                    if (txnOperated && Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
+                        try {
+                            callback.afterVisible(transactionState);
+                        } catch (Throwable t) {
+                            LOG.warn("afterVisible callback failed for txn {}, callbackId {}",
+                                    transactionState.getTransactionId(), callbackId, t);
+                        }
+                    }
                 }
             }
         }
     }
 
-    // all transctionState in TransactionStateBatch have the same dbId
+    // all transactionState in TransactionStateBatch have the same dbId
     public long getDbId() {
         if (transactionStates.size() != 0) {
             return transactionStates.get(0).getDbId();
@@ -89,23 +143,27 @@ public class TransactionStateBatch implements Writable {
     }
 
     public List<Long> getTxnIds() {
-        return transactionStates.stream().map(state -> state.getTransactionId()).collect(Collectors.toList());
+        return transactionStates.stream().map(TransactionState::getTransactionId).collect(Collectors.toList());
     }
 
-    public long getTableId() {
-        if (transactionStates.size() != 0) {
-            return transactionStates.get(0).getTableIdList().get(0);
+    // Union of table ids across all transactions in the batch, in first-appearance order.
+    // For a single-table batch this is a singleton list; for a multi-table batch
+    // (lake_enable_batch_publish_multi_table) table sets may differ across transactions.
+    public List<Long> getTableIdList() {
+        Set<Long> tableIds = new LinkedHashSet<>();
+        for (TransactionState state : transactionStates) {
+            tableIds.addAll(state.getTableIdList());
         }
-        return -1;
+        return new ArrayList<>(tableIds);
     }
 
     public long size() {
         return transactionStates.size();
     }
 
-    public TransactionState index(int index) throws UserException {
+    public TransactionState index(int index) throws StarRocksException {
         if (index < 0 || index >= transactionStates.size()) {
-            throw new UserException("index out of bound");
+            throw new StarRocksException("index out of bound");
         }
         return transactionStates.get(index);
     }
@@ -114,13 +172,22 @@ public class TransactionStateBatch implements Writable {
         return transactionStates;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    public void writeLock() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.writeLock();
+        }
     }
 
-    public static TransactionStateBatch read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TransactionStateBatch.class);
+    public void writeUnlock() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.writeUnlock();
+        }
+    }
+
+    public void replaySetTransactionStatus() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.replaySetTransactionStatus();
+        }
     }
 
     @Override

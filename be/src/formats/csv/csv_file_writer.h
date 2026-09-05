@@ -1,0 +1,127 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "formats/csv/converter.h"
+#include "formats/file_writer.h"
+#include "formats/io/formatted_output_stream.h"
+#include "gen_cpp/Types_types.h"
+
+namespace starrocks {
+class ColumnEvaluator;
+class FileSystem;
+class PriorityThreadPool;
+class RuntimeState;
+} // namespace starrocks
+
+namespace starrocks::formats {
+
+struct CSVWriterOptions : FileWriterOptions {
+    std::string column_terminated_by = ",";
+    std::string line_terminated_by = "\n";
+    std::string collection_delim = ",";
+    std::string mapkey_delim = ",";
+    bool is_hive = false;
+    bool include_header = false;
+    // 0 = disabled. When set, all non-NULL fields are wrapped with this char.
+    char enclose = 0;
+    // 0 = disabled. Used together with enclose to escape enclose/escape chars inside fields.
+    char escape = 0;
+
+    inline static std::string COLUMN_TERMINATED_BY = "column_terminated_by";
+    inline static std::string LINE_TERMINATED_BY = "line_terminated_by";
+    inline static std::string COLLECTION_DELIM = "collection_delim";
+    inline static std::string MAPKEY_DELIM = "mapkey_delim";
+    inline static std::string IS_HIVE = "is_hive";
+    inline static std::string INCLUDE_HEADER = "include_header";
+    inline static std::string ENCLOSE = "enclose";
+    inline static std::string ESCAPE = "escape";
+};
+
+// The primary purpose of this class is to support hive + csv. Use with caution in other cases.
+// TODO(letian-jiang): support escaping
+class CSVFileWriter final : public FileWriter {
+public:
+    CSVFileWriter(std::string location, std::shared_ptr<FormattedOutputStream> output_stream,
+                  std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
+                  std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                  std::shared_ptr<CSVWriterOptions> writer_options, std::function<void()> rollback_action);
+
+    ~CSVFileWriter() override;
+
+    Status init() override;
+
+    int64_t get_written_bytes() override;
+
+    int64_t get_allocated_bytes() override;
+
+    int64_t get_flush_batch_size() override;
+
+    Status write(Chunk* chunk) override;
+
+    FileCommitResult close() override;
+
+private:
+    const std::string _location;
+    std::shared_ptr<FormattedOutputStream> _output_stream;
+    const std::vector<std::string> _column_names;
+    const std::vector<TypeDescriptor> _types;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
+    std::shared_ptr<CSVWriterOptions> _writer_options;
+    const std::function<void()> _rollback_action;
+    std::shared_ptr<csv::Converter::Options> _converter_options;
+
+    int64_t _num_rows = 0;
+    bool _header_written = false;
+    // (nullable converter, not-null converter)
+    std::vector<std::pair<std::unique_ptr<csv::Converter>, std::unique_ptr<csv::Converter>>> _column_converters;
+
+    Status _write_header();
+
+    // Write a field value enclosed with enclose char, escaping internal enclose and escape
+    // chars. The converter writes into a temporary in-memory buffer, then this method scans
+    // the buffer and writes escaped content to the real output stream.
+    Status _write_enclosed_field(csv::Converter* converter, const Column& column, size_t row_num,
+                                 const csv::Converter::Options& options);
+
+    // Write a string value enclosed with enclose char, escaping internal enclose and escape
+    // chars. Shared by header and field writing paths.
+    Status _write_enclosed_string(const std::string& value);
+};
+
+class CSVFileWriterFactory : public FileWriterFactory {
+public:
+    CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
+                         std::map<std::string, std::string> options, std::vector<std::string> column_names,
+                         std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                         PriorityThreadPool* executors, RuntimeState* runtime_state);
+
+    Status init() override;
+
+    StatusOr<WriterAndStream> create(const std::string& path) const override;
+
+private:
+    std::shared_ptr<FileSystem> _fs;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
+    std::map<std::string, std::string> _options;
+    std::shared_ptr<CSVWriterOptions> _parsed_options;
+
+    std::vector<std::string> _column_names;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
+};
+
+} // namespace starrocks::formats

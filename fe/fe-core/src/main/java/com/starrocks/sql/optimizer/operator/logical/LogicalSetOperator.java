@@ -24,9 +24,11 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public abstract class LogicalSetOperator extends LogicalOperator {
@@ -53,6 +55,24 @@ public abstract class LogicalSetOperator extends LogicalOperator {
         return childOutputColumns;
     }
 
+    /**
+     * Return the children refs correspond to the output ref
+     *
+     * @param ref output ref
+     * @return children
+     */
+    public List<ColumnRefOperator> resolveColumnRef(ColumnRefOperator ref) {
+        int index = outputColumnRefOp.indexOf(ref);
+        if (index == -1) {
+            return null;
+        }
+        List<ColumnRefOperator> result = Lists.newArrayList();
+        for (var child : childOutputColumns) {
+            result.add(child.get(index));
+        }
+        return result;
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
@@ -67,6 +87,11 @@ public abstract class LogicalSetOperator extends LogicalOperator {
         List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
         outputColumnRefOp.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
         return new RowOutputInfo(columnOutputInfoList, outputColumnRefOp);
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        return new DomainProperty(Map.of());
     }
 
     @Override

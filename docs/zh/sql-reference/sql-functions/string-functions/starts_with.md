@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "如果字符串以指定前缀开头返回1，否则返回0。"
 ---
 
 # starts_with
 
-## 功能
+
 
 如果字符串以指定前缀开头返回 1，否则返回 0，任意参数为 NULL 则返回 NULL。
 

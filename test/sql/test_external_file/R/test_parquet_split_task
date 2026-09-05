@@ -1,0 +1,49 @@
+-- name: testParquetSplitTask
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_split_task/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/multi_stripes.parquet oss://${oss_bucket}/test_parquet_split_task/${uuid0}/multi_stripes.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 13,616. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE multi_stripes
+(
+    c0 int,
+    c1 string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_parquet_split_task/${uuid0}/",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+set enable_connector_split_io_tasks = true;
+-- result:
+-- !result
+set connector_max_split_size = 64;
+-- result:
+-- !result
+select c1, count(1) from multi_stripes where c0 % 26 in (0, 25) group by c1 order by c1;
+-- result:
+a	77
+z	76
+-- !result
+set connector_max_split_size = 64 * 1024 * 1024;
+-- result:
+-- !result
+select c1, count(1) from multi_stripes where c0 % 26 in (0, 25) group by c1 order by c1;
+-- result:
+a	77
+z	76
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_split_task/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

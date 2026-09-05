@@ -20,23 +20,43 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Delegate;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
 
 public class AnalyzeInsertTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -52,9 +72,9 @@ public class AnalyzeInsertTest {
     @Test
     public void testInsert() {
         analyzeFail("insert into t0 select v4,v5 from t1",
-                "Column count doesn't match value count");
-        analyzeFail("insert into t0 select 1,2", "Column count doesn't match value count");
-        analyzeFail("insert into t0 values(1,2)", "Column count doesn't match value count");
+                "Inserted target column count: 3 doesn't match select/value column count: 2");
+        analyzeFail("insert into t0 select 1,2", "Inserted target column count: 3 doesn't match select/value column count: 2");
+        analyzeFail("insert into t0 values(1,2)", "Inserted target column count: 3 doesn't match select/value column count: 2");
 
         analyzeFail("insert into tnotnull(v1) values(1)",
                 "must be explicitly mentioned in column permutation");
@@ -78,8 +98,44 @@ public class AnalyzeInsertTest {
 
         analyzeSuccess("insert into tmc values (1,2)");
         analyzeSuccess("insert into tmc (id,name) values (1,2)");
-        analyzeFail("insert into tmc values (1,2,3)", "Column count doesn't match value count");
+        analyzeFail("insert into tmc values (1,2,3)",
+                "Inserted target column count: 2 doesn't match select/value column count: 3");
         analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
+    }
+
+    /**
+     * An internal shadow-rewrite INSERT writes only the target rollup index via a column-subset target
+     * list, so a base required (NOT NULL, no-default) column that the rollup does not carry must NOT be
+     * required in the column permutation. {@code insert into tnotnull(v1) ...} omits the NOT NULL,
+     * no-default base column {@code v2}; as a plain INSERT this fails with "must be explicitly mentioned
+     * in column permutation" (see {@link #testInsert()}), but with the shadow-rewrite flags set the
+     * required-columns check is skipped and analysis succeeds. No user INSERT can set isShadowRewrite,
+     * so this relaxation is reachable only by the internal rewrite job.
+     */
+    @Test
+    public void testShadowRewriteSkipsRequiredColumnCheck() {
+        // Sanity: as a plain INSERT this omission is rejected.
+        analyzeFail("insert into tnotnull(v1) values(1)",
+                "must be explicitly mentioned in column permutation");
+
+        // Same statement, marked as an internal shadow rewrite with a target write index set: the
+        // required-columns loop is skipped, so analysis must NOT throw the permutation error.
+        StatementBase stmt = parseSql("insert into tnotnull(v1) values(1)");
+        Assertions.assertTrue(stmt instanceof InsertStmt);
+        InsertStmt insertStmt = (InsertStmt) stmt;
+        insertStmt.setShadowRewrite(true);
+        insertStmt.setTargetWriteIndexId(12345L);
+        Analyzer.analyze(insertStmt, getConnectContext());
+    }
+
+    @Test
+    public void testInsertOverwriteWhenSchemaChange() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getDb("test").getTable("t0");
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        analyzeFail("insert overwrite t0 select * from t0;",
+                "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
+        table.setState(OlapTable.OlapTableState.NORMAL);
     }
 
     @Test
@@ -88,35 +144,34 @@ public class AnalyzeInsertTest {
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadata) {
-            {
-                metadata.getDb("iceberg_catalog", "err_db");
-                result = null;
-                minTimes = 0;
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database();
             }
         };
-        analyzeFail("insert into iceberg_catalog.err_db.tbl values (1)",
-                "Unknown database 'err_db'");
 
-        new Expectations(metadata) {
-            {
-                metadata.getDb(anyString, anyString);
-                result = new Database();
-                minTimes = 0;
-
-                metadata.getTable(anyString, anyString, anyString);
-                result = null;
-                minTimes = 0;
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return null;
             }
         };
         analyzeFail("insert into iceberg_catalog.db.err_tbl values (1)",
                 "Table err_tbl is not found");
 
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString, anyString);
-                result = icebergTable;
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 minTimes = 0;
+                result = new Database();
 
                 icebergTable.supportInsert();
                 result = true;
@@ -124,12 +179,20 @@ public class AnalyzeInsertTest {
             }
         };
         analyzeFail("insert into iceberg_catalog.db.tbl values (1)",
-                "Column count doesn't match value count");
+                "Inserted target column count: 0 doesn't match select/value column count: 1");
 
         new Expectations(metadata) {
             {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
                 icebergTable.getBaseSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT));
+                result = ImmutableList.of(new Column("c1", IntegerType.INT));
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", IntegerType.INT));
                 minTimes = 0;
             }
         };
@@ -139,15 +202,26 @@ public class AnalyzeInsertTest {
     @Test
     public void testPartitionedIcebergTable(@Mocked IcebergTable icebergTable) {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
                 result = new Database();
-                minTimes = 0;
-
-                metadata.getTable(anyString, anyString, anyString);
-                result = icebergTable;
-                minTimes = 0;
 
                 icebergTable.supportInsert();
                 result = true;
@@ -158,7 +232,7 @@ public class AnalyzeInsertTest {
                 minTimes = 0;
 
                 icebergTable.getColumn(anyString);
-                result = ImmutableList.of(new Column("p1", Type.ARRAY_DATE));
+                result = ImmutableList.of(new Column("p1", ArrayType.ARRAY_DATE));
                 minTimes = 0;
 
                 icebergTable.isIcebergTable();
@@ -176,11 +250,17 @@ public class AnalyzeInsertTest {
         new Expectations() {
             {
                 icebergTable.getBaseSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.INT), new Column("p2", Type.INT));
+                result = ImmutableList.of(new Column("c1", IntegerType.INT),
+                        new Column("p1", IntegerType.INT), new Column("p2", IntegerType.INT));
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", IntegerType.INT),
+                        new Column("p1", IntegerType.INT), new Column("p2", IntegerType.INT));
                 minTimes = 0;
 
                 icebergTable.getColumn(anyString);
-                result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.INT));
+                result = ImmutableList.of(new Column("p1", IntegerType.INT), new Column("p2", IntegerType.INT));
                 minTimes = 0;
 
                 icebergTable.getPartitionColumnNames();
@@ -189,19 +269,23 @@ public class AnalyzeInsertTest {
             }
         };
 
-        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)",
-                "partition value can't be null.");
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)");
         analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
 
         new Expectations() {
             {
                 icebergTable.getBaseSchema();
-                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.DATETIME),
-                        new Column("p2", Type.INT));
+                result = ImmutableList.of(new Column("c1", IntegerType.INT), new Column("p1", DateType.DATETIME),
+                        new Column("p2", IntegerType.INT));
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", IntegerType.INT), new Column("p1", DateType.DATETIME),
+                        new Column("p2", IntegerType.INT));
                 minTimes = 0;
 
                 icebergTable.getColumn(anyString);
-                result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.DATETIME));
+                result = ImmutableList.of(new Column("p1", IntegerType.INT), new Column("p2", DateType.DATETIME));
                 minTimes = 0;
 
                 icebergTable.getPartitionColumnNames();
@@ -210,24 +294,149 @@ public class AnalyzeInsertTest {
 
                 icebergTable.getType();
                 result = Table.TableType.ICEBERG;
-                minTimes = 1;
+                minTimes = 0;
             }
         };
 
-        analyzeFail("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"",
-                "Unsupported partition column type [DATETIME] for ICEBERG table sink.");
+        analyzeSuccess("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"");
+    }
+
+    @Test
+    public void testInsertIntoNonExistentIcebergPartitionColumn(@Mocked IcebergTable icebergTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+                icebergTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.isIcebergTable();
+                result = true;
+                minTimes = 0;
+
+                // Non-partitioned table: no partition columns at all.
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList();
+                minTimes = 0;
+
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", IntegerType.INT));
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", IntegerType.INT));
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = new Column("c1", IntegerType.INT);
+                minTimes = 0;
+            }
+        };
+
+        // A static partition clause naming a non-partition column must be rejected, not silently
+        // ignored, even when a target column list is present (issue #11350).
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(nonexist_part_col='x') (c1) values (1)",
+                "Only 0 partition columns can be included in the partition clause");
+    }
+
+    @Test
+    public void testInsertIntoIcebergStaticPartitionWithColumnList(@Mocked IcebergTable icebergTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        Column c1 = new Column("c1", IntegerType.INT, true);
+        Column p1 = new Column("p1", IntegerType.INT, true);
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+                icebergTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.isIcebergTable();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList("p1");
+                minTimes = 0;
+
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(c1, p1);
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(c1, p1);
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = new Delegate<Column>() {
+                    Column getColumn(String name) {
+                        return "p1".equalsIgnoreCase(name) ? p1 : c1;
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        // The target-list invariant still applies to a static partition insert: a column list that
+        // omits the partition column is rejected (partition columns must appear in the list).
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111) (c1) values (1)",
+                "Must include partition column p1");
+
+        // A column list that includes the partition column stays accepted (the partition value is
+        // taken from the PARTITION clause; only the non-partition column is supplied by VALUES).
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111) (c1, p1) values (1)");
     }
 
     @Test
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
-        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadata) {
-            {
-                metadata.getDb(anyString, anyString);
-                result = new Database();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database();
+            }
+        };
 
-                metadata.getTable(anyString, anyString, anyString);
-                result = hiveTable;
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext conntext, Database database, TableName tableName) {
+                return hiveTable;
             }
         };
 
@@ -235,19 +444,23 @@ public class AnalyzeInsertTest {
             {
                 hiveTable.supportInsert();
                 result = true;
+                minTimes = 0;
 
                 hiveTable.isHiveTable();
                 result = true;
+                minTimes = 0;
 
                 hiveTable.isUnPartitioned();
                 result = false;
+                minTimes = 0;
 
                 hiveTable.getHiveTableType();
                 result = HiveTable.HiveTableType.EXTERNAL_TABLE;
+                minTimes = 0;
             }
         };
 
-        analyzeFail("insert into hive_catalog.db.tbl select 1, 2, 3",
+        analyzeFail("insert into hive_catalog.db.tbl select 1, 2, 3", 
                 "Only support to write hive managed table");
     }
 
@@ -257,6 +470,11 @@ public class AnalyzeInsertTest {
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select \"abc\" as k1");
+
+        analyzeSuccess("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\" ) \n" +
                 "select \"abc\" as k1");
 
         analyzeFail("insert into files ( \n" +
@@ -269,31 +487,21 @@ public class AnalyzeInsertTest {
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"compression\" = \"uncompressed\" ) \n" +
                         "select \"abc\" as k1",
-                "format is a mandatory property. " +
-                        "Use \"path\" = \"parquet\" as only parquet format is supported now");
+                "format is a mandatory property. Use any of (parquet, orc, csv).");
 
         analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                "\t\"format\"=\"orc\", \n" +
+                "\t\"format\"=\"unknown\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1",
-                "use \"path\" = \"parquet\", as only parquet format is supported now");
-
-        analyzeFail("insert into files ( \n" +
-                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                        "\t\"format\"=\"parquet\" ) \n" +
-                        "select \"abc\" as k1",
-                "compression is a mandatory property. " +
-                "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                "(uncompressed, gzip, brotli, zstd, lz4).");
+                "Unsupported format unknown. Use any of (parquet, orc, csv).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"format\"=\"parquet\", \n" +
                         "\t\"compression\" = \"unknown\" ) \n" +
                         "select \"abc\" as k1",
-                "compression type unknown is not supported. " +
-                        "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
+                "Unsupported compression codec unknown. Use any of (uncompressed, snappy, lz4, zstd, gzip).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -310,14 +518,6 @@ public class AnalyzeInsertTest {
                         "\t\"compression\" = \"uncompressed\", \n" +
                         "\t\"partition_by\"=\"k1\" ) \n" +
                         "select \"abc\" as k1");
-
-        analyzeFail("insert into files ( \n" +
-                "\t\"path\" = \"s3://path/to/directory/prefix\", \n" +
-                "\t\"format\"=\"parquet\", \n" +
-                "\t\"compression\" = \"uncompressed\", \n" +
-                "\t\"partition_by\"=\"k1\" ) \n" +
-                "select \"abc\" as k1",
-                "If partition_by is used, path should be a directory ends with forward slash(/).");
 
         analyzeSuccess("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -350,10 +550,60 @@ public class AnalyzeInsertTest {
                 "got invalid parameter \"single\" = \"false-false\", expect a boolean value (true or false).");
 
         analyzeFail("insert into files ( \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                        "\t\"format\"=\"parquet\", \n" +
+                        "\t\"compression\" = \"uncompressed\", \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"f\" ) \n" +
+                        "select \"abc\" as k1, 123 as k2",
+                "got invalid parameter \"parquet.use_legacy_encoding\" = \"f\", expect a boolean value (true or false).");
+
+        analyzeSuccess("insert into files ( \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                        "\t\"format\"=\"parquet\", \n" +
+                        "\t\"compression\" = \"uncompressed\", \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"true\" ) \n" +
+                        "select \"abc\" as k1, 123 as k2");
+
+        analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\", \n" +
                 "\t\"partition_by\"=\"k1\" ) \n" +
                 "select 1.23 as k1", "partition column does not support type of DECIMAL32(3,2).");
+
+        analyzeFail("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\", \n" +
+                "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
+    }
+
+    @Test
+    public void testInsertFailAbortTransaction() throws Exception {
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        ConnectContext connectContext = getConnectContext();
+        starRocksAssert.withDatabase("insert_fail").withTable("create table insert_fail.t1 (k1 int, k2 int) " +
+                "distributed by hash(k1) buckets 1 properties ('replication_num' = '1')");
+
+        String insertSql = "insert into insert_fail.t1 values (1)";
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        StatementBase statement = SqlParser.parseSingleStatement(insertSql, connectContext.getSessionVariable().getSqlMode());
+        try {
+            new StmtExecutor(connectContext, statement).execute();
+        } catch (Exception e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("Inserted target column count: 2 doesn't match select/value column count: 1"));
+        }
+
+        List<List<String>> results = starRocksAssert.show("show proc '/transactions/insert_fail'");
+        Assertions.assertEquals(2, results.size());
+        for (List<String> row : results) {
+            Assertions.assertEquals(2, row.size());
+            if (row.get(0).equals("running")) {
+                Assertions.assertEquals("0", row.get(1));
+            } else if (row.get(0).equals("finished")) {
+                Assertions.assertEquals("1", row.get(1));
+            }
+        }
     }
 }

@@ -14,11 +14,14 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
+#include "storage/rowset/rowset.h"
 #include "storage/tablet_updates.h"
 
 namespace starrocks {
@@ -27,7 +30,7 @@ class Tablet;
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
-    std::vector<std::unique_ptr<Column>> write_columns;
+    MutableColumns write_columns;
     std::vector<uint32_t> write_columns_uid;
     ChunkPtr partial_update_value_columns; // only used for column_with_row store
     bool inited = false;
@@ -63,21 +66,21 @@ struct PartialUpdateState {
 
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
-    std::unique_ptr<Column> write_column;
-    Rowset* rowset;
+    MutableColumnPtr write_column;
+    Rowset* rowset{nullptr};
     TabletSchemaCSPtr schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id{0};
+    uint32_t segment_id{0};
     std::vector<uint32_t> rowids;
-    std::unique_ptr<Column> delete_pks;
-    bool skip_rewrite;
-    AutoIncrementPartialUpdateState() : rowset(nullptr), schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    MutableColumnPtr delete_pks;
+    bool skip_rewrite{false};
+    AutoIncrementPartialUpdateState() : schema(nullptr) {}
 
     void init(Rowset* rowset, TabletSchemaCSPtr schema, uint32_t id, uint32_t segment_id) {
         this->rowset = rowset;
-        this->schema = schema;
+        this->schema = std::move(schema);
         this->id = id;
         this->segment_id = segment_id;
     }
@@ -98,19 +101,19 @@ struct AutoIncrementPartialUpdateState {
 
 class RowsetUpdateState {
 public:
-    using ColumnUniquePtr = std::unique_ptr<Column>;
-
     RowsetUpdateState();
     ~RowsetUpdateState();
+    RowsetUpdateState(const RowsetUpdateState&) = delete;
+    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
 
     Status load(Tablet* tablet, Rowset* rowset);
 
     Status apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_schema, Rowset* rowset, uint32_t rowset_id,
                  uint32_t segment_id, EditVersion latest_applied_version, const PrimaryIndex& index,
-                 std::unique_ptr<Column>& delete_pks, int64_t* append_column_size);
+                 MutableColumnPtr& delete_pks, int64_t* append_column_size);
 
-    const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
-    const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
+    const MutableColumns& upserts() const { return _upserts; }
+    const MutableColumns& deletes() const { return _deletes; }
 
     std::size_t memory_usage() const { return _memory_usage; }
 
@@ -123,26 +126,28 @@ public:
     Status test_check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
                                EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
                                const PrimaryIndex& index) {
-        return _check_and_resolve_conflict(tablet, rowset, rowset_id, segment_id, latest_applied_version,
-                                           read_column_ids, index, tablet->tablet_schema());
+        _tablet = tablet;
+        _rowset = rowset;
+        return _check_and_resolve_conflict(rowset_id, segment_id, latest_applied_version, read_column_ids, index,
+                                           tablet->tablet_schema());
     }
 
     static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_default,
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid, vector<uint32_t>* idxes);
 
-    Status load_deletes(Rowset* rowset, uint32_t delete_id);
-    Status load_upserts(Rowset* rowset, uint32_t upsert_id);
+    Status load_deletes(uint32_t delete_id);
+    Status load_upserts(uint32_t upsert_id);
     void release_upserts(uint32_t idx);
     void release_deletes(uint32_t idx);
 
 private:
-    Status _load_deletes(Rowset* rowset, uint32_t delete_id, Column* pk_column);
-    Status _load_upserts(Rowset* rowset, uint32_t upsert_id, Column* pk_column);
+    Status _load_deletes(uint32_t delete_id, Column* pk_column);
+    Status _load_upserts(uint32_t upsert_id, Column* pk_column);
 
-    Status _do_load(Tablet* tablet, Rowset* rowset);
+    Status _do_load();
 
-    Status _prepare_partial_update_value_columns(Tablet* tablet, Rowset* rowset, uint32_t idx,
-                                                 const std::vector<uint32_t>& update_column_ids);
+    Status _prepare_partial_update_value_columns(uint32_t idx, const std::vector<uint32_t>& update_column_ids,
+                                                 const TabletSchemaCSPtr& tablet_schema);
 
     // `need_lock` means whether the `_index_lock` in TabletUpdates needs to held.
     // `index_lock` is used to avoid access the PrimaryIndex at the same time as the apply thread.
@@ -150,34 +155,33 @@ private:
     // In rowset commit phase, `need_lock` should be set as true to prevent concurrent access.
     // In rowset apply phase, `_index_lock` is already held by apply thread, `need_lock` should be set as false
     // to avoid dead lock.
-    Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock,
-                                          const TabletSchemaCSPtr& tablet_schema);
+    Status _prepare_partial_update_states(uint32_t idx, bool need_lock, const TabletSchemaCSPtr& tablet_schema);
 
-    Status _prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
-                                                         EditVersion latest_applied_version,
+    Status _prepare_auto_increment_partial_update_states(uint32_t idx, EditVersion latest_applied_version,
                                                          const std::vector<uint32_t>& column_id,
                                                          const TabletSchemaCSPtr& tablet_schema);
 
-    Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
-                                       EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
-                                       const PrimaryIndex& index, const TabletSchemaCSPtr& tablet_schema);
+    Status _check_and_resolve_conflict(uint32_t rowset_id, uint32_t segment_id, EditVersion latest_applied_version,
+                                       std::vector<uint32_t>& read_column_ids, const PrimaryIndex& index,
+                                       const TabletSchemaCSPtr& tablet_schema);
 
-    Status _rebuild_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
+    Status _rebuild_partial_update_states(uint32_t rowset_id, uint32_t segment_id,
                                           const TabletSchemaCSPtr& tablet_schema);
 
-    bool _check_partial_update(Rowset* rowset);
+    bool _check_partial_update();
 
     std::once_flag _load_once_flag;
     Status _status;
     // one for each segment file
-    std::vector<ColumnUniquePtr> _upserts;
+    MutableColumns _upserts;
     // one for each delete file
-    std::vector<ColumnUniquePtr> _deletes;
+    MutableColumns _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
     TabletSchemaCSPtr _tablet_schema = nullptr;
 
     // column_with_row partial update states
+    bool _partial_update_value_column_inited = false;
     std::vector<uint32_t> _partial_update_value_column_ids;
     // only column added by reading rowset
     Schema _partial_update_value_columns_schema;
@@ -188,9 +192,19 @@ private:
     std::vector<PartialUpdateState> _partial_update_states;
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
+    std::map<string, string> _column_to_expr_value;
 
-    RowsetUpdateState(const RowsetUpdateState&) = delete;
-    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
+    // A RowsetUpdateState is cached per (tablet, rowset) and serves that single
+    // rowset for its whole lifetime. Capture the tablet/rowset once on load so the
+    // load/apply helpers don't have to thread them through as parameters, and hold
+    // a RowsetReleaseGuard to keep the rowset (and hence the cached segment
+    // iterators below) alive until this state is destroyed.
+    Tablet* _tablet = nullptr;
+    Rowset* _rowset = nullptr;
+    std::optional<RowsetReleaseGuard> _rowset_guard;
+
+    OlapReaderStatistics _segment_iters_stats;
+    std::vector<ChunkIteratorPtr> _segment_iters;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

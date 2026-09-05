@@ -22,7 +22,13 @@ MYSELF=
 STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
 STARROCKS_HOME=${STARROCKS_ROOT}/fe
 FE_CONFFILE=$STARROCKS_HOME/conf/fe.conf
-EXIT_IN_PROGRESS=false
+META_DIR=$STARROCKS_HOME/meta
+IS_FE_OBSERVER=${IS_FE_OBSERVER:-"false"}
+
+case "$IS_FE_OBSERVER" in
+    1|true|True) IS_FE_OBSERVER="true" ;;
+    *) IS_FE_OBSERVER="false" ;;
+esac
 
 log_stderr()
 {
@@ -59,7 +65,7 @@ collect_env_info()
     POD_INDEX=`echo $POD_FQDN | awk -F'.' '{print $1}' | awk -F'-' '{print $NF}'`
 
     # edit_log_port from conf file
-    local edit_port=`parse_confval_from_fe_conf "edit_log_port"`
+    local edit_log_port=`parse_confval_from_fe_conf "edit_log_port"`
     if [[ "x$edit_log_port" != "x" ]] ; then
         EDIT_LOG_PORT=$edit_log_port
     fi
@@ -88,22 +94,29 @@ probe_leader_for_pod0()
     local memlist=
     while true
     do
-        memlist=`show_frontends $svc`
-        local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $2}'`
-        if [[ "x$leader" != "x" ]] ; then
-            # has leader, done
-            log_stderr "Find leader: $leader!"
-            FE_LEADER=$leader
-            return 0
-        fi
+        NC="nc -z -w 2"
+        if $NC $svc $QUERY_PORT ; then
+            log_stderr "FE service is alive, check if has leader ..."
 
-        if [[ "x$memlist" != "x" ]] ; then
-            # has memberlist ever before
-            has_member=true
+            memlist=`show_frontends $svc`
+            local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $3}'`
+            if [[ "x$leader" != "x" ]] ; then
+                # has leader, done
+                log_stderr "Find leader: $leader!"
+                FE_LEADER=$leader
+                return 0
+            fi
+
+            if [[ "x$memlist" != "x" ]] ; then
+                # FE service does not have leader yet, but has members.
+                has_member=true
+            fi
+            log_stderr "No leader yet, has_member: $has_member ..."
+        else
+            log_stderr "FE service $svc:$QUERY_PORT is not alive yet!"
         fi
 
         # no leader yet, check if needs timeout and quit
-        log_stderr "No leader yet, has_member: $has_member ..."
         local timeout=$PROBE_LEADER_POD0_TIMEOUT
         if $has_member ; then
             # set timeout to the same as PODX since there are other members
@@ -134,15 +147,21 @@ probe_leader_for_podX()
     local start=`date +%s`
     while true
     do
-        local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $2}'`
-        if [[ "x$leader" != "x" ]] ; then
-            # has leader, done
-            log_stderr "Find leader: $leader!"
-            FE_LEADER=$leader
-            return 0
+        NC="nc -z -w 2"
+        if $NC $svc $QUERY_PORT ; then
+            log_stderr "FE service is alive, check if has leader ..."
+            local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $3}'`
+            if [[ "x$leader" != "x" ]] ; then
+                # has leader, done
+                log_stderr "Find leader: $leader!"
+                FE_LEADER=$leader
+                return 0
+            fi
+            # no leader yet, check if needs timeout and quit
+            log_stderr "No leader yet ..."
+        else
+            log_stderr "FE service $svc:$QUERY_PORT is not alive yet!"
         fi
-        # no leader yet, check if needs timeout and quit
-        log_stderr "No leader yet ..."
 
         local now=`date +%s`
         let "expire=start+PROBE_LEADER_PODX_TIMEOUT"
@@ -159,7 +178,7 @@ probe_leader()
 {
     local svc=$1
     # find leader under current service and set to FE_LEADER
-    if [[ "$POD_INDEX" -eq 0 ]] ; then
+    if [[ "$POD_INDEX" -eq 0 ]] && [[ "$IS_FE_OBSERVER" == "false" ]]; then
         probe_leader_for_pod0 $svc
     else
         probe_leader_for_podX $svc
@@ -204,8 +223,13 @@ start_fe_no_meta()
         local start=`date +%s`
         while true
         do
-            log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as follower ..."
-            mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
+            if [[ "$IS_FE_OBSERVER" != "false" ]]; then
+                log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as observer ..."
+                mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD OBSERVER \"$MYSELF:$EDIT_LOG_PORT\";"
+            else
+                log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as follower ..."
+                mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
+            fi
             # check if added successful
             if show_frontends $svc | grep -q -w "$MYSELF" &>/dev/null ; then
                 break;
@@ -252,7 +276,13 @@ if [[ "x$svc_name" == "x" ]] ; then
 fi
 
 update_conf_from_configmap
-if [[ -f "/opt/starrocks/fe/meta/image/ROLE" ]];then
+# meta_dir from conf file
+meta_dir=`parse_confval_from_fe_conf "meta_dir"`
+if [[ "x$meta_dir" != "x" ]] ; then
+    META_DIR=$meta_dir
+fi
+
+if [[ -f "$META_DIR/image/ROLE" ]];then
     log_stderr "start fe with exist meta."
     start_fe_with_meta
 else

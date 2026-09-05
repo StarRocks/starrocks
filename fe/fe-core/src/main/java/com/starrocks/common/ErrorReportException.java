@@ -28,13 +28,13 @@ public class ErrorReportException extends RuntimeException {
         return errorCode;
     }
 
-    public static String report(ErrorCode errorCode, Object... objs) {
+    public static ErrorReportException report(ErrorCode errorCode, Object... objs) {
         String errMsg = errorCode.formatErrorMsg(objs);
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             ctx.getState().setError(errMsg);
             ctx.getState().setErrorCode(errorCode);
         }
-        throw new ErrorReportException(errorCode, errMsg);
+        return new ErrorReportException(errorCode, errMsg);
     }
 }

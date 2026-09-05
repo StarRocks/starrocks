@@ -15,18 +15,17 @@
 #pragma once
 
 #include <boost/algorithm/string.hpp>
+#include <memory>
 #include <orc/OrcFile.hh>
 
-#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "exprs/runtime_filter_bank.h"
 #include "formats/orc/column_reader.h"
 #include "formats/orc/orc_mapping.h"
+#include "formats/orc/utils.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace orc::proto {
 class ColumnStatistics;
@@ -35,6 +34,8 @@ class ColumnStatistics;
 namespace starrocks {
 class RandomAccessFile;
 class RuntimeState;
+struct SkipRowsContext;
+using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 } // namespace starrocks
 namespace starrocks {
 
@@ -57,10 +58,9 @@ public:
 
     // src slot descriptors should exactly matches columns in row readers.
     explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
-    OrcChunkReader();
-    ~OrcChunkReader();
-    Status init(std::unique_ptr<orc::InputStream> input_stream);
-    Status init(std::unique_ptr<orc::Reader> reader);
+    ~OrcChunkReader() = default;
+    Status init(std::unique_ptr<orc::InputStream> input_stream, const OrcPredicates* orc_predicates = nullptr);
+    Status init(std::unique_ptr<orc::Reader> reader, const OrcPredicates* orc_predicates = nullptr);
     Status read_next(orc::RowReader::ReadPosition* pos = nullptr);
     // create sample chunk
     ChunkPtr create_chunk();
@@ -72,9 +72,7 @@ public:
     // call them before calling init.
     void set_read_chunk_size(uint64_t v) { _read_chunk_size = v; }
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
-    Status set_conjuncts(const std::vector<Expr*>& conjuncts);
-    Status set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                             const RuntimeFilterProbeCollector* rf_collector);
+    Status build_search_argument_by_predicates(const OrcPredicates* orc_predicates);
     Status set_timezone(const std::string& tz);
     size_t num_columns() const { return _src_slot_descriptors.size(); }
 
@@ -107,16 +105,11 @@ public:
         }
     }
     void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
+    void set_invalid_as_null(bool invalid_as_null) { _invalid_as_null = invalid_as_null; }
 
-    static void build_column_name_to_orc_type_mapping(std::unordered_map<std::string, const orc::Type*>* mapping,
-                                                      const std::vector<std::string>* hive_column_names,
-                                                      const orc::Type& root_type, bool case_sensitive);
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
                                       const std::vector<std::string>* hive_column_names, const orc::Type& root_type,
-                                      bool case_sensitive);
-    static std::string format_column_name(const std::string& col_name, bool case_sensitive) {
-        return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
-    }
+                                      bool case_sensitive, bool use_orc_column_names);
 
     void set_runtime_state(RuntimeState* state) { _state = state; }
     RuntimeState* runtime_state() { return _state; }
@@ -124,7 +117,13 @@ public:
     SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
     void report_error_message(const std::string& error_msg);
-    const orc::Type* get_orc_type_by_slot_name(const std::string& name) const;
+    // Phase 4 of the rejected records feature: capture every row marked 0
+    // in _broker_load_filter as a structured JSON Lines record before the
+    // caller filters the chunk. Called unconditionally; itself gates on
+    // `state->enable_log_rejected_record()` so it is a cheap no-op when
+    // rejected-record logging is disabled.
+    void capture_rejected_rows_before_filter(Chunk* chunk);
+    const orc::Type* get_orc_type_by_slot_id(const SlotId& slot_id) const;
 
     void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
     bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
@@ -134,11 +133,14 @@ public:
     Status lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
-    ColumnPtr get_row_delete_filter(const std::set<int64_t>& deleted_pos);
+    StatusOr<MutableColumnPtr> get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx);
+    size_t get_row_delete_number(const SkipRowsContextPtr& skip_rows_ctx);
 
     bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
 
     Status get_schema(std::vector<SlotDescriptor>* schema);
+
+    std::string get_search_argument_string() const;
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
@@ -146,9 +148,18 @@ private:
     StatusOr<ChunkPtr> _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots,
                                    const std::vector<int>* indices);
 
-    bool _ok_to_add_conjunct(const Expr* conjunct);
-    Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
-    bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
+    bool _ok_to_add_conjunct(const Expr* conjunct,
+                             const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors);
+    bool _ok_to_add_compound_conjunct(const Expr* conjunct,
+                                      const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors);
+    bool _ok_to_add_binary_in_conjunct(
+            const Expr* conjunct, const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors);
+    bool _ok_to_add_is_null_conjunct(const Expr* conjunct,
+                                     const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors);
+    Status _add_conjunct(const Expr* conjunct,
+                         const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors,
+                         std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+    bool _add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot_desc, const RuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
     void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to);
@@ -159,7 +170,6 @@ private:
     orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
     std::vector<SlotDescriptor*> _src_slot_descriptors;
-    std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
 
     // Access ORC columns by name. By default,
     // columns in ORC files are accessed by their ordinal position in the Hive table definition.
@@ -169,15 +179,14 @@ private:
     // We make the same behavior as Trino & Presto.
     // https://trino.io/docs/current/connector/hive.html?highlight=hive#orc-format-configuration-properties
     bool _use_orc_column_names = false;
-    OrcMappingOptions _orc_mapping_options;
-    std::unique_ptr<OrcMapping> _root_selected_mapping;
+    OrcMappingOptions _orc_mapping_options{};
+    std::unique_ptr<OrcMapping> _root_mapping;
     std::vector<TypeDescriptor> _src_types;
-    // slot id to position in orc.
-    std::unordered_map<SlotId, int> _slot_id_to_position;
+
     std::vector<Expr*> _cast_exprs;
     std::vector<std::unique_ptr<ORCColumnReader>> _column_readers;
     Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
-    Status _init_position_in_orc();
+    Status _init_position_in_orc() const;
     Status _init_src_types(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_cast_exprs();
     Status _init_column_readers();
@@ -185,8 +194,8 @@ private:
     ObjectPool _pool;
     uint64_t _read_chunk_size;
     cctz::time_zone _tzinfo;
-    int64_t _tzoffset_in_seconds;
-    bool _drop_nanoseconds_in_datetime;
+    int64_t _tzoffset_in_seconds{0};
+    bool _drop_nanoseconds_in_datetime{false};
 
     // Only used for UT, used after init reader
     const std::vector<bool>& TEST_get_selected_column_id_list();
@@ -194,19 +203,33 @@ private:
     const std::vector<bool>& TEST_get_lazyload_column_id_list();
 
     // fields related to broker load.
-    bool _broker_load_mode;
-    bool _strict_mode;
+    bool _broker_load_mode{true};
+    bool _strict_mode{true};
     std::shared_ptr<Filter> _broker_load_filter;
-    size_t _num_rows_filtered;
+    size_t _num_rows_filtered{0};
+    SlotDescriptor* _current_slot = nullptr;
+    int _error_message_counter{0};
+
+    // fields related to hive table
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
+    bool _invalid_as_null = false;
     // Key is slot name formatted with case sensitive
     std::unordered_map<std::string, const orc::Type*> _formatted_slot_name_to_orc_type;
+    std::unordered_map<SlotId, size_t> _slot_id_to_pos_in_src_slot_descs;
     RuntimeState* _state = nullptr;
-    SlotDescriptor* _current_slot = nullptr;
+    LazyLoadContext* _lazy_load_ctx{nullptr};
+
     std::string _current_file_name;
-    int _error_message_counter;
-    LazyLoadContext* _lazy_load_ctx;
 };
+
+// Free helper extracted from OrcChunkReader::capture_rejected_rows_before_filter
+// for testability. For each row where filter[i] == 0, calls
+// writer->append_from_chunk with per-slot column names derived from
+// src_slot_descriptors. Declared here so unit tests can exercise the
+// per-row emit path without constructing a full OrcChunkReader.
+class RejectedRecordWriter;
+void orc_emit_rejected_rows(RejectedRecordWriter* writer, const Chunk& chunk,
+                            const std::vector<SlotDescriptor*>& src_slot_descriptors, const Filter& filter);
 
 } // namespace starrocks

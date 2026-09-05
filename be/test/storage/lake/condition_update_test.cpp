@@ -15,12 +15,21 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <string_view>
 
+#include "base/debug/trace.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
@@ -32,53 +41,22 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
 class ConditionUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     ConditionUpdateTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata = generate_simple_tablet_metadata_v2(PRIMARY_KEYS);
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
+        _tablet_metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
 
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(PRIMARY_KEYS);
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(next_id());
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(next_id());
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-            c1->set_aggregation("REPLACE");
-        }
         _referenced_column_ids.push_back(0);
         _referenced_column_ids.push_back(1);
-        _partial_tablet_schema = TabletSchema::create(*schema);
+        _partial_tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_partial_tablet_schema));
 
-        auto c2 = schema->add_column();
+        auto c2 = _tablet_metadata->mutable_schema()->add_column();
         {
             c2->set_unique_id(next_id());
             c2->set_name("c2");
@@ -88,7 +66,7 @@ public:
             c2->set_aggregation("REPLACE");
         }
 
-        _tablet_schema = TabletSchema::create(*schema);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -107,11 +85,13 @@ public:
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         std::vector<int> v2(chunk_size);
+        std::vector<std::string> key_col_str(chunk_size);
+        std::vector<Slice> key_col(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
             v0[i] = i + shift * chunk_size;
+            key_col_str[i] = std::to_string(v0[i]);
+            key_col[i] = Slice(key_col_str[i]);
         }
-        auto rng = std::default_random_engine{};
-        std::shuffle(v0.begin(), v0.end(), rng);
         for (int i = 0; i < chunk_size; i++) {
             v1[i] = v0[i] * a;
         }
@@ -120,22 +100,22 @@ public:
             v2[i] = v0[i] * b;
         }
 
-        auto c0 = Int32Column::create();
+        auto c0 = BinaryColumn::create();
         auto c1 = Int32Column::create();
         auto c2 = Int32Column::create();
-        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c0->append_strings(key_col.data(), key_col.size());
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
         c2->append_numbers(v2.data(), v2.size() * sizeof(int));
 
-        return Chunk({c0, c1, c2}, _schema);
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _schema);
     }
 
     int64_t check(int64_t version, std::function<bool(int c0, int c1, int c2)> check_fn) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -146,7 +126,7 @@ public:
             ret += chunk->num_rows();
             auto cols = chunk->columns();
             for (int i = 0; i < chunk->num_rows(); i++) {
-                EXPECT_TRUE(check_fn(cols[0]->get(i).get_int32(), cols[1]->get(i).get_int32(),
+                EXPECT_TRUE(check_fn(std::stoi(cols[0]->get(i).get_slice().to_string()), cols[1]->get(i).get_int32(),
                                      cols[2]->get(i).get_int32()));
             }
             chunk->reset();
@@ -158,7 +138,7 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_condition_update";
     constexpr static const int kChunkSize = 12;
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<TabletSchema> _partial_tablet_schema;
     std::shared_ptr<Schema> _schema;
@@ -185,11 +165,11 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -219,11 +199,11 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_merge_condition("c1")
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -233,9 +213,6 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
                   }));
         ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 4 + i);
-    }
-    if (GetParam().enable_persistent_index) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
 }
 
@@ -257,11 +234,11 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -285,11 +262,11 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_merge_condition("c1")
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(i == 0 ? chunk1 : chunk2, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -299,9 +276,6 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 4 == c1) && (c0 * 5 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
-    if (GetParam().enable_persistent_index) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
@@ -325,13 +299,13 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_merge_condition("c1")
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
     // finish condition merge in one memtable
     ASSERT_OK(delta_writer->write(chunks[0], indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunks[1], indexes.data(), indexes.size()));
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     delta_writer->close();
     // Publish version
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -341,12 +315,492 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
               }));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
-    if (GetParam().enable_persistent_index) {
-        check_local_persistent_index_meta(tablet_id, version);
+}
+
+// Tests parallel condition merge optimization for primary key tables.
+// This test validates that condition updates work correctly when using the new parallel
+// execution path with SST file ingestion.
+//
+// TEST SETUP:
+// - Enables parallel execution flags and forces small write buffer to trigger SST generation
+// - ignore_merge_condition_inside_same_transaction=true enables load spilling for condition updates
+// - Large chunk_size (20K rows) ensures parallel processing is triggered
+//
+// TEST SCENARIO:
+// 1. Insert baseline data with c1=c0*3, c2=c0*4
+// 2. Apply 4 condition updates with different c1 values, using c1 as merge condition (max wins)
+// 3. Verify final state matches expected merge results based on max(c1) logic
+TEST_P(ConditionUpdateTest, test_condition_update_parallel) {
+    // Configure test environment for parallel execution
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_parallel_compaction, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_parallel_execution_min_rows, 4096);
+    ConfigResetGuard<int64_t> guard4(&config::pk_index_eager_build_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard5(&config::ignore_merge_condition_inside_same_transaction, true);
+    ConfigResetGuard<int64_t> guard6(&config::lake_publish_version_slow_log_ms, 0);
+    // Force small write buffer to ensure SST files are generated (required for parallel path)
+    ConfigResetGuard<int64_t> guard7(&config::write_buffer_size, 1);
+    const int64_t chunk_size = 5 * 4096; // 20K rows: large enough to trigger parallelism
+    auto chunk0 = generate_data(chunk_size, 0, 3, 4);
+    auto indexes = std::vector<uint32_t>(chunk_size);
+    for (int i = 0; i < chunk_size; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // STEP 1: Insert baseline data (3 identical writes to establish initial state)
+    // Each write contains same data: c0=[0..chunk_size), c1=c0*3, c2=c0*4
+    // Final state after 3 writes: c1=c0*3, c2=c0*4 (last write wins)
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(chunk_size, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+
+    // STEP 2: Apply condition updates using c1 as merge condition (max c1 wins)
+    // Test sequence validates parallel merge logic with various c1 values:
+    // Update 0: c1=4, c2=5 -> c1=4 > baseline(3), new wins -> result(4,5)
+    // Update 1: c1=3, c2=6 -> c1=3 <= current(4), old wins -> result(4,5)
+    // Update 2: c1=4, c2=6 -> c1=4 <= current(4), old wins -> result(4,6) [NOTE: c2 updated!]
+    // Update 3: c1=5, c2=6 -> c1=5 > current(4), new wins -> result(5,6)
+    Chunk chunks[4];
+    chunks[0] = generate_data(chunk_size, 0, 4, 5);
+    chunks[1] = generate_data(chunk_size, 0, 3, 6);
+    chunks[2] = generate_data(chunk_size, 0, 4, 6);
+    chunks[3] = generate_data(chunk_size, 0, 5, 6);
+    // Expected results after each condition update
+    std::pair<int, int> result[4];
+    result[0] = std::make_pair(4, 5);
+    result[1] = std::make_pair(4, 5); // c1=3 loses to current c1=4
+    result[2] = std::make_pair(4, 6); // c1=4 equals current, uses >= so new wins
+    result[3] = std::make_pair(5, 6);
+    for (int i = 0; i < 4; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1") // Key: Set merge condition column
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        // Write same chunk 3 times to test same-transaction merge behavior
+        // With ignore_merge_condition_inside_same_transaction=true, these duplicates within
+        // the same txn won't trigger condition comparison, testing the optimization
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish and verify results match expected condition merge outcome
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+        // Verify: Final data should match expected result based on condition comparison
+        ASSERT_EQ(chunk_size, check(version, [&](int c0, int c1, int c2) {
+                      return (c0 * result[i].first == c1) && (c0 * result[i].second == c2);
+                  }));
+        ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        EXPECT_EQ(new_tablet_metadata->rowsets_size(), 4 + i);
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(ConditionUpdateTest, ConditionUpdateTest,
-                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
+// Exercises the non-SST condition-merge path with parallel execution enabled
+// (the branch refactored by _do_update_with_condition to use chunk-level parallelism
+// plus a serial index.upsert phase). SSTs are intentionally not produced here:
+// ignore_merge_condition_inside_same_transaction is left at its default (false) and
+// write_buffer_size is left large, so the publish path enters _do_update_with_condition.
+//
+// Scenario mirrors test_condition_update but the compare phase runs on the
+// pk_index_execution_thread_pool; results must be identical to the serial path.
+TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel) {
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
+
+    auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // Four condition updates with c1 as the merge column (max wins):
+    //   (c1=4,c2=5): 4 > 3, new wins -> (4,5)
+    //   (c1=3,c2=6): 3 < 4, old wins -> (4,5)
+    //   (c1=4,c2=6): 4 >= 4, new wins on tie -> (4,6)
+    //   (c1=5,c2=6): 5 > 4, new wins -> (5,6)
+    Chunk chunks[4];
+    chunks[0] = generate_data(kChunkSize, 0, 4, 5);
+    chunks[1] = generate_data(kChunkSize, 0, 3, 6);
+    chunks[2] = generate_data(kChunkSize, 0, 4, 6);
+    chunks[3] = generate_data(kChunkSize, 0, 5, 6);
+    std::pair<int, int> result[4] = {{4, 5}, {4, 5}, {4, 6}, {5, 6}};
+    for (int i = 0; i < 4; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+        ASSERT_EQ(kChunkSize, check(version, [&](int c0, int c1, int c2) {
+                      return (c0 * result[i].first == c1) && (c0 * result[i].second == c2);
+                  }));
+    }
+}
+
+// Covers the non-SST parallel path across multiple segments within a single txn.
+// write_buffer_size=1 forces each write() to flush into its own segment so the publish
+// loop calls _do_update_with_condition repeatedly; each call submits its chunk's
+// compare task to the shared pool, and the final index.upsert is applied per segment
+// after the barrier.
+TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_multi_segment) {
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
+
+    auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    auto chunk1 = generate_data(kChunkSize, 0, 4, 5);
+    auto chunk2 = generate_data(kChunkSize, 0, 3, 6);
+    // Force one segment per write.
+    ConfigResetGuard<int64_t> guard_buf(&config::write_buffer_size, 1);
+    for (int i = 0; i < 2; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(i == 0 ? chunk1 : chunk2, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    // After both condition updates, c1=4,c2=5 must win over the (c1=3,c2=6) follow-up.
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 4 == c1) && (c0 * 5 == c2); }));
+}
+
+// Covers the "all new rows win / no collisions" fast path in the non-SST parallel merge:
+// every primary key in the condition-update chunk is brand new (disjoint from baseline keys),
+// so index.get() returns -1 for every row and the per-chunk task skips the condition-column
+// reads. Serial merge then upserts the whole chunk as a single winner range.
+TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_all_new_keys) {
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
+
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // Baseline keys: shift=0, so c0 in [0, kChunkSize).
+    auto baseline = generate_data(kChunkSize, 0, 3, 4);
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(baseline, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Condition update on disjoint keys (shift=1 → c0 in [kChunkSize, 2*kChunkSize)).
+    auto disjoint = generate_data(kChunkSize, 1, 7, 8);
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(disjoint, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Both key ranges coexist: baseline rows keep (3,4) and new rows carry (7,8).
+    ASSERT_EQ(2 * kChunkSize, check(version, [](int c0, int c1, int c2) {
+                  if (c0 < kChunkSize) {
+                      return (c0 * 3 == c1) && (c0 * 4 == c2);
+                  }
+                  return (c0 * 7 == c1) && (c0 * 8 == c2);
+              }));
+}
+
+// Stresses the per-chunk compact path of the phase-2 parallel index.upsert in
+// `_do_update_with_condition`: every other row in the condition update is a loser
+// (existing c1 wins) and every other row is a winner (new c1 wins). With a 50/50
+// alternating pattern the compare phase emits the maximum number of winner ranges
+// per chunk (run-length 1), which is the worst case for the per-range slot scheme
+// the PR replaced. The expected merged state mixes baseline rows and update rows
+// row-by-row.
+TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_fragmented_winners) {
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
+
+    const int64_t chunk_size = 5 * 4096; // 20K rows, multiple per-segment chunks
+    ConfigResetGuard<int64_t> guard2(&config::pk_index_parallel_execution_min_rows, 4096);
+
+    auto baseline = generate_data(chunk_size, 0, 3, 4); // baseline c1=k*3, c2=k*4
+    auto indexes = std::vector<uint32_t>(chunk_size);
+    for (int i = 0; i < chunk_size; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(baseline, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Build an alternating chunk: even rows have c1=k*2 (loser, < baseline c1=k*3),
+    // odd rows have c1=k*4 (winner, > baseline). c2 in update is k*9.
+    Chunk alt;
+    {
+        std::vector<int> v0(chunk_size);
+        std::vector<int> v1(chunk_size);
+        std::vector<int> v2(chunk_size);
+        std::vector<std::string> key_col_str(chunk_size);
+        std::vector<Slice> key_col(chunk_size);
+        for (int i = 0; i < chunk_size; i++) {
+            v0[i] = i;
+            key_col_str[i] = std::to_string(v0[i]);
+            key_col[i] = Slice(key_col_str[i]);
+            v1[i] = (i % 2 == 0) ? v0[i] * 2 : v0[i] * 4;
+            v2[i] = v0[i] * 9;
+        }
+        auto c0 = BinaryColumn::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        c0->append_strings(key_col.data(), key_col.size());
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        c2->append_numbers(v2.data(), v2.size() * sizeof(int));
+        alt = Chunk({std::move(c0), std::move(c1), std::move(c2)}, _schema);
+    }
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(alt, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Even rows: baseline wins, c1=k*3, c2=k*4.
+    // Odd rows: update wins, c1=k*4, c2=k*9.
+    // k=0 is a special case (every multiplier collapses to 0); both winner and loser produce
+    // c1=0, c2=0, so accept either combination there.
+    ASSERT_EQ(chunk_size, check(version, [](int c0, int c1, int c2) {
+                  if (c0 == 0) {
+                      return c1 == 0 && c2 == 0;
+                  }
+                  if (c0 % 2 == 0) {
+                      return c1 == c0 * 3 && c2 == c0 * 4;
+                  }
+                  return c1 == c0 * 4 && c2 == c0 * 9;
+              }));
+}
+
+// Trace stores counters keyed by `const char*` (pointer comparison), and the literal we
+// pass here may not share an address with the one inside update_manager.cpp across
+// translation units. Match by string value so the lookup is robust against the compiler's
+// string-pooling decisions.
+static int64_t find_trace_metric(const std::map<const char*, int64_t>& metrics, std::string_view name) {
+    for (const auto& [k, v] : metrics) {
+        if (k != nullptr && name == k) {
+            return v;
+        }
+    }
+    return 0;
+}
+
+// Guards the trace-propagation fix for the non-SST parallel compare phase. With >1
+// per-segment chunk every chunk's compare task runs on pk_index_execution_thread_pool, and
+// `process_condition_update_count` is incremented only inside that worker task. Without
+// re-adopting the publish thread's trace in the worker, the counter would land on the
+// worker's (absent) trace and be lost; asserting it is visible in the adopted trace proves
+// the counters are propagated back.
+TEST_P(ConditionUpdateTest, test_condition_update_no_sst_trace_propagation) {
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
+    const int64_t chunk_size = 2 * 4096; // >1 per-segment chunk so the compare runs on the pool
+    ConfigResetGuard<int64_t> guard2(&config::pk_index_parallel_execution_min_rows, 4096);
+
+    auto baseline = generate_data(chunk_size, 0, 3, 4); // baseline c1=k*3, c2=k*4
+    auto indexes = std::vector<uint32_t>(chunk_size);
+    for (int i = 0; i < chunk_size; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(baseline, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Condition update with c1 as the merge column: c1=k*4 > baseline k*3, so the new row
+    // wins on every key. Keys fully overlap the baseline so the compare path actually reads
+    // old condition values (not the all-new fast path).
+    auto update = generate_data(chunk_size, 0, 4, 5);
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(update, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    ASSERT_EQ(chunk_size, check(version, [](int c0, int c1, int c2) { return c1 == c0 * 4 && c2 == c0 * 5; }));
+
+    // process_condition_update_count is incremented once per chunk inside the worker task;
+    // with >1 chunk and trace propagation working it must be visible here.
+    auto metrics = trace->metrics()->Get();
+    int64_t worker_cnt = find_trace_metric(metrics, "process_condition_update_count");
+    ASSERT_GT(worker_cnt, 0) << "worker-thread trace counters were not propagated to the publish trace";
+}
+
+INSTANTIATE_TEST_SUITE_P(ConditionUpdateTest, ConditionUpdateTest, ::testing::Values(PrimaryKeyParam{true}));
 
 } // namespace starrocks::lake

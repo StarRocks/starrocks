@@ -1,0 +1,154 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifdef WITH_TENANN
+
+#include "storage/index/vector/tenann/tenann_index_builder.h"
+
+#include <tenann/util/threads.h>
+
+#include <algorithm>
+
+#include "column/array_column.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_vector_index_fwd.h"
+#include "storage/index/vector/tenann/tenann_index_utils.h"
+#include "tenann/factory/index_factory.h"
+#include "tenann/index/index_cache.h"
+
+namespace starrocks {
+
+// =============== TenAnnIndexBuilderProxy =============
+
+Status TenAnnIndexBuilderProxy::init() {
+    ASSIGN_OR_RETURN(auto meta, get_vector_meta(_tablet_index, std::map<std::string, std::string>{}))
+
+    tenann::OmpSetNumThreads(std::max(1, _omp_threads));
+
+    const auto& params = meta.common_params();
+
+    if (!params.contains(index::vector::DIM)) {
+        return Status::InvalidArgument("dim is needed because it's a critical common param");
+    }
+    _dim = params[index::vector::DIM];
+
+    if (!params.contains(index::vector::METRIC_TYPE)) {
+        return Status::InvalidArgument("metric_type is needed because it's a critical common param");
+    }
+
+    // Build-time cache fill is opt-in (enable_vector_index_cache_on_build, default off):
+    // the cache is sized for the query working set, so loads and compactions would
+    // otherwise evict indexes queries are using; TenANNReader::init_searcher fills it on
+    // demand instead. No index-type carve-out -- IVF-PQ honours the opt-in too, its
+    // inverted lists then staying resident until eviction. The null check is a guard, not
+    // policy: tenann's WriteIndex throws on a missing cache, failing the build outright.
+    auto* index_cache = tenann::GetGlobalIndexCache();
+    const bool write_index_cache = config::enable_vector_index_cache_on_build && index_cache != nullptr;
+
+    auto meta_copy = meta;
+    meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = write_index_cache;
+    if (params[index::vector::METRIC_TYPE] == static_cast<int>(tenann::MetricType::kCosineSimilarity)) {
+        meta_copy.index_writer_options()["cosine_backend"] = resolve_vector_index_cosine_backend(meta);
+    }
+
+    try {
+        // build and write index
+        _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
+        _index_builder->index_writer()->SetIndexCache(index_cache);
+        // Bound the per-builder row buffer (no-op for builders that don't buffer).
+        // Tunable via BE config vector_index_build_flush_threshold_rows; lower it
+        // when BE memory is tight, set 0 to disable intermediate flushing.
+        // Clamp at 0 before casting: the config is int64_t and could be set
+        // negative at runtime; a raw cast to size_t would wrap to a huge value
+        // and silently disable flushing.
+        const int64_t flush_threshold = std::max<int64_t>(0, config::vector_index_build_flush_threshold_rows);
+        _index_builder->SetFlushThresholdRows(static_cast<size_t>(flush_threshold));
+        // Use tenann file writer for remote FS (S3/HDFS) in shared-data mode
+        if (_file_writer != nullptr) {
+            _index_builder->index_writer()->SetFileWriter(
+                    std::shared_ptr<tenann::IndexFileWriter>(_file_writer, [](tenann::IndexFileWriter*) {}));
+        }
+        if (_is_element_nullable) {
+            _index_builder->EnableCustomRowId();
+        }
+        _index_builder->Open(_index_path);
+
+        if (!_index_builder->is_opened()) {
+            return Status::InternalError("Can not open index path in " + _index_path);
+        }
+    } catch (tenann::Error& e) {
+        return Status::InternalError(e.what());
+    }
+
+    return Status::OK();
+}
+
+Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t offset) {
+    DCHECK(array_column.is_array());
+    const auto& array_col = down_cast<const ArrayColumn&>(array_column);
+
+    DCHECK(array_col.elements_column()->is_nullable());
+    const auto& nullable_elements = down_cast<const NullableColumn&>(array_col.elements());
+    const auto& is_element_nulls = nullable_elements.null_column_ref();
+    const uint8_t* is_element_nulls_data = is_element_nulls.raw_data();
+
+    // Input validation (dim consistency + cosine normalization) is performed
+    // upstream in ArrayColumnWriter::append via validate_vector_index_input
+    // before data ever reaches this proxy, so writes that succeed are always
+    // well-formed. This proxy trusts its caller and skips re-checking.
+
+    RawDataVisitor rv;
+    RETURN_IF_ERROR(array_col.accept(&rv));
+    try {
+        auto vector_view = tenann::ArraySeqView{.data = const_cast<uint8_t*>(rv.result()),
+                                                .dim = _dim,
+                                                .size = static_cast<uint32_t>(array_col.size()),
+                                                .elem_type = tenann::kFloatType};
+        std::vector<int64_t> row_ids(array_col.size());
+        std::iota(row_ids.begin(), row_ids.end(), offset);
+        _index_builder->Add({vector_view}, row_ids.data(), is_element_nulls_data);
+    } catch (tenann::Error& e) {
+        LOG(WARNING) << e.what();
+        return Status::InternalError(e.what());
+    }
+    return Status::OK();
+}
+
+Status TenAnnIndexBuilderProxy::flush() {
+    try {
+        _index_builder->Flush();
+    } catch (tenann::Error& e) {
+        LOG(WARNING) << e.what();
+        return Status::InternalError(e.what());
+    }
+    return Status::OK();
+}
+
+Status TenAnnIndexBuilderProxy::close() const {
+    if (_index_builder && !_index_builder->is_closed()) {
+        _index_builder->Close();
+    }
+    // TenANN's IndexBuilder::Close() does NOT call IndexFileWriter::Close().
+    // For S3, objects are only visible after close(), so we must explicitly
+    // close the file writer to finalize the upload. VectorIndexFileWriter::Close()
+    // is idempotent, so the destructor path can safely re-enter.
+    if (_file_writer) {
+        _file_writer->Close();
+        return _file_writer->status();
+    }
+    return Status::OK();
+}
+
+} // namespace starrocks
+#endif

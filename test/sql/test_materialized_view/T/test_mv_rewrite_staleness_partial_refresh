@@ -1,0 +1,65 @@
+-- name: test_mv_rewrite_staleness_partial_refresh
+-- Regression for the cross-partition staleness masking bug (POST-1698).
+--
+-- With mv_rewrite_staleness_second > 0, refreshing only SOME partitions used to
+-- advance the MV-global lastRefreshTime, which the staleness gate compared against
+-- the latest base modification. A recent partial refresh therefore made the gate
+-- report "fresh" and transparently read the NOT-refreshed (stale) partitions
+-- directly from the MV, WITHOUT compensating them from the base table -> silently
+-- wrong results.
+--
+-- The fix bases the staleness gate on lastFreshnessConfirmedAt, which is only
+-- advanced by a refresh that confirms the whole freshness baseline (a partial
+-- PARTITION START/END refresh does NOT advance it), so the stale partition is
+-- detected and compensated from base (MV fresh part UNION base stale part).
+--
+-- The sleep is intentional and load-bearing: the gate compares the latest base
+-- modification time against the confirmed-refresh time (a wall-clock gap), so the
+-- elapsed time must exceed mv_rewrite_staleness_second for the scenario to be
+-- exercised. sleep(3) vs staleness=1 keeps a safe 2s margin (a stable lower bound,
+-- not a race).
+CREATE TABLE base (
+  dt DATE NOT NULL,
+  v  INT  NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt)
+PARTITION BY RANGE(dt) (
+  PARTITION p01 VALUES [('2026-07-01'), ('2026-07-02')),
+  PARTITION p02 VALUES [('2026-07-02'), ('2026-07-03'))
+)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO base VALUES ('2026-07-01', 10), ('2026-07-02', 20);
+CREATE MATERIALIZED VIEW mv0
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+  "replication_num" = "1",
+  "mv_rewrite_staleness_second" = "1",
+  "partition_refresh_number" = "1"
+)
+AS SELECT dt, sum(v) AS sv FROM base GROUP BY dt;
+-- Full refresh: confirms the freshness baseline (lastFreshnessConfirmedAt).
+REFRESH MATERIALIZED VIEW mv0 WITH SYNC MODE;
+-- Age the confirmed-refresh baseline past mv_rewrite_staleness_second (1s).
+select sleep(3);
+-- p02 becomes stale (25 in base vs 20 in the MV). p01 is written LAST so its
+-- version time is the global max; refreshing only p01 advances the MV-global
+-- lastRefreshTime to that max while lastFreshnessConfirmedAt stays frozen at the
+-- full-refresh time -- exactly the masking setup.
+INSERT INTO base VALUES ('2026-07-02', 5);
+INSERT INTO base VALUES ('2026-07-01', 100);
+REFRESH MATERIALIZED VIEW mv0 PARTITION START ('2026-07-01') END ('2026-07-02') WITH SYNC MODE;
+-- A query spanning p01 (fresh) + p02 (stale) must be a UNION compensation
+-- (MV fresh part UNION base stale part), not a masked direct MV read.
+function: print_hit_materialized_view("SELECT dt, sum(v) AS sv FROM base WHERE dt >= '2026-07-01' AND dt < '2026-07-03' GROUP BY dt", "mv0", "UNION")
+-- Correctness gate: p02 must be compensated from base (25), NOT read stale from
+-- the MV (20). On the buggy build this returns 20 for 2026-07-02.
+SELECT dt, sum(v) AS sv FROM base WHERE dt >= '2026-07-01' AND dt < '2026-07-03' GROUP BY dt ORDER BY dt;
+-- Negative control: a query confined to the fresh partition p01 needs no
+-- compensation and reads the MV directly (still hits mv0).
+function: print_hit_materialized_view("SELECT dt, sum(v) AS sv FROM base WHERE dt >= '2026-07-01' AND dt < '2026-07-02' GROUP BY dt", "mv0")
+SELECT dt, sum(v) AS sv FROM base WHERE dt >= '2026-07-01' AND dt < '2026-07-02' GROUP BY dt ORDER BY dt;
+drop materialized view mv0;
+drop table base force;

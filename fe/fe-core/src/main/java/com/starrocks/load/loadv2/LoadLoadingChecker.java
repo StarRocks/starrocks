@@ -35,7 +35,7 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,18 +43,18 @@ import org.apache.logging.log4j.Logger;
  * LoadLoadingChecker will update loading status for jobs that loading by PushTask.
  * Now only for SparkLoadJob
  */
-public class LoadLoadingChecker extends FrontendDaemon {
+public class LoadLoadingChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadLoadingChecker.class);
 
     private LoadMgr loadManager;
 
     public LoadLoadingChecker(LoadMgr loadManager) {
-        super("Load loading checker", Config.load_checker_interval_second * 1000L);
+        super("load-loading-checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         try {
             loadManager.processLoadingStateJobs();
         } catch (Throwable e) {

@@ -12,34 +12,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
+import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.IntLiteral;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
@@ -47,57 +69,294 @@ public class JDBCMetadata implements ConnectorMetadata {
     private static Logger LOG = LogManager.getLogger(JDBCMetadata.class);
 
     private Map<String, String> properties;
+    JDBCSchemaResolver schemaResolver;
     private String catalogName;
-    private JDBCSchemaResolver schemaResolver;
+
+    private JDBCMetaCache<String, Database> dbCache;
+    private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
+    private JDBCMetaCache<JDBCTableName, Long> tableIdCache;
+    private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
+    private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
+    // Async row-count cache: never blocks planning. On cold start returns the default immediately
+    // and loads in background; refreshAfterWrite keeps the value warm with async reload.
+    private AsyncLoadingCache<JDBCTableName, Long> rowCountCache;
+
+    private HikariDataSource dataSource;
+    private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
+    private static final ExecutorService ROW_COUNT_EXECUTOR = Executors.newFixedThreadPool(
+            2, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-row-count-%d").build());
+
+    // HikariCP connection lifecycle constants
+    static final long MINIMUM_MAX_LIFETIME_MS = 30_000L;
+    static final long DEFAULT_MAX_LIFETIME_MS = 300_000L;
+    static final long MINIMUM_KEEPALIVE_TIME_MS = 30_000L;
+    static final long KEEPALIVE_DISABLED = 0L;
+    private static final List<String> SUPPORTED_SCHEMA_RESOLVERS =
+            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse");
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
+        this(properties, catalogName, null);
+    }
+
+    public JDBCMetadata(Map<String, String> properties, String catalogName, HikariDataSource dataSource) {
         this.properties = properties;
         this.catalogName = catalogName;
         try {
-            Class.forName(properties.get(JDBCResource.DRIVER_CLASS));
+            String driverName = getDriverName();
+            Class.forName(driverName);
         } catch (ClassNotFoundException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
         }
-        if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
-            schemaResolver = new MysqlSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("postgresql")) {
-            schemaResolver = new PostgresSchemaResolver();
+        schemaResolver = createSchemaResolver();
+        if (dataSource == null) {
+            dataSource = createHikariDataSource();
+        }
+        this.dataSource = dataSource;
+        checkAndSetSupportPartitionInformation();
+        createMetaAsyncCacheInstances(properties);
+    }
+
+    private String getDriverName() {
+        String driverName = properties.get(JDBCResource.DRIVER_CLASS);
+        // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
+        if (driverName.contains("mysql")) {
+            driverName = "org.mariadb.jdbc.Driver";
+        }
+        return driverName;
+    }
+
+    /**
+     * Creates the appropriate SchemaResolver based on configuration.
+     * Priority:
+     * 1. If schema_resolver property is specified, use that resolver
+     * 2. Otherwise, auto-detect based on driver class name
+     */
+    private JDBCSchemaResolver createSchemaResolver() {
+        // Check for explicit schema_resolver property first
+        String schemaResolverType = properties.get(JDBCResource.SCHEMA_RESOLVER);
+        if (schemaResolverType != null && !schemaResolverType.trim().isEmpty()) {
+            return createSchemaResolverFromProperty(schemaResolverType.trim());
+        }
+
+        // Fall back to driver class name detection
+        String driverClass = properties.get(JDBCResource.DRIVER_CLASS).toLowerCase();
+        if (driverClass.contains("mysql")) {
+            return new MysqlSchemaResolver();
+        } else if (driverClass.contains("postgresql")) {
+            return new PostgresSchemaResolver();
+        } else if (driverClass.contains("mariadb")) {
+            return new MysqlSchemaResolver();
+        } else if (driverClass.contains("clickhouse")) {
+            return new ClickhouseSchemaResolver(properties);
+        } else if (driverClass.contains("oracle")) {
+            return new OracleSchemaResolver(properties);
+        } else if (driverClass.contains("sqlserver")) {
+            return new SqlServerSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
         }
     }
 
+    /**
+     * Creates a SchemaResolver from the explicitly specified resolver type.
+     * @param resolverType the type of resolver (e.g., "postgresql", "mysql")
+     * @return the appropriate JDBCSchemaResolver instance
+     */
+    private JDBCSchemaResolver createSchemaResolverFromProperty(String resolverType) {
+        switch (resolverType.toLowerCase()) {
+            case "postgresql":
+                return new PostgresSchemaResolver();
+            case "mysql":
+                return new MysqlSchemaResolver();
+            case "oracle":
+                return new OracleSchemaResolver();
+            case "sqlserver":
+                return new SqlServerSchemaResolver();
+            case "clickhouse":
+                return new ClickhouseSchemaResolver(properties);
+            default:
+                throw new StarRocksConnectorException(
+                        "Unknown schema_resolver: " + resolverType +
+                        ". Supported values: " + String.join(", ", SUPPORTED_SCHEMA_RESOLVERS));
+        }
+    }
+
+    String getJdbcUrl() {
+        String jdbcUrl = properties.get(JDBCResource.URI);
+        // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
+        if (jdbcUrl.startsWith("jdbc:mysql")) {
+            jdbcUrl = jdbcUrl.replaceFirst("jdbc:mysql", "jdbc:mariadb");
+        }
+        return jdbcUrl;
+    }
+
+    private void createMetaAsyncCacheInstances(Map<String, String> properties) {
+        dbCache = new JDBCMetaCache<>(properties, false);
+        partitionNamesCache = new JDBCMetaCache<>(properties, false);
+        tableIdCache = new JDBCMetaCache<>(properties, true);
+        tableInstanceCache = new JDBCMetaCache<>(properties, false);
+        partitionInfoCache = new JDBCMetaCache<>(properties, false);
+        rowCountCache = buildRowCountCache(properties);
+    }
+
+    private AsyncLoadingCache<JDBCTableName, Long> buildRowCountCache(Map<String, String> properties) {
+        // Row-count cache is always enabled regardless of jdbc_meta_cache_enable.
+        // jdbc_meta_cache_enable controls schema metadata freshness; statistics are a
+        // separate concern and must never block planning — async loading is mandatory.
+        // Each parameter can be overridden per-catalog via the JDBC catalog properties map.
+        long refreshSec = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_refresh_sec",
+                String.valueOf(Config.jdbc_row_count_cache_refresh_sec)));
+        long expireSec = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_expire_sec",
+                String.valueOf(Config.jdbc_row_count_cache_expire_sec)));
+        long maxSize = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_max_size",
+                String.valueOf(Config.jdbc_row_count_cache_max_size)));
+        return Caffeine.newBuilder()
+                .maximumSize(maxSize)
+                .refreshAfterWrite(refreshSec, TimeUnit.SECONDS)
+                .expireAfterWrite(expireSec, TimeUnit.SECONDS)
+                .executor(ROW_COUNT_EXECUTOR)
+                .buildAsync(key -> loadRowCount(key));
+    }
+
+    private long loadRowCount(JDBCTableName key) {
+        try (Connection connection = getConnection()) {
+            long count = schemaResolver.getTableRowCount(connection, key.getDatabaseName(), key.getTableName());
+            return count >= 0 ? count : Config.default_statistics_output_row_count;
+        } catch (Exception e) {
+            LOG.warn("Failed to load row count for {}.{}: {}", key.getDatabaseName(), key.getTableName(),
+                    e.getMessage());
+            return Config.default_statistics_output_row_count;
+        }
+    }
+
+    public void checkAndSetSupportPartitionInformation() {
+        try (Connection connection = getConnection()) {
+            schemaResolver.checkAndSetSupportPartitionInformation(connection);
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(
+                    "check and set support partition information for JDBC catalog fail!", e);
+        }
+    }
+
+    private HikariDataSource createHikariDataSource() {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(getJdbcUrl());
+        config.setUsername(properties.get(JDBCResource.USER));
+        config.setPassword(properties.get(JDBCResource.PASSWORD));
+        config.setDriverClassName(getDriverName());
+        config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
+        config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
+        config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
+        config.setConnectionTimeout(Config.jdbc_connection_timeout_ms);
+
+        applyLifecycleConfig(config);
+
+        return new HikariDataSource(config);
+    }
+
+    // Package-visible for testing
+    static void applyLifecycleConfig(HikariConfig config) {
+        long maxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        if (maxLifetime < MINIMUM_MAX_LIFETIME_MS) {
+            LOG.warn("jdbc_connection_max_lifetime_ms={} is below minimum {}, using default {}",
+                    maxLifetime, MINIMUM_MAX_LIFETIME_MS, DEFAULT_MAX_LIFETIME_MS);
+            maxLifetime = DEFAULT_MAX_LIFETIME_MS;
+        }
+        config.setMaxLifetime(maxLifetime);
+
+        // keepaliveTime: 0 = disabled (HikariCP semantics), otherwise must be >= 30s and < maxLifetime
+        long keepaliveTime = Config.jdbc_connection_keepalive_time_ms;
+        if (keepaliveTime != KEEPALIVE_DISABLED) {
+            if (keepaliveTime < MINIMUM_KEEPALIVE_TIME_MS || keepaliveTime >= maxLifetime) {
+                LOG.warn("jdbc_connection_keepalive_time_ms={} is invalid (must be 0 or >= {} and < {}), disabling keepalive",
+                        keepaliveTime, MINIMUM_KEEPALIVE_TIME_MS, maxLifetime);
+                keepaliveTime = KEEPALIVE_DISABLED;
+            }
+        }
+        config.setKeepaliveTime(keepaliveTime);
+
+        // Connection leak detection (for debugging)
+        if (Config.jdbc_connection_leak_detection_threshold_ms > 0) {
+            config.setLeakDetectionThreshold(Config.jdbc_connection_leak_detection_threshold_ms);
+        }
+    }
+
     public Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(properties.get(JDBCResource.URI),
-                properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
+        Connection connection = dataSource.getConnection();
+        try {
+            // Set network timeout only when it's configured (>=0)
+            if (Config.jdbc_network_timeout_ms >= 0L) {
+                int networkTimeoutMs = (int) Math.min(Config.jdbc_network_timeout_ms, (long) Integer.MAX_VALUE);
+                connection.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, networkTimeoutMs);
+            }
+        } catch (SQLException e) {
+            connection.close();
+            throw e;
+        }
+        return connection;
     }
 
     @Override
-    public List<String> listDbNames() {
+    public Table.TableType getTableType() {
+        return Table.TableType.JDBC;
+    }
+
+    @Override
+    public List<String> listDbNames(ConnectContext context) {
         try (Connection connection = getConnection()) {
             return Lists.newArrayList(schemaResolver.listSchemas(connection));
         } catch (SQLException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException("list db names for JDBC catalog fail!", e);
         }
     }
 
     @Override
-    public Database getDb(String name) {
-        try {
-            if (listDbNames().contains(name)) {
-                return new Database(0, name);
-            } else {
-                return null;
+    public Database getDb(ConnectContext context, String name) {
+        // NOTE: We use manual cache control (getIfPresent + put) instead of the lambda-based approach
+        // for the following reason:
+        //
+        // The lambda in getTable() can return null when the table doesn't exist, but JDBCMetaCache.get()
+        // uses Objects.requireNonNull() which throws NullPointerException when the lambda returns null.
+        //
+        // For getDb(), we need to return null for non-existent databases (a valid result, not an error),
+        // so we manually control the cache to avoid the NPE issue:
+        // 1. Use getIfPresent() to check cache without triggering the lambda
+        // 2. On cache miss, query directly and only cache successful (non-null) results
+        // 3. Return null for non-existent databases or SQLException without caching
+
+        // Check cache first
+        Database cached = dbCache.getIfPresent(name);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Cache miss - query directly
+        try (Connection connection = getConnection()) {
+            if (schemaResolver.databaseExists(connection, name)) {
+                Database db = new Database(0, name);
+                // Only cache on success to avoid caching null values
+                dbCache.put(name, db);
+                return db;
             }
-        } catch (StarRocksConnectorException e) {
+            // Database doesn't exist - don't cache null
+            return null;
+        } catch (SQLException e) {
+            // From getConnection() or databaseExists()
+            LOG.warn("Failed to check database existence for {}.{}: {}",
+                    catalogName, name, e.getMessage());
+            // Exception occurred - don't cache null
             return null;
         }
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         try (Connection connection = getConnection()) {
             try (ResultSet resultSet = schemaResolver.getTables(connection, dbName)) {
                 ImmutableList.Builder<String> list = ImmutableList.builder();
@@ -108,85 +367,228 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return list.build();
             }
         } catch (SQLException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException("list table names for JDBC catalog fail!", e);
         }
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
+        JDBCTableName jdbcTable = new JDBCTableName(null, dbName, tblName);
+        return tableInstanceCache.get(jdbcTable,
+                k -> {
+                    try (Connection connection = getConnection();
+                            ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName)) {
+                        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+                        List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet, originalJdbcTypes);
+                        List<Column> partitionColumns = Lists.newArrayList();
+                        if (schemaResolver.isSupportPartitionInformation()) {
+                            partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
+                        }
+                        if (fullSchema.isEmpty()) {
+                            return null;
+                        }
+
+                        Long tableId = tableIdCache.getPersistentCache(jdbcTable,
+                                j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong());
+                        Table table = schemaResolver.getTable(tableId, tblName, fullSchema,
+                                partitionColumns, dbName, catalogName, properties);
+                        if (table != null) {
+                            if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
+                                ((JDBCTable) table).setOriginalJdbcColumnTypes(originalJdbcTypes);
+                            }
+                        }
+                        return table;
+                    } catch (SQLException | DdlException e) {
+                        LOG.warn("get table for JDBC catalog fail!", e);
+                        return null;
+                    }
+                });
+    }
+
+    @Override
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
         try (Connection connection = getConnection()) {
-            ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
-            List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
-            List<Column> partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
-            if (fullSchema.isEmpty()) {
-                return null;
+            return schemaResolver.getTableComment(connection, dbName, tblName);
+        } catch (SQLException e) {
+            LOG.warn("get table comment for JDBC catalog fail!", e);
+            return "";
+        }
+    }
+
+    @Override
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        String normalizedQuery = JDBCTable.normalizePassThroughQuery(query);
+        String metadataQuery = "SELECT * FROM (" + normalizedQuery + ") starrocks_query WHERE 1 = 0";
+        try (Connection connection = getConnection();
+                Statement statement = connection.createStatement()) {
+            int queryTimeoutSeconds = schemaResolver.getQueryTimeoutSeconds();
+            if (queryTimeoutSeconds > 0) {
+                statement.setQueryTimeout(queryTimeoutSeconds);
             }
-            JDBCTableName tableKey = JDBCTableName.of(catalogName, dbName, tblName);
-            if (JDBCTableIdCache.containsTableId(tableKey)) {
-                return schemaResolver.getTable(JDBCTableIdCache.getTableId(tableKey),
-                        tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
-            } else {
-                Integer tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
-                JDBCTableIdCache.putTableId(tableKey, tableId);
-                return schemaResolver.getTable(tableId, tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
+
+            try (ResultSet resultSet = statement.executeQuery(metadataQuery)) {
+                Map<String, Integer> originalJdbcTypes = new HashMap<>();
+                List<Column> fullSchema = schemaResolver.convertToSRTable(resultSet.getMetaData(), originalJdbcTypes);
+                if (fullSchema.isEmpty()) {
+                    throw new StarRocksConnectorException("pass-through query returned no columns");
+                }
+
+                long tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong();
+                JDBCTable queryTable = new JDBCTable(tableId, "_query_" + tableId, fullSchema, dbName, catalogName,
+                        properties);
+                queryTable.setPassThroughQuery(normalizedQuery);
+                if (!originalJdbcTypes.isEmpty()) {
+                    queryTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
+                }
+                return queryTable;
             }
         } catch (SQLException | DdlException e) {
-            LOG.warn(e.getMessage());
-            return null;
+            throw new StarRocksConnectorException("get query table for JDBC catalog fail!", e);
         }
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
-        try (Connection connection = getConnection()) {
-            return schemaResolver.listPartitionNames(connection, databaseName, tableName);
-        } catch (SQLException e) {
-            throw new StarRocksConnectorException(e.getMessage());
-        }
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
+        return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
+                k -> {
+                    try (Connection connection = getConnection()) {
+                        return schemaResolver.listPartitionNames(connection, databaseName, tableName);
+                    } catch (SQLException e) {
+                        throw new StarRocksConnectorException("list partition names for JDBC catalog fail!",
+                                e);
+                    }
+                });
     }
 
     public List<Column> listPartitionColumns(String databaseName, String tableName, List<Column> fullSchema) {
         try (Connection connection = getConnection()) {
             Set<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName)
-                    .stream().map(columnName -> columnName.toLowerCase()).collect(Collectors.toSet());
-            if (partitionColumnNames.size() > 0) {
-                return fullSchema.stream().filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
+                    .stream().map(String::toLowerCase).collect(Collectors.toSet());
+            if (!partitionColumnNames.isEmpty()) {
+                return fullSchema.stream()
+                        .filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
                         .collect(Collectors.toList());
             } else {
                 return Lists.newArrayList();
             }
-        } catch (SQLException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+        } catch (SQLException | StarRocksConnectorException e) {
+            LOG.warn("list partition columns for JDBC catalog fail!", e);
+            return Lists.newArrayList();
         }
     }
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        try (Connection connection = getConnection()) {
-            List<Partition> partitions = schemaResolver.getPartitions(connection, table);
-            String maxInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
-            String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+        JDBCTable jdbcTable = (JDBCTable) table;
+        List<Partition> partitions = partitionInfoCache.get(
+                new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName()),
+                k -> {
+                    try (Connection connection = getConnection()) {
+                        List<Partition> partitionsForCache = schemaResolver.getPartitions(connection, table);
+                        if (!partitionsForCache.isEmpty()) {
+                            return partitionsForCache;
+                        }
+                        return Lists.newArrayList();
+                    } catch (SQLException e) {
+                        throw new StarRocksConnectorException("get partitions for JDBC catalog fail!", e);
+                    }
+                });
 
-            ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
-            if (partitions.isEmpty()) {
-                return Lists.newArrayList();
+        String maxInt = IntLiteral.createMaxValue(IntegerType.INT).getStringValue();
+        String maxDate = DateLiteral.createMaxValue(DateType.DATE).getStringValue();
+
+        ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
+        if (partitions.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        for (Partition partition : partitions) {
+            String partitionName = partition.getPartitionName();
+            if (partitionNames != null && partitionNames.contains(partitionName)) {
+                list.add(partition);
             }
-            for (Partition partition : partitions) {
-                String partitionName = partition.getPartitionName();
-                if (partitionNames.contains(partitionName)) {
+            // Determine boundary value
+            if (partitionName.equalsIgnoreCase(PartitionUtil.MYSQL_PARTITION_MAXVALUE)) {
+                if (partitionNames != null && (partitionNames.contains(maxInt)
+                        || partitionNames.contains(maxDate))) {
                     list.add(partition);
                 }
-                // Determine boundary value
-                if (partitionName.equalsIgnoreCase(PartitionUtil.MYSQL_PARTITION_MAXVALUE)) {
-                    if (partitionNames.contains(maxInt) || partitionNames.contains(maxDate)) {
-                        list.add(partition);
-                    }
-                }
             }
-            return list.build();
-        } catch (SQLException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+        }
+        return list.build();
+    }
+
+    @Override
+    public Statistics getTableStatistics(OptimizerContext session, Table table,
+            Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
+            ScalarOperator predicate, long limit, TvrVersionRange tableVersionRange) {
+        if (rowCountCache == null) {
+            return Statistics.builder().setOutputRowCount(Config.default_statistics_output_row_count).build();
+        }
+        JDBCTable jdbcTable = (JDBCTable) table;
+        JDBCTableName key = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
+
+        long rowCount = Config.default_statistics_output_row_count;
+        boolean hasRealRowCount = false;
+        CompletableFuture<Long> future = rowCountCache.getIfPresent(key);
+        if (future == null) {
+            // Cold start: fire async load, return default for this planning round.
+            rowCountCache.get(key);
+        } else if (future.isDone() && !future.isCompletedExceptionally()) {
+            try {
+                rowCount = future.getNow(Config.default_statistics_output_row_count);
+                hasRealRowCount = true;
+            } catch (Exception e) {
+                LOG.warn("Unexpected error reading row count for {}.{}", key.getDatabaseName(), key.getTableName(), e);
+            }
+        }
+        // Future in-flight or completed exceptionally: fall through to default.
+        Statistics.Builder builder = Statistics.builder().setOutputRowCount(rowCount);
+        if (hasRealRowCount) {
+            builder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+        }
+        // Populate per-column NDV estimates (Tier-3 type-fraction; no extra IO to source DB)
+        if (!columns.isEmpty()) {
+            Map<ColumnRefOperator, ColumnStatistic> colStats = new HashMap<>();
+            for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
+                ConnectorNdvEstimator.TypeCategory cat =
+                        ConnectorNdvEstimator.fromStarRocksType(entry.getValue().getType());
+                double ndv = Math.max(1.0, Math.min(
+                        ConnectorNdvEstimator.typeNdv(cat, rowCount), rowCount));
+                colStats.put(entry.getKey(), ColumnStatistic.builder()
+                        .setDistinctValuesCount(ndv)
+                        .setAverageRowSize(entry.getValue().getType().getTypeSize())
+                        .setNullsFraction(0)
+                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                        .build());
+            }
+            builder.addColumnStatistics(colStats);
+        }
+        return builder.build();
+    }
+
+    @Override
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+        JDBCTable jdbcTable = (JDBCTable) table;
+        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
+        if (!onlyCachedPartitions) {
+            tableInstanceCache.invalidate(jdbcTableName);
+        }
+        partitionNamesCache.invalidate(jdbcTableName);
+        partitionInfoCache.invalidate(jdbcTableName);
+        if (rowCountCache != null) {
+            rowCountCache.synchronous().invalidate(jdbcTableName);
         }
     }
 
+    public void refreshCache(Map<String, String> properties) {
+        createMetaAsyncCacheInstances(properties);
+    }
+
+    @Override
+    public void shutdown() {
+        if (dataSource != null) {
+            dataSource.close();
+        }
+    }
 }

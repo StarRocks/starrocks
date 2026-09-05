@@ -15,17 +15,14 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.ResourcePattern;
-import com.starrocks.analysis.TablePattern;
-import com.starrocks.common.Pair;
-import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+
+import static com.starrocks.common.util.Util.normalizeNames;
 
 public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokeClause clause;
@@ -35,11 +32,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected String role;
     protected String objectTypeUnResolved;
     protected List<String> privilegeTypeUnResolved;
-
-    // the following fields is set by analyzer for old privilege framework and will be removed after 2.5 released
-    private PrivBitSet privBitSet = null;
-    private TablePattern tblPattern = null;
-    private ResourcePattern resourcePattern = null;
 
     // the following fields is set by analyzer, for new RBAC privilege framework
     private ObjectType objectType;
@@ -63,24 +55,14 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
-        this.objectsUnResolved = objectsUnResolved;
+        this.objectsUnResolved = normalizeNames(objectTypeUnResolved, objectsUnResolved);
         this.role = clause.getRoleName();
-    }
-
-    public void setAnalysedTable(PrivBitSet privBitSet, TablePattern tablePattern) {
-        this.privBitSet = privBitSet;
-        this.tblPattern = tablePattern;
-    }
-
-    public void setAnalysedResource(PrivBitSet privBitSet, ResourcePattern resourcePattern) {
-        this.privBitSet = privBitSet;
-        this.resourcePattern = resourcePattern;
     }
 
     /**
      * old privilege framework only support grant/revoke on one single object
      */
-    public UserIdentity getUserPrivilegeObject() {
+    public UserRef getUserPrivilegeObject() {
         return objectsUnResolved.getUserPrivilegeObjectList().get(0);
     }
 
@@ -88,12 +70,16 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objectsUnResolved.getPrivilegeObjectNameTokensList();
     }
 
-    public List<UserIdentity> getUserPrivilegeObjectList() {
+    public List<UserRef> getUserPrivilegeObjectList() {
         return objectsUnResolved.getUserPrivilegeObjectList();
     }
 
-    public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {
-        return objectsUnResolved.getFunctions();
+    public List<FunctionRef> getFunctionRefs() {
+        return objectsUnResolved.getFunctionRefs();
+    }
+
+    public List<FunctionArgsDef> getFunctionArgsDefs() {
+        return objectsUnResolved.getFunctionArgsDefs();
     }
 
     public boolean isGrantOnALL() {
@@ -104,10 +90,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         isGrantOnAll = true;
     }
 
-    public void setPrivBitSet(PrivBitSet privBitSet) {
-        this.privBitSet = privBitSet;
-    }
-
     public void setRole(String role) {
         this.role = role;
     }
@@ -116,8 +98,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return role;
     }
 
-    public UserIdentity getUserIdentity() {
-        return clause.getUserIdentity();
+    public UserRef getUser() {
+        return clause.getUser();
     }
 
     public String getObjectTypeUnResolved() {
@@ -126,18 +108,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     public List<String> getPrivilegeTypeUnResolved() {
         return privilegeTypeUnResolved;
-    }
-
-    public TablePattern getTblPattern() {
-        return tblPattern;
-    }
-
-    public ResourcePattern getResourcePattern() {
-        return resourcePattern;
-    }
-
-    public PrivBitSet getPrivBitSet() {
-        return privBitSet;
     }
 
     public ObjectType getObjectType() {
@@ -166,6 +136,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitGrantRevokePrivilegeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitGrantRevokePrivilegeStatement(this, context);
     }
 }

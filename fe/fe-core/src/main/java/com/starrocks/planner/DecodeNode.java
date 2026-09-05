@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TDecodeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalDecodeNode;
@@ -53,7 +50,7 @@ public class DecodeNode extends PlanNode {
                       Map<Integer, Integer> dictIdToStringIds,
                       Map<SlotId, Expr> stringFunctions,
                       Map<SlotRef, SlotRef> slotRefMap
-                      ) {
+    ) {
         super(id, tupleDescriptor.getId().asList(), "Decode");
         addChild(child);
         this.dictIdToStringIds = dictIdToStringIds;
@@ -72,7 +69,7 @@ public class DecodeNode extends PlanNode {
         msg.decode_node = new TDecodeNode();
         msg.decode_node.setDict_id_to_string_ids(dictIdToStringIds);
         stringFunctions.forEach(
-                (key, value) -> msg.decode_node.putToString_functions(key.asInt(), value.treeToThrift()));
+                (key, value) -> msg.decode_node.putToString_functions(key.asInt(), ExprToThrift.treeToThrift(value)));
     }
 
     @Override
@@ -94,7 +91,7 @@ public class DecodeNode extends PlanNode {
                 output.append("<function id ").
                         append(kv.getKey()).
                         append("> : ").
-                        append(kv.getValue().toSql()).
+                        append(explainExpr(kv.getValue())).
                         append("\n");
             }
         }
@@ -113,9 +110,11 @@ public class DecodeNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -124,15 +123,17 @@ public class DecodeNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr(descTbl)), 0, true);
     }
 
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalDecodeNode decodeNode = new TNormalDecodeNode();
         List<Pair<SlotId, SlotId>> dictIdAndStrIdPairs = dictIdToStringIds.entrySet().stream().map(
-                e -> Pair.create(normalizer.remapSlotId(new SlotId(e.getKey())), new SlotId(e.getValue()))
+                e -> Pair.create(normalizer.remapSlotId(new SlotId(e.getKey())),
+                        normalizer.remapSlotId(new SlotId(e.getValue())))
         ).sorted(Comparator.comparing(p -> p.first.asInt())).collect(Collectors.toList());
         List<Integer> fromDictIds = dictIdAndStrIdPairs.stream().map(p -> p.first.asInt())
                 .collect(Collectors.toList());
@@ -147,5 +148,16 @@ public class DecodeNode extends PlanNode {
         planNode.setNode_type(TPlanNodeType.DECODE_NODE);
         planNode.setDecode_node(decodeNode);
         normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
+
+    public Map<Integer, Integer> getDictIdToStringIds() {
+        return dictIdToStringIds;
+    }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into a decode operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
     }
 }

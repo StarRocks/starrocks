@@ -38,10 +38,11 @@
 #include <cstdio>
 #include <sstream>
 
+#include "base/bit/bit_util.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "util/bit_util.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/runtime_metrics.h"
 
 namespace starrocks {
 
@@ -53,24 +54,28 @@ const int MemPool::MAX_CHUNK_SIZE;
 const int MemPool::DEFAULT_ALIGNMENT;
 uint32_t MemPool::k_zero_length_region_ alignas(std::max_align_t) = MEM_POOL_POISON;
 
+int MemPool::memory_max_alignment() {
+    return config::memory_max_alignment;
+}
+
 MemPool::ChunkInfo::ChunkInfo(const MemChunk& chunk_) : chunk(chunk_) {
-    StarRocksMetrics::instance()->memory_pool_bytes_total.increment(chunk.size);
+    RuntimeMetrics::instance()->memory_pool_bytes_total.increment(chunk.size);
 }
 
 MemPool::~MemPool() {
     int64_t total_bytes_released = 0;
     for (auto& chunk : chunks_) {
         total_bytes_released += chunk.chunk.size;
-        MemChunkAllocator::instance()->free(chunk.chunk);
+        MemChunkAllocator::free(chunk.chunk);
     }
-    StarRocksMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
+    RuntimeMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
 }
 
 void MemPool::clear() {
     current_chunk_idx_ = -1;
     for (auto& chunk : chunks_) {
         chunk.allocated_bytes = 0;
-        ASAN_POISON_MEMORY_REGION(chunk.chunk.data, chunk.chunk.size);
+        SR_ASAN_POISON_MEMORY_REGION(chunk.chunk.data, chunk.chunk.size);
     }
     total_allocated_bytes_ = 0;
     DCHECK(check_integrity(false));
@@ -80,7 +85,7 @@ void MemPool::free_all() {
     int64_t total_bytes_released = 0;
     for (auto& chunk : chunks_) {
         total_bytes_released += chunk.chunk.size;
-        MemChunkAllocator::instance()->free(chunk.chunk);
+        MemChunkAllocator::free(chunk.chunk);
     }
     chunks_.clear();
     next_chunk_size_ = INITIAL_CHUNK_SIZE;
@@ -88,7 +93,7 @@ void MemPool::free_all() {
     total_allocated_bytes_ = 0;
     total_reserved_bytes_ = 0;
 
-    StarRocksMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
+    RuntimeMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
 }
 
 bool MemPool::find_chunk(size_t min_size, bool check_limits) {
@@ -132,14 +137,14 @@ bool MemPool::find_chunk(size_t min_size, bool check_limits) {
 
     // Allocate a new chunk. Return early if allocate fails.
     MemChunk chunk;
-    if (!MemChunkAllocator::instance()->allocate(chunk_size, &chunk)) {
+    if (!MemChunkAllocator::allocate(chunk_size, &chunk)) {
         if (tls_thread_status.is_catched()) {
             throw std::bad_alloc();
         } else {
             return false;
         }
     }
-    ASAN_POISON_MEMORY_REGION(chunk.data, chunk_size);
+    SR_ASAN_POISON_MEMORY_REGION(chunk.data, chunk_size);
     // Put it before the first free chunk. If no free chunks, it goes at the end.
     if (first_free_idx == static_cast<int>(chunks_.size())) {
         chunks_.emplace_back(chunk);

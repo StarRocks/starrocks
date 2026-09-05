@@ -78,14 +78,15 @@ public class MultiJoinNode {
         List<ScalarOperator> predicates = new ArrayList<>();
         Map<ColumnRefOperator, ScalarOperator> proMap = new HashMap<>();
 
-        flattenJoinNode(node, atoms, predicates, proMap);
+        flattenJoinNode(node, atoms, predicates, proMap, true);
 
         return new MultiJoinNode(atoms, predicates, proMap);
     }
 
     private static void flattenJoinNode(OptExpression node, LinkedHashSet<OptExpression> atoms,
                                         List<ScalarOperator> predicates,
-                                        Map<ColumnRefOperator, ScalarOperator> expressionMap) {
+                                        Map<ColumnRefOperator, ScalarOperator> expressionMap,
+                                        boolean isMultiJoinRoot) {
         Operator operator = node.getOp();
         if (!(operator instanceof LogicalJoinOperator)) {
             atoms.add(node);
@@ -112,25 +113,46 @@ public class MultiJoinNode {
 
         if (joinOperator.getProjection() != null) {
             Projection projection = joinOperator.getProjection();
-
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                if (!entry.getValue().isColumnRef()
-                        && entry.getValue().getUsedColumns().isIntersect(node.inputAt(0).getOutputColumns())
-                        && entry.getValue().getUsedColumns().isIntersect(node.inputAt(1).getOutputColumns())) {
-                    atoms.add(node);
-                    return;
-                }
-
-                if (!entry.getKey().equals(entry.getValue())) {
-                    expressionMap.put(entry.getKey(), entry.getValue());
-                }
+            if (hasUnsafeProjectionForJoinReorder(node, isMultiJoinRoot)) {
+                atoms.add(node);
+                return;
             }
+            projection.getColumnRefMap().forEach((columnRef, expression) -> {
+                if (!columnRef.equals(expression)) {
+                    expressionMap.put(columnRef, expression);
+                }
+            });
         }
 
-        flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap);
-        flattenJoinNode(node.inputAt(1), atoms, predicates, expressionMap);
+        flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap, false);
+        flattenJoinNode(node.inputAt(1), atoms, predicates, expressionMap, false);
         predicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
         Preconditions.checkState(!Utils.isEqualBinaryPredicate(joinPredicate));
         predicates.addAll(Utils.extractConjuncts(joinPredicate));
+    }
+
+    static boolean hasProjectRelyOnTwoChildren(OptExpression node) {
+        if (!(node.getOp() instanceof LogicalJoinOperator)) {
+            return false;
+        }
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) node.getOp();
+        if (joinOperator.getProjection() == null) {
+            return false;
+        }
+        ColumnRefSet leftChildColumns = node.inputAt(0).getOutputColumns();
+        ColumnRefSet rightChildColumns = node.inputAt(1).getOutputColumns();
+        return joinOperator.getProjection().getColumnRefMap().values().stream().anyMatch(expression -> {
+            ColumnRefSet usedColumns = expression.getUsedColumns();
+            return !expression.isColumnRef()
+                    && usedColumns.isIntersect(leftChildColumns)
+                    && usedColumns.isIntersect(rightChildColumns);
+        });
+    }
+
+    // multi join node tree's root can have projection that rely on two children
+    // since projection's output won't be used by any atom of this join tree
+    // so it's safe to reorder this join tree
+    private static boolean hasUnsafeProjectionForJoinReorder(OptExpression node, boolean isMultiJoinRoot) {
+        return !isMultiJoinRoot && hasProjectRelyOnTwoChildren(node);
     }
 }

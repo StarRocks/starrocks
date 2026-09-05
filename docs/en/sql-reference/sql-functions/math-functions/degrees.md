@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Converts the angle in radians x to degrees."
 ---
 
 # degrees
 
-## Description
+
 
 Converts the angle in radians `x` to degrees.
 

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Alias of from_base64; decodes a Base64-encoded string to its original string value."
 ---
 
 # base64_decode_string
 
-## Description
+
 
 This function is the same as [from_base64](from_base64.md).
 Decodes a Base64-encoded string. and an inverse of [to_base64](to_base64.md).

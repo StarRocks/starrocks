@@ -12,50 +12,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.KeysDesc;
+import com.starrocks.common.util.SqlUtils;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 public class OptimizeClause extends AlterTableClause {
     private KeysDesc keysDesc;
     private PartitionDesc partitionDesc;
     private DistributionDesc distributionDesc;
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
+    private OptimizeRange range;
 
-    @SerializedName(value = "sourcePartitionIds")
-    List<Long> sourcePartitionIds = Lists.newArrayList();
+    private List<Long> sourcePartitionIds = Lists.newArrayList();
 
-    private List<String> sortKeys = Lists.newArrayList();
+    private boolean isTableOptimize = false;
+
+    // It saves the original sort order elements parsing from the order by clause.
+    // Because other sort properties, such as sort-direction and null-orders, are not supported in optimize clause now.
+    // We extract its sort columns to `sortKeys` in analyze phase and use the `sortKeys` instead of it in most places.
+    private List<OrderByElement> orderByElements;
+    // It will be set based on `orderByElements` in analyze
+    private List<String> sortKeys;
 
     public OptimizeClause(KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           List<String> sortKeys,
-                           PartitionNames partitionNames) {
-        this(keysDesc, partitionDesc, distributionDesc, sortKeys, partitionNames, NodePosition.ZERO);
+                          PartitionDesc partitionDesc,
+                          DistributionDesc distributionDesc,
+                          List<OrderByElement> orderByElements,
+                          PartitionRef partitionNames,
+                          OptimizeRange range) {
+        this(keysDesc, partitionDesc, distributionDesc, orderByElements, partitionNames, range, NodePosition.ZERO);
     }
 
     public OptimizeClause(KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           List<String> sortKeys,
-                           PartitionNames partitionNames,
-                           NodePosition pos) {
-        super(AlterOpType.OPTIMIZE, pos);
+                          PartitionDesc partitionDesc,
+                          DistributionDesc distributionDesc,
+                          List<OrderByElement> orderByElements,
+                          PartitionRef partitionNames,
+                          OptimizeRange range,
+                          NodePosition pos) {
+        super(pos);
         this.keysDesc = keysDesc;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
         this.partitionNames = partitionNames;
+        this.range = range;
+    }
+
+    // Add getter and setter for OptimizeRange
+    public OptimizeRange getRange() {
+        return range;
+    }
+
+    public void setRange(OptimizeRange range) {
+        this.range = range;
     }
 
     public KeysDesc getKeysDesc() {
@@ -70,6 +85,14 @@ public class OptimizeClause extends AlterTableClause {
         return this.distributionDesc;
     }
 
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public void setSortKeys(List<String> sortKeys) {
+        this.sortKeys = sortKeys;
+    }
+
     public List<String> getSortKeys() {
         return sortKeys;
     }
@@ -82,7 +105,7 @@ public class OptimizeClause extends AlterTableClause {
         this.partitionDesc = partitionDesc;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
@@ -94,31 +117,133 @@ public class OptimizeClause extends AlterTableClause {
         return sourcePartitionIds;
     }
 
-    public static OptimizeClause read(DataInput in) throws IOException {
-        throw new RuntimeException("OptimizeClause serialization is not supported anymore.");
+    public boolean isTableOptimize() {
+        return isTableOptimize;
     }
 
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER ");
-        if (partitionDesc != null) {
-            sb.append(partitionDesc.toString());
-        }
-        if (distributionDesc != null) {
-            sb.append(distributionDesc.toString());
-        }
-        if (keysDesc != null) {
-            sb.append(keysDesc.toSql());
-        }
-        if (sortKeys != null && !sortKeys.isEmpty()) {
-            sb.append(String.join(",", sortKeys));
-        }
-        return sb.toString();
+    public void setTableOptimize(boolean tableOptimize) {
+        isTableOptimize = tableOptimize;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitOptimizeClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitOptimizeClause(this, context);
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+
+        // PARTITIONS (p1, p2)
+        if (partitionNames != null && !partitionNames.getPartitionNames().isEmpty()) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(partitionNames.toString());
+        }
+
+        // DUPLICATE KEY(`col1`, `col2`) etc.
+        if (keysDesc != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(keysDesc.getKeysType().toSql());
+            List<String> keyColumns = keysDesc.getKeysColumnNames();
+            if (keyColumns != null && !keyColumns.isEmpty()) {
+                sb.append("(");
+                for (int i = 0; i < keyColumns.size(); i++) {
+                    if (i != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(SqlUtils.getIdentSql(keyColumns.get(i)));
+                }
+                sb.append(")");
+            }
+        }
+
+        // PARTITION BY RANGE(...)
+        if (partitionDesc != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(partitionDesc);
+        }
+
+        // ORDER BY (`col1`, `col2`)
+        if (sortKeys != null && !sortKeys.isEmpty()) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append("ORDER BY (");
+            for (int i = 0; i < sortKeys.size(); i++) {
+                if (i != 0) {
+                    sb.append(", ");
+                }
+                sb.append(SqlUtils.getIdentSql(sortKeys.get(i)));
+            }
+            sb.append(")");
+        }
+
+        // DISTRIBUTED BY HASH(`col1`) BUCKETS 10
+        if (distributionDesc != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            if (distributionDesc instanceof HashDistributionDesc) {
+                HashDistributionDesc hashDesc = (HashDistributionDesc) distributionDesc;
+                sb.append("DISTRIBUTED BY HASH(");
+                List<String> distCols = hashDesc.getDistributionColumnNames();
+                for (int i = 0; i < distCols.size(); i++) {
+                    if (i != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(SqlUtils.getIdentSql(distCols.get(i)));
+                }
+                sb.append(")");
+                if (hashDesc.getBuckets() > 0) {
+                    sb.append(" BUCKETS ").append(hashDesc.getBuckets());
+                }
+            } else if (distributionDesc instanceof RandomDistributionDesc) {
+                RandomDistributionDesc randomDesc = (RandomDistributionDesc) distributionDesc;
+                sb.append("DISTRIBUTED BY RANDOM");
+                if (randomDesc.getBuckets() > 0) {
+                    sb.append(" BUCKETS ").append(randomDesc.getBuckets());
+                }
+            } else {
+                sb.append(distributionDesc);
+            }
+        }
+
+        // BETWEEN start AND end
+        if (range != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append("BETWEEN ");
+            if (range.getStart() != null) {
+                sb.append(toSqlStringLiteral(range.getStart())).append(" ");
+            }
+            sb.append("AND");
+            if (range.getEnd() != null) {
+                sb.append(" ").append(toSqlStringLiteral(range.getEnd()));
+            }
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Render a {@link StringLiteral} as a single-quoted,
+     * backslash-and-quote-escaped SQL string. Using {@code getStringValue()} directly would drop the
+     * surrounding quotes (and the escaping), producing e.g. {@code BETWEEN 2024-01-01 AND 2024-12-31}
+     * which is neither the submitted clause nor valid for the {@code optimizeRange} grammar.
+     */
+    private static String toSqlStringLiteral(StringLiteral literal) {
+        return "'" + SqlUtils.escapeSqlString(literal.getStringValue()) + "'";
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
     }
 }

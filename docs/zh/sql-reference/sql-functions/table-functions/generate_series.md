@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "生成一系列从 start 到 end 的数值，步长可选，默认为 1。"
 ---
 
 # generate_series
 
-## 功能
+
 
 生成一系列从 `start` 到 `end` 的数值，步长为 `step`，`step` 默认为 1。
 

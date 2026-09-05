@@ -1,0 +1,43 @@
+-- name: test_iceberg_row_id_multi_row_group
+-- Row lineage: _row_id must be first_row_id + file-local row position for every row group.
+-- Each fixture file carries 15 row groups of 100 rows; id is pre-populated so that
+-- id == expected _row_id (file1: 0..1499, file2: 1500..2999). add_files assigns
+-- first_row_id per Iceberg's standard row-lineage bookkeeping (footer-accurate record
+-- count via AppendFiles/Transaction commit), so file1 gets first_row_id=0 and file2
+-- gets first_row_id=1500. A row-group-level base would shift _row_id past the first
+-- row group of each file.
+
+create external catalog iceberg_rowid_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/warehouse/"
+);
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/warehouse/rowid_db > /dev/null
+
+use iceberg_rowid_${uuid0}.rowid_db;
+
+CREATE TABLE rowid_multi_rg (
+    id INT,
+    payload STRING
+) properties(
+  'format-version' = '3'
+);
+
+shell: ossutil64 cp ./sql/test_iceberg/data/row_id_multi_rg/row_id_multi_rg_file1.parquet oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/data/row_id_multi_rg_file1.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/row_id_multi_rg/row_id_multi_rg_file2.parquet oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/data/row_id_multi_rg_file2.parquet > /dev/null
+
+alter table rowid_multi_rg execute add_files(location='oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/data/row_id_multi_rg_file1.parquet', file_format='parquet');
+alter table rowid_multi_rg execute add_files(location='oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/data/row_id_multi_rg_file2.parquet', file_format='parquet');
+
+set new_planner_optimize_timeout = 30000;
+
+select count(*), count(distinct _row_id), min(_row_id), max(_row_id) from rowid_multi_rg;
+select id, _row_id from rowid_multi_rg where id in (0, 99, 100, 101, 1499, 1500, 1599, 1600, 2999) order by id;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_row_id_multi_row_group/${uuid0}/ > /dev/null
+
+drop table rowid_multi_rg force;
+set catalog default_catalog;
+drop catalog iceberg_rowid_${uuid0};

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the weekday index for a given date."
 ---
 
 # dayofweek
 
-## Description
+
 
 Returns the weekday index for a given date. For example, the index for Sunday is 1, for Monday is 2, for Saturday is 7.
 

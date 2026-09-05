@@ -1,0 +1,88 @@
+-- name: test_range_orderby_create @cloud
+-- SQL integration: CREATE TABLE for a range-distributed PRIMARY KEY table whose ORDER BY
+-- differs from the primary key. Tablet ranges stay in primary-key space -- ORDER BY only
+-- sets the physical sort order inside a tablet -- so the same primary key must still route
+-- to one tablet and collapse to one row.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Accepted: file_bundling defaults to true in shared-data mode.
+create table t1 (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+-- RANGE distribution with a sort key that is not the primary key.
+select distribute_type, primary_key, sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't1';
+
+-- The sort key is not the routing key: a second write of the same primary key must replace
+-- the first one, however far apart the two rows sort.
+insert into t1 values (1, 1, 900, 'z'), (1, 2, 100, 'a'), (2, 1, 500, 'm');
+insert into t1 values (1, 1, 1, 'b');
+select * from t1 order by k1, k2;
+select count(*) from t1;
+
+-- Rejected: a split of this shape rewrites the children wholesale, which needs bundled files.
+create table t_no_bundling (
+    k1 int not null,
+    v1 int not null
+)
+primary key(k1)
+order by(v1)
+properties('replication_num' = '1', 'file_bundling' = 'false');
+
+-- Accepted with file_bundling off: the ORDER BY equals the primary key, so nothing separates
+-- the sort key from the routing key and the new requirement must not fire.
+create table t_same_order (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null
+)
+primary key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1', 'file_bundling' = 'false');
+select distribute_type, primary_key, sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't_same_order';
+
+-- Accepted with file_bundling off: HASH distribution has always allowed a separate ORDER BY
+-- and has no split rewrite to strand, so the requirement must not leak onto it.
+create table t_hash (
+    k1 int not null,
+    v1 int not null
+)
+primary key(k1)
+distributed by hash(k1) buckets 3
+order by(v1)
+properties('replication_num' = '1', 'file_bundling' = 'false');
+insert into t_hash values (1, 10), (2, 20), (1, 5);
+select * from t_hash order by k1;
+
+-- Rejected: a sort key column of this table also has to be encodable as a range boundary.
+create table t_bad_sort_type (
+    k1 int not null,
+    v1 double not null
+)
+primary key(k1)
+order by(v1)
+properties('replication_num' = '1');
+
+-- Rejected: the relaxation is primary-key only. A UNIQUE KEY range table still needs its sort
+-- columns to be its key columns.
+create table t_uniq (
+    k1 int not null,
+    k2 int not null,
+    v1 int
+)
+unique key(k1, k2)
+order by(v1, k1)
+properties('replication_num' = '1');
+
+drop database db_${uuid0} force;

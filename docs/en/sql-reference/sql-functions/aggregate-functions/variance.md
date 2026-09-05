@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the population variance of an expression."
 ---
 
-# VARIANCE,VAR_POP,VARIANCE_POP
+# variance,var_pop,variance_pop
 
-## Description
+
 
 Returns the population variance of an expression. Since v2.5.10, this function can also be used as a window function.
 

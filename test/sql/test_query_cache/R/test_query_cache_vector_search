@@ -1,0 +1,114 @@
+-- name: test_query_cache_vector_search
+CREATE TABLE w1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE wvec (
+  c0 INT,
+  vec ARRAY<FLOAT> NOT NULL,
+  INDEX idx_vec (vec) USING VECTOR ('metric_type' = 'l2_distance',
+    'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5')
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO w1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+-- result:
+-- !result
+INSERT INTO wvec VALUES
+ (1,[1,1,1,1,1]),(2,[1,1,1,1,2]),(3,[1,1,1,2,1]),(4,[1,1,2,1,1]),(5,[1,2,1,1,1]),
+ (6,[2,1,1,1,1]),(7,[1,1,1,2,2]),(8,[1,1,2,2,1]),(9,[1,2,2,1,1]),(10,[2,2,1,1,1]),
+ (101,[9,9,9,9,9]),(102,[9,9,9,9,8]),(103,[9,9,9,8,9]),(104,[9,9,8,9,9]),(105,[9,8,9,9,9]),
+ (106,[8,9,9,9,9]),(107,[9,9,9,8,8]),(108,[9,9,8,8,9]),(109,[9,8,8,9,9]),(110,[8,8,9,9,9]);
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set query_cache_hot_partition_num = 100;
+-- result:
+-- !result
+select group_concat(cast(c0 as string) order by c0) from
+ (select c0 from wvec order by approx_l2_distance([1,1,1,1,1], vec) limit 5) t;
+-- result:
+1,2,3,4,5
+-- !result
+select group_concat(cast(c0 as string) order by c0) from
+ (select c0 from wvec order by approx_l2_distance([9,9,9,9,9], vec) limit 5) t;
+-- result:
+101,102,103,104,105
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select w1.c1, sum(w1.v1) s from w1
+  join (select c0 as k from wvec order by approx_l2_distance([1,1,1,1,1], vec) limit 5) b
+  on w1.ts > b.k group by w1.c1) x;
+-- result:
+3100
+-- !result
+select ifnull(sum(s),0) from (select w1.c1, sum(w1.v1) s from w1
+  join (select c0 as k from wvec order by approx_l2_distance([9,9,9,9,9], vec) limit 5) b
+  on w1.ts > b.k group by w1.c1) x;
+-- result:
+0
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select w1.c1, sum(w1.v1) s from w1
+  join (select c0 as k from wvec order by approx_l2_distance([1,1,1,1,1], vec) limit 5) b
+  on w1.ts > b.k group by w1.c1) x;
+-- result:
+3100
+-- !result
+select ifnull(sum(s),0) from (select w1.c1, sum(w1.v1) s from w1
+  join (select c0 as k from wvec order by approx_l2_distance([9,9,9,9,9], vec) limit 5) b
+  on w1.ts > b.k group by w1.c1) x;
+-- result:
+0
+-- !result
+CREATE TABLE w2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO w2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select w2.c1, sum(w2.v1) s from w2
+  join (select c0 as k from wvec order by approx_l2_distance([9,9,9,9,9], vec) limit 5) b
+  on w2.ts > b.k group by w2.c1) x;
+-- result:
+0
+-- !result
+select ifnull(sum(s),0) from (select w2.c1, sum(w2.v1) s from w2
+  join (select c0 as k from wvec order by approx_l2_distance([1,1,1,1,1], vec) limit 5) b
+  on w2.ts > b.k group by w2.c1) x;
+-- result:
+3100
+-- !result

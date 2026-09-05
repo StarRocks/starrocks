@@ -17,18 +17,20 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.BiMap;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 
 import java.util.Map;
 import java.util.Set;
 
 public class RewriteContext {
     private final OptExpression queryExpression;
-    private final PredicateSplit queryPredicateSplit;
+    private PredicateSplit queryPredicateSplit;
     private EquivalenceClasses queryEquivalenceClasses;
     // key is table relation id
     private final Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns;
@@ -41,10 +43,14 @@ public class RewriteContext {
     private final ColumnRefFactory mvRefFactory;
     private EquivalenceClasses queryBasedViewEquivalenceClasses;
     private final ReplaceColumnRefRewriter mvColumnRefRewriter;
-
     private final Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
     private final Set<ColumnRefOperator> queryColumnSet;
+    private final OptimizerContext optimizerContext;
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
+    private ScalarOperator unionRewriteQueryExtraPredicate;
+    private AggregatePushDownContext aggregatePushDownContext;
+    // whether this rewritten query is a rollup query
+    private boolean isRollup;
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
@@ -58,7 +64,8 @@ public class RewriteContext {
                           ColumnRefFactory mvRefFactory,
                           ReplaceColumnRefRewriter mvColumnRefRewriter,
                           Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
-                          Set<ColumnRefOperator> queryColumnSet) {
+                          Set<ColumnRefOperator> queryColumnSet,
+                          OptimizerContext optimizerContext) {
         this.queryExpression = queryExpression;
         this.queryPredicateSplit = queryPredicateSplit;
         this.queryEquivalenceClasses = queryEquivalenceClasses;
@@ -72,6 +79,7 @@ public class RewriteContext {
         this.mvColumnRefRewriter = mvColumnRefRewriter;
         this.outputMapping = outputMapping;
         this.queryColumnSet = queryColumnSet;
+        this.optimizerContext = optimizerContext;
     }
 
     public BiMap<Integer, Integer> getQueryToMvRelationIdMapping() {
@@ -88,6 +96,10 @@ public class RewriteContext {
 
     public PredicateSplit getQueryPredicateSplit() {
         return queryPredicateSplit;
+    }
+
+    public void setQueryPredicateSplit(PredicateSplit queryPredicateSplit) {
+        this.queryPredicateSplit = queryPredicateSplit;
     }
 
     public EquivalenceClasses getQueryEquivalenceClasses() {
@@ -148,5 +160,33 @@ public class RewriteContext {
 
     public Map<ColumnRefOperator, ScalarOperator> getMVColumnRefToScalarOp() {
         return MvUtils.getColumnRefMap(getMvExpression(), getMvRefFactory());
+    }
+
+    public ScalarOperator getUnionRewriteQueryExtraPredicate() {
+        return unionRewriteQueryExtraPredicate;
+    }
+
+    public void setUnionRewriteQueryExtraPredicate(ScalarOperator unionRewriteQueryExtraPredicate) {
+        this.unionRewriteQueryExtraPredicate = unionRewriteQueryExtraPredicate;
+    }
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
+    }
+
+    public boolean isRollup() {
+        return isRollup;
+    }
+
+    public void setRollup(boolean rollup) {
+        isRollup = rollup;
+    }
+
+    public OptimizerContext getOptimizerContext() {
+        return optimizerContext;
     }
 }

@@ -14,21 +14,21 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprId;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprId;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LimitElement;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * AnalyzeState is used to record some temporary variables that may be used during translate.
@@ -56,8 +56,6 @@ public class AnalyzeState {
     private Scope orderScope;
     private List<Expr> orderSourceExpressions;
 
-    private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-
     /**
      * outputExprInOrderByScope is used to record which expressions in outputExpression are to be
      * recorded in the first level of OrderByScope (order by expressions can refer to columns in output)
@@ -77,6 +75,9 @@ public class AnalyzeState {
      * whether two expressions come from the same column
      */
     private final Map<Expr, FieldId> columnReferences = new HashMap<>();
+    private final Set<RelationId> localRelationIds = new HashSet<>();
+    private final List<Expr> joinOnPredicates = new ArrayList<>();
+    private boolean hasOuterColumnReferenceFromRelation;
 
     /**
      * Non-deterministic functions should be mapped multiple times in the project,
@@ -98,24 +99,32 @@ public class AnalyzeState {
     }
 
     public void addColumnReference(Expr e, FieldId fieldId) {
-        this.columnReferences.put(e, fieldId);
+        this.columnReferences.computeIfAbsent(e, k -> fieldId);
     }
 
     public Map<Expr, FieldId> getColumnReferences() {
         return columnReferences;
     }
 
-    public SelectRelation build() {
-        SelectRelation selectRelation = new SelectRelation(
-                outputExpressions, isDistinct,
-                orderScope, orderSourceExpressions,
-                relation, predicate, limit,
-                groupBy, aggregate, groupingSetsList, groupingFunctionCallExprs,
-                orderBy, having,
-                outputAnalytic, orderByAnalytic,
-                columnReferences);
-        selectRelation.setScope(new Scope(RelationId.of(selectRelation), outputScope.getRelationFields()));
-        return selectRelation;
+    void registerLocalScope(Scope scope) {
+        localRelationIds.add(scope.getRelationId());
+    }
+
+    boolean hasOuterColumnReference() {
+        return hasOuterColumnReferenceFromRelation || columnReferences.values().stream()
+                .anyMatch(fieldId -> !localRelationIds.contains(fieldId.getRelationId()));
+    }
+
+    void mergeOuterColumnReference(boolean hasOuterColumnReference) {
+        hasOuterColumnReferenceFromRelation |= hasOuterColumnReference;
+    }
+
+    void addJoinOnPredicate(Expr predicate) {
+        joinOnPredicates.add(predicate);
+    }
+
+    List<Expr> getJoinOnPredicates() {
+        return joinOnPredicates;
     }
 
     public Scope getOrderScope() {
@@ -256,13 +265,5 @@ public class AnalyzeState {
 
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
-    }
-
-    public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
-        this.generatedExprToColumnRef = generatedExprToColumnRef;
-    }
-
-    public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
-        return generatedExprToColumnRef;
     }
 }

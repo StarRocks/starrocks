@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the ASCII code of the leftmost character of a string."
 ---
 
 # ascii
 
-## Description
+
 
 This function returns the ascii value of the leftmost character of a given string.
 

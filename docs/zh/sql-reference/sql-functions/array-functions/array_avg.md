@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回ARRAY中所有元素的平均数，忽略NULL值。"
 ---
 
 # array_avg
 
-## 功能
+
 
 求取一个ARRAY中的所有数据的平均数，返回这个结果。
 

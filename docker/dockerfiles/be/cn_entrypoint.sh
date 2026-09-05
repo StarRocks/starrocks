@@ -113,7 +113,8 @@ drop_my_self()
     local start=`date +%s`
     local memlist=
 
-    while true
+    # If we infinitely retry to drop myself, it may cause the pod to be stuck in the Terminating state.
+    for ((i=0;i<3;++i))
     do
         log_stderr "try to drop myself($MY_SELF) from FE ..."
         memlist=`show_compute_nodes $svc`
@@ -122,11 +123,12 @@ drop_my_self()
             # return code 0: no error
             selfinfo=`echo "$memlist" | grep -w "\<$MY_SELF\>" | awk '{printf("%s:%s\n", $2, $3);}'`
             if [[ "x$selfinfo" == "x" ]] ; then
-                log_stderr "myself $selfinfo is not in fe cluster"
+                log_stderr "myself is not in fe cluster"
                 return 0
             else
                 log_stderr "drop my self $selfinfo ..."
                 timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM DROP COMPUTE NODE \"$selfinfo\";"
+                break;
             fi
         else
             log_stderr "Got error $ret, sleep and retry ..."
@@ -137,30 +139,8 @@ drop_my_self()
 
 exit_clean()
 {
-    log_stderr "Receives signal to exit ..."
-    pidfile=$STARROCKS_HOME/bin/cn.pid
-    if ! test -f $pidfile ; then
-        log_stderr "Can't find $pidfile!"
-    else
-        pid=`cat $pidfile`
-        if [[ "x$pid" == "x" ]] ; then
-            log_stderr "Empty pid file!"
-        else
-            log_stderr "detect cn pid $pid exists ..."
-            while true
-            do
-                if ps -p $pid &>/dev/null ; then
-                    log_stderr "cn process $pid is still alive ..."
-                    sleep $PROBE_INTERVAL
-                else
-                    log_stderr "cn process $pid dead."
-                    break;
-                fi
-            done
-        fi
-    fi
-    # remove myself from FE
-    drop_my_self $svc_name
+    log_stderr "Got SIGTERM, exit ..."
+    exit 143
 }
 
 svc_name=$1
@@ -170,11 +150,11 @@ if [[ "x$svc_name" == "x" ]] ; then
     exit 1
 fi
 
+update_conf_from_configmap
 collect_env_info
 add_self $svc_name || exit $?
 trap exit_clean SIGTERM
 
-update_conf_from_configmap
 log_stderr "run start_cn.sh"
 
 addition_args=
@@ -184,11 +164,12 @@ if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
 fi
 $STARROCKS_HOME/bin/start_cn.sh $addition_args
 ret=$?
-if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
-    nol=50
-    log_stderr "Last $nol lines of cn.INFO ..."
-    tail -n $nol $STARROCKS_HOME/log/cn.INFO
-    log_stderr "Last $nol lines of cn.out ..."
-    tail -n $nol $STARROCKS_HOME/log/cn.out
+
+if [[ $ret -eq 0 || $ret -eq 137 ]] ; then
+    # The reason why we need to sleep here is to avoid the pod being killed by k8s before the preStop hook is exited.
+    # If the CN subprocess fails to start, we also want the entrypoint script to exit as soon as possible.
+    sleep 5
 fi
+
+# keep the same return code from start_cn.sh
 exit $ret

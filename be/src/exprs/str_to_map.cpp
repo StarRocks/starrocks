@@ -15,16 +15,40 @@
 #include <algorithm>
 #include <stack>
 
+#include "base/string/utf8.h"
 #include "column/array_column.h"
-#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/map_column.h"
+#include "exprs/function_context.h"
 #include "exprs/string_functions.h"
-#include "gutil/strings/split.h"
-#include "util/utf8.h"
 
 namespace starrocks {
+
+/**
+* @param: [string, delimiter, map_delimiter]
+* @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+* @return: MapColumn map<string,string>
+*/
+StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 3);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    // split first
+    Columns split_columns{columns[0], columns[1]};
+    ASSIGN_OR_RETURN(auto splited, StringFunctions::split(context, split_columns));
+
+    Columns splited_columns{splited, columns[2]};
+    return str_to_map_v1(context, splited_columns);
+}
+
+Status StringFunctions::str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    return StringFunctions::split_prepare(context, scope);
+}
+
+Status StringFunctions::str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    return StringFunctions::split_close(context, scope);
+}
 
 /**
 * @param: [array_string, delimiter]
@@ -39,16 +63,16 @@ namespace starrocks {
  TODO: split UTF8 chinese character according to its size, which would be greater than 1.
 */
 
-StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     // decompose array<string>
     auto array_str_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
-    NullColumnPtr nulls = nullptr;
+    NullColumn::Ptr nulls = nullptr;
     if (array_str_column->is_nullable()) {
-        nulls = down_cast<NullableColumn*>(array_str_column.get())->null_column();
+        nulls = down_cast<const NullableColumn*>(array_str_column.get())->null_column();
     }
-    auto* array_str = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(array_str_column.get()));
+    const auto* array_str = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(array_str_column.get()));
     auto offsets = array_str->offsets_column();
     auto nullable_str = array_str->elements_column(); // no null here
 
@@ -101,17 +125,21 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
             Slice haystack = string_viewer.value(off);
             if (haystack.empty()) { // return {"":NULL}
                 if (is_unique(tmp_slice, Slice(""))) {
-                    tmp_keys.push(Slice());
-                    tmp_values.push(Slice());
+                    tmp_keys.emplace();
+                    tmp_values.emplace();
                     val_is_null.push(true);
                 }
                 continue;
             }
             if (delimiter.size == 0) { // return {`1-th`:`rest`}
-                auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[0])];
+                // A truncated/invalid UTF-8 lead byte can claim more bytes than the haystack holds.
+                // Clamp char_size so the key slice stays in bounds and `haystack.size - char_size`
+                // (the value length) does not underflow into a huge size_t.
+                auto char_size = std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[0])],
+                                                  haystack.size);
                 if (is_unique(tmp_slice, Slice(haystack.data, char_size))) {
-                    tmp_keys.push(Slice(haystack.data, char_size));
-                    tmp_values.push(Slice(haystack.data + char_size, haystack.size - char_size));
+                    tmp_keys.emplace(haystack.data, char_size);
+                    tmp_values.emplace(haystack.data + char_size, haystack.size - char_size);
                     val_is_null.push(false);
                 }
             } else {
@@ -124,14 +152,14 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
                 if (pos != nullptr) { // return {`0-pos`:`rest`}
                     if (is_unique(tmp_slice, Slice(haystack.data, pos - haystack.data))) {
                         auto offset = pos - haystack.data + delimiter.size;
-                        tmp_keys.push(Slice(haystack.data, pos - haystack.data));
-                        tmp_values.push(Slice(haystack.data + offset, haystack.size - offset));
+                        tmp_keys.emplace(haystack.data, pos - haystack.data);
+                        tmp_values.emplace(haystack.data + offset, haystack.size - offset);
                         val_is_null.push(false);
                     }
                 } else { // return {`all`:null}
                     if (is_unique(tmp_slice, Slice(haystack.data, haystack.size))) {
-                        tmp_keys.push(Slice(haystack.data, haystack.size));
-                        tmp_values.push(Slice());
+                        tmp_keys.emplace(haystack.data, haystack.size);
+                        tmp_values.emplace();
                         val_is_null.push(true);
                     }
                 }
@@ -156,8 +184,8 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
     }
 
     auto map = MapColumn::create(keys_builder.build_nullable_column(), values_builder.build_nullable_column(),
-                                 res_offsets);
-    return NullableColumn::create(std::move(map), res_null);
+                                 std::move(res_offsets));
+    return NullableColumn::create(std::move(map), std::move(res_null));
 }
 
 } // namespace starrocks

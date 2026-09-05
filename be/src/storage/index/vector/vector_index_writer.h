@@ -1,0 +1,105 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <utility>
+
+#include "column/array_column.h"
+#include "column/object_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "fs/fs.h"
+#include "storage/index/vector/vector_index_builder_factory.h"
+#include "storage/tablet_schema.h"
+#include "storage_primitive/rowid_types.h"
+#include "types/bitmap_value.h"
+
+namespace starrocks {
+
+class ArrayColumn;
+class VectorIndexFileWriter;
+
+// Validate an array column against the vector index parameters. Every caller
+// that feeds data into a vector index builder must call this first so the
+// same dim and cosine-normalization rules apply regardless of whether the
+// build is inline (VectorIndexWriter::append, sync OLAP path) or asynchronous
+// (lake::VectorIndexBuildTask, shared-data path), and so that buffered data
+// below the build threshold is still checked. Mirrors the original
+// valid_input_vector logic in tenann_index_builder.cpp.
+Status validate_vector_index_input(const ArrayColumn& array_col, size_t dim, bool is_input_normalized);
+
+// Resolve the row-count threshold at/above which a real vector index is built for a
+// segment (below it the build is skipped and reads fall back to brute-force). Single
+// source of truth shared by the inline build (VectorIndexWriter::init, sync OLAP/lake
+// path) and the async build registration (lake::get_vector_index_build_threshold), so
+// the two never diverge.
+//
+// Precedence:
+//   1. config_vector_index_default_build_threshold
+//   2. user property `index_build_threshold` overrides (1)
+//   3. for IVFPQ, floor at `nlist` -- applied LAST so a user override can never drop
+//      below nlist (faiss requires at least nlist training points or it throws).
+uint32_t resolve_vector_index_build_threshold(const TabletIndex& index);
+
+class VectorIndexWriter {
+public:
+    static void create(const std::shared_ptr<TabletIndex>& tablet_index, const std::string& vector_index_file_path,
+                       bool is_element_nullable, std::unique_ptr<VectorIndexWriter>* res);
+
+    VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, std::string vector_index_file_path,
+                      bool is_element_nullable);
+
+    ~VectorIndexWriter();
+
+    Status init();
+
+    Status append(const Column& src);
+
+    Status finish(uint64_t* index_size);
+
+    uint64_t size() const;
+
+    uint64_t estimate_buffer_size() const;
+
+    uint64_t total_mem_footprint() const { return estimate_buffer_size(); }
+
+private:
+    std::shared_ptr<TabletIndex> _tablet_index;
+    std::string _vector_index_file_path;
+    // Declared before _index_builder: TenAnnIndexBuilderProxy stores a raw pointer to this
+    // VectorIndexFileWriter. Members are destroyed in reverse declaration order, so the
+    // proxy's destructor (which calls close() -> _file_writer->Close()) must run BEFORE
+    // _file_writer_holder is freed, otherwise we get a use-after-free on teardown.
+    std::unique_ptr<VectorIndexFileWriter> _file_writer_holder;
+    std::unique_ptr<VectorIndexBuilder> _index_builder;
+
+    uint32_t _start_vector_index_build_threshold;
+
+    // buffer data for tiny data size
+    MutableColumnPtr _buffer_column;
+
+    // size of null_bit column is the same size with buffer_column
+    // e.g. buffer_column: [1, NULL, 3, NULL, 4], null_column: [0, 1, 0, 1, 0]
+    const bool _is_element_nullable;
+    size_t _next_row_id = 0;
+    size_t _row_size = 0;
+    size_t _buffer_size = 0;
+
+    Status _prepare_index_builder();
+
+    Status _append_data(const Column& src, size_t offset);
+};
+
+} // namespace starrocks

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回指定日期对应的星期名称。"
 ---
 
 # dayname
 
-## 功能
+
 
 返回指定日期对应的星期名称。
 

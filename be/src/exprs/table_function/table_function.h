@@ -18,7 +18,7 @@
 
 #include "column/fixed_length_column.h"
 #include "exprs/function_helper.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 
@@ -27,17 +27,21 @@ public:
     TableFunctionState() = default;
     virtual ~TableFunctionState() = default;
 
-    void set_params(starrocks::Columns columns) {
+    void set_params(Columns columns) {
         this->_columns = std::move(columns);
         set_processed_rows(0);
         on_new_params();
     }
 
-    starrocks::Columns& get_columns() { return _columns; }
+    Columns& get_columns() { return _columns; }
 
-    void set_offset(int64_t offset) { this->_offset = offset; }
+    virtual void set_offset(int64_t offset) { this->_offset = offset; }
 
     int64_t get_offset() { return _offset; }
+
+    void set_is_left_join(bool is_left_join) { this->_is_left_join = is_left_join; }
+
+    bool get_is_left_join() { return _is_left_join; }
 
     // How many rows of `get_columns()` have been processed/consumed by the table function.
     //
@@ -55,11 +59,15 @@ public:
 
     [[nodiscard]] const Status& status() const { return _status; }
 
+    void set_is_required(bool is_required) { _is_required = is_required; }
+
+    bool is_required() { return _is_required; }
+
 private:
     virtual void on_new_params(){};
 
     //Params of table function
-    starrocks::Columns _columns;
+    Columns _columns;
 
     size_t _processed_rows = 0;
 
@@ -72,6 +80,10 @@ private:
     int64_t _offset = 0;
 
     Status _status;
+
+    // used to identify left join for table function
+    bool _is_left_join = false;
+    bool _is_required = true;
 };
 
 class TableFunction {
@@ -79,18 +91,25 @@ public:
     virtual ~TableFunction() = default;
 
     //Initialize TableFunctionState
-    [[nodiscard]] virtual Status init(const TFunction& fn, TableFunctionState** state) const = 0;
+    virtual Status init(const TFunction& fn, TableFunctionState** state) const = 0;
 
     //Some preparations are made in prepare, such as establishing a connection or initializing initial values
-    [[nodiscard]] virtual Status prepare(TableFunctionState* state) const = 0;
+    virtual Status prepare(TableFunctionState* state) const = 0;
 
-    [[nodiscard]] virtual Status open(RuntimeState* runtime_state, TableFunctionState* state) const = 0;
+    virtual Status open(RuntimeState* runtime_state, TableFunctionState* state) const = 0;
 
     //Table function processing logic
-    virtual std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const = 0;
+    virtual std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                          TableFunctionState* state) const = 0;
+
+    // Whether process() is safe to run wrapped in TRY_CATCH_BAD_ALLOC: a std::bad_alloc thrown
+    // by an over-limit allocation can unwind out of process() without leaking memory or leaving
+    // any state corrupted. Default false; override to true only for implementations whose
+    // process() is fully RAII / exception-safe (e.g. Unnest/MultiUnnest).
+    virtual bool is_exception_safe() const { return false; }
 
     //Release the resources constructed in init and prepare
-    [[nodiscard]] virtual Status close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;
+    virtual Status close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;
 };
 
 using TableFunctionPtr = std::shared_ptr<TableFunction>;

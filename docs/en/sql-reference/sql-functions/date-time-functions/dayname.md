@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the day corresponding to a date."
 ---
 
 # dayname
 
-## Description
+
 
 Returns the day corresponding to a date.
 

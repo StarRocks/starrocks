@@ -12,49 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.DescriptorTable;
+import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.paimon.PaimonUtils;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.paimon.options.Options;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.DataTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.utils.JsonSerdeUtil;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
-
 public class PaimonTable extends Table {
     private static final Logger LOG = LogManager.getLogger(PaimonTable.class);
-    private final String catalogName;
-    private final String databaseName;
-    private final String tableName;
-    private final Options paimonOptions;
-    private final AbstractFileStoreTable paimonNativeTable;
-    private final List<String> partColumnNames;
-    private final List<String> paimonFieldNames;
+
+    private String catalogName;
+    private String databaseName;
+    private String tableName;
+    private org.apache.paimon.table.Table paimonNativeTable;
+    private String uuid;
+    private List<String> partColumnNames;
+    private List<String> paimonFieldNames;
+    private Map<String, String> properties;
+
+    public PaimonTable() {
+        super(TableType.PAIMON);
+    }
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
-                       Options paimonOptions, org.apache.paimon.table.Table paimonNativeTable, long createTime) {
-        super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
+                       org.apache.paimon.table.Table paimonNativeTable) {
+        super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
-        this.paimonOptions = paimonOptions;
-        this.paimonNativeTable = (AbstractFileStoreTable) paimonNativeTable;
+        this.paimonNativeTable = paimonNativeTable;
         this.partColumnNames = paimonNativeTable.partitionKeys();
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
                 .collect(Collectors.toList());
-        this.createTime = createTime;
     }
 
     @Override
@@ -62,26 +73,53 @@ public class PaimonTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return databaseName;
     }
 
-    public String getTableName() {
+    @Override
+    public String getCatalogTableName() {
         return tableName;
     }
 
-    public AbstractFileStoreTable getNativeTable() {
+    public org.apache.paimon.table.Table getNativeTable() {
         return paimonNativeTable;
+    }
+
+    // For refresh table only
+    public void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
+        this.paimonNativeTable = paimonNativeTable;
     }
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, databaseName, tableName, Long.toString(createTime));
+        if (Strings.isNullOrEmpty(this.uuid)) {
+            this.uuid = String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid().replace(".", "_"));
+        }
+        return this.uuid;
     }
 
     @Override
     public String getTableLocation() {
-        return paimonNativeTable.location().toString();
+        if (paimonNativeTable instanceof DataTable) {
+            return ((DataTable) paimonNativeTable).location().toString();
+        } else {
+            return paimonNativeTable.name().toString();
+        }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        if (properties == null) {
+            this.properties = new HashMap<>();
+            this.properties.putAll(paimonNativeTable.options());
+        }
+        return properties;
+    }
+
+    public List<String> getPrimaryKeyColumnNames() {
+        return paimonNativeTable.primaryKeys();
     }
 
     @Override
@@ -105,7 +143,7 @@ public class PaimonTable extends Table {
 
     @Override
     public boolean isUnPartitioned() {
-        return partColumnNames.size() == 0;
+        return partColumnNames.isEmpty();
     }
 
     @Override
@@ -116,16 +154,55 @@ public class PaimonTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TPaimonTable tPaimonTable = new TPaimonTable();
-        StringBuilder sb = new StringBuilder();
-        for (String key : this.paimonOptions.keySet()) {
-            sb.append(key).append("=").append(this.paimonOptions.get(key)).append(",");
-        }
-        String option = sb.substring(0, sb.length() - 1);
+        String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
+        tPaimonTable.setPaimon_native_table(encodedTable);
+        tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
-        tPaimonTable.setPaimon_options(option);
+        tPaimonTable.setPaimon_schema(PaimonUtils.getTPaimonSchema(this.paimonNativeTable.rowType()));
+
+        if (paimonNativeTable instanceof FileStoreTable fileStoreTable) {
+            tPaimonTable.setPaimon_table_path(fileStoreTable.location().toString());
+            try {
+                tPaimonTable.setPaimon_table_schema_json(JsonSerdeUtil.toJson(fileStoreTable.schema()));
+            } catch (RuntimeException e) {
+                LOG.warn("Failed to serialize Paimon table schema for {}", tableName, e);
+            }
+        }
+
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
+    }
+
+    @Override
+    public String getTableIdentifier() {
+        String uuid = getUUID();
+        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        PaimonTable that = (PaimonTable) o;
+        return catalogName.equals(that.catalogName) &&
+                databaseName.equals(that.databaseName) &&
+                tableName.equals(that.tableName) &&
+                Objects.equals(getTableIdentifier(), that.getTableIdentifier());
+    }
+
+    @Override
+    public boolean isTemporal() {
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(catalogName, databaseName, tableName, getTableIdentifier());
     }
 }

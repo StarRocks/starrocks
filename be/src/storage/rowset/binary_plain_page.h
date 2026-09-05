@@ -38,35 +38,45 @@
 // Strings:
 //   raw strings that were written
 // Trailer
-//  Offsets:
-//    offsets pointing to the beginning of each string
+//  Offsets (one 32-bit value per string):
+//    for PLAIN_ENCODING: absolute offset pointing to the beginning of each string
+//    for PLAIN_ENCODING_DELTA_OFFSET: the per-value delta (i.e. the string length), so the
+//      absolute offset is the prefix sum; the trailer size is identical, only the values differ
 //  num_elems (32-bit fixed)
 //
 
 #pragma once
 
 #include <cstdint>
+#include <memory>
+#include <type_traits>
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
-#include "util/coding.h"
-#include "util/faststring.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 class Column;
-}
+} // namespace starrocks
 
 namespace starrocks {
 
 class BinaryPlainPageBuilder final : public PageBuilder {
 public:
-    explicit BinaryPlainPageBuilder(const PageBuilderOptions& options) : _options(options) { reset(); }
+    // delta_offset: when true, the offset trailer stores per-value deltas (string lengths)
+    // instead of absolute offsets. Selected via the PLAIN_ENCODING_DELTA_OFFSET encoding;
+    // dictionary-page and ordinary plain callers leave it false.
+    explicit BinaryPlainPageBuilder(const PageBuilderOptions& options, bool delta_offset = false)
+            : _delta_offset(delta_offset), _options(options) {
+        reset();
+    }
 
     void reserve_head(uint8_t head_size) override {
         CHECK_EQ(0, _reserved_head_size);
@@ -108,9 +118,22 @@ public:
         DCHECK(!_finished);
         DCHECK_EQ(_next_offset + _reserved_head_size, _buffer.size());
         _buffer.reserve(_size_estimate);
-        // Set up trailer
-        for (uint32_t _offset : _offsets) {
-            put_fixed32_le(&_buffer, _offset);
+        // Set up trailer. With delta encoding we store each value's delta from the previous
+        // offset (i.e. its length; the first entry is offsets[0] == 0). The trailer keeps the
+        // same size (one uint32 per value) and the count field stays a plain count, but the
+        // values are near-constant for fixed-ish strings and compress far better than
+        // monotonically increasing absolute offsets. The format is identified by the column's
+        // encoding (PLAIN_ENCODING_DELTA_OFFSET), not by any in-trailer flag.
+        if (_delta_offset) {
+            uint32_t prev = 0;
+            for (uint32_t off : _offsets) {
+                put_fixed32_le(&_buffer, off - prev);
+                prev = off;
+            }
+        } else {
+            for (uint32_t offset : _offsets) {
+                put_fixed32_le(&_buffer, offset);
+            }
         }
         put_fixed32_le(&_buffer, _offsets.size());
         if (!_offsets.empty()) {
@@ -121,14 +144,7 @@ public:
         return &_buffer;
     }
 
-    void reset() override {
-        _offsets.clear();
-        _buffer.reserve(_options.data_page_size == 0 ? 65536 : _options.data_page_size);
-        _buffer.resize(_reserved_head_size);
-        _next_offset = 0;
-        _size_estimate = sizeof(uint32_t);
-        _finished = false;
-    }
+    void reset() override;
 
     uint32_t count() const override { return _offsets.size(); }
 
@@ -172,6 +188,8 @@ private:
     faststring _buffer;
     // Offsets of each entry, relative to the start of the page
     std::vector<uint32_t> _offsets;
+    // When true, the offset trailer is written as per-value deltas instead of absolute offsets.
+    bool _delta_offset{false};
     PageBuilderOptions _options;
     faststring _first_value;
     faststring _last_value;
@@ -181,42 +199,31 @@ private:
 template <LogicalType Type>
 class BinaryPlainPageDecoder final : public PageDecoder {
 public:
-    explicit BinaryPlainPageDecoder(Slice data)
-            : _data(data), _parsed(false), _num_elems(0), _offsets_pos(0), _cur_idx(0) {}
+    // delta_offset must match how the page was written (selected by the column encoding:
+    // PLAIN_ENCODING_DELTA_OFFSET -> true). When true, init() reconstructs absolute offsets
+    // from the on-disk deltas; otherwise it aliases the absolute offsets in the page.
+    explicit BinaryPlainPageDecoder(Slice data, bool delta_offset = false) : _data(data), _delta_offset(delta_offset) {}
 
-    [[nodiscard]] Status init() override {
-        RETURN_IF(_parsed, Status::OK());
+    Status init() override;
 
-        if (_data.size < sizeof(uint32_t)) {
-            std::stringstream ss;
-            ss << "file corruption: not enough bytes for trailer in BinaryPlainPageDecoder ."
-                  "invalid data size:"
-               << _data.size << ", trailer size:" << sizeof(uint32_t);
-            return Status::Corruption(ss.str());
-        }
-
-        // Decode trailer
-        _num_elems = decode_fixed32_le((const uint8_t*)&_data[_data.get_size() - sizeof(uint32_t)]);
-        _offsets_pos =
-                static_cast<uint32_t>(_data.get_size()) - (_num_elems + 1) * static_cast<uint32_t>(sizeof(uint32_t));
-        _offsets_ptr = reinterpret_cast<uint32_t*>(_data.data + _offsets_pos);
-
-        _parsed = true;
-
-        return Status::OK();
-    }
-
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK_LE(pos, _num_elems);
         _cur_idx = pos;
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* count, Column* dst) override;
+    Status next_batch(size_t* count, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     bool append_range(uint32_t idx, uint32_t end, Column* dst) const;
+
+    Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                          Column* column) override;
+
+    Status next_batch_with_filter(Column* column, const SparseRange<>& range,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) override;
 
     uint32_t count() const override {
         DCHECK(_parsed);
@@ -230,11 +237,15 @@ public:
 
     EncodingTypePB encoding_type() const override { return PLAIN_ENCODING; }
 
+    size_t estimate_row_size() const { return _estimated_row_size; }
+
     Slice string_at_index(uint32_t idx) const {
         const uint32_t start_offset = offset(idx);
         uint32_t len = offset(static_cast<int>(idx) + 1) - start_offset;
         return {&_data[start_offset], len};
     }
+
+    void batch_string_at_index(Slice* dst, const int32_t* idx, size_t size) const;
 
     int find(const Slice& word) const {
         DCHECK(_parsed);
@@ -249,7 +260,16 @@ public:
         return -1;
     }
 
+    bool supports_read_by_rowids() const override { return Type == TYPE_VARCHAR; }
+
     uint32_t max_value_length() const {
+        // The max value length is an invariant of the (immutable) dictionary/page, but it is
+        // O(_num_elems) to compute. As a dict decoder this is re-queried on every data page via
+        // BinaryDictPageDecoder::set_dict_decoder, so memoize the first computation. The decoder
+        // object is owned by a single ScalarColumnIterator, so the mutable cache needs no locking.
+        if (_max_value_length_cache >= 0) {
+            return static_cast<uint32_t>(_max_value_length_cache);
+        }
         uint32_t max_length = 0;
         for (int i = 0; i < _num_elems; ++i) {
             uint32_t length = offset(i + 1) - offset_uncheck(i);
@@ -257,10 +277,66 @@ public:
                 max_length = length;
             }
         }
+        _max_value_length_cache = max_length;
         return max_length;
     }
 
     uint32_t dict_size() { return _num_elems; }
+
+    // Zero-copy access methods for dictionary usage
+    const void* get_raw_data() const {
+        const uint32_t start_offset = offset_uncheck(0);
+        return &_data[start_offset];
+    }
+
+    size_t get_data_length() const { return _num_elems > 0 ? offset(_num_elems) - offset_uncheck(0) : 0; }
+
+    // Get offsets for zero-copy construction
+    void get_offsets_for_zero_copy(BinaryColumn::Offsets& offsets) const {
+        offsets.clear();
+        if (_num_elems == 0) {
+            offsets.resize(1, 0);
+            return;
+        }
+
+        uint32_t base_offset = offset_uncheck(0); // Get the base offset
+        const uint32_t total_bytes = offset(_num_elems) - base_offset;
+        offsets.resize_uninitialized(_num_elems + 1, total_bytes);
+        offsets.visit_storage([&](auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            offsets_buf[0] = 0; // Start from 0
+            for (uint32_t i = 0; i < _num_elems - 1; ++i) {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+                auto offset = _offsets_ptr[i + 1];
+#else
+                // direct call offset_uncheck() will break auto-vectorized
+                // maybe we can remove this condition compile after we upgrade the toolchain
+                auto offset = offset_uncheck(i + 1);
+#endif
+                // Convert absolute offset to relative offset from base
+                uint32_t current_offset = offset - base_offset;
+                offsets_buf[i + 1] = static_cast<OffsetValue>(current_offset);
+            }
+
+            for (uint32_t i = _num_elems - 1; i < _num_elems; i++) {
+                uint32_t current_offset = offset(i + 1) - base_offset;
+                offsets_buf[i + 1] = static_cast<OffsetValue>(current_offset);
+            }
+        });
+    }
+
+    // Dictionary-page predicate cache (used by BinaryDictPageDecoder):
+    //
+    // For string columns with DICT_ENCODING, there is a single dictionary page (DICTIONARY_PAGE) shared by all
+    // data pages in the column. At runtime, ScalarColumnIterator loads that dictionary page into a
+    // BinaryPlainPageDecoder (this class). When predicate-late-materialization calls into
+    // BinaryDictPageDecoder::next_batch_with_filter(), we can evaluate predicates on the dictionary page once
+    // (dict_id -> selected) and reuse the selection across all subsequent data pages.
+    //
+    // This cache is only meaningful when this decoder instance represents the *dictionary page*.
+    // It should not be used for ordinary string data pages.
+    Status get_dict_filter_selection(const std::vector<const ColumnPredicate*>& predicates, const uint8_t** selection,
+                                     uint32_t* dict_size, uint32_t* selected_count) const;
 
 private:
     // Return the offset within '_data' where the string value with index 'idx' can be found.
@@ -268,23 +344,71 @@ private:
 
     uint32_t offset_uncheck(int idx) const {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
+        // On little-endian, _offsets_ptr always points at native-order absolute offsets:
+        // either aliased into the page (legacy) or the reconstructed buffer (delta).
         return _offsets_ptr[idx];
 #else
+        // On big-endian, delta pages were reconstructed into a native-order owned buffer in
+        // init(); read it directly. Legacy pages still decode the little-endian page bytes.
+        if (_offsets_materialized) {
+            return _offsets_ptr[idx];
+        }
         const uint32_t pos = _offsets_pos + idx * static_cast<uint32_t>(sizeof(uint32_t));
         const auto* const p = reinterpret_cast<const uint8_t*>(&_data[pos]);
         return decode_fixed32_le(p);
 #endif
     }
 
-    Slice _data;
-    bool _parsed;
+    Status next_range_with_filter(uint32_t idx, uint32_t end, Column* dst,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  const uint8_t* null, uint8_t* selection, uint16_t* selected_idx);
 
-    uint32_t _num_elems;
-    uint32_t _offsets_pos;
+    void reserve_col(size_t n, Column* column) override {
+        Column* data_col;
+        if (column->is_nullable()) {
+            // This is NullableColumn, get its data_column
+            auto* nullable_col = down_cast<NullableColumn*>(column);
+            data_col = nullable_col->data_column_raw_ptr();
+        } else {
+            data_col = column;
+        }
+
+        if (data_col->is_binary() && data_col->capacity() == 0) {
+            BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+            binary_col->reserve(n, n * _estimated_row_size);
+        }
+    }
+
+    Slice _data;
+    // Whether the on-disk offset trailer is delta-encoded (must match the writer / column encoding).
+    bool _delta_offset{false};
+    bool _parsed{false};
+
+    uint32_t _num_elems{0};
+    uint32_t _offsets_pos{0};
+    // Points at the absolute-offset array. For legacy pages this aliases into `_data`
+    // (zero-copy). For delta-encoded pages it points at `_abs_offsets`, reconstructed in init().
     uint32_t* _offsets_ptr = nullptr;
+    // Owns the absolute offsets reconstructed from on-disk deltas; empty for legacy pages.
+    std::vector<uint32_t> _abs_offsets;
+    // True when `_offsets_ptr` points at the native-order `_abs_offsets` buffer (delta pages)
+    // rather than aliasing the little-endian page bytes. Used by the big-endian read path.
+    bool _offsets_materialized = false;
 
     // Index of the currently seeked element in the page.
-    uint32_t _cur_idx;
+    uint32_t _cur_idx{0};
+
+    size_t _estimated_row_size;
+
+    std::optional<std::vector<Slice>> _parsed_datas;
+
+    // Cached result of predicate evaluation on the dictionary page. See get_dict_filter_selection().
+    mutable bool _dict_filter_cache_valid{false};
+    mutable std::vector<uint8_t> _dict_filter_cache_selection;
+    mutable uint32_t _dict_filter_cache_selected_count{0};
+
+    // Lazily-computed cache for max_value_length(); -1 means "not yet computed".
+    mutable int64_t _max_value_length_cache = -1;
 };
 
 } // namespace starrocks

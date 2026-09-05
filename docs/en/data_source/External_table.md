@@ -1,18 +1,28 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 30
+displayed_sidebar: docs
+description: "The External Table feature is no longer recommended except for certain corner usage cases, and might be deprecated in future releases."
 ---
 
 # External table
 
 :::note
-From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
-From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
+The External Table feature is no longer recommended except for certain corner usage cases, and might be deprecated in future releases. To manage and query data from external data sources in general scenarios, [External Catalog](./catalog/catalog_overview.md) is recommended.
+
+- From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](./catalog/hive_catalog.md), [Iceberg catalog](./catalog/iceberg/iceberg.md), and [Hudi catalog](./catalog/hudi_catalog.md).
+
+- From v3.1 onwards, we recommend that you use [JDBC catalog](./catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](./catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
+
+- From v3.2.9 and v3.3.1, we recommend that you use [JDBC catalog](./catalog/jdbc_catalog.md) to query data from Oracle and SQL Server.
+
+- The External Table feature was designed to help with loading data into StarRocks, NOT to perform efficient queries against external systems as a normal operation. A more performant solution would be to load the data into StarRocks.
+
 :::
 
-StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, StarRocks, Elasticsearch, Apache Hive™, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
+StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. Currently, except StarRocks external table, all other external tables are deprecated. **You can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
 
-From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
+From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](./data_cache/data_cache.md).
 
 ## StarRocks external table
 
@@ -68,7 +78,17 @@ Parameters:
 
 * **EXTERNAL:** This keyword indicates that the table to be created is an external table.
 * **host:** This parameter specifies the IP address of the leader FE node of the destination StarRocks cluster.
-* **port:**  This parameter specifies the RPC port of the leader FE node of the destination StarRocks cluster. You can set this parameter based on the rpc_port configuration in the **fe/fe.conf** file.
+* **port:**  This parameter specifies the RPC port of the FE node of the destination StarRocks cluster.
+
+  :::note
+
+  To ensure that the source cluster to which the StarRocks external tables belong can access the destination StarRocks cluster, you must configure your network and firewall to allow access to the following ports:
+
+  * The RPC port of the FE node. See `rpc_port` in the FE configuration file **fe/fe.conf**. The default RPC port is `9020`.
+  * The bRPC port of the BE node. See `brpc_port` in the BE configuration file **be/be.conf**. The default bRPC port is `8060`.
+
+  :::
+
 * **user:** This parameter specifies the username used to access the destination StarRocks cluster.
 * **password:** This parameter specifies the password used to access the destination StarRocks cluster.
 * **database:** This parameter specifies the database to which the destination table belongs.
@@ -80,7 +100,7 @@ The following limits apply when you use a StarRocks external table:
 * The syntax of creating an external table is the same as creating a normal table, but the column names and other information in the external table must be the same as the destination table.
 * The external table synchronizes table metadata from the destination table every 10 seconds. If a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
 
-## External table for a JDBC-compatible database
+## (Deprecated) External table for a JDBC-compatible database
 
 From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks. This section describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
 
@@ -116,7 +136,7 @@ The required parameters in `PROPERTIES` are as follows:
 
 * `password`: the password that is used to connect to the target database.
 
-* `jdbc_uri`: the URI that the JDBC driver uses to connect to the target database. The URI format must satisfy the database URI syntax. For the URI syntax of some common databases, visit the official websites of [Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E), [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html), [SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
+* `jdbc_uri`: the URI that the JDBC driver uses to connect to the target database. The URI format must satisfy the database URI syntax. For the URI syntax of some common databases, visit the official websites of [Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E), [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html), [SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
 
 > Note: The URI must include the name of the target database. For example, in the preceding code example, `jdbc_test` is the name of the target database that you want to connect.
 
@@ -322,7 +342,7 @@ The following table describes the parameters.
 | **Parameter**        | **Required** | **Default value** | **Description**                                              |
 | -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
 | hosts                | Yes          | None              | The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API operation. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API operation. Otherwise, BEs may not be able to communicate with your Elasticsearch cluster. |
-| index                | Yes          | None              | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. This parameter supports wildcards (\*). For example, if you set `index` to <code class="language-text">hello*</code>, StarRocks retrieves all indexes whose names start with `hello`. |
+| index                | Yes          | None              | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. This parameter supports wildcards (`*`). For example, if you set `index` to `hello*`, StarRocks retrieves all indexes whose names start with `hello`. |
 | user                 | No           | Empty             | The username that is used to log in to the Elasticsearch cluster with basic authentication enabled. Make sure you have access to `/*cluster/state/*nodes/http` and the index. |
 | password             | No           | Empty             | The password that is used to log in to the Elasticsearch cluster. |
 | type                 | No           | `_doc`            | The type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions. |
@@ -561,7 +581,7 @@ A Hive resource corresponds to a Hive cluster. You must configure the Hive clust
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://10.10.44.98:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 
@@ -577,7 +597,7 @@ SHOW RESOURCES;
 DROP RESOURCE "hive0";
 ~~~
 
-You can modify `hive.metastore.uris` of a Hive resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+You can modify `hive.metastore.uris` of a Hive resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 
 ### Create a database
 
@@ -640,16 +660,16 @@ Description:
 
     |  Column type of Hive   |  Column type of StarRocks   | Description |
     | --- | --- | ---|
-    |   INT/INTEGER  | INT    |
-    |   BIGINT  | BIGINT    |
+    |   INT/INTEGER  | INT    ||
+    |   BIGINT  | BIGINT    ||
     |   TIMESTAMP  | DATETIME    | Precision and time zone information will be lost when you convert TIMESTAMP data into DATETIME data. You need to convert TIMESTAMP data into DATETIME data that does not have the time zone offset based on the time zone in sessionVariable. |
-    |  STRING  | VARCHAR   |
-    |  VARCHAR  | VARCHAR   |
-    |  CHAR  | CHAR   |
-    |  DOUBLE | DOUBLE |
-    | FLOAT | FLOAT|
-    | DECIMAL | DECIMAL|
-    | ARRAY | ARRAY |
+    |  STRING  | VARCHAR   ||
+    |  VARCHAR  | VARCHAR   ||
+    |  CHAR  | CHAR   ||
+    |  DOUBLE | DOUBLE ||
+    | FLOAT | FLOAT||
+    | DECIMAL | DECIMAL||
+    | ARRAY | ARRAY ||
 
 > Note:
 >
@@ -668,7 +688,7 @@ select count(*) from profile_wos_p7;
 
 ### Update cached Hive table metadata
 
-* Hive partition information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.  `hive_meta_cache_ttl_s` specifies the timeout duration of the cache and the default value is 86400.
+* Hive partition information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.
   * The cached data can also be refreshed manually.
     1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
     2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
@@ -713,7 +733,7 @@ select count(*) from profile_wos_p7;
    1. `fs.s3a.access.key`: the AWS access key ID.
    2. `fs.s3a.secret.key`: the AWS secret key.
    3. `fs.s3a.endpoint`: the AWS S3 endpoint to connect to.
-   4. `fs.s3a.connection.maximu``m`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
+   4. `fs.s3a.connection.maximum`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
 
 ## (Deprecated) Iceberg external table
 
@@ -751,7 +771,7 @@ CREATE EXTERNAL RESOURCE "iceberg0"
 PROPERTIES (
    "type" = "iceberg",
    "iceberg.catalog.type" = "HIVE",
-   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
+   "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083" 
 );
 ~~~
 
@@ -786,7 +806,7 @@ The following table describes the related parameters.
 | iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`. If you specify a custom catalog, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg external table. |
 
-You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 
 ##### View Iceberg resources
 
@@ -920,7 +940,7 @@ Execute the following statement to create a Hudi resource named `hudi0`:
 CREATE EXTERNAL RESOURCE "hudi0" 
 PROPERTIES ( 
     "type" = "hudi", 
-    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 
@@ -931,7 +951,7 @@ The following table describes the parameters.
 | type                | The type of the Hudi resource. Set the vaue to hudi.         |
 | hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the `<IP address of the Hive metastore>:<Port number of the Hive metastore>` format. The default port number is 9083. |
 
-From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 
 ##### View Hudi resources
 

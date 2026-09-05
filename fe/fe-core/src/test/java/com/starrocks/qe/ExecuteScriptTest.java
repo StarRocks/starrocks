@@ -15,22 +15,22 @@
 package com.starrocks.qe;
 
 import com.starrocks.pseudocluster.PseudoCluster;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
 public class ExecuteScriptTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }
@@ -40,13 +40,13 @@ public class ExecuteScriptTest {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
-            Assert.assertTrue(stmt.execute("admin execute on frontend 'out.append(\"aaa\\\\nbbb\")'"));
+            Assertions.assertTrue(stmt.execute("admin execute on frontend 'out.append(\"aaa\\\\nbbb\")'"));
             ResultSet result = stmt.getResultSet();
-            Assert.assertTrue(result.next());
-            Assert.assertEquals("aaa", result.getString(1));
-            Assert.assertTrue(result.next());
-            Assert.assertEquals("bbb", result.getString(1));
-            Assert.assertFalse(result.next());
+            Assertions.assertTrue(result.next());
+            Assertions.assertEquals("aaa", result.getString(1));
+            Assertions.assertTrue(result.next());
+            Assertions.assertEquals("bbb", result.getString(1));
+            Assertions.assertFalse(result.next());
         } finally {
             stmt.close();
             connection.close();
@@ -58,9 +58,9 @@ public class ExecuteScriptTest {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
-            Assert.assertTrue(stmt.execute("admin execute on 10001 'System.print(\"aaa\")'"));
+            Assertions.assertTrue(stmt.execute("admin execute on 10001 'System.print(\"aaa\")'"));
             ResultSet result = stmt.getResultSet();
-            Assert.assertTrue(result.next());
+            Assertions.assertTrue(result.next());
         } finally {
             stmt.close();
             connection.close();

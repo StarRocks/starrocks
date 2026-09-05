@@ -14,6 +14,7 @@
 
 package com.starrocks.hive.reader;
 
+import com.starrocks.connector.share.credential.CloudConfigurationApplier;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -51,8 +52,12 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HiveScanner extends ConnectorScanner {
 
     private static final Logger LOG = LogManager.getLogger(HiveScanner.class);
+
+    private static final String SERDE_PROPERTY_PREFIX = "SerDe.";
+
     private final String hiveColumnNames;
     private final String[] hiveColumnTypes;
+    private Map<String, String> serdeProperties = new HashMap<>();
     private final String[] requiredFields;
     private int[] requiredColumnIds;
     private ColumnType[] requiredTypes;
@@ -76,13 +81,21 @@ public class HiveScanner extends ConnectorScanner {
     private final int fetchSize;
     private final ClassLoader classLoader;
     private final String fsOptionsProps;
+    private final Map<String, String> fsOptionsPropsMap;
+
+    // The key buffer used to store the key part(meta data) of the file.
+    private Writable key;
+    // The value buffer used to store the value data.
+    private Writable value;
+
+    private final String timeZone;
 
     public HiveScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
-        this.hiveColumnTypes = params.get("hive_column_types").split("#");
-        this.requiredFields = params.get("required_fields").split(",");
-        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
+        this.hiveColumnTypes = ScannerHelper.splitAndOmitEmptyStrings(params.get("hive_column_types"), "#");
+        this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
+        this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
         this.dataFilePath = params.get("data_file_path");
         this.blockOffset = Long.parseLong(params.get("block_offset"));
         this.blockLength = Long.parseLong(params.get("block_length"));
@@ -92,9 +105,19 @@ public class HiveScanner extends ConnectorScanner {
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
         this.fsOptionsProps = params.get("fs_options_props");
+        Map<String, String> propsMap = new HashMap<>();
+        ScannerHelper.parseFSOptionsProps(this.fsOptionsProps, kv -> {
+            propsMap.put(kv[0], kv[1]);
+            return null;
+        }, t -> null);
+        this.fsOptionsPropsMap = propsMap;
         for (Map.Entry<String, String> kv : params.entrySet()) {
+            if (kv.getKey().startsWith(SERDE_PROPERTY_PREFIX)) {
+                this.serdeProperties.put(kv.getKey().substring(SERDE_PROPERTY_PREFIX.length()), kv.getValue());
+            }
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
+        this.timeZone = params.get("time_zone");
     }
 
     private JobConf makeJobConf(Properties properties) {
@@ -102,11 +125,12 @@ public class HiveScanner extends ConnectorScanner {
         JobConf jobConf = new JobConf(conf);
         jobConf.setBoolean("hive.io.file.read.all.columns", false);
         properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
+        CloudConfigurationApplier.applyCloudConfiguration(fsOptionsPropsMap, jobConf);
         return jobConf;
     }
 
     private void parseRequiredTypes() {
-        String[] hiveColumnNames = this.hiveColumnNames.split(",");
+        String[] hiveColumnNames = ScannerHelper.splitAndOmitEmptyStrings(this.hiveColumnNames, ",");
         HashMap<String, Integer> hiveColumnNameToIndex = new HashMap<>();
         HashMap<String, String> hiveColumnNameToType = new HashMap<>();
         for (int i = 0; i < hiveColumnNames.length; i++) {
@@ -159,6 +183,7 @@ public class HiveScanner extends ConnectorScanner {
         }
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
         properties.setProperty("serialization.lib", this.serde);
+        properties.putAll(serdeProperties);
 
         ScannerHelper.parseFSOptionsProps(fsOptionsProps, kv -> {
             properties.put(kv[0], kv[1]);
@@ -180,10 +205,21 @@ public class HiveScanner extends ConnectorScanner {
         deserializer = getDeserializer(jobConf, properties, serde);
         rowInspector = getTableObjectInspector(deserializer);
         for (int i = 0; i < requiredFields.length; i++) {
-            StructField field = rowInspector.getStructFieldRef(requiredFields[i]);
-            structFields[i] = field;
-            fieldInspectors[i] = field.getFieldObjectInspector();
+            StructField field = null;
+            try {
+                // for avro file, schema could be defined in the field is `SerDe.avro.schema.url`
+                // if schema is incompatible, field can not be found.
+                field = rowInspector.getStructFieldRef(requiredFields[i]);
+            } catch (RuntimeException e) {
+                LOG.warn("Failed to find field", e);
+            }
+            if (field != null) {
+                structFields[i] = field;
+                fieldInspectors[i] = field.getFieldObjectInspector();
+            }
         }
+        key = (Writable) reader.createKey();
+        value = (Writable) reader.createValue();
     }
 
     @Override
@@ -216,8 +252,6 @@ public class HiveScanner extends ConnectorScanner {
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            Writable key = (Writable) reader.createKey();
-            Writable value = (Writable) reader.createValue();
             int numRows = 0;
             for (; numRows < getTableSize(); numRows++) {
                 if (!reader.next(key, value)) {
@@ -225,11 +259,14 @@ public class HiveScanner extends ConnectorScanner {
                 }
                 Object rowData = deserializer.deserialize(value);
                 for (int i = 0; i < requiredFields.length; i++) {
-                    Object fieldData = rowInspector.getStructFieldData(rowData, structFields[i]);
+                    Object fieldData = null;
+                    if (structFields[i] != null) {
+                        fieldData = rowInspector.getStructFieldData(rowData, structFields[i]);
+                    }
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new HiveColumnValue(fieldInspectors[i], fieldData);
+                        ColumnValue fieldValue = new HiveColumnValue(fieldInspectors[i], fieldData, timeZone);
                         appendData(i, fieldValue);
                     }
                 }
@@ -289,6 +326,9 @@ public class HiveScanner extends ConnectorScanner {
         sb.append("\n");
         sb.append("serde: ");
         sb.append(serde);
+        sb.append("\n");
+        sb.append("serdeProperties: ");
+        sb.append(serdeProperties.toString());
         sb.append("\n");
         sb.append("inputFormat: ");
         sb.append(inputFormat);

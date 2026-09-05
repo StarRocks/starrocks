@@ -51,12 +51,20 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         return storeInfo;
     }
 
+    public void setFilePathInfo(FilePathInfo filePathInfo) {
+        this.storeInfo = filePathInfo;
+    }
+
     public FileCacheInfo getCacheInfo() {
         return cacheInfo;
     }
 
     public DataCacheInfo getDataCacheInfo() {
         return new DataCacheInfo(getCacheInfo());
+    }
+
+    public void setDataCacheEnable(boolean isEnable) {
+        this.cacheInfo = this.cacheInfo.toBuilder().setEnableCache(isEnable).build();
     }
 
     @Override

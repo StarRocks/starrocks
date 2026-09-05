@@ -177,7 +177,7 @@ public class Text implements Writable {
             return -1; // not found
         } catch (CharacterCodingException e) {
             // can't get here
-            LOG.warn(e);
+            LOG.warn("Failed to execute find", e);
             return -1;
         }
     }
@@ -295,6 +295,7 @@ public class Text implements Writable {
         }
     }
 
+    @Override
     public void write(DataOutput out) throws IOException {
         out.writeInt(length);
         out.write(bytes, 0, length);

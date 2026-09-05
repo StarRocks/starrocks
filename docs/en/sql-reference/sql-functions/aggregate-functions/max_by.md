@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the value of x associated with the maximum value of y."
 ---
 
 # max_by
 
-## Description
+
 
 Returns the value of `x` associated with the maximum value of `y`.
 

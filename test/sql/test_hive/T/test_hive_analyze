@@ -1,0 +1,25 @@
+-- name: testHiveAnalyze
+set enable_query_trigger_analyze = false;
+
+create external catalog hive_analyze_test_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+[UC] analyze full table hive_analyze_test_${uuid0}.hive_oss_db.emps(empid);
+function: assert_show_stats_meta_contains("where `database`= 'hive_analyze_test_${uuid0}.hive_oss_db'", 'FULL')
+drop stats hive_analyze_test_${uuid0}.hive_oss_db.emps;
+
+[UC] analyze sample table hive_analyze_test_${uuid0}.hive_oss_db.emps(empid);
+function: assert_show_stats_meta_contains("where `database`= 'hive_analyze_test_${uuid0}.hive_oss_db'", 'SAMPLE', 'sampled_partition_size=6', 'all_partition_size=6')
+drop stats hive_analyze_test_${uuid0}.hive_oss_db.emps;
+
+admin set frontend config ("statistic_sample_collect_partition_size" = "3");
+[UC] analyze sample table hive_analyze_test_${uuid0}.hive_oss_db.emps(empid);
+function: assert_show_stats_meta_contains("where `database`= 'hive_analyze_test_${uuid0}.hive_oss_db'", 'SAMPLE', 'sampled_partition_size=3', 'all_partition_size=6')
+drop stats hive_analyze_test_${uuid0}.hive_oss_db.emps;
+admin set frontend config ("statistic_sample_collect_partition_size" = "1000");
+
+drop catalog hive_analyze_test_${uuid0};

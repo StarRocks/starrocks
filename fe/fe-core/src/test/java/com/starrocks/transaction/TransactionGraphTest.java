@@ -16,7 +16,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TransactionGraphTest {
     private void expectNextBatch(TransactionGraph graph, List<Long> expected) {
@@ -66,9 +66,96 @@ public class TransactionGraphTest {
         graph.remove(3);
         graph.remove(4);
         assertEquals(graph.size(), 4);
-        expectNextBatch(graph, Lists.newArrayList(1L, 2L, 5L, 6L));
+        // removing the middle writers must keep txn5/txn6 ordered after txn1/txn2
+        expectNextBatch(graph, Lists.newArrayList(1L, 2L));
+        expectNextBatch(graph, Lists.newArrayList(5L, 6L));
         assertEquals(graph.size(), 0);
         assertEquals(graph.getTxnsWithoutDependency().size(), 0);
+    }
+
+    @Test
+    public void testRemoveTailKeepsLastTableWriter() {
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(1L));
+        // the tail of table 1's chain becomes visible first, e.g. via single publish
+        graph.remove(2);
+        // a new writer of table 1 must still depend on the remaining txn1
+        graph.add(3, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(3L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
+    public void testRemoveMiddleNodeKeepsOrdering() {
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(1L));
+        graph.add(3, Lists.newArrayList(1L));
+        graph.remove(2);
+        // txn3 must still wait for txn1
+        assertEquals(Lists.newArrayList(1L), graph.getTxnsWithoutDependency());
+        // the single-table batch walk follows the spliced chain 1 -> 3
+        assertEquals(Lists.newArrayList(1L, 3L), graph.getTxnsWithTxnDependencyBatch(1, 5, 1));
+        graph.remove(1);
+        expectNextBatch(graph, Lists.newArrayList(3L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
+    public void testRemoveMiddleNodeWithMultipleSuccessors() {
+        // table1: txn1 -> txn2 -> txn3 -> txn4
+        // table2:         txn2 ---------> txn4
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(1L, 2L));
+        graph.add(3, Lists.newArrayList(1L));
+        graph.add(4, Lists.newArrayList(1L, 2L));
+        graph.remove(2);
+        // table1 is spliced to txn1 -> txn3; txn4's table2 dependency on txn2 is satisfied
+        // but its table1 dependency on txn3 remains
+        expectNextBatch(graph, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(3L));
+        expectNextBatch(graph, Lists.newArrayList(4L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
+    public void testRemoveWithMultiplePredecessorsOnSameTable() {
+        // table1: txn1 -> txn2 -> txn3
+        // table2: txn1 ---------> txn3
+        // txn3's ins contain two writers of table1; the fallback for lastTableWriter must
+        // pick the immediate one (txn2), not txn1
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L, 2L));
+        graph.add(2, Lists.newArrayList(1L));
+        graph.add(3, Lists.newArrayList(1L, 2L));
+        graph.remove(3);
+        graph.add(4, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(2L));
+        expectNextBatch(graph, Lists.newArrayList(4L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
+    public void testRemoveWithOutOfOrderTxnIds() {
+        // txns enter the graph in commit order, which can differ from txn id order:
+        // table1: txn5 -> txn2 -> txn7
+        // table2: txn5 ---------> txn7
+        // the fallback for table1's last writer must pick txn2 (added last), not txn5
+        // (the larger txn id)
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(5, Lists.newArrayList(1L, 2L));
+        graph.add(2, Lists.newArrayList(1L));
+        graph.add(7, Lists.newArrayList(1L, 2L));
+        graph.remove(7);
+        graph.add(9, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(5L));
+        expectNextBatch(graph, Lists.newArrayList(2L));
+        expectNextBatch(graph, Lists.newArrayList(9L));
+        assertEquals(0, graph.size());
     }
 
     @Test
@@ -200,6 +287,66 @@ public class TransactionGraphTest {
         assertEquals(txnIds.size(), 1);
         batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 4);
         assertEquals(batchTxnIds.size(), 1);
+    }
+
+    @Test
+    public void testGetTxnsWithTxnDependencyBatchMultiTable() {
+        // CDC-like chain: every txn writes the same multi-table set
+        TransactionGraph graph = new TransactionGraph();
+        for (int i = 1; i <= 6; i++) {
+            graph.add(i, Lists.newArrayList(1L, 2L, 3L));
+        }
+        List<Long> batch = graph.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L), batch);
+        // maxBatchSize caps the batch
+        batch = graph.getTxnsWithTxnDependencyBatchMultiTable(1, 4, 1);
+        assertEquals(Lists.newArrayList(1L, 2L, 3L, 4L), batch);
+
+        // diamond: txn1 {1,2} -> txn2 {1} / txn3 {2} -> txn4 {1,2}.
+        // txn2 and txn3 are independent of each other, so only one of them may chain onto
+        // txn1; the other is left out to publish in parallel after the batch finishes.
+        TransactionGraph graph2 = new TransactionGraph();
+        graph2.add(1, Lists.newArrayList(1L, 2L));
+        graph2.add(2, Lists.newArrayList(1L));
+        graph2.add(3, Lists.newArrayList(2L));
+        graph2.add(4, Lists.newArrayList(1L, 2L));
+        batch = graph2.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L, 2L), batch);
+
+        // a txn introducing a new table still joins when it extends the chain; a txn
+        // independent of the chain tail does not, even though its dependencies are in
+        // the batch
+        TransactionGraph graph3 = new TransactionGraph();
+        graph3.add(1, Lists.newArrayList(1L, 2L));
+        graph3.add(2, Lists.newArrayList(1L, 3L)); // table 3 is new, depends on txn1 only
+        graph3.add(3, Lists.newArrayList(2L));     // depends on txn1 only, independent of txn2
+        graph3.add(4, Lists.newArrayList(1L));     // depends on txn2, extends the chain
+        batch = graph3.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L, 2L, 4L), batch);
+
+        // single-table head: a multi-table successor joins as well
+        TransactionGraph graph4 = new TransactionGraph();
+        graph4.add(1, Lists.newArrayList(1L));
+        graph4.add(2, Lists.newArrayList(1L));
+        graph4.add(3, Lists.newArrayList(1L, 2L));
+        batch = graph4.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L, 2L, 3L), batch);
+
+        // minBatchSize not reached -> empty result
+        batch = graph4.getTxnsWithTxnDependencyBatchMultiTable(4, 10, 1);
+        assertEquals(0, batch.size());
+
+        // a txn depending on another dependency-free head outside the batch must not join:
+        // publishing it in this batch would jump over that txn
+        TransactionGraph graph5 = new TransactionGraph();
+        graph5.add(1, Lists.newArrayList(9L));     // independent head on table 9
+        graph5.add(2, Lists.newArrayList(1L, 2L)); // head of the walk
+        graph5.add(3, Lists.newArrayList(2L, 9L)); // depends on txn2 AND txn1 (outside)
+        batch = graph5.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 2);
+        assertEquals(Lists.newArrayList(2L), batch);
+        // walking from txn1 must not pull txn3 either (txn2 outside that batch)
+        batch = graph5.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L), batch);
     }
 
     @Test

@@ -1,5 +1,8 @@
 ---
-displayed_sidebar: "Chinese"
+sidebar_position: 30
+displayed_sidebar: docs
+description: "Hive catalog 是外部 catalog，无需数据导入即可查询 Hive 数据及执行数据转换。"
+toc_max_heading_level: 5
 ---
 
 # Hive catalog
@@ -7,28 +10,48 @@ displayed_sidebar: "Chinese"
 Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hive Catalog，您可以：
 
 - 无需手动建表，通过 Hive Catalog 直接查询 Hive 内的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式（3.2 版本及以上）、以及 ORC 或 Textfile 格式（3.3 版本及以上）的 Hive 表中。
 
-为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Hive 内的数据，StarRocks 集群必须能够访问 Hive 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 
 - 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue。
 
-  > **说明**
-  >
-  > 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
+  :::note
+  
+  如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
+
+  :::
 
 ## 使用说明
 
-- StarRocks 查询 Hive 数据时，支持 Parquet、ORC 、CSV 、Avro、RCFile、SequenceFile 文件格式，其中：
+- StarRocks 查询 Hive 内的数据时，支持 Parquet、ORC、Textfile、Avro、RCFile、SequenceFile 文件格式，其中：
 
-  - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
+  - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。自 v3.1.5 起，Parquet 文件还支持 LZO 压缩格式。
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
+  - Textfile 文件从 v3.1.5 起支持 LZO 压缩格式。
 
-- StarRocks 查询 Hive 数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 CSV 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
-- Hive Catalog 仅支持查询 Hive 数据，不支持针对 Hive 的写/删操作。
+- StarRocks 查询 Hive 内的数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 STRUCT 数据类型；自 v4.2 起支持 MAP 数据类型。
+
+- 自 v4.2 起，StarRocks 查询 Textfile 格式的 Hive 表时，解析行为与 Hive 保持一致：
+
+  - 对于使用 OpenCSVSerde 的表，遵循 `quoteChar` 和 `escapeChar` 属性（含默认值 `"` 和 `\`），解析规则与 Hive 0.14 至 4.0 内置的 opencsv 2.3 库一致。
+  - 对于使用 LazySimpleSerDe 的表，遵循 `ESCAPED BY` 定义的转义字符。
+  - 按物理行边界切分行，并在去转义之前识别 `\N` NULL 标记，两者均与 Hive 一致。
+  - 按 Hive 文本格式解析 MAP 列，即多个键值对之间使用集合分隔符分隔，键和值之间使用 Map Key 分隔符分隔。
+
+  以上规则仅影响对 Hive 表的查询，Broker Load、Stream Load 和 FILES() 函数不受影响。在更早的 StarRocks 版本中，引号和转义字符会被忽略，行列切分结果可能与 Hive 不同。
+
+- StarRocks 写入数据到 Hive 时，支持 Parquet（3.2 版本及以上）、以及 ORC 或 Textfile（3.3 版本及以上）文件格式，其中：
+
+  - Parquet 和 ORC 文件支持 NO_COMPRESSION、SNAPPY、LZ4、ZSTD 和 GZIP 压缩格式。
+  - Textfile 文件支持 NO_COMPRESSION 压缩格式。
+
+  您可以通过表属性 [`compression_codec`](./hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+
+  在写入 Hive 表时，如果该表的属性中包含了 `compression_codec`，StarRocks 优先使用该算法对写入数据进行压缩。否则，使用系统变量 `connector_sink_compression_codec` 中设置的压缩算法代替。
 
 ## 准备工作
 
@@ -44,27 +67,29 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 - Assumed Role
 - IAM User
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/csp_auth/authenticate_to_aws_resources.md#准备工作)。
 
 ### HDFS
 
 如果使用 HDFS 作为文件存储，则需要在 StarRocks 集群中做如下配置：
 
-- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE 使配置生效。如果不设置该用户名，则默认使用 FE 和 BE 进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
-- 查询 Hive 数据时，StarRocks 集群的 FE 和 BE 会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
-  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
-  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
+- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件（或每个 CN 的 **cn/conf/hadoop_env.sh** 文件）最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE（或 CN）使配置生效。如果不设置该用户名，则默认使用 FE 和 BE（或 CN）进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
+- 查询 Hive 数据时，StarRocks 集群的 FE 和 BE（或 CN）会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
+  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
+  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
 
-> **注意**
->
-> 如果查询时因为域名无法识别 (Unknown Host) 而发生访问失败，您需要将 HDFS 集群中各节点的主机名及 IP 地址之间的映射关系配置到 **/etc/hosts** 路径中。
+:::note
+
+如果查询时因为域名无法识别 (Unknown Host) 而发生访问失败，您需要将 HDFS 集群中各节点的主机名及 IP 地址之间的映射关系配置到 **/etc/hosts** 路径中。
+
+:::
 
 ### Kerberos 认证
 
 如果 HDFS 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
 
-- 在每个 FE 和 每个 BE 上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
+- 在每个 FE 和 每个 BE（或 CN）上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
+- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件（或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件）中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
 
 ## 创建 Hive Catalog
 
@@ -109,7 +134,7 @@ Hive Catalog 的描述。此参数为可选。
 
 | 参数                      | 是否必须  | 说明                                                         |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| enable_recursive_listing | 否       | 指定 StarRocks 是否递归读取表或者分区目录（包括子目录）中文件的数据。取值范围：`true` 和 `false`。默认值：`false`。取值为 `true` 表示递归遍历，取值为 `false` 表示只读取表或者分区目录当前层级中文件的数据。 |
+| enable_recursive_listing | 否       | 指定 StarRocks 是否递归读取表或者分区目录（包括子目录）中文件的数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示递归遍历，取值为 `false` 表示只读取表或者分区目录当前层级中文件的数据。 |
 
 #### MetastoreParams
 
@@ -124,9 +149,11 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
-> **说明**
->
-> 在查询 Hive 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+:::note
+
+在查询 Hive 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+
+:::
 
 `MetastoreParams` 包含如下参数。
 
@@ -176,8 +203,10 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 | aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
 | aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
+| hive.metastore.glue.catalogid | 否       | 要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。 |
+| aws.glue.resource_share_type  | 否       | 通过设置发送给 AWS Glue `GetDatabases` API 的 `ResourceShareType`，控制 `SHOW DATABASES` 列出哪些数据库。不区分大小写。取值范围：`FOREIGN`（其他账户通过 AWS Resource Access Manager 与你的账户共享的数据库）、`FEDERATED`（引用外部数据源的数据库，如 JDBC 连接）、`ALL`（本地数据库加上前两者）。不指定时仅列出本地数据库。该参数仅影响列表结果：StarRocks 查询数据库时仍然使用 `hive.metastore.glue.catalogid` 配置的单一账户，因此列出的 `FOREIGN` 数据库仍无法查询，除非将 `hive.metastore.glue.catalogid` 也设置为其所有者账户，或在自己的 Data Catalog 中为其创建 [resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html)；而 `FEDERATED` 数据库并非 Hive 兼容的数据库，无法通过该 Catalog 查询。 |
 
-有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
+有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
 #### StorageCredentialParams
 
@@ -225,7 +254,7 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
 | aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
 ##### 阿里云 OSS
 
@@ -239,9 +268,9 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
 
 | 参数                            | 是否必须 | 说明                                                         |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
-| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。      |
+| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)。    |
+| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/zh/document_detail/53045.html)。                                     |
+| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/zh/document_detail/53045.html)。      |
 
 ##### 兼容 S3 协议的对象存储
 
@@ -278,8 +307,8 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 - 基于 Shared Key 进行认证和鉴权
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -292,18 +321,84 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container_name | 是           | 数据所在 Blob 容器的名称。               |
+  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+
+###### Azure Data Lake Storage Gen2
+
+如果选择 Data Lake Storage Gen2 作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -336,56 +431,6 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
   | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
-
-###### Azure Data Lake Storage Gen2
-
-如果选择 Data Lake Storage Gen2 作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
-
-- 基于 Managed Identity 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
-
-- 基于 Shared Key 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
-
-- 基于 Service Principal 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                           | **是否必须** | **说明**                                                     |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ##### Google GCS
 
@@ -467,11 +512,12 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
 | enable_metastore_cache            | 否       | 指定 StarRocks 是否缓存 Hive 表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
 | enable_remote_file_cache               | 否       | 指定 StarRocks 是否缓存 Hive 表或分区的数据文件的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
-| metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`7200`，即 2 小时。 |
+| metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`60`，即一分钟。自 v3.3.0 起，该属性默认值由 `7200` 变更为 `60`。 |
 | remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
 | enable_cache_list_names                | 否       | 指定 StarRocks 是否缓存 Hive Partition Names。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| remote_file_cache_memory_ratio         | 否       | 远程文件缓存的最大内存使用率。默认值：`0.1`，即 10%。自 v3.5.6 起支持。 |
 
 ### 示例
 
@@ -487,7 +533,7 @@ PROPERTIES
 (
     "type" = "hive",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -503,7 +549,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
@@ -534,7 +580,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -568,7 +614,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
@@ -605,7 +651,7 @@ PROPERTIES
 (
     "type" = "hive",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -626,7 +672,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
   );
@@ -640,9 +686,9 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
@@ -657,7 +703,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
   ```
@@ -670,7 +716,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
       "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
@@ -687,7 +733,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
       "azure.adls2.oauth2_client_id" = "<service_client_id>"
@@ -702,7 +748,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
   );
@@ -716,10 +762,25 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>" 
+  );
+  ```
+
+- 如果基于 Workload Identity 进行认证和鉴权，可以按如下创建 Hive Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
   );
   ```
 
@@ -733,7 +794,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
   ```
@@ -746,7 +807,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -763,7 +824,7 @@ PROPERTIES
     (
         "type" = "hive",
         "hive.metastore.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
@@ -777,7 +838,7 @@ PROPERTIES
     (
         "type" = "hive",
         "hive.metastore.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
@@ -787,13 +848,13 @@ PROPERTIES
 
 ## 查看 Hive Catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hive Catalog `hive_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hive Catalog `hive_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG hive_catalog_glue;
@@ -803,7 +864,7 @@ SHOW CREATE CATALOG hive_catalog_glue;
 
 您可以通过如下方法切换至目标 Hive Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Hive Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话生效的 Hive Catalog，然后再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -812,7 +873,7 @@ SHOW CREATE CATALOG hive_catalog_glue;
   USE <db_name>
   ```
 
-- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Hive Catalog 下的指定数据库：
+- 通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Hive Catalog 下的指定数据库：
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -820,7 +881,7 @@ SHOW CREATE CATALOG hive_catalog_glue;
 
 ## 删除 Hive Catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Hive Catalog `hive_catalog_glue`：
 
@@ -846,7 +907,7 @@ DROP Catalog hive_catalog_glue;
 
 ## 查询 Hive 表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Hive 集群中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Hive 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -854,7 +915,7 @@ DROP Catalog hive_catalog_glue;
 
 2. [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -870,19 +931,11 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 
 ## 赋予 Hive 表和视图的权限
 
-您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 来赋予角色某个 Hive Catalog 内所有表或视图的查询权限。
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 来赋予角色某个 Hive Catalog 内所有表和视图的查询权限。命令语法如下：
 
-- 赋予角色某个 Hive Catalog 内所有表的查询权限：
-
-  ```SQL
-  GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
-  ```
-
-- 赋予角色某个 Hive Catalog 内所有视图的查询权限：
-
-  ```SQL
-  GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE <role_name>
-  ```
+```SQL
+GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
+```
 
 例如，通过如下命令创建角色 `hive_role_table`，切换至 Hive Catalog `hive_catalog`，然后把 `hive_catalog` 内所有表和视图的查询权限都赋予 `hive_role_table`：
 
@@ -893,20 +946,19 @@ CREATE ROLE hive_role_table;
 -- 切换到数据目录 hive_catalog。
 SET CATALOG hive_catalog;
 
--- 把 hive_catalog 内所有表的查询权限赋予 hive_role_table。
+-- 把 hive_catalog 内所有表和视图的查询权限赋予 hive_role_table。
 GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
-
--- 把 hive_catalog 内所有视图的查询权限赋予 hive_role_table。
-GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 ```
 
 ## 创建 Hive 数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Hive Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Hive Catalog 内创建数据库。本功能自 3.2 版本起开始支持。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Hive Catalog 的 [CREATE DATABASE](../../administration/user_privs/authorization/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Hive Catalog 内创建数据库。本功能自 3.2 版本起开始支持。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+:::note
+
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+:::
 
 [切换至目标 Hive Catalog](#切换-hive-catalog-和数据库)，然后通过如下语句创建 Hive 数据库：
 
@@ -936,11 +988,13 @@ CREATE DATABASE <database_name>
 
 ## 删除 Hive 数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该 Hive 数据库。本功能自 3.2 版本起开始支持。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [DROP](../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Hive 数据库。本功能自 3.2 版本起开始支持。仅支持删除空数据库。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+:::note
+
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+:::
 
 删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
 
@@ -952,11 +1006,16 @@ DROP DATABASE <database_name>
 
 ## 创建 Hive 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Hive 数据库下创建 Managed Table。本功能自 3.2 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、或 [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) 在该 Hive 数据库下创建 Managed Table。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+本功能自 3.2 版本起开始支持，彼时只支持创建 Parquet 格式的 Hive 表。自 3.3 版本起，该功能还支持创建 ORC 及 Textfile 格式的 Hive 表。
+
+:::note
+
+- 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+- Hive Catalog 自 3.2.4 版本起支持 CREATE TABLE LIKE。
+
+:::
 
 [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。然后通过如下语法创建 Hive 的 Managed Table：
 
@@ -969,6 +1028,7 @@ partition_column_definition1,partition_column_definition2...])
 [partition_desc]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
+[LIKE [database.]<source_table_name>]
 ```
 
 ### 参数说明
@@ -1015,10 +1075,12 @@ PARTITION BY (par_col1[, par_col2...])
 | **属性**          | **描述**                                                     |
 | ----------------- | ------------------------------------------------------------ |
 | location          | Managed Table 所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
-| file_format       | Managed Table 的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
-| compression_codec | Managed Table 的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。 |
+| file_format       | Managed Table 的文件格式。当前支持 Parquet、ORC、Textfile 文件格式，其中 ORC 和 Textfile 文件格式自 3.3 版本起支持。取值范围：`parquet`、`orc`、`textfile`。默认值：`parquet`。 |
+| compression_codec | Managed Table 的压缩格式。                                   |
 
 ### 示例
+
+以下建表语句以默认的 Parquet 格式为例。
 
 1. 创建非分区表 `unpartition_tbl`，包含 `id` 和 `score` 两列，如下所示：
 
@@ -1052,11 +1114,18 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Hive 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。需要注意的是，写数据到 External Table 的功能默认是关闭的，您可以通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../reference/System_variable.md) 打开。
+同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+本功能自 3.2 版本起开始支持，彼时只支持写入到 Parquet 格式的 Hive 表。自 3.3 版本起，该功能还支持写入到 ORC 及 Textfile 格式的 Hive 表。
+
+需要注意的是，写数据到 External Table 的功能默认是关闭的，您需要通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../sql-reference/System_variable.md) 打开。
+
+:::note
+
+- 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+- 您可以通过表属性 [`compression_codec`](#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。StarRocks 会优先选择表属性中指定的 `compression_codec` 来使用。
+
+:::
 
 [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)，然后通过如下语法将 StarRocks 表数据写入到 Parquet 格式的 Hive 表中：
 
@@ -1090,6 +1159,8 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 | PARTITION   | 导入的目标分区。需要指定目标表的所有分区列，指定的分区列的顺序可以与建表时定义的分区列的顺序不一致。指定分区时，不允许通过列名 (`column_name`) 指定导入的目标列。 |
 
 ### 示例
+
+以下写入语句以默认的 Parquet 格式为例。
 
 1. 向表 `partition_tbl_1` 中插入如下三行数据：
 
@@ -1139,13 +1210,65 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## 清空 Hive 表
+
+您可以使用 [TRUNCATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) 语句快速删除 Hive 托管表中的所有数据。该操作支持：
+
+- 清空非分区表中的所有数据
+- 清空分区表中的所有分区
+- 清空分区表中的指定分区
+
+### 语法
+
+```SQL
+TRUNCATE TABLE <table_name>
+
+TRUNCATE TABLE <table_name> PARTITION (partition_name = partition_value [, ...])
+```
+
+### 参数
+
+- `table_name`: 要清空数据的 Hive 表名称。清空表数据前，需要[切换至目标 Hive Catalog 和 Database](#切换-hive-catalog-和数据库)。
+- `partition_name = partition_value`: 分区列的名称和值，用于识别要清空的分区。
+
+### 示例
+
+以下示例的前提是已切换至目标 Hive Catalog 和 Database。
+
+1. 清空非分区表：
+
+   ```SQL
+   TRUNCATE TABLE my_table;
+   ```
+
+2. 清空分区表所有分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table;
+   ```
+
+3. 清空单分区表的指定分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01');
+   ```
+
+4. 清空多分区表的指定分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01', id=1);
+   TRUNCATE TABLE my_multi_part_table PARTITION (k2='2020-01-02', k3='b');
+   ```
+
 ## 删除 Hive 表
 
-同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。注意当前只支持删除 Hive 的 Managed Table。
+同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。注意当前只支持删除 Hive 的 Managed Table。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+:::note
+
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+:::
 
 执行删除表的操作时，您必须在 DROP TABLE 语句中指定 `FORCE` 关键字。该操作不会删除表对应的文件路径，但是会删除 HDFS 或对象存储上的表数据。请您谨慎执行该操作。
 
@@ -1159,10 +1282,10 @@ DROP TABLE <table_name> FORCE
 
 ### 手动更新
 
-默认情况下，StarRocks 会缓存 Hive 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hive 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
+默认情况下，StarRocks 会缓存 Hive 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hive 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
 
 ```SQL
-REFRESH EXTERNAL TABLE <table_name>
+REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 ```
 
 以下情况适用于执行手动更新元数据：
@@ -1171,94 +1294,24 @@ REFRESH EXTERNAL TABLE <table_name>
 - Hive 表有 Schema 变更。
 - Hive 表被 DROP 后重建一个同名 Hive 表。
 - 创建 Hive Catalog 时在 `PROPERTIES` 中指定了 `"enable_cache_list_names" = "true"`。在 Hive 侧新增分区后，需要查询新增分区。
-  > **说明**
-  >
-  > 自 2.5.5 版本起，StarRocks 支持周期性刷新 Hive 元数据缓存。参见本文下面”[周期性刷新元数据缓存](#周期性刷新元数据缓存)“小节。开启 Hive 元数据缓存周期性刷新功能以后，默认情况下 StarRocks 每 10 分钟刷新一次 Hive 元数据缓存。因此，一般情况下，无需执行手动更新。您只有在新增分区后，需要立即查询新增分区的数据时，才需要执行手动更新。
+  :::note
+  
+  自 2.5.5 版本起，StarRocks 支持周期性刷新 Hive 元数据缓存。参见本文下面”[周期性刷新元数据缓存](#周期性刷新元数据缓存)“小节。开启 Hive 元数据缓存周期性刷新功能以后，默认情况下 StarRocks 每 10 分钟刷新一次 Hive 元数据缓存。因此，一般情况下，无需执行手动更新。您只有在新增分区后，需要立即查询新增分区的数据时，才需要执行手动更新。
+
+  :::
 
 注意 REFRESH EXTERNAL TABLE 只会更新 FE 中已缓存的表和分区。
 
-### 自动增量更新
-
-与自动异步更新策略不同，在自动增量更新策略下，FE 可以定时从 HMS 读取各种事件，进而感知 Hive 表元数据的变更情况，如增减列、增减分区和更新分区数据等，无需手动更新 Hive 表的元数据。
-此功能会对 HMS 产生较大压力，请慎重使用。推荐使用[周期性刷新元数据缓存](#周期性刷新元数据缓存) 来感知数据变更。
-
-开启自动增量更新策略的步骤如下：
-
-#### 步骤 1：在 HMS 上配置事件侦听器
-
-HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2 版本的事件侦听器配置为例。将以下配置项添加到 **$HiveMetastore/conf/hive-site.xml** 文件中，然后重启 HMS：
-
-```XML
-<property>
-    <name>hive.metastore.event.db.notification.api.auth</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.notifications.add.thrift.objects</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.alter.notifications.basic</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.dml.events</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.transactional.event.listeners</name>
-    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
-</property>
-<property>
-    <name>hive.metastore.event.db.listener.timetolive</name>
-    <value>172800s</value>
-</property>
-<property>
-    <name>hive.metastore.server.max.message.size</name>
-    <value>858993459</value>
-</property>
-```
-
-配置完成后，可以在 FE 日志文件中搜索 `event id`，然后通过查看事件 ID 来检查事件监听器是否配置成功。如果配置失败，则所有 `event id` 均为 `0`。
-
-#### 步骤 2：在 StarRocks 上开启自动增量更新策略
-
-您可以给 StarRocks 集群中某一个 Hive Catalog 开启自动增量更新策略，也可以给 StarRocks 集群中所有 Hive Catalog 开启自动增量更新策略。
-
-- 如果要给单个 Hive Catalog 开启自动增量更新策略，则需要在创建该 Hive Catalog 时把 `PROPERTIES` 中的 `enable_hms_events_incremental_sync` 参数设置为 `true`，如下所示：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG <catalog_name>
-  [COMMENT <comment>]
-  PROPERTIES
-  (
-      "type" = "hive",
-      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
-       ....
-      "enable_hms_events_incremental_sync" = "true"
-  );
-  ```
-  
-- 如果要给所有 Hive Catalog 开启自动增量更新策略，则需要把 `enable_hms_events_incremental_sync` 参数添加到每个 FE 的 **$FE_HOME/conf/fe.conf** 文件中，并设置为 `true`，然后重启 FE，使参数配置生效。
-
-您还可以根据业务需求在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件中对以下参数进行调优，然后重启 FE，使参数配置生效。
-
-| Parameter                         | Description                                                  |
-| --------------------------------- | ------------------------------------------------------------ |
-| hms_events_polling_interval_ms    | StarRocks 从 HMS 中读取事件的时间间隔。默认值：`5000`。单位：毫秒。 |
-| hms_events_batch_size_per_rpc     | StarRocks 每次读取事件的最大数量。默认值：`500`。            |
-| enable_hms_parallel_process_evens | 指定 StarRocks 在读取事件时是否并行处理读取的事件。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 则开启并行机制，取值为 `false` 则关闭并行机制。 |
-| hms_process_events_parallel_num   | StarRocks 每次处理事件的最大并发数。默认值：`4`。            |
 
 ## 周期性刷新元数据缓存
 
-自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/Configuration.md#fe-配置项)配置 Hive 元数据缓存周期性刷新：
+自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/configuration/FE_parameters/FE_parameters.md)配置 Hive 元数据缓存周期性刷新：
 
 | 配置名称                                                      | 默认值                        | 说明                                  |
 | ------------------------------------------------------------ | ---------------------------- | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
 
 元数据缓存周期性刷新与元数据自动异步更新策略配合使用，可以进一步加快数据访问速度，降低从外部数据源读取数据的压力，提升查询性能。
 
@@ -1270,19 +1323,19 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 
 例如，有一张名为 `table2` 的 Hive 表，该表的数据分布在四个分区：`p1`、`p2`、`p3` 和 `p4`。当一个查询命中 `p1` 时，StarRocks 会自动缓存 `p1` 的元数据、以及 `p1` 下数据文件的元数据。假设当前缓存元数据的更新和淘汰策略设置如下：
 
-- 异步更新 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_refresh_interval_sec` 参数指定）为 2 小时。
+- 异步更新 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_refresh_interval_sec` 参数指定）为  60 秒。
 - 异步更新 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_refresh_interval_sec` 参数指定）为 60 秒。
 - 自动淘汰 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_ttl_sec` 参数指定）为 24 小时。
 - 自动淘汰 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_ttl_sec` 参数指定）为 36 小时。
 
 如下图所示。
 
-![Update policy on timeline](../../assets/catalog_timeline_zh.png)
+![Update policy on timeline](../../_assets/hive_catalog_timeline_zh.png)
 
 StarRocks 采用如下策略更新和淘汰缓存的元数据：
 
 - 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔不超过 60 秒，则 StarRocks 既不会更新 `p1` 的缓存元数据，也不会更新 `p1` 下数据文件的缓存元数据。
-- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 60 秒，则 StarRocks 会更新 `p1` 下数据文件的缓存元数据。
-- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 2 小时，则 StarRocks 会更新 `p1` 的缓存元数据。
+- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 60 秒，则 StarRocks 会更新 `p1` 的缓存元数据以及 `p1` 下数据文件的缓存元数据。
+- 如果表在 24 小时内被访问过，相关缓存将每 10 分钟在后台刷新一次。
 - 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 的元数据。
 - 如果继上次更新结束后，`p1` 在 36 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。

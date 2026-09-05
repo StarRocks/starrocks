@@ -17,54 +17,74 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
+ADD_BE_LIB(StorageBase
+    base/short_key_index.cpp
+)
 
-add_subdirectory(rowset)
+target_link_libraries(StorageBase PUBLIC
+    ComputeEnv
+    StoragePrimitive
+    Runtime
+    ColumnSortCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
 
-add_library(Storage STATIC
-    aggregate_type.cpp
+set(STORAGE_FILES
     base_tablet.cpp
-    decimal12.cpp
-    decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
     delta_column_group.cpp
-    key_coder.cpp
+    flat_json_metrics.cpp
+    json_path_deriver.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
     metadata_util.cpp
+    non_closing_chunk_iterator.cpp
     kv_store.cpp
     local_tablet_reader.cpp
-    publish_version_manager.cpp
-    olap_common.cpp
     olap_server.cpp
-    options.cpp
-    page_cache.cpp
     persistent_index.cpp
     primary_index.cpp
-    primary_key_encoder.cpp
+    query/bucket_sequence_morsel_queue.cpp
+    query/olap_dynamic_morsel_queue.cpp
+    query/olap_fixed_morsel_queue.cpp
+    query/olap_morsel_queue.cpp
+    query/split_morsel_queue.cpp
+    query/split_scan_morsel.cpp
     protobuf_file.cpp
+    replication_txn_manager.cpp
+    remote_snapshot_client.cpp
+    replication_utils.cpp
+    segment_stream_converter.cpp
+    del_file_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
+    storage_cleanup_executor.cpp
+    storage_env.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
+    storage_metrics.cpp
     data_dir.cpp
-    short_key_index.cpp
     snapshot_manager.cpp
     snapshot_meta.cpp
     tablet.cpp
     tablet_manager.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
+    tablet_index.cpp
     tablet_schema.cpp
     tablet_schema_map.cpp
     tablet_updates.cpp
     txn_manager.cpp
-    types.cpp
+    type_info_factory.cpp
     update_manager.cpp
     utils.cpp
     compaction_utils.cpp
@@ -76,6 +96,11 @@ add_library(Storage STATIC
     rowset/bitshuffle_page.cpp
     rowset/bitshuffle_wrapper.cpp
     rowset/column_iterator.cpp
+    rowset/json_column_compactor.cpp
+    rowset/json_column_iterator.cpp
+    rowset/json_column_writer.cpp
+    rowset/object_column_writer.cpp
+    rowset/cast_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
     rowset/column_decoder.cpp
@@ -95,48 +120,33 @@ add_library(Storage STATIC
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
     rowset/binary_prefix_page.cpp
+    rowset/data_sample.cpp
+    rowset/dict_page.cpp
     rowset/segment.cpp
+    rowset/segment_file_info.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp
     rowset/storage_page_decoder.cpp
-    rowset/block_split_bloom_filter.cpp
     rowset/bloom_filter_index_reader.cpp
     rowset/bloom_filter_index_writer.cpp
-    rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
+    rowset/options.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
     rowset/horizontal_update_rowset_writer.cpp
-    task/engine_batch_load_task.cpp
-    task/engine_checksum_task.cpp
-    task/engine_clone_task.cpp
-    task/engine_manual_compaction_task.cpp
-    task/engine_storage_migration_task.cpp
-    task/engine_alter_tablet_task.cpp
-    aggregate_iterator.cpp
+    rowset/bitmap_index_evaluator.cpp
+    rowset/metadata_cache.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
-    chunk_iterator.cpp
-    column_predicate_cmp.cpp
-    column_in_predicate.cpp
-    column_not_in_predicate.cpp
-    column_null_predicate.cpp
-    column_or_predicate.cpp
-    column_expr_predicate.cpp
-    conjunctive_predicates.cpp
+    chunk_variant_helper.cpp
+    runtime_filter_predicate.cpp
     convert_helper.cpp
     delete_predicates.cpp
-    disjunctive_predicates.cpp
-    empty_iterator.cpp
-    merge_iterator.cpp
     predicate_parser.cpp
-    projection_iterator.cpp
-    push_handler.cpp
-    row_source_mask.cpp
     row_store_encoder.cpp
     row_store_encoder_simple.cpp
     row_store_encoder_factory.cpp
@@ -149,10 +159,8 @@ add_library(Storage STATIC
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
-    union_iterator.cpp
+    full_sort_key_codec.cpp
     unique_iterator.cpp
-    column_aggregate_func.cpp
-    chunk_aggregator.cpp
     delta_writer.cpp
     memtable.cpp
     base_compaction.cpp
@@ -160,42 +168,95 @@ add_library(Storage STATIC
     compaction.cpp
     rowset_merger.cpp
     column_predicate_rewriter.cpp
-    column_predicate_dict_conjuct.cpp
+    column_predicate_inverted_index_fallback.cpp
     compaction_task.cpp
     compaction_utils.cpp
     compaction_manager.cpp
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
+    virtual_column_utils.cpp
+    extends_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
-    push_utils.cpp
+    primary_key_recover.cpp
+    local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
+    lake/async_file_deleter.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/cross_publish_context.cpp
+    lake/compaction_task_context.cpp
+    lake/combined_txn_log_writer.cpp
+    lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
+    lake/vacuum_full.cpp
+    lake/vector_index_build_task.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/pk_tablet_sst_writer.cpp
+    lake/pk_tablet_unsort_sst_writer.cpp
+    lake/primary_key_compaction_policy.cpp
+    lake/tablet_reshard_helper.cpp
+    lake/tablet_splitter.cpp
+    lake/tablet_merger.cpp
+    lake/tablet_reshard.cpp
+    lake/replication_txn_manager.cpp
+    lake/lake_replication_txn_manager.cpp
+    lake/lake_proto_normalizer.cpp
     lake/rowset.cpp
+    lake/segment_metadata_filter.cpp
+    lake/segment_task_runner.cpp
+    lake/index_delta_group_loader.cpp
+    lake/index_file_reader.cpp
+    lake/index_file_writer.cpp
+    lake/add_index_schema_change.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
+    lake/tablet_range_helper.cpp
+    lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
-    lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
+    lake/segment_pk_iterator.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
+    lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
+    lake/lake_primary_key_recover.cpp
+    lake/spill_mem_table_sink.cpp
+    lake/tablet_retain_info.cpp
+    lake/tablet_writer.cpp
+    lake/lake_persistent_index_parallel_compact_mgr.cpp
+    lake/lake_persistent_index_size_tiered_compaction_strategy.cpp
+    lake/persistent_index_sstable_fileset.cpp
+    lake/lake_persistent_index_key_value_merger.cpp
+    lake/tablet_internal_parallel_merge_task.cpp
+    sstable/block_builder.cpp
+    sstable/block.cpp
+    sstable/coding.cpp
+    sstable/comparator.cpp
+    sstable/filter_block.cpp
+    sstable/format.cpp
+    sstable/table_builder.cpp
+    sstable/table.cpp
+    sstable/two_level_iterator.cpp
+    sstable/filter_policy.cpp
+    sstable/iterator.cpp
+    sstable/options.cpp
+    sstable/merger.cpp
+    sstable/concatenating_iterator.cpp
+    lake/lake_delvec_loader.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -204,7 +265,63 @@ add_library(Storage STATIC
     binlog_reader.cpp
     lake/update_compaction_state.cpp
     lake/txn_log_applier.cpp
-    lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    persistent_index_load_executor.cpp
+    lake/local_pk_index_manager.cpp
+    persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
-    lake/persistent_index_memtable.cpp)
+    lake/parallel_task_runner.cpp
+    parallel_upsert_context.cpp
+    lake/persistent_index_memtable.cpp
+    lake/local_pk_index_manager.cpp
+    lake/persistent_index_sstable.cpp
+    lake/lake_primary_key_compaction_conflict_resolver.cpp
+    lake/column_mode_partial_update_handler.cpp
+    lake/tablet_write_log_manager.cpp
+    primary_key_dump.cpp
+    rows_mapper.cpp
+    primary_key_compaction_conflict_resolver.cpp
+    local_primary_key_compaction_conflict_resolver.cpp
+    lake/load_spill_pipeline_merge_iterator.cpp
+    lake/load_spill_pipeline_merge_context.cpp
+    index/inverted/inverted_index_iterator.cpp
+    index/inverted/inverted_index_option.cpp
+    index/inverted/inverted_plugin_factory.cpp
+    index/inverted/clucene/clucene_plugin.cpp
+    index/inverted/clucene/clucene_inverted_writer.cpp
+    index/inverted/clucene/clucene_inverted_reader.cpp
+    index/inverted/clucene/match_operator.cpp
+    index/vector/vector_index_cache.cpp
+    index/vector/vector_index_cache_metrics.cpp
+    index/vector/vector_index_builder_factory.cpp
+    index/vector/vector_index_writer.cpp
+    index/vector/vector_index_builder.cpp
+    index/vector/vector_index_file_reader.cpp
+    index/vector/vector_index_reader_factory.cpp
+    index/vector/tenann_index_reader.cpp
+    index/vector/tenann/del_id_filter.cpp
+    index/vector/tenann/tenann_index_builder.cpp
+    index/vector/tenann/tenann_index_utils.cpp
+    lake/table_schema_service.cpp
+    index/inverted/builtin/builtin_plugin.cpp
+    index/inverted/builtin/builtin_inverted_writer.cpp
+    index/inverted/builtin/builtin_inverted_reader.cpp
+    index/inverted/builtin/builtin_inverted_index_iterator.cpp
+    index/inverted/builtin/builtin_simple_analyzer.cpp
+    manual_compaction.cpp
+    rowset/unique_rowset_id_generator.cpp
+    rowset/rowset.cpp
+    rowset/rowset_factory.cpp
+    rowset/rowset_meta_manager.cpp
+    rowset/rowset_writer.cpp)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
+endif()
+
+ADD_BE_LIB(Storage
+    ${STORAGE_FILES}
+)
+
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)
+target_link_libraries(Storage PRIVATE Runtime)

@@ -47,7 +47,7 @@ TEST_F(StringFunctionReverseTest, reverseASCIITest) {
         str->append(s.substr(0, j));
     }
 
-    columns.emplace_back(str);
+    columns.emplace_back(str->clone());
 
     ColumnPtr result = StringFunctions::reverse(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
@@ -57,7 +57,7 @@ TEST_F(StringFunctionReverseTest, reverseASCIITest) {
     for (int k = 0; k < 100; ++k) {
         auto tmp_s = str->get_slice(k).to_string();
         std::string expect(tmp_s.rbegin(), tmp_s.rend());
-        ASSERT_EQ(expect, v->get_data()[k].to_string());
+        ASSERT_EQ(expect, v->get_slice(k).to_string());
     }
 }
 
@@ -76,7 +76,7 @@ TEST_F(StringFunctionReverseTest, reverseUtf8Test) {
         str->append(std::get<0>(c));
     }
 
-    columns.emplace_back(str);
+    columns.emplace_back(str->clone());
 
     ColumnPtr result = StringFunctions::reverse(ctx.get(), columns).value();
     ASSERT_EQ(str->size(), result->size());
@@ -85,7 +85,7 @@ TEST_F(StringFunctionReverseTest, reverseUtf8Test) {
 
     for (auto i = 0; i < str->size(); ++i) {
         auto expect = std::get<1>(cases[i]);
-        ASSERT_EQ(expect, v->get_data()[i].to_string());
+        ASSERT_EQ(expect, v->get_slice(i).to_string());
     }
 }
 

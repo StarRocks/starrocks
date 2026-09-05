@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回以弧度表示的角度x的正弦值。"
 ---
 
 # sin
 
-## 功能
+
 
 计算参数 `x` 的正弦，`x` 为弧度值。
 

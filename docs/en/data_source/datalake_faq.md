@@ -1,16 +1,18 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 50
+displayed_sidebar: docs
+description: "FAQ for common data lake analytics issues in StarRocks, including catalog setup and query problems."
 ---
 
-# Data lake-related FAQ
+# Data lake FAQ
 
 This topic describes some commonly asked questions (FAQ) about data lake and provides solutions to these issues. Some metrics mentioned in this topic can be obtained only from the profiles of the SQL queries. To obtain the profiles of SQL queries, you must specify `set enable_profile=true`.
 
-## Slow HDFS nodes
+## Slow HDFS DataNodes
 
 ### Issue description
 
-When you access the data files stored in your HDFS cluster, you may find a huge difference between the values of the `__MAX_OF_FSIOTime` and `__MIN_OF_FSIOTime` metrics from the profiles of the SQL queries you run, which indicates slow HDFS nodes. The following example is a typical profile that indicates an HDFS node slowdown issue:
+When you access the data files stored in your HDFS cluster, you may find a huge difference between the values of the `__MAX_OF_FSIOTime` and `__MIN_OF_FSIOTime` metrics from the profiles of the SQL queries you run. This indicates that some DataNodes in the HDFS cluster are slow. The following example is a typical profile that indicates a slow HDFS DataNode issue:
 
 ```plaintext
  - InputStream: 0
@@ -38,16 +40,30 @@ When you access the data files stored in your HDFS cluster, you may find a huge 
 
 You can use one of the following solutions to resolve this issue:
 
-- **[Recommended]** Enable the [data cache](../data_source/data_cache.md) feature, which eliminates the impact of slow HDFS nodes on queries by automatically caching the data from external storage systems to the BEs of your StarRocks cluster.
+- **[Recommended]** Enable the [data cache](./data_cache/data_cache.md) feature, which eliminates the impact of slow HDFS DataNodes on queries by automatically caching the data from external storage systems to the BEs or CNs of your StarRocks cluster.
+- **[Recommended]** Shorten the timeout duration between the HDFS client and DataNode. This solution is suitable when Data Cache cannot help resolve the slow HDFS DataNode issue.
 - Enable the [Hedged Read](https://hadoop.apache.org/docs/r2.8.3/hadoop-project-dist/hadoop-common/release/2.4.0/RELEASENOTES.2.4.0.html) feature. With this feature enabled, if a read from a block is slow, StarRocks starts up a new read, which runs in parallel to the original read, to read against a different block replica. Whenever one of the two reads returns, the other read is cancelled. **The Hedged Read feature can help accelerate reads, but it also significantly increases heap memory consumption on Java virtual machines (JVMs). Therefore, if your physical machines provide a small memory capacity, we recommend that you do not enable the Hedged Read feature.**
 
 #### [Recommended] Data Cache
 
-See [Data Cache](../data_source/data_cache.md).
+See [Data Cache](./data_cache/data_cache.md).
+
+#### [Recommended] Shorten timeout duration between HDFS client and DataNode
+
+Configure the `dfs.client.socket-timeout` property in the `hdfs-site.xml` file to shorten the timeout duration between the HDFS client and DataNode. (The default timeout duration is 60s, which is a bit long.) As such, when StarRocks encounters a slow DataNode, the connection request from it can time out within a very short period of time and then be forwarded to another DataNode. The following example sets a 5-second timeout duration:
+
+```xml
+<configuration>
+  <property>
+      <name>dfs.client.socket-timeout</name>
+      <value>5000</value>
+   </property>
+</configuration>
+```
 
 #### Hedged Read
 
-Use the following parameters (supported from v3.0 onwards) in the BE configuration file `be.conf` to enable and configure the Hedged Read feature in your HDFS cluster.
+Use the following parameters (supported from v3.0 onwards) in the BE or CN configuration file `be.conf` to enable and configure the Hedged Read feature in your HDFS cluster.
 
 | Parameter                                | Default value | Description                                                         |
 | ---------------------------------------- | ------------- | ------------------------------------------------------------------- |
@@ -62,3 +78,33 @@ If the value of any of the following metrics in your query profiles exceeds `0`,
 | TotalHedgedReadOps             | The number of hedged reads that are started up.                 |
 | TotalHedgedReadOpsInCurThread  | The number of times that StarRocks has to start up a hedged read in the current thread instead of in a new thread because the Hedged Read thread pool has reached its maximum size specified by the `hdfs_client_hedged_read_threadpool_size` parameter. |
 | TotalHedgedReadOpsWin          | The number of times that a hedged read beats its original read. |
+
+## How do I resolve the error “ERROR 1064 (HY000): Type mismatches on column [is_refund], JDBC result type is Integer, please set the type to one of tinyint,smallint,int,bigint” when querying a table in the Hive Catalog?
+
+This issue is caused by an incorrect JDBC connection configuration. Add the parameter `tinyInt1isBit=false` to your JDBC URI to prevent this issue:
+
+```SQL
+"jdbc_uri" = "jdbc:mysql://xxx:3306?database=yl_spmibill&tinyInt1isBit=false"
+```
+
+## Why can’t I query the latest updated data in the Iceberg Catalog (even after refresh or catalog rebuild), and how should I troubleshoot this?
+
+First check whether the issue is caused by Data Cache being enabled. Follow these steps to verify:
+
+1. Compare the scanned data files between StarRocks and Spark:
+
+   - In StarRocks: `select file_path, spec_id from db.table_name$files;`
+   - In Spark: `select file_path, spec_id from db.table_name.files;`
+
+2. If the results are consistent, continue troubleshooting by disabling Data Cache and querying again to see whether the issue persists.
+
+Root cause: To update the Iceberg table data is to overwrite old files, which corrupts Iceberg’s historical data. The correct behavior is to generate new file names when writing updates. StarRocks Data Cache uses the file name, file size, and modification time to determine whether cached data is valid. Since Iceberg does not overwrite files and the modification time is always 0, StarRocks incorrectly treats the files as unchanged and reads from cache, resulting in outdated query results.
+
+## FE constantly crashes after queries against tables in external catalog integrated with JuiceFS. How can I solve this?
+
+To solve this, restart FE after adding the following configuration items to **fe.conf**:
+
+```Properties
+proc_profile_mem_enable=false
+proc_profile_cpu_enable=false
+```

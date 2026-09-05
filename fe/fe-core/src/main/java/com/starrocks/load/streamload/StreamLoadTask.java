@@ -14,71 +14,87 @@
 
 package com.starrocks.load.streamload;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
+import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
-import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.StreamLoadStmt;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.BackendService;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadChannel;
 import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.AbstractTxnStateChangeCallback;
+import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
-import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
-import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class StreamLoadTask extends AbstractTxnStateChangeCallback
-        implements Writable, GsonPostProcessable, GsonPreProcessable {
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
+
+public class StreamLoadTask extends AbstractStreamLoadTask {
     private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
 
     public enum State {
@@ -95,8 +111,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public enum Type {
         STREAM_LOAD,
         ROUTINE_LOAD,
-        PARALLEL_STREAM_LOAD     // default
+        PARALLEL_STREAM_LOAD,
+        MULTI_STATEMENT_STREAM_LOAD
     }
+
+    private static final double DEFAULT_MAX_FILTER_RATIO = 0.0;
 
     @SerializedName(value = "id")
     private long id;
@@ -115,6 +134,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long tableId;
     @SerializedName(value = "tableName")
     private String tableName;
+    @SerializedName(value = "user")
+    private String user = "";
+    @SerializedName(value = "clientIp")
+    private String clientIp = "";
     @SerializedName(value = "errorMsg")
     private String errorMsg;
     @SerializedName(value = "trackingUrl")
@@ -133,6 +156,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long startPreparingTimeMs;
     @SerializedName(value = "finishPreparingTimeMs")
     private long finishPreparingTimeMs;
+    @SerializedName(value = "commitTimeMs")
+    private long commitTimeMs;
     @SerializedName(value = "endTimeMs")
     private long endTimeMs;
     @SerializedName(value = "txnId")
@@ -149,6 +174,17 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long numRowsUnselected;
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
+    @SerializedName(value = "warehouseId")
+    private long warehouseId;
+    @SerializedName(value = "computeResource")
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+
+    @SerializedName(value = "beginTxnTimeMs")
+    private long beginTxnTimeMs;
+    @SerializedName(value = "planTimeMs")
+    private long planTimeMs;
+    @SerializedName(value = "receiveDataTimeMs")
+    private long receiveDataTimeMs;
 
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
@@ -156,14 +192,17 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private Type type = Type.PARALLEL_STREAM_LOAD;
 
     private List<State> channels;
-    private StreamLoadParam streamLoadParam;
+    private StreamLoadKvParams streamLoadParams;
     private StreamLoadInfo streamLoadInfo;
     private Coordinator coord;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPAddress;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPPort;
+    @IgnoreMemoryTrack
     private OlapTable table;
     private long taskDeadlineMs;
     private boolean isCommitting;
+    private ConnectContext context;
+    private ExplicitTxnState.ExplicitTxnStateItem txnStateItem = new ExplicitTxnState.ExplicitTxnStateItem();
 
     private ReentrantReadWriteLock lock;
 
@@ -183,9 +222,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         lock.readLock().unlock();
     }
 
-    public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, long createTimeMs, boolean isRoutineLoad) {
-        this(id, db, table, label, timeoutMs, 1, 0, createTimeMs);
+    public StreamLoadTask() {
+        computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    }
+
+    public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
+                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, ComputeResource computeResource) {
+        this(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, computeResource);
         isSyncStreamLoad = true;
         if (isRoutineLoad) {
             type = Type.ROUTINE_LOAD;
@@ -194,17 +237,18 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
     }
 
-    public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, int channelNum, int channelId, long createTimeMs) {
+    public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
+                          long timeoutMs, int channelNum, int channelId, long createTimeMs, ComputeResource computeResource) {
         this.id = id;
-        UUID uuid = UUID.randomUUID();
-        this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        this.loadId = UUIDUtil.genTUniqueId();
         this.dbId = db.getId();
         this.dbName = db.getFullName();
         this.tableId = table.getId();
         this.tableName = table.getName();
         this.table = table;
         this.label = label;
+        this.user = user;
+        this.clientIp = clientIp;
         this.timeoutMs = timeoutMs;
         this.channelNum = channelNum;
         this.createTimeMs = createTimeMs;
@@ -218,7 +262,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.endTimeMs = -1;
         this.txnId = -1;
         this.errorMsg = null;
-
+        this.warehouseId = computeResource.getWarehouseId();
+        this.computeResource = computeResource;
         init();
     }
 
@@ -232,14 +277,46 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.channelIdToBEHTTPAddress = null;
         this.channelIdToBEHTTPPort = null;
         this.coord = null;
-        this.streamLoadParam = null;
+        this.streamLoadParams = null;
         this.streamLoadInfo = null;
         this.isCommitting = false;
+        this.context = new ConnectContext();
+        this.context.setQualifiedUser(user);
     }
 
-    public void beginTxn(int channelId, int channelNum, TransactionResult resp) {
+    @Override
+    public long getCurrentWarehouseId() {
+        return warehouseId;
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isFinalState();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return endTimeMs();
+    }
+
+    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp) {
+        beginTxn(0, 1, requestId, TxnCoordinator.fromBackend(clientIp, backendId), resp);
+    }
+
+    @Override
+    public void beginTxnFromFrontend(TransactionResult resp) {
+        beginTxnFromFrontend(0, 1, resp);
+    }
+
+    public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp) {
+        beginTxn(channelId, channelNum, null,
+                new TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()), resp);
+    }
+
+    public void beginTxn(int channelId, int channelNum, TUniqueId requestId, TxnCoordinator txnCoordinator,
+                         TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
-        boolean exception = false;
+        Exception exception = null;
         writeLock();
         try {
             if (channelNum != this.channelNum) {
@@ -251,7 +328,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
             switch (this.state) {
                 case BEGIN: {
-                    unprotectedBeginTxn(false);
+                    unprotectedBeginTxn(requestId, txnCoordinator);
                     this.state = State.BEFORE_LOAD;
                     this.channels.set(channelId, State.BEFORE_LOAD);
                     this.beforeLoadTimeMs = System.currentTimeMillis();
@@ -286,7 +363,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -299,23 +376,83 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     break;
                 }
             }
+        } catch (DuplicatedRequestException e) {
+            // this is a duplicate request, considered a normal request,
+            LOG.info("duplicate request for stream load. request id: {}, txn_id: {}", e.getDuplicatedRequestId(),
+                    e.getTxnId());
+            // only begin state will throw duplciate request exception
+            resp.addResultEntry("Label", this.label);
+            resp.addResultEntry("TxnId", this.txnId);
+            resp.addResultEntry("BeginChannel", channelNum);
+            resp.addResultEntry("BeginTxnTimeMs", this.beforeLoadTimeMs - this.createTimeMs);
         } catch (Exception e) {
-            this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
-                    .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
-            exception = true;
+            exception = e;
         } finally {
             writeUnlock();
         }
 
-        if (exception && this.errorMsg != null) {
-            LOG.warn(errorMsg);
+        if (exception != null) {
+            updateTransactionResultWithException(exception, resp);
             cancelTask();
             resp.addResultEntry("Cancelled time", endTimeMs - startTimeMs);
-            resp.setErrorMsg(this.errorMsg);
         }
     }
 
-    public TNetworkAddress tryLoad(int channelId, TransactionResult resp) {
+    public void tryBegin(int channelId, int channelNum, long txnId) throws StarRocksException {
+        writeLock();
+        try {
+            if (channelNum != this.channelNum) {
+                throw new StarRocksException("channel num " + channelNum
+                        + " does not equal to original channel num " + this.channelNum);
+            }
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new StarRocksException("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
+            }
+
+            switch (this.state) {
+                case BEGIN: {
+                    this.txnId = txnId;
+                    this.state = State.BEFORE_LOAD;
+                    this.channels.set(channelId, State.BEFORE_LOAD);
+                    this.beforeLoadTimeMs = System.currentTimeMillis();
+                    LOG.info("stream load {} channel_id {} begin. db: {}, tbl: {}, txn_id: {}",
+                            label, channelId, dbName, tableName, txnId);
+                    break;
+                }
+                default: {
+                    break;
+                }
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void updateTransactionResultWithException(Exception e, TransactionResult resp) {
+        ActionStatus status = ActionStatus.FAILED;
+        if (e instanceof LabelAlreadyUsedException) {
+            status = ActionStatus.LABEL_ALREADY_EXISTS;
+        }
+
+        this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
+                .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
+        LOG.warn(this.errorMsg);
+
+        resp.setError(status, this.errorMsg, e);
+    }
+
+    public TNetworkAddress tryLoad(int channelId, String tableName, TransactionResult resp) throws StarRocksException {
+        // Validate table name first
+        try {
+            if (!this.tableName.equals(tableName)) {
+                throw new StarRocksException(
+                        String.format("Request table %s not equal transaction table %s", tableName, this.tableName));
+            }
+        } catch (StarRocksException e) {
+            resp.setErrorMsg(e.getMessage());
+            return null;
+        }
+
         long startTimeMs = System.currentTimeMillis();
         boolean needUnLock = true;
         boolean exception = false;
@@ -356,7 +493,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -387,7 +524,18 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
-    public TNetworkAddress executeTask(int channelId, HttpHeaders headers, TransactionResult resp) {
+    public TNetworkAddress executeTask(int channelId, String tableName, HttpHeaders headers, TransactionResult resp) {
+        // Validate table name first
+        try {
+            if (!this.tableName.equals(tableName)) {
+                throw new StarRocksException(
+                        String.format("Request table %s not equal transaction table %s", tableName, this.tableName));
+            }
+        } catch (StarRocksException e) {
+            resp.setErrorMsg(e.getMessage());
+            return null;
+        }
+
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         writeLock();
@@ -437,7 +585,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -451,6 +599,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 }
             }
         } catch (Exception e) {
+            LOG.warn("execute task " + label + " exception ", e);
             this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
                     .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
             exception = true;
@@ -467,7 +616,18 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
-    public void prepareChannel(int channelId, HttpHeaders headers, TransactionResult resp) {
+    public void prepareChannel(int channelId, String tableName, HttpHeaders headers, TransactionResult resp) {
+        // Validate table name first
+        try {
+            if (!this.tableName.equals(tableName)) {
+                throw new StarRocksException(
+                        String.format("Request table %s not equal transaction table %s", tableName, this.tableName));
+            }
+        } catch (StarRocksException e) {
+            resp.setErrorMsg(e.getMessage());
+            return;
+        }
+
         long startTimeMs = System.currentTimeMillis();
         boolean needUnLock = true;
         boolean exception = false;
@@ -555,7 +715,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -587,14 +747,14 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return;
     }
 
-    public void waitCoordFinishAndPrepareTxn(TransactionResult resp) {
+    public void waitCoordFinish(TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
-                    resp.setOKMsg("txn could not be prepared because task state is: " + state
+                    resp.setErrorMsg("txn could not be prepared because task state is: " + state
                             + ", error_msg: " + errorMsg);
 
                 } else {
@@ -607,15 +767,16 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 return;
             }
             if (this.state != State.PREPARING) {
-                throw new UserException("stream load task " + this.label
+                throw new StarRocksException("stream load task " + this.label
                         + " s state (" + this.state + ") is not preparing, can not prepare txn");
             }
             unprotectedWaitCoordFinish();
             if (!checkDataQuality()) {
-                throw new UserException("abnormal data more than max filter rate, tracking_url: " +
+                throw new StarRocksException("abnormal data more than max filter rate, tracking_url: " +
                         this.trackingUrl);
             }
         } catch (Exception e) {
+            LOG.info("waitCoordFinish", e);
             this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
                     .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
             exception = true;
@@ -630,10 +791,21 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             resp.setErrorMsg(this.errorMsg);
             return;
         }
+    }
+
+    public void waitCoordFinishAndPrepareTxn(long preparedTimeoutMs, TransactionResult resp) {
+        long startTimeMs = System.currentTimeMillis();
+        boolean exception = false;
+
+        waitCoordFinish(resp);
+        if (!resp.stateOK()) {
+            return;
+        }
 
         try {
-            unprotectedPrepareTxn();
+            unprotectedPrepareTxn(preparedTimeoutMs);
         } catch (Exception e) {
+            LOG.info("unprotectedPrepareTxn", e);
             this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
                     .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
             exception = true;
@@ -659,14 +831,14 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 label, dbName, tableName, txnId);
     }
 
-    public void commitTxn(TransactionResult resp) throws UserException {
+    public void commitTxn(HttpHeaders headers, TransactionResult resp) throws StarRocksException {
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         readLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
-                    resp.setOKMsg("txn could not be committed because task state is: " + state
+                    resp.setErrorMsg("txn could not be committed because task state is: " + state
                             + ", error_msg: " + errorMsg);
 
                 } else {
@@ -684,7 +856,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
 
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().commitPreparedTransaction(dbId, txnId, timeoutMs);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitPreparedTransaction(dbId, txnId, timeoutMs);
         } catch (Exception e) {
             this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
                     .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
@@ -711,12 +883,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         resp.setOKMsg("stream load " + label + " commit");
     }
 
-    public void manualCancelTask(TransactionResult resp) throws UserException {
+    public void manualCancelTask(TransactionResult resp) throws StarRocksException {
         long startTimeMs = System.currentTimeMillis();
         readLock();
         try {
             if (isCommitting) {
-                resp.setOKMsg("txn can not be cancelled because task state is committing");
+                resp.setErrorMsg("txn can not be cancelled because task state is committing");
                 return;
             }
         } finally {
@@ -725,8 +897,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
         String errorMsg = cancelTask("manual abort");
         if (errorMsg != null) {
-            resp.setOKMsg("stream load " + label + " abort fail");
-            resp.addResultEntry("Abort fail reason", errorMsg);
+            // Set error status when abort fails, not OK status
+            resp.setErrorMsg("stream load " + label + " abort fail: " + errorMsg);
         } else {
             resp.setOKMsg("stream load " + label + " abort");
             resp.addResultEntry("Cancelled time", endTimeMs - startTimeMs);
@@ -737,15 +909,23 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return new DefaultCoordinator.Factory();
     }
 
-    public void unprotectedExecute(HttpHeaders headers) throws UserException {
-        streamLoadParam = StreamLoadParam.parseHttpHeader(headers);
-        streamLoadInfo = StreamLoadInfo.fromStreamLoadContext(loadId, txnId, (int) timeoutMs / 1000, streamLoadParam);
+    public void unprotectedExecute(HttpHeaders headers) throws StarRocksException {
+        try (var scope = context.bindScope()) {
+            doUnprotectedExecute(headers);
+        }
+    }
+
+    private void doUnprotectedExecute(HttpHeaders headers) throws StarRocksException {
+        streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
+                loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams, acquireContext);
         if (table == null) {
             getTable();
         }
         LoadPlanner loadPlanner = new LoadPlanner(id, loadId, txnId, dbId, dbName, table,
                 streamLoadInfo.isStrictMode(), streamLoadInfo.getTimezone(), streamLoadInfo.isPartialUpdate(),
-                null, null, streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(),
+                context, null, streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(),
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
@@ -765,39 +945,33 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             this.channelIdToBEHTTPAddress = coord.getChannelIdToBEHTTPMap();
             this.channelIdToBEHTTPPort = coord.getChannelIdToBEPortMap();
         } catch (Exception e) {
-            throw new UserException(e.getMessage());
+            throw new StarRocksException(e.getMessage());
         }
     }
 
-    private void unprotectedFinishStreamLoadChannel(int channelId) throws UserException {
+    private void unprotectedFinishStreamLoadChannel(int channelId) throws StarRocksException {
         TNetworkAddress address = channelIdToBEHTTPPort.get(channelId);
-
-        boolean ok = false;
-        BackendService.Client client = null;
         try {
-            client = ClientPool.backendPool.borrowObject(address);
             TStreamLoadChannel streamLoadChannel = new TStreamLoadChannel();
             streamLoadChannel.setLabel(label);
             streamLoadChannel.setChannel_id(channelId);
-            TStatus tStatus = client.finish_stream_load_channel(streamLoadChannel);
-            ok = true;
+            streamLoadChannel.setTable_name(tableName);
+
+            TStatus tStatus = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.backendPool,
+                    address,
+                    client -> client.finish_stream_load_channel(streamLoadChannel));
 
             if (tStatus.getStatus_code() != TStatusCode.OK) {
                 // ignore fail status
             }
             LOG.info("finish stream load channel label: {} channel id {}", label, channelId);
         } catch (Exception e) {
-            throw new UserException("failed to send finish stream load channel: " + e.getMessage(), e);
-        } finally {
-            if (ok) {
-                ClientPool.backendPool.returnObject(address, client);
-            } else {
-                ClientPool.backendPool.invalidateObject(address, client);
-            }
+            throw new StarRocksException("failed to send finish stream load channel: " + e.getMessage(), e);
         }
     }
 
-    private void unprotectedWaitCoordFinish() throws UserException {
+    private void unprotectedWaitCoordFinish() throws StarRocksException {
         try {
             int waitSecond = (int) (getLeftTimeMs() / 1000);
             if (waitSecond <= 0) {
@@ -807,7 +981,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 Status status = coord.getExecStatus();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
-                    throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                    // A load that was cancelled never reports its counters, so reaching this without an
+                    // OK status means the load stopped for a reason the user needs to see. Reporting
+                    // "no rows imported" here would hide it behind what looks like a data problem.
+                    throw new LoadException(status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg());
                 }
                 this.numRowsNormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
@@ -815,22 +992,30 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                    throw new LoadException(status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg());
                 }
 
                 if (coord.isEnableLoadProfile()) {
-                    collectProfile();
+                    collectProfile(false);
                 }
 
                 this.trackingUrl = coord.getTrackingUrl();
                 if (!status.ok()) {
                     throw new LoadException(status.getErrorMsg());
                 }
+                TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO);
+                txnStateItem.setDmlStmt(new StreamLoadStmt(tableRef, NodePosition.ZERO));
+                txnStateItem.setTabletCommitInfos(TabletCommitInfo.fromThrift(coord.getCommitInfos()));
+                txnStateItem.setTabletFailInfos(TabletFailInfo.fromThrift(coord.getFailInfos()));
+                txnStateItem.addLoadedRows(numRowsNormal);
+                txnStateItem.addFilteredRows(numRowsUnselected);
+                txnStateItem.addLoadedBytes(numLoadBytesTotal);
             } else {
                 throw new LoadException("coordinator could not finished before job timeout");
             }
         } catch (Exception e) {
-            throw new UserException(e.getMessage());
+            throw new StarRocksException(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
@@ -849,7 +1034,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
         readLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
                     return "cur task state is: " + state
                             + ", error_msg: " + errorMsg;
@@ -862,8 +1047,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
         try {
             if (txnId != -1L) {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                        dbId, txnId, reason);
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        dbId, txnId, reason, Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
             } else {
                 writeLock();
                 for (int i = 0; i < channelNum; i++) {
@@ -881,15 +1066,24 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
-    public void unprotectedBeginTxn(boolean replay) throws UserException {
-        this.txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                dbId, Lists.newArrayList(tableId), label, null,
-                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
-                timeoutMs / 1000);
+    public void unprotectedBeginTxn(TUniqueId requestId, TxnCoordinator txnCoordinator) throws StarRocksException {
+        TransactionState.LoadJobSourceType sourceType;
+        switch (txnCoordinator.sourceType) {
+            case FE:
+                sourceType = TransactionState.LoadJobSourceType.FRONTEND_STREAMING;
+                break;
+            case BE:
+                sourceType = TransactionState.LoadJobSourceType.BACKEND_STREAMING;
+                break;
+            default:
+                throw new StarRocksException("Unknown source type: " + txnCoordinator.sourceType);
+        }
+        this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                dbId, Lists.newArrayList(tableId), label, requestId, txnCoordinator,
+                sourceType, id, timeoutMs / 1000, computeResource);
     }
 
-    public void unprotectedPrepareTxn() throws UserException {
+    public void unprotectedPrepareTxn(long preparedTimeoutMs) throws StarRocksException, LockTimeoutException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
@@ -897,8 +1091,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(dbId,
-                txnId, commitInfos, failInfos, txnCommitAttachment);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
+                dbId, txnId, preparedTimeoutMs, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
     }
 
     public boolean checkNeedRemove(long currentMs, boolean isForce) {
@@ -910,7 +1104,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         } finally {
             readUnlock();
         }
-        Preconditions.checkState(endTimeMs != -1, endTimeMs);
+        if (endTimeMs == -1) {
+            return false;
+        }
         if (isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L)) {
             return true;
         }
@@ -922,11 +1118,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             return true;
         }
 
-        if (numRowsAbnormal > (numRowsAbnormal + numRowsNormal) * streamLoadParam.maxFilterRatio) {
-            return false;
-        }
-
-        return true;
+        return !(numRowsAbnormal > (numRowsAbnormal + numRowsNormal) *
+                streamLoadParams.getMaxFilterRatio().orElse(DEFAULT_MAX_FILTER_RATIO));
     }
 
     public boolean checkNeedPrepareTxn() {
@@ -937,7 +1130,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public void beforePrepared(TransactionState txnState) throws TransactionException {
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 throw new TransactionException("txn could not be prepared because task state is: " + state);
             }
         } finally {
@@ -946,10 +1139,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterPrepared(TransactionState txnState) throws StarRocksException {
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -981,7 +1171,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public void beforeCommitted(TransactionState txnState) throws TransactionException {
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 throw new TransactionException("txn could not be commited because task state is: " + state);
             }
             isCommitting = true;
@@ -991,15 +1181,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
-        if (!txnOperated) {
-            return;
-        }
-
-        // sync stream load collect profile
-        if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
-            collectProfile();
-            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
+        // sync stream load collect profile, here we collect profile only when be has reported
+        if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
+            collectProfile(false);
+        } else {
+            LOG.debug("stream load does not collect profile, txn_id: {}, label: {}, load id: {}",
+                    txnId, label, DebugUtil.printId(loadId));
         }
 
         writeLock();
@@ -1008,38 +1196,38 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.channels.set(i, State.COMMITED);
             }
             this.state = State.COMMITED;
+            commitTimeMs = System.currentTimeMillis();
             isCommitting = false;
         } finally {
             writeUnlock();
+            // sync stream load related query info should unregister here
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
 
-    public void collectProfile() {
-        long currentTimestamp = System.currentTimeMillis();
-        long totalTimeMs = currentTimestamp - createTimeMs;
-
-        // For the usage scenarios of flink cdc or routine load,
-        // the frequency of stream load maybe very high, resulting in many profiles,
-        // but we may only care about the long-duration stream load profile.
-        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
-            LOG.info(String.format("Load %s, totalTimeMs %d < Config.stream_load_profile_collect_second %d)",
-                    label, totalTimeMs, Config.stream_load_profile_collect_second));
-            return;
-        }
-
+    public RuntimeProfile buildTopLevelProfile(boolean isAborted) {
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
         summaryProfile.addInfoString(ProfileManager.START_TIME,
-                TimeUtils.longToTimeString(createTimeMs));
+                TimeUtils.longToTimeStringWithTimeZone(createTimeMs, profileZone));
 
-        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(System.currentTimeMillis()));
+        long currentTimestamp = System.currentTimeMillis();
+        long totalTimeMs = currentTimestamp - createTimeMs;
+        summaryProfile.addInfoString(ProfileManager.END_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(currentTimestamp, profileZone));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
-        summaryProfile.addInfoString("StarRocks Version",
+        summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, getStringByType());
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isAborted ? "Aborted" : "Finished");
+        summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, getStmt());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP,
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseComputeResourceName(computeResource));
 
         Map<String, String> loadCounters = coord.getLoadCounters();
         if (loadCounters != null && loadCounters.size() != 0) {
@@ -1048,35 +1236,47 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             summaryProfile.addInfoString("NumRowsAbnormal", loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
             summaryProfile.addInfoString("numRowsUnselected", loadCounters.get(LoadJob.UNSELECTED_ROWS));
         }
-        ConnectContext session = ConnectContext.get();
-        if (session != null) {
-            SessionVariable variables = session.getSessionVariable();
-            if (variables != null) {
-                summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
-            }
-        }
 
         profile.addChild(summaryProfile);
+
+        return profile;
+    }
+
+    public void collectProfile(boolean isAborted) {
+        RuntimeProfile profile = buildTopLevelProfile(isAborted);
+
         if (coord.getQueryProfile() != null) {
             if (!isSyncStreamLoad()) {
                 coord.collectProfileSync();
-                profile.addChild(coord.buildQueryProfile(session == null || session.needMergeProfile()));
-            } else {
-                profile.addChild(coord.getQueryProfile());
             }
+            profile.addChild(coord.buildQueryProfile(true));
         }
 
-        ProfileManager.getInstance().pushLoadProfile(profile);
+        ProfileManager.getInstance().pushProfile(null, profile);
     }
 
-    public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,
-                             String errorLogUrl, String errorMsg) {
-        this.numRowsNormal = loadRows;
-        this.numRowsAbnormal = filteredRows;
-        this.numRowsUnselected = unselectedRows;
-        this.numLoadBytesTotal = loadBytes;
-        this.trackingUrl = errorLogUrl;
+    public void setLoadState(TxnCommitAttachment attachment, String errorMsg) {
         this.errorMsg = errorMsg;
+        if (attachment != null) {
+            if (attachment instanceof ManualLoadTxnCommitAttachment) {
+                ManualLoadTxnCommitAttachment manualLoadTxnCommitAttachment = (ManualLoadTxnCommitAttachment) attachment;
+                this.numRowsNormal = manualLoadTxnCommitAttachment.getLoadedRows();
+                this.numRowsAbnormal = manualLoadTxnCommitAttachment.getFilteredRows();
+                this.numRowsUnselected = manualLoadTxnCommitAttachment.getUnselectedRows();
+                this.numLoadBytesTotal = manualLoadTxnCommitAttachment.getLoadedBytes();
+                this.trackingUrl = manualLoadTxnCommitAttachment.getErrorLogUrl();
+                this.beginTxnTimeMs = manualLoadTxnCommitAttachment.getBeginTxnTime();
+                this.receiveDataTimeMs = manualLoadTxnCommitAttachment.getReceiveDataTime();
+                this.planTimeMs = manualLoadTxnCommitAttachment.getPlanTime();
+            } else if (attachment instanceof RLTaskTxnCommitAttachment) {
+                RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = (RLTaskTxnCommitAttachment) attachment;
+                this.numRowsNormal = rlTaskTxnCommitAttachment.getLoadedRows();
+                this.numRowsAbnormal = rlTaskTxnCommitAttachment.getFilteredRows();
+                this.numRowsUnselected = rlTaskTxnCommitAttachment.getUnselectedRows();
+                this.numLoadBytesTotal = rlTaskTxnCommitAttachment.getLoadedBytes();
+                this.trackingUrl = rlTaskTxnCommitAttachment.getErrorLogUrl();
+            }
+        }
     }
 
     @Override
@@ -1089,6 +1289,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.channels.set(i, State.COMMITED);
             }
             this.state = State.COMMITED;
+            commitTimeMs = txnState.getCommitTime();
             this.preparedChannelNum = this.channelNum;
         } finally {
             writeUnlock();
@@ -1096,19 +1297,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException {
-        if (!txnOperated) {
-            return;
-        }
-
-        if (isSyncStreamLoad && coord.isEnableLoadProfile()) {
-            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
+            throws StarRocksException {
+        if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
+            collectProfile(true);
         }
 
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 return;
             }
             if (coord != null && !isSyncStreamLoad) {
@@ -1122,10 +1319,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             state = State.CANCELLED;
             errorMsg = txnState.getReason();
             gcObject();
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
+            // sync stream load related query info should unregister here
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
     @Override
@@ -1140,17 +1340,14 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             errorMsg = txnState.getReason();
             state = State.CANCELLED;
             endTimeMs = txnState.getFinishTime();
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
         }
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterVisible(TransactionState txnState) {
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -1158,11 +1355,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             state = State.FINISHED;
             endTimeMs = System.currentTimeMillis();
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
             gcObject();
         } finally {
             writeUnlock();
         }
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
     @Override
@@ -1176,7 +1374,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             this.preparedChannelNum = this.channelNum;
             state = State.FINISHED;
             endTimeMs = txnState.getFinishTime();
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
         }
@@ -1187,7 +1385,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         channelIdToBEHTTPAddress = null;
         channelIdToBEHTTPPort = null;
         table = null;
-        streamLoadParam = null;
+        streamLoadParams = null;
         streamLoadInfo = null;
     }
 
@@ -1200,38 +1398,120 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         state = State.CANCELLED;
     }
 
+    /**
+     * Mark this sub-task COMMITED (or FINISHED when the transaction is already visible)
+     * after the parent multi-statement transaction committed successfully.
+     * Sub-tasks of a multi-statement transaction are not registered as transaction state
+     * callbacks (the explicit transaction carries no callback id), so
+     * afterCommitted/afterVisible are never invoked on them; the parent task drives their
+     * terminal state instead. Without this, display outlets that delegate to sub-tasks
+     * (information_schema.loads, SHOW STREAM LOAD) would show PREPARING forever.
+     * A COMMITED sub-task may be upgraded to FINISHED by a later call with visible=true
+     * (the transaction became visible after the commit returned).
+     */
+    public void markCommittedByParent(boolean visible, long finishTimeMs) {
+        boolean becameVisible = false;
+        writeLock();
+        try {
+            if (state == State.CANCELLED || state == State.FINISHED) {
+                return;
+            }
+            State finalState = visible ? State.FINISHED : State.COMMITED;
+            if (state == finalState) {
+                return;
+            }
+            for (int i = 0; i < channelNum; i++) {
+                this.channels.set(i, finalState);
+            }
+            this.state = finalState;
+            if (this.commitTimeMs <= 0) {
+                this.commitTimeMs = finishTimeMs;
+            }
+            this.isCommitting = false;
+            if (visible) {
+                this.endTimeMs = finishTimeMs;
+                gcObject();
+                becameVisible = true;
+            }
+        } finally {
+            writeUnlock();
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+        }
+        if (becameVisible) {
+            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
+        }
+    }
+
+    /**
+     * Cancel the coordinator and set task state to CANCELLED without aborting the transaction.
+     * This is used for sub-tasks in multi-statement transactions where the parent task
+     * manages the transaction lifecycle.
+     */
+    public void cancelCoordinatorOnly(String reason) {
+        writeLock();
+        try {
+            if (isUnreversibleState()) {
+                return;
+            }
+            if (coord != null && !isSyncStreamLoad) {
+                coord.cancel(reason);
+                QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+            }
+            for (int i = 0; i < channelNum; i++) {
+                this.channels.set(i, State.CANCELLED);
+            }
+            endTimeMs = System.currentTimeMillis();
+            state = State.CANCELLED;
+            errorMsg = reason;
+            gcObject();
+        } finally {
+            writeUnlock();
+        }
+    }
+
     private void replayTxnAttachment(TransactionState txnState) {
-        if (txnState.getTxnCommitAttachment() == null) {
+        TxnCommitAttachment txnCommitAttachment = txnState.getTxnCommitAttachment();
+        if (txnCommitAttachment == null) {
             return;
         }
-        StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnState.getTxnCommitAttachment();
-        this.trackingUrl = attachment.getTrackingURL();
-        this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
-        this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
-        this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
-        this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
-        this.endTimeMs = attachment.getEndTimeMs();
-        this.numRowsNormal = attachment.getNumRowsNormal();
-        this.numRowsAbnormal = attachment.getNumRowsAbnormal();
-        this.numRowsUnselected = attachment.getNumRowsUnselected();
-        this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+        if (txnCommitAttachment instanceof StreamLoadTxnCommitAttachment) {
+            StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnCommitAttachment;
+            this.trackingUrl = attachment.getTrackingURL();
+            this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
+            this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
+            this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
+            this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
+            this.endTimeMs = attachment.getEndTimeMs();
+            this.numRowsNormal = attachment.getNumRowsNormal();
+            this.numRowsAbnormal = attachment.getNumRowsAbnormal();
+            this.numRowsUnselected = attachment.getNumRowsUnselected();
+            this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+            return;
+        }
+        if (txnCommitAttachment instanceof ManualLoadTxnCommitAttachment
+                || txnCommitAttachment instanceof RLTaskTxnCommitAttachment) {
+            setLoadState(txnCommitAttachment, txnState.getReason());
+            return;
+        }
+        LOG.warn("ignore unsupported txn commit attachment {} while replaying stream load task {}",
+                txnCommitAttachment.getClass().getName(), label);
     }
 
     public OlapTable getTable() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
             }
             return table;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -1247,11 +1527,19 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return createTimeMs;
     }
 
+    public long commitTimeMs() {
+        return commitTimeMs;
+    }
+
     public long endTimeMs() {
         return endTimeMs;
     }
 
     public boolean isFinalState() {
+        return state == State.CANCELLED || state == State.FINISHED;
+    }
+
+    public boolean isUnreversibleState() {
         return state == State.CANCELLED || state == State.COMMITED || state == State.FINISHED;
     }
 
@@ -1265,6 +1553,16 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     public long getDBId() {
         return dbId;
+    }
+
+    @Override
+    public Long getLoadStartTimeMs() {
+        return startLoadingTimeMs;
+    }
+
+    @Override
+    public String getUser() {
+        return user;
     }
 
     public String getTableName() {
@@ -1287,6 +1585,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return state.name();
     }
 
+    public TUniqueId getTUniqueId() {
+        return this.loadId;
+    }
+
     public void setTUniqueId(TUniqueId loadId) {
         this.loadId = loadId;
     }
@@ -1307,8 +1609,16 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return isSyncStreamLoad;
     }
 
+    public boolean setIsSyncStreamLoad(boolean isSyncStreamLoad) {
+        return this.isSyncStreamLoad = isSyncStreamLoad;
+    }
+
     public boolean isRoutineLoadTask() {
         return type == Type.ROUTINE_LOAD;
+    }
+
+    public String getStmt() {
+        return "";
     }
 
     // for sync stream load
@@ -1319,9 +1629,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public String getStringByType() {
         switch (this.type) {
             case ROUTINE_LOAD:
-                return "ROUTINE_LOAD";
+                return ProfileManager.LOAD_TYPE_ROUTINE_LOAD;
             case STREAM_LOAD:
-                return "STREAM_LOAD";
+                return ProfileManager.LOAD_TYPE_STREAM_LOAD;
             case PARALLEL_STREAM_LOAD:
                 return "PARALLEL_STREAM_LOAD";
             default:
@@ -1329,7 +1639,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
     }
 
-    public List<String> getShowInfo() {
+    @Override
+    public List<List<String>> getShowInfo() {
         readLock();
         try {
             List<String> row = Lists.newArrayList();
@@ -1373,13 +1684,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             } else {
                 row.add("");
             }
-            return row;
+            return List.of(row);
         } finally {
             readUnlock();
         }
     }
 
-    public List<String> getShowBriefInfo() {
+    public List<List<String>> getShowBriefInfo() {
         readLock();
         try {
             List<String> row = Lists.newArrayList();
@@ -1388,36 +1699,19 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             row.add(dbName);
             row.add(tableName);
             row.add(state.name());
-            return row;
+            return List.of(row);
         } finally {
             readUnlock();
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-        out.writeLong(loadId.getHi());
-        out.writeLong(loadId.getLo());
-    }
 
-    public static StreamLoadTask read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        StreamLoadTask task = GsonUtils.GSON.fromJson(json, StreamLoadTask.class);
-        long hi = in.readLong();
-        long lo = in.readLong();
-        TUniqueId loadId = new TUniqueId(hi, lo);
-        task.init();
-        task.setTUniqueId(loadId);
-        // Only task which type is PARALLEL will be persisted
-        // just set type to PARALLEL
-        task.setType(Type.PARALLEL_STREAM_LOAD);
-        return task;
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {
         loadId = new TUniqueId(loadIdHi, loadIdLo);
+        init();
     }
 
     @Override
@@ -1426,7 +1720,112 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         loadIdLo = loadId.getLo();
     }
 
-    public TStreamLoadInfo toThrift() {
+    public String toRuntimeDetails() {
+        TreeMap<String, Object> runtimeDetails = Maps.newTreeMap();
+        if (!clientIp.equals("")) {
+            runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_CLIENT_IP, clientIp);
+        }
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_LOAD_ID, DebugUtil.printId(loadId));
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ID, txnId);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_BEGIN_TXN_TIME_MS, beginTxnTimeMs);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_RECEIVE_DATA_TIME_MS, receiveDataTimeMs);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_PLAN_TIME_MS, planTimeMs);
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        if (txnState != null) {
+            // Avoid acquiring txnState write lock here to prevent deadlocks with callbacks holding txn lock
+            // and attempting to take StreamLoadTask/LoadJob locks. A slightly stale errMsg is acceptable.
+            runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ERROR_MSG, txnState.getErrMsg());
+        }
+        Gson gson = new Gson();
+        return gson.toJson(runtimeDetails);
+    }
+
+    public String toProperties() {
+        TreeMap<String, Object> properties = Maps.newTreeMap();
+        properties.put(LoadConstants.PROPERTIES_TIMEOUT, timeoutMs / 1000);
+        Gson gson = new Gson();
+        return gson.toJson(properties);
+    }
+
+    public List<TLoadInfo> toThrift() {
+        readLock();
+        try {
+            TLoadInfo info = new TLoadInfo();
+            info.setJob_id(id);
+            info.setLabel(label);
+            info.setLoad_id(DebugUtil.printId(loadId));
+            info.setTxn_id(txnId);
+            info.setDb(dbName);
+            info.setTable(tableName);
+            info.setUser(user);
+            info.setState(state.name());
+            info.setError_msg(errorMsg);
+            info.setRuntime_details(toRuntimeDetails());
+            info.setProperties(toProperties());
+            if (state == State.FINISHED) {
+                info.setProgress("100%");
+            } else {
+                info.setProgress("0%");
+            }
+            if (ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
+                info.setProfile_id(DebugUtil.printId(loadId));
+            }
+            // tracking url
+            if (trackingUrl != null) {
+                info.setUrl(trackingUrl);
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+            info.setPriority(LoadPriority.NORMAL);
+
+            info.setNum_sink_rows(numRowsNormal);
+            info.setNum_filtered_rows(numRowsAbnormal);
+            info.setNum_unselected_rows(numRowsUnselected);
+            info.setNum_scan_bytes(numLoadBytesTotal);
+
+            info.setCreate_time(TimeUtils.longToTimeString(createTimeMs));
+            info.setLoad_start_time(TimeUtils.longToTimeString(startLoadingTimeMs));
+            info.setLoad_commit_time(TimeUtils.longToTimeString(commitTimeMs));
+            info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs));
+            // New BE prefers these UTC epoch-ms fields and converts to the session
+            // zone on materialization, so the rendered column value matches whatever
+            // zone the querying session is in.
+            if (createTimeMs > 0) {
+                info.setCreate_time_ms(createTimeMs);
+            }
+            if (startLoadingTimeMs > 0) {
+                info.setLoad_start_time_ms(startLoadingTimeMs);
+            }
+            if (commitTimeMs > 0) {
+                info.setLoad_commit_time_ms(commitTimeMs);
+            }
+            if (endTimeMs > 0) {
+                info.setLoad_finish_time_ms(endTimeMs);
+            }
+
+            info.setType(getStringByType());
+
+            // warehouse
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                    info.setWarehouse(warehouse.getName());
+                } catch (Exception e) {
+                    LOG.warn("Failed to get warehouse for stream load task {}, error: {}", id, e.getMessage());
+                    info.setWarehouse("");
+                }
+            } else {
+                info.setWarehouse("");
+            }
+
+            return Lists.newArrayList(info);
+        } finally {
+            readUnlock();
+        }
+
+    }
+
+    @Override
+    public List<TStreamLoadInfo> toStreamLoadThrift() {
         readLock();
         try {
             TStreamLoadInfo info = new TStreamLoadInfo();
@@ -1470,9 +1869,17 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             info.setChannel_state(channelStateBuilder.toString());
             info.setType(getStringByType());
-            return info;
+            return Lists.newArrayList(info);
         } finally {
             readUnlock();
         }
+    }
+
+    protected void setState(State state) {
+        this.state = state;
+    }
+
+    public ExplicitTxnState.ExplicitTxnStateItem getTxnStateItem() {
+        return txnStateItem;
     }
 }

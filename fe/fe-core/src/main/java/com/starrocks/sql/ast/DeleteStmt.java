@@ -35,17 +35,16 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 public class DeleteStmt extends DmlStmt {
-    private final TableName tblName;
-    private final PartitionNames partitionNames;
+    private TableRef tableRef;
+    private final PartitionRef partitionRef;
     private final List<Relation> usingRelations;
     private final Expr wherePredicate;
     private final List<CTERelation> commonTableExpressions;
@@ -60,24 +59,28 @@ public class DeleteStmt extends DmlStmt {
     // The JobID is generated here for easy correlation when cancel Delete
     private long jobId = -1;
 
-    public DeleteStmt(TableName tableName, PartitionNames partitionNames, Expr wherePredicate) {
-        this(tableName, partitionNames, null, wherePredicate, null, NodePosition.ZERO);
+    // Optional MySQL OK-packet info string attached at analyze time, surfaced to the
+    // client after DeleteMgr.process() succeeds. Used to warn about merge-on-read cost
+    // on non-Primary-Key tables and recommend TRUNCATE PARTITION for bulk removal.
+    private String okInfoMessage;
+
+    public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, Expr wherePredicate) {
+        this(tableRef, partitionNames, null, wherePredicate, null, NodePosition.ZERO);
     }
 
-    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations,
+    public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, List<Relation> usingRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions) {
-        this(tableName, partitionNames, usingRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);
+        this(tableRef, partitionNames, usingRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);
     }
 
-    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations,
+    public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, List<Relation> usingRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions, NodePosition pos) {
         super(pos);
-        this.tblName = tableName;
-        this.partitionNames = partitionNames;
+        this.tableRef = tableRef;
+        this.partitionRef = partitionNames;
         this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
-        this.deleteConditions = Lists.newLinkedList();
     }
 
     public long getJobId() {
@@ -89,8 +92,12 @@ public class DeleteStmt extends DmlStmt {
     }
 
     @Override
-    public TableName getTableName() {
-        return tblName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public Expr getWherePredicate() {
@@ -102,11 +109,11 @@ public class DeleteStmt extends DmlStmt {
     }
 
     public List<String> getPartitionNamesList() {
-        return partitionNames == null ? Lists.newArrayList() : partitionNames.getPartitionNames();
+        return partitionRef == null ? Lists.newArrayList() : partitionRef.getPartitionNames();
     }
 
-    public PartitionNames getPartitionNames() {
-        return partitionNames;
+    public PartitionRef getPartitionNames() {
+        return partitionRef;
     }
 
     public List<Relation> getUsingRelations() {
@@ -143,7 +150,15 @@ public class DeleteStmt extends DmlStmt {
         return queryStatement;
     }
 
+    public String getOkInfoMessage() {
+        return okInfoMessage;
+    }
+
+    public void setOkInfoMessage(String okInfoMessage) {
+        this.okInfoMessage = okInfoMessage;
+    }
+
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDeleteStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDeleteStatement(this, context);
     }
 }

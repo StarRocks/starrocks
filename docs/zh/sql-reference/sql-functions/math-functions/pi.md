@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回圆周率π的值。"
 ---
 
 # pi
 
-## 功能
+
 
 返回圆周率。
 

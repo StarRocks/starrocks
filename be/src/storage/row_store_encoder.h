@@ -42,12 +42,12 @@ public:
                                                      BinaryColumn& dest) = 0;
     virtual Status decode_columns_from_full_row_column(const Schema& schema, const BinaryColumn& full_row_column,
                                                        const std::vector<uint32_t>& read_column_ids,
-                                                       std::vector<std::unique_ptr<Column>>* dest) = 0;
+                                                       MutableColumns* dest) = 0;
+    Status is_supported(const Schema& schema);
 
 protected:
     // simple encode not support complex type
     bool is_field_supported(const Field& f);
-    Status is_supported(const Schema& schema);
 };
 
 } // namespace starrocks

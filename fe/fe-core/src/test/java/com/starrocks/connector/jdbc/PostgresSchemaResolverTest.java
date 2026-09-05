@@ -12,25 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
+import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -40,17 +39,20 @@ import java.util.Map;
 
 public class PostgresSchemaResolverTest {
     @Mocked
-    DriverManager driverManager;
+    HikariDataSource dataSource;
 
     @Mocked
     Connection connection;
+
+    @Mocked
+    PreparedStatement preparedStatement;
 
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
 
-    @Before
+    @BeforeEach
     public void setUp() throws SQLException {
         dbResult = new MockResultSet("catalog");
         dbResult.addColumn("TABLE_SCHEM", Arrays.asList("postgres", "template1", "test"));
@@ -58,13 +60,21 @@ public class PostgresSchemaResolverTest {
         tableResult.addColumn("TABLE_NAME", Arrays.asList("tbl1", "tbl2", "tbl3"));
         columnResult = new MockResultSet("columns");
         columnResult.addColumn("DATA_TYPE", Arrays.asList(Types.BIT, Types.INTEGER, Types.INTEGER, Types.REAL, Types.DOUBLE,
-                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP));
+                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP, Types.VARBINARY,
+                Types.TIME, Types.TIME_WITH_TIMEZONE, Types.OTHER, Types.OTHER));
         columnResult.addColumn("TYPE_NAME", Arrays.asList("BOOL", "INTEGER", "SERIAL", "FLOAT4", "FLOAT8",
-                "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6));
-        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"));
-        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"));
+                "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP", "UUID",
+                "TIME", "TIMETZ", "JSON", "JSONB"));
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29, 36,
+                15, 21, 2147483647, 2147483647));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6, 0,
+                0, 0, 0, 0));
+        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
+                "m", "n", "o", "p"));
+        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO",
+                "NO", "NO", "YES", "YES", "YES", "YES"));
+        columnResult.addColumn("REMARKS", Arrays.asList("comment-a", null, null, null, null, null, null, null, null, null,
+                null, null));
         properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "org.postgresql.Driver");
         properties.put(JDBCResource.URI, "jdbc:postgresql://127.0.0.1:5432/t1");
@@ -78,7 +88,7 @@ public class PostgresSchemaResolverTest {
     public void testListDatabaseNames() throws SQLException {
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -88,12 +98,12 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            List<String> result = jdbcMetadata.listDbNames();
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("postgres", "template1", "test");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -101,7 +111,7 @@ public class PostgresSchemaResolverTest {
     public void testGetDb() throws SQLException {
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -111,11 +121,11 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            Database db = jdbcMetadata.getDb("test");
-            Assert.assertEquals("test", db.getOriginName());
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
+            Assertions.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -123,7 +133,7 @@ public class PostgresSchemaResolverTest {
     public void testListTableNames() throws SQLException {
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -138,12 +148,12 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            List<String> result = jdbcMetadata.listTableNames("test");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -151,7 +161,7 @@ public class PostgresSchemaResolverTest {
     public void testGetTable() throws SQLException {
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -165,21 +175,139 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            Table table = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
-            Assert.assertEquals("catalog.test.tbl1", table.getUUID());
-            Assert.assertEquals("tbl1", table.getName());
-            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
-            PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
-            ResultSet columnSet = postgresSchemaResolver.getColumns(connection, "test", "tbl1");
-            List<Column> fullSchema = postgresSchemaResolver.convertToSRTable(columnSet);
-            Table table1 = postgresSchemaResolver.getTable(1, "tbl1", fullSchema, "test", "catalog", properties);
-            Assert.assertTrue(table1 instanceof JDBCTable);
-            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+            Assertions.assertTrue(table instanceof JDBCTable);
+            Assertions.assertEquals("catalog.test.tbl1", table.getUUID());
+            Assertions.assertEquals("tbl1", table.getName());
+            Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Assertions.assertEquals(16, table.getColumns().size());
+            Assertions.assertTrue(table.getColumn("h").getType().isStringType());
+            Assertions.assertTrue(table.getColumn("l").getType().isBinaryType());
+            Assertions.assertEquals("comment-a", table.getColumn("a").getComment());
+            Assertions.assertEquals("", table.getColumn("b").getComment());
+            Assertions.assertTrue(table.getColumn("m").getType().isTime());
+            Assertions.assertTrue(table.getColumn("n").getType().isTime());
+            Assertions.assertTrue(table.getColumn("o").getType().isJsonType());
+            Assertions.assertTrue(table.getColumn("p").getType().isJsonType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
+    }
+
+    @Test
+    public void testGetPartitions() {
+        PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
+        List<Partition> partitions = postgresSchemaResolver.getPartitions(null, new Table(1L, "tbl1",
+                Table.TableType.JDBC, Lists.newArrayList()));
+        Assertions.assertEquals(partitions.size(), 1);
+        Assertions.assertEquals(partitions.get(0).getPartitionName(), "tbl1");
+    }
+
+    @Test
+    public void testConvertOtherTypeForTimeAndJson() {
+        PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.OTHER, "time", 0, 0).isTime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "time without time zone", 0, 0).isTime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "timetz", 0, 0).isTime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "time with time zone", 0, 0).isTime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "timestamptz", 0, 0).isDatetime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "timestamp with time zone", 0, 0).isDatetime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.OTHER, "json", 0, 0).isJsonType());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.OTHER, "jsonb", 0, 0).isJsonType());
+    }
+
+    @Test
+    public void testConvertWithTimezoneTypeName() {
+        PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.TIME, "time", 0, 0).isTime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.TIME, "timetz", 0, 0).isTime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIME, "time with time zone", 0, 0).isTime());
+
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIMESTAMP, "timestamp", 0, 0).isDatetime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIMESTAMP, "timestamptz", 0, 0).isDatetime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIMESTAMP, "timestamp with time zone", 0, 0).isDatetime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIMESTAMP_WITH_TIMEZONE, "timestamp with time zone", 0, 0).isDatetime());
+    }
+
+    // -------------------------------------------------------------------------
+    // getTableRowCount tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testGetTableRowCountReturnsCount() throws SQLException {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("reltuples", Arrays.asList(5_000_000L));
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "public", "orders");
+        Assertions.assertEquals(5_000_000L, count);
+    }
+
+    @Test
+    public void testGetTableRowCountReturnsNegativeOneWhenEmpty() throws SQLException {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("reltuples", Arrays.asList());
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "public", "orders");
+        Assertions.assertEquals(-1L, count, "Should return -1 when table is not found in pg_class");
+    }
+
+    @Test
+    public void testGetTableRowCountReturnsNegativeOneWhenNull() throws SQLException {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("reltuples", Arrays.asList((Object) null));
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "public", "orders");
+        Assertions.assertEquals(-1L, count, "Should return -1 when reltuples is NULL");
     }
 }

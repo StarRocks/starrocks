@@ -1,0 +1,5 @@
+-- name: test_jit_case_when_mixed_types
+CREATE TABLE t (k INT, c DOUBLE) PROPERTIES("replication_num"="1");
+INSERT INTO t VALUES (1, 1.5), (2, 2.5);
+set jit_level = -1;
+SELECT CASE c WHEN 1.5 THEN 1 WHEN 2.5 THEN 2 ELSE 0 END FROM t ORDER BY 1;

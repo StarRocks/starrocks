@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "column/binary_column.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

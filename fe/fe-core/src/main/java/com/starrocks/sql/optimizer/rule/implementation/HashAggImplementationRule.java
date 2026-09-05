@@ -39,12 +39,14 @@ public class HashAggImplementationRule extends ImplementationRule {
                 logical.getGroupingKeys(),
                 logical.getPartitionByColumns(),
                 logical.getAggregations(),
-                logical.getSingleDistinctFunctionPos(),
                 logical.isSplit(),
                 logical.getLimit(),
                 logical.getPredicate(),
                 logical.getProjection());
         physical.setDistinctColumnDataSkew(logical.getDistinctColumnDataSkew());
+        physical.setTopNLocalAgg(logical.isTopNLocalAgg());
+        physical.setTopNSortInfo(logical.getAggTopnSortInfo());
+        physical.setLocalLimit(logical.getLocalLimit());
         OptExpression result = OptExpression.create(physical, input.getInputs());
         return Lists.newArrayList(result);
     }

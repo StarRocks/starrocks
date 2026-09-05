@@ -1,0 +1,64 @@
+-- name: test_temporary_partition
+CREATE TABLE `allstringx` (
+  `c0` bigint DEFAULT NULL,
+  `c1` string DEFAULT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`c0`)
+(
+PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("1024")),
+PARTITION p3 VALUES [("1024"), ("2048")),
+PARTITION p4 VALUES [("2048"), ("4096")),
+PARTITION p5 VALUES [("4096"), ("8192")),
+PARTITION p6 VALUES [("8192"), ("65536")),
+PARTITION p7 VALUES [("65536"), ("2100000000")))
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into allstringx values (1, 'S0');
+-- result:
+-- !result
+insert into allstringx values (4096, 'S1');
+-- result:
+-- !result
+select distinct c1 from allstringx order by 1;
+-- result:
+S0
+S1
+-- !result
+function: wait_global_dict_ready('c1', 'allstringx')
+-- result:
+
+-- !result
+ALTER TABLE allstringx ADD TEMPORARY PARTITION px VALUES [("4096"), ("8192"));
+-- result:
+-- !result
+insert into allstringx TEMPORARY PARTITION(px) values (4096, 'S2');
+-- result:
+-- !result
+select distinct c1 from allstringx;
+-- result:
+S1
+S0
+-- !result
+function: wait_global_dict_ready('c1', 'allstringx')
+-- result:
+
+-- !result
+insert into allstringx values (4096, 'S1');
+-- result:
+-- !result
+ALTER TABLE allstringx REPLACE PARTITION(p5) WITH TEMPORARY PARTITION (px);
+-- result:
+-- !result
+select distinct c1 from allstringx order by 1;
+-- result:
+S0
+S2
+-- !result

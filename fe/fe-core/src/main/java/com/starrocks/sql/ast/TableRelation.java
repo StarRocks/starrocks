@@ -15,14 +15,16 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,22 +38,35 @@ public class TableRelation extends Relation {
         _BINLOG_,
         _SYNC_MV_,
         _USE_PK_INDEX_,
+        _CACHE_STATS_,
     }
 
     private final TableName name;
     private Table table;
     private Map<Field, Column> columns;
     // Support temporary partition
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
     private final List<Long> tabletIds;
     private final List<Long> replicaIds;
     private final Set<TableHint> tableHints = new HashSet<>();
-    // optional temporal clause for external MySQL tables that support this syntax
-    private String temporalClause;
+    // used for mysql external table
+    private String queryPeriodString;
+
+    // used for time travel
+    private QueryPeriod queryPeriod;
+    // used for tvr incremental read
+    private TvrVersionRange tvrVersionRange;
+
+    // TABLE SAMPLE
+    private TableSampleClause sampleClause;
 
     private Expr partitionPredicate;
 
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+
+    private List<String> pruneScanColumns = Collections.emptyList();
+
+    private long gtid = 0;
 
     public TableRelation(TableName name) {
         super(name.getPos());
@@ -61,11 +76,11 @@ public class TableRelation extends Relation {
         this.replicaIds = Lists.newArrayList();
     }
 
-    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, List<Long> replicaIds) {
+    public TableRelation(TableName name, PartitionRef partitionNames, List<Long> tabletIds, List<Long> replicaIds) {
         this(name, partitionNames, tabletIds, replicaIds, NodePosition.ZERO);
     }
 
-    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, List<Long> replicaIds,
+    public TableRelation(TableName name, PartitionRef partitionNames, List<Long> tabletIds, List<Long> replicaIds,
                          NodePosition pos) {
         super(pos);
         this.name = name;
@@ -86,11 +101,11 @@ public class TableRelation extends Relation {
         this.table = table;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
-    public void setPartitionNames(PartitionNames partitionNames) {
+    public void setPartitionNames(PartitionRef partitionNames) {
         this.partitionNames = partitionNames;
     }
 
@@ -114,6 +129,14 @@ public class TableRelation extends Relation {
 
     public void setColumns(Map<Field, Column> columns) {
         this.columns = columns;
+    }
+
+    public List<String> getPruneScanColumns() {
+        return pruneScanColumns;
+    }
+
+    public void setPruneScanColumns(List<String> pruneScanColumns) {
+        this.pruneScanColumns = pruneScanColumns;
     }
 
     public Map<Field, Column> getColumns() {
@@ -177,9 +200,13 @@ public class TableRelation extends Relation {
         return tableHints.contains(TableHint._USE_PK_INDEX_);
     }
 
+    public boolean isCacheStatsQuery() {
+        return tableHints.contains(TableHint._CACHE_STATS_);
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTable(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitTable(this, context);
     }
 
     @Override
@@ -187,12 +214,36 @@ public class TableRelation extends Relation {
         return name.toString();
     }
 
-    public void setTemporalClause(String temporalClause) {
-        this.temporalClause = temporalClause;
+    public String getQueryPeriodString() {
+        return queryPeriodString;
     }
 
-    public String getTemporalClause() {
-        return this.temporalClause;
+    public void setQueryPeriodString(String queryPeriodString) {
+        this.queryPeriodString = queryPeriodString;
+    }
+
+    public QueryPeriod getQueryPeriod() {
+        return queryPeriod;
+    }
+
+    public void setQueryPeriod(QueryPeriod queryPeriod) {
+        this.queryPeriod = queryPeriod;
+    }
+
+    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
+        this.tvrVersionRange = tvrVersionRange;
+    }
+
+    public TvrVersionRange getTvrVersionRange() {
+        return tvrVersionRange;
+    }
+
+    public TableSampleClause getSampleClause() {
+        return sampleClause;
+    }
+
+    public void setSampleClause(TableSampleClause sampleClause) {
+        this.sampleClause = sampleClause;
     }
 
     public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
@@ -201,5 +252,13 @@ public class TableRelation extends Relation {
 
     public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
         return generatedExprToColumnRef;
+    }
+
+    public void setGtid(long gtid) {
+        this.gtid = gtid;
+    }
+
+    public long getGtid() {
+        return gtid;
     }
 }

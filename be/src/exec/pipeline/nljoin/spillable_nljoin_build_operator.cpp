@@ -14,17 +14,20 @@
 
 #include "exec/pipeline/nljoin/spillable_nljoin_build_operator.h"
 
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/spiller.hpp"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/spill/options.h"
-#include "exec/spill/spiller.hpp"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks::pipeline {
 Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(NLJoinBuildOperator::prepare(state));
     _spill_channel->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     RETURN_IF_ERROR(_spill_channel->spiller()->prepare(state));
     _cross_join_context->input_channel(_driver_sequence).set_spiller(_spill_channel->spiller());
     if (state->spill_mode() == TSpillMode::FORCE) {
@@ -52,8 +55,19 @@ bool SpillableNLJoinBuildOperator::is_finished() const {
 }
 
 Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
-    auto& executor = *_spill_channel->io_executor();
     auto spiller = _spill_channel->spiller();
+
+    // On cancellation, do not run spiller->flush() during teardown. The not-spilled branch below
+    // already delegates to NLJoinBuildOperator::set_finishing, which early-returns when cancelled;
+    // guard the spilled branch the same way to avoid touching spill state while the query is being
+    // torn down.
+    if (state->is_cancelled()) {
+        if (spiller != nullptr) {
+            spiller->cancel();
+        }
+        _spill_channel->set_finishing();
+        return NLJoinBuildOperator::set_finishing(state);
+    }
 
     if (!spiller->spilled()) {
         _spill_channel->set_finishing();
@@ -61,7 +75,7 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(spiller->flush(state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+    RETURN_IF_ERROR(spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
     RETURN_IF_ERROR(spiller->set_flush_all_call_back(
             [&, state]() {
                 RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
@@ -69,7 +83,7 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
                 _spill_channel->set_finishing();
                 return Status::OK();
             },
-            state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+            state, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
 
     return Status::OK();
 }
@@ -79,8 +93,7 @@ Status SpillableNLJoinBuildOperator::push_chunk(RuntimeState* state, const Chunk
         RETURN_IF_ERROR(NLJoinBuildOperator::push_chunk(state, chunk));
     } else {
         // TODO: process auto spill mode
-        RETURN_IF_ERROR(_cross_join_context->input_channel(_driver_sequence)
-                                .add_chunk_to_spill_buffer(state, chunk, *_spill_channel->io_executor()));
+        RETURN_IF_ERROR(_cross_join_context->input_channel(_driver_sequence).add_chunk_to_spill_buffer(state, chunk));
     }
     return Status::OK();
 }
@@ -93,11 +106,14 @@ Status SpillableNLJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->min_spilled_size = state->spill_operator_min_bytes();
-    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
+    _spill_options->block_manager = state->query_runtime_state()->query_spill_manager()->block_manager();
     _spill_options->name = "spillable-nestloop-join-build";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->read_shared = true;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 
     return Status::OK();
 }

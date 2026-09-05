@@ -15,7 +15,8 @@
 #pragma once
 
 #include "common/status.h"
-#include "runtime/runtime_state.h"
+#include "gutil/macros.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::pipeline {
 
@@ -34,7 +35,8 @@ public:
     ContextWithDependency() = default;
     virtual ~ContextWithDependency() = default;
 
-    DISALLOW_COPY_AND_ASSIGN(ContextWithDependency);
+    ContextWithDependency(const ContextWithDependency&) = delete;
+    ContextWithDependency& operator=(const ContextWithDependency&) = delete;
 
     // For pipeline, it is called by unref() when the last operator is unreffed.
     // For non-pipeline, it is called by close() of the exec node directly
@@ -57,7 +59,7 @@ public:
     }
 
     // When the output operator is finished, the context can be finished regardless of other running operators.
-    [[nodiscard]] Status set_finished() {
+    Status set_finished() {
         _is_finished.store(true, std::memory_order_release);
         return Status::OK();
     }

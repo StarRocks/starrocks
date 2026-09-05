@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "在给定的日期上增加指定数量的月份。"
 ---
 
 # add_months
 
-## 功能
+
 
 在给定的日期（DATE、DATETIME）上增加一个整数月，返回结果日期。
 

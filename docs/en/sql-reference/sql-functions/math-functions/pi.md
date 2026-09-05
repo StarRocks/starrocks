@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the value of Pi."
 ---
 
 # pi
 
-## Description
+
 
 Returns the value of Pi.
 

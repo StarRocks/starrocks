@@ -16,16 +16,17 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.expression.ExprUtils;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Select list items plus distinct clause.
  */
 public class SelectList {
     private boolean isDistinct;
-    private Map<String, String> optHints;
+
+    private List<HintNode> hintNodes;
 
     // ///////////////////////////////////////
     // BEGIN: Members that need to be reset()
@@ -61,6 +62,11 @@ public class SelectList {
         items.add(item);
     }
 
+    public void setItems(List<SelectListItem> items) {
+        this.items.clear();
+        this.items.addAll(items);
+    }
+
     public boolean isDistinct() {
         return isDistinct;
     }
@@ -69,18 +75,10 @@ public class SelectList {
         isDistinct = value;
     }
 
-    public Map<String, String> getOptHints() {
-        return optHints;
-    }
-
-    public void setOptHints(Map<String, String> optHints) {
-        this.optHints = optHints;
-    }
-
     public void reset() {
         for (SelectListItem item : items) {
             if (!item.isStar()) {
-                item.getExpr().reset();
+                ExprUtils.reset(item.getExpr());
             }
         }
     }
@@ -88,5 +86,13 @@ public class SelectList {
     @Override
     public SelectList clone() {
         return new SelectList(this);
+    }
+
+    public List<HintNode> getHintNodes() {
+        return hintNodes;
+    }
+
+    public void setHintNodes(List<HintNode> hintNodes) {
+        this.hintNodes = hintNodes;
     }
 }

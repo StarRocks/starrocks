@@ -17,8 +17,8 @@
 #include <memory>
 
 #include "column/column_access_path.h"
-#include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 // FillSubfieldIterator is a wrapper/proxy on complex type(STRUCT) column iterator that will
@@ -36,23 +36,23 @@ public:
 
     ColumnId column_id() const { return _cid; }
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
-    [[nodiscard]] Status seek_to_first() override;
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override;
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord);
+    Status seek_to_first() override;
+
+    Status seek_to_ordinal(ordinal_t ord) override;
 
     ordinal_t get_current_ordinal() const override;
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override {
-        return Status::NotSupported("");
-    }
+    ordinal_t num_rows() const override;
+
+    std::string name() const override { return "FillSubfieldIterator"; }
 
 private:
     ColumnId _cid;

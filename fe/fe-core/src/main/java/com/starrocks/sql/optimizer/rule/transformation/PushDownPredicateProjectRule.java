@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -34,8 +37,11 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class PushDownPredicateProjectRule extends TransformationRule {
     private static final List<ScalarOperatorRewriteRule> PROJECT_REWRITE_PREDICATE_RULE = Lists.newArrayList(
@@ -46,8 +52,6 @@ public class PushDownPredicateProjectRule extends TransformationRule {
             new FoldConstantsRule(),
             new SimplifiedPredicateRule()
     );
-
-    private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
 
     public PushDownPredicateProjectRule() {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_PROJECT,
@@ -70,26 +74,94 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         return !assertColumn.isPresent();
     }
 
+    private boolean hasLambda(ScalarOperator op) {
+        if (op == null) {
+            return false;
+        }
+        if (op instanceof LambdaFunctionOperator) {
+            return true;
+        }
+        for (var c : op.getChildren()) {
+            if (hasLambda(c)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         OptExpression child = input.getInputs().get(0);
 
         LogicalProjectOperator project = (LogicalProjectOperator) (child.getOp());
+
+        if (!context.getSessionVariable().getEnableLambdaPushDown()) {
+            Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();
+            for (var entry : m.entrySet()) {
+                if (hasLambda(entry.getValue())) {
+                    return Lists.newArrayList();
+                }
+            }
+        }
+
+        // Check if the filter's predicate contains non-deterministic functions
+        // If it does, don't push down the predicate below project to avoid incorrect results
+        List<ScalarOperator> compoundAndPredicates = Utils.extractConjuncts(filter.getPredicate());
+        Set<ScalarOperator> deterministicPredicates = new HashSet<>();
+        Set<ScalarOperator> nonDeterministicPredicates = new HashSet<>();
+        for (var entry : project.getColumnRefMap().entrySet()) {
+            if (Utils.hasNonDeterministicFunc(entry.getValue())) {
+                compoundAndPredicates.forEach(scalarOperator -> {
+                    if (scalarOperator.getUsedColumns().contains(entry.getKey())) {
+                        nonDeterministicPredicates.add(scalarOperator);
+                    }
+                });
+            }
+        }
+        compoundAndPredicates.forEach(predicate -> {
+            if (!nonDeterministicPredicates.contains(predicate)) {
+                deterministicPredicates.add(predicate);
+            }
+        });
+
+        // if all non-deterministic predicate, do not push down!
+        if (deterministicPredicates.isEmpty()) {
+            return Lists.newArrayList();
+        }
+
+        ScalarOperator deterministicPredicateTree;
+        if (nonDeterministicPredicates.isEmpty()) {
+            deterministicPredicateTree = filter.getPredicate();
+        } else {
+            deterministicPredicateTree =
+                    Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, deterministicPredicates);
+        }
+
+        ScalarOperator nonDeterministicPredicateTree =
+                Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, nonDeterministicPredicates);
+
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
-        ScalarOperator newPredicate = rewriter.rewrite(filter.getPredicate());
+        ScalarOperator newPredicate = rewriter.rewrite(deterministicPredicateTree);
 
         // try rewrite new predicate
         // e.g. : select 1 as b, MIN(v1) from t0 having (b + 1) != b;
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         newPredicate = scalarRewriter.rewrite(newPredicate, PROJECT_REWRITE_PREDICATE_RULE);
 
         OptExpression newFilter = new OptExpression(new LogicalFilterOperator(newPredicate));
-
         newFilter.getInputs().addAll(child.getInputs());
-        child.getInputs().clear();
-        child.getInputs().add(newFilter);
 
-        return Lists.newArrayList(child);
+        OptExpression newProject = OptExpression.create(project, newFilter);
+        OptExpression root;
+        if (!nonDeterministicPredicates.isEmpty()) {
+            OptExpression nonDeterministicFilter =
+                    OptExpression.create(new LogicalFilterOperator(nonDeterministicPredicateTree), newProject);
+            root = nonDeterministicFilter;
+        } else {
+            root = newProject;
+        }
+
+        return Lists.newArrayList(root);
     }
-
 }

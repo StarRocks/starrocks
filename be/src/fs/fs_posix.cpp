@@ -15,26 +15,40 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include "starrocks_macos_posix_shims.h"
+#endif
+
+#include <cerrno>
+#include <climits>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 
-#include "common/config.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/string/slice.h"
+#include "base/system/errno.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_local_io_fwd.h"
 #include "common/logging.h"
+#include "fs/encrypt_file.h"
 #include "fs/fd_cache.h"
 #include "fs/fs.h"
+#include "fs/fs_posix.h"
+#include "fs/fs_registry.h"
+#include "fs/fs_scheme.h"
 #include "gutil/gscoped_ptr.h"
 #include "gutil/macros.h"
 #include "gutil/port.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "io/fd_input_stream.h"
-#include "util/errno.h"
-#include "util/slice.h"
+#include "io/io_profiler.h"
 
 #ifdef USE_STAROS
-#include "fslib/metric_key.h"
-#include "metrics/metrics.h"
+#include <fslib/metric_key.h>
+#include <metrics/metrics.h>
 #endif
 
 #ifdef USE_STAROS
@@ -90,12 +104,16 @@ static Status io_error(const std::string& context, int err_number) {
     switch (err_number) {
     case 0:
         return Status::OK();
+    case EIO:
+        return Status::IOError(fmt::format("{}: {}", context, std::strerror(err_number)));
     case ENOENT:
         return Status::NotFound(fmt::format("{}: {}", context, std::strerror(err_number)));
     case EEXIST:
         return Status::AlreadyExist(fmt::format("{}: {}", context, std::strerror(err_number)));
+    case ENOSPC:
+        return Status::CapacityLimitExceed(fmt::format("{}: {}", context, std::strerror(err_number)));
     default:
-        return Status::IOError(fmt::format("{}: {}", context, std::strerror(err_number)));
+        return Status::InternalError(fmt::format("{}: {}", context, std::strerror(err_number)));
     }
 }
 
@@ -153,6 +171,7 @@ static Status do_writev_at(int fd, const string& filename, uint64_t offset, cons
         ssize_t w;
         RETRY_ON_EINTR(w, pwritev(fd, iov + completed_iov, iov_count, cur_offset));
         if (PREDICT_FALSE(w < 0)) {
+            perror("TRACE pwritev");
             // An error: return a non-ok status.
             return io_error(filename, errno);
         }
@@ -200,9 +219,12 @@ public:
     Status append(const Slice& data) override { return appendv(&data, 1); }
 
     Status appendv(const Slice* data, size_t cnt) override {
+        TEST_ERROR_POINT("PosixFileSystem::appendv");
 #ifdef USE_STAROS
         staros::starlet::metrics::TimeObserver<prometheus::Histogram> write_latency(s_sr_posix_write_iolatency);
 #endif
+        MonotonicStopWatch watch;
+        watch.start();
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
@@ -210,10 +232,14 @@ public:
 #ifdef USE_STAROS
         s_sr_posix_write_iosize.Observe(bytes_written);
 #endif
+#ifndef __APPLE__
+        IOProfiler::add_write(bytes_written, watch.elapsed_time());
+#endif
         return Status::OK();
     }
 
     Status pre_allocate(uint64_t size) override {
+        TEST_ERROR_POINT("PosixFileSystem::pre_allocate");
         uint64_t offset = std::max(_filesize, _pre_allocated_size);
         int ret;
         RETRY_ON_EINTR(ret, fallocate(_fd, 0, offset, size));
@@ -231,6 +257,7 @@ public:
     }
 
     Status close() override {
+        TEST_ERROR_POINT("PosixFileSystem::close");
         if (_closed) {
             return Status::OK();
         }
@@ -270,6 +297,7 @@ public:
     }
 
     Status flush(FlushMode mode) override {
+        TEST_ERROR_POINT("PosixFileSystem::flush");
 #if defined(__linux__)
         int flags = SYNC_FILE_RANGE_WRITE;
         if (mode == FLUSH_SYNC) {
@@ -288,10 +316,16 @@ public:
     }
 
     Status sync() override {
+        TEST_ERROR_POINT("PosixFileSystem::sync");
+        MonotonicStopWatch watch;
+        watch.start();
         if (_pending_sync) {
             _pending_sync = false;
             RETURN_IF_ERROR(do_sync(_fd, _filename));
         }
+#ifndef __APPLE__
+        IOProfiler::add_sync(watch.elapsed_time());
+#endif
         return Status::OK();
     }
 
@@ -319,19 +353,19 @@ public:
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const string& fname) override {
-        (void)opts;
         int fd;
         RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        auto stream = std::make_shared<io::FdInputStream>(fd);
+        auto stream = std::make_unique<io::FdInputStream>(fd);
         stream->set_close_on_delete(true);
-        return std::make_unique<SequentialFile>(std::move(stream), fname);
+        return SequentialFile::from(std::move(stream), fname, opts.encryption_info);
     }
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& fname) override {
+        std::unique_ptr<io::FdInputStream> fstream;
         if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
             FdCache::Handle* h = FdCache::Instance()->lookup(fname);
             if (h == nullptr) {
@@ -342,19 +376,18 @@ public:
                 }
                 h = FdCache::Instance()->insert(fname, fd);
             }
-            auto stream = std::make_shared<CachedFdInputStream>(h);
-            stream->set_close_on_delete(false);
-            return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+            fstream = std::make_unique<CachedFdInputStream>(h);
+            fstream->set_close_on_delete(false);
         } else {
             int fd;
             RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
             if (fd < 0) {
                 return io_error(fname, errno);
             }
-            auto stream = std::make_shared<io::FdInputStream>(fd);
-            stream->set_close_on_delete(true);
-            return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+            fstream = std::make_unique<io::FdInputStream>(fd);
+            fstream->set_close_on_delete(true);
         }
+        return RandomAccessFile::from(std::move(fstream), fname, false, opts.encryption_info);
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const string& fname) override {
@@ -366,11 +399,19 @@ public:
         int fd = 0;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
 
+        if (opts.direct_write) {
+            if (fcntl(fd, F_SETFL, O_DIRECT) == -1) {
+                ::close(fd);
+                return Status::InternalError("set fcntl direct error");
+            }
+        }
+
         uint64_t file_size = 0;
         if (opts.mode == MUST_EXIST) {
             ASSIGN_OR_RETURN(file_size, get_file_size(fname));
         }
-        return std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
+        return wrap_encrypted(std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close),
+                              opts.encryption_info);
     }
 
     Status path_exists(const std::string& fname) override {
@@ -394,29 +435,42 @@ public:
             return io_error(dir, errno);
         }
         errno = 0;
+        Status ret;
         struct dirent* entry;
         while ((entry = readdir(d)) != nullptr) {
             std::string_view name(entry->d_name);
             if (name == "." || name == "..") {
                 continue;
             }
-            // callback returning false means to terminate iteration
-            if (!cb(name)) {
+            auto saved_errno = errno;
+            auto r = cb(name);
+            errno = saved_errno;
+            if (!r) {
                 break;
             }
         }
-        closedir(d);
-        if (errno != 0) return io_error(dir, errno);
-        return Status::OK();
+        if (entry == nullptr && errno != 0) {
+            PLOG(WARNING) << "Fail to read " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        if (closedir(d) != 0) {
+            PLOG(WARNING) << "Fail to close " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        return ret;
     }
 
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
         DIR* d = opendir(dir.c_str());
         if (d == nullptr) {
+            // If the error is caused by a nonexist directory or is not a directory, does not print log
+            PLOG_IF(WARNING, errno != ENOENT && errno != ENOTDIR) << "Fail to open " << dir;
             return io_error(dir, errno);
         }
         errno = 0;
+        Status ret;
         struct dirent* entry;
+        // FIXME: readdir is not required to be thread-safe, replace it with readdir_r
         while ((entry = readdir(d)) != nullptr) {
             std::string_view name(entry->d_name);
             if (name == "." || name == "..") {
@@ -425,6 +479,8 @@ public:
             struct stat child_stat;
             std::string child_path = fmt::format("{}/{}", dir, name);
             if (stat(child_path.c_str(), &child_stat) != 0) {
+                PLOG(WARNING) << "Fail to stat " << child_path;
+                ret.update(io_error(child_path, errno));
                 break;
             }
             DirEntry de;
@@ -432,17 +488,26 @@ public:
             de.is_dir = S_ISDIR(child_stat.st_mode);
             de.mtime = static_cast<int64_t>(child_stat.st_mtime);
             de.size = child_stat.st_size;
-            // callback returning false means to terminate iteration
-            if (!cb(de)) {
+            auto saved_errno = errno;
+            auto r = cb(de);
+            errno = saved_errno;
+            if (!r) {
                 break;
             }
         }
-        closedir(d);
-        if (errno != 0) return io_error(dir, errno);
-        return Status::OK();
+        if (entry == nullptr && errno != 0) {
+            PLOG(WARNING) << "Fail to read " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        if (closedir(d) != 0) {
+            PLOG(WARNING) << "Fail to close " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        return ret;
     }
 
     Status delete_file(const std::string& fname) override {
+        TEST_ERROR_POINT("PosixFileSystem::delete_file");
         if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
             FdCache::Instance()->erase(fname);
         }
@@ -478,17 +543,41 @@ public:
     }
 
     Status create_dir_recursive(const std::string& dirname) override {
+        // Should be compatible with the scenario where `dirname` exists as a symbolic link
+        // and linked to an existing directory.
+        // On CentOS create_directories() will fail in this situation, but on Ubuntu, it won't.
+        // So we make a precheck here in order to have the same expected behavior on both and probably
+        // all the other platforms.
+        try {
+            if (std::filesystem::is_symlink(dirname)) {
+                char real_path[PATH_MAX];
+                char* result = realpath(dirname.c_str(), real_path);
+                if (result == nullptr) {
+                    return io_error(fmt::format("create {} recursively", dirname), errno);
+                }
+                if (std::filesystem::is_directory(real_path)) {
+                    return Status::OK();
+                } else {
+                    return io_error(fmt::format("create {} recursively", dirname), ENOTDIR);
+                }
+            }
+        } catch (const std::filesystem::filesystem_error& e) {
+            // is_symlink throws error when BE has no permission to access the path
+            return io_error(fmt::format("create {} recursively", dirname), e.code().value());
+        }
+
         std::error_code ec;
         // If `dirname` already exist and is a directory, the return value would be false and ec.value() would be 0
         (void)std::filesystem::create_directories(dirname, ec);
         if (ec.value() != 0) {
-            return io_error(fmt::format("create {} recursive", dirname), ec.value());
+            return io_error(fmt::format("create {} recursively", dirname), ec.value());
         }
         return Status::OK();
     }
 
     // Delete the specified directory.
     Status delete_dir(const std::string& dirname) override {
+        TEST_ERROR_POINT("PosixFileSystem::delete_dir");
         if (rmdir(dirname.c_str()) != 0) {
             return io_error(dirname, errno);
         }
@@ -509,7 +598,7 @@ public:
             RETURN_IF_ERROR(st);
             return delete_dir(dirname);
         } else {
-            return delete_file(dirname);
+            return ignore_not_found(delete_file(dirname));
         }
     }
 
@@ -592,6 +681,17 @@ public:
             return Status::IOError(fmt::format("fail to get space info of path {}: {}", path, e.what()));
         }
     }
+
+    // Directly return size as both cached and total for local file system.
+    StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset,
+                                                        int64_t size) override {
+        (void)offset;
+        if (size < 0) {
+            ASSIGN_OR_RETURN(auto file_size, get_file_size(path));
+            return std::make_pair(static_cast<size_t>(file_size), static_cast<size_t>(file_size));
+        }
+        return std::make_pair(static_cast<size_t>(size), static_cast<size_t>(size));
+    }
 };
 
 // Default Posix FileSystem
@@ -603,5 +703,44 @@ FileSystem* FileSystem::Default() {
 std::unique_ptr<FileSystem> new_fs_posix() {
     return std::make_unique<PosixFileSystem>();
 }
+
+namespace fs {
+namespace {
+
+thread_local std::shared_ptr<FileSystem> tls_fs_posix_registry;
+
+bool match_posix_shared(std::string_view uri) {
+    return is_posix_uri(uri);
+}
+
+bool match_posix_unique(std::string_view uri, const FSOptions&) {
+    return is_posix_uri(uri);
+}
+
+StatusOr<std::shared_ptr<FileSystem>> create_posix_shared(std::string_view) {
+    if (tls_fs_posix_registry == nullptr) {
+        tls_fs_posix_registry = std::make_shared<PosixFileSystem>();
+    }
+    return tls_fs_posix_registry;
+}
+
+StatusOr<std::unique_ptr<FileSystem>> create_posix_unique(std::string_view, const FSOptions&) {
+    return new_fs_posix();
+}
+
+} // namespace
+
+FileSystemProvider new_posix_file_system_provider(int priority) {
+    return {
+            .id = "posix",
+            .priority = priority,
+            .match_shared = match_posix_shared,
+            .create_shared = create_posix_shared,
+            .match_unique = match_posix_unique,
+            .create_unique = create_posix_unique,
+    };
+}
+
+} // namespace fs
 
 } // end namespace starrocks

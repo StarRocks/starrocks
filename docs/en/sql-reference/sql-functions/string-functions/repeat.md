@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns a string repeated a specified number of times."
 ---
 
 # repeat
 
-## Description
+
 
 This function repeats `str` by a number of times according to `count`. When `count` is below 1, it returns an empty string. When `str` or `count` is NULL, it returns NULL.
 

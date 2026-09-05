@@ -17,42 +17,59 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariable.PaimonReaderMode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPaimonDeletionFile;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.io.DataOutputViewStreamWrapper;
 import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.DeletionFile;
+import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.utils.InstantiationUtil;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -104,45 +121,257 @@ public class PaimonScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
-    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
+    public long getEstimatedLength(long rowCount, TupleDescriptor tupleDescriptor) {
+        List<Column> dataColumns = tupleDescriptor.getSlots().stream().map(s -> s.getColumn())
+                .collect(Collectors.toList());
+        long rowSize = dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+
+        return rowCount * rowSize;
+    }
+
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                paimonTable.getCatalogName(), paimonTable, null, -1, predicate, fieldNames, -1);
-        RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setPredicate(predicate)
+                .setFieldNames(fieldNames)
+                .setTableVersionRange(tvrVersionRange)
+                .setLimit(limit)
+                .build();
+        List<RemoteFileInfo> fileInfos;
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
+            fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
+        }
+
+        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
 
         if (splits.isEmpty()) {
             LOG.warn("There is no paimon splits on {}.{} and predicate: [{}]",
-                    paimonTable.getDbName(), paimonTable.getTableName(), predicate);
+                    paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), predicate);
             return;
         }
 
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        PaimonReaderMode paimonReaderMode = sessionVariable.getPaimonReaderMode();
+        if (sessionVariable.getPaimonForceJNIReader()) {
+            paimonReaderMode = PaimonReaderMode.JNI;
+        }
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
-            DataSplit dataSplit = (DataSplit) split;
-            addScanRangeLocations(dataSplit, predicateInfo);
-            BinaryRow partitionValue = dataSplit.partition();
-            if (!selectedPartitions.containsKey(partitionValue)) {
-                selectedPartitions.put(partitionValue, nextPartitionId());
+            if (split instanceof DataSplit dataSplit) {
+                Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
+                if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
+                    List<RawFile> rawFiles = optionalRawFiles.get();
+                    boolean supportedDataFileFormat =
+                            rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
+                    if (supportedDataFileFormat) {
+                        Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
+                        for (int i = 0; i < rawFiles.size(); i++) {
+                            if (deletionFiles.isPresent()) {
+                                splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
+                            } else {
+                                splitRawFileScanRangeLocations(rawFiles.get(i), null);
+                            }
+                        }
+                    } else {
+                        long totalFileLength = getTotalFileLength(dataSplit);
+                        addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
+                    }
+                } else {
+                    long totalFileLength = getTotalFileLength(dataSplit);
+                    addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
+                }
+                selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId());
+            } else {
+                // paimon system table
+                long length = getEstimatedLength(split.rowCount(), tupleDescriptor);
+                addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo, length);
             }
+
         }
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
+        traceReaderMetrics();
+        traceDeletionVectorMetrics();
     }
 
-    private void addScanRangeLocations(DataSplit split, String predicateInfo) {
+    private void traceReaderMetrics() {
+        int starrocksNativeReaderCount = 0, paimonNativeReaderCount = 0, jniReaderCount = 0;
+        long starrocksNativeReaderLength = 0, paimonNativeReaderLength = 0, jniReaderLength = 0;
+
+        for (TScanRangeLocations rangeLocation : scanRangeLocationsList) {
+            THdfsScanRange hdfsScanRange = rangeLocation.getScan_range().getHdfs_scan_range();
+            if (hdfsScanRange.use_paimon_native_reader) {
+                paimonNativeReaderCount++;
+                paimonNativeReaderLength += hdfsScanRange.length;
+            } else if (hdfsScanRange.use_paimon_jni_reader) {
+                jniReaderCount++;
+                jniReaderLength += hdfsScanRange.length;
+            } else {
+                starrocksNativeReaderCount++;
+                starrocksNativeReaderLength += hdfsScanRange.length;
+            }
+        }
+
+        String prefix = "Paimon.metadata.reader." + paimonTable.getCatalogTableName() + ".";
+        Tracers.record(EXTERNAL, prefix + "starRocksNativeReaderReadNum", String.valueOf(starrocksNativeReaderCount));
+        Tracers.record(EXTERNAL, prefix + "starRocksNativeReaderReadBytes", starrocksNativeReaderLength + " B");
+        Tracers.record(EXTERNAL, prefix + "paimonNativeReaderReadNum", String.valueOf(paimonNativeReaderCount));
+        Tracers.record(EXTERNAL, prefix + "paimonNativeReaderReadBytes", paimonNativeReaderLength + " B");
+        Tracers.record(EXTERNAL, prefix + "jniReaderReadNum", String.valueOf(jniReaderCount));
+        Tracers.record(EXTERNAL, prefix + "jniReaderReadBytes", jniReaderLength + " B");
+    }
+
+    private void traceDeletionVectorMetrics() {
+        String prefix = "Paimon.metadata.deletionVector." + paimonTable.getCatalogTableName() + ".";
+        int deletionVectorCount = 0;
+        long deletionVectorReaderScanRange = 0;
+        for (TScanRangeLocations rangeLocation : scanRangeLocationsList) {
+            THdfsScanRange hdfsScanRange = rangeLocation.getScan_range().getHdfs_scan_range();
+            if (hdfsScanRange.getPaimon_deletion_file() != null) {
+                deletionVectorCount++;
+                deletionVectorReaderScanRange += hdfsScanRange.length - hdfsScanRange.offset;
+            }
+        }
+        Tracers.record(EXTERNAL, prefix + "count", String.valueOf(deletionVectorCount));
+        Tracers.record(EXTERNAL, prefix + "readBytes", String.valueOf(deletionVectorReaderScanRange));
+    }
+
+    private THdfsFileFormat fromType(String type) {
+        THdfsFileFormat tHdfsFileFormat;
+        switch (type) {
+            case "orc":
+                tHdfsFileFormat = THdfsFileFormat.ORC;
+                break;
+            case "parquet":
+                tHdfsFileFormat = THdfsFileFormat.PARQUET;
+                break;
+            default:
+                tHdfsFileFormat = THdfsFileFormat.UNKNOWN;
+        }
+        return tHdfsFileFormat;
+    }
+
+    public void splitRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
+        long splitSize = ConnectContext.get().getSessionVariable().getConnectorMaxSplitSize();
+        // Guard against invalid values: 0 or negative
+        if (splitSize <= 0) {
+            splitSize = SessionVariable.DEFAULT_SESSION_VARIABLE.getConnectorMaxSplitSize();
+        }
+        long totalSize = rawFile.length();
+        long offset = rawFile.offset();
+        boolean needSplit = totalSize > splitSize;
+        if (needSplit) {
+            splitScanRangeLocations(rawFile, offset, totalSize, splitSize, deletionFile);
+        } else {
+            addRawFileScanRangeLocations(rawFile, deletionFile);
+        }
+    }
+
+    public void splitScanRangeLocations(RawFile rawFile,
+                                        long offset,
+                                        long length,
+                                        long splitSize,
+                                        @Nullable DeletionFile deletionFile) {
+        long remainingBytes = length;
+        do {
+            if (remainingBytes < 2 * splitSize) {
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, remainingBytes, deletionFile);
+                remainingBytes = 0;
+            } else {
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, splitSize, deletionFile);
+                remainingBytes -= splitSize;
+            }
+        } while (remainingBytes > 0);
+    }
+
+    private void addRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
+        addRawFileScanRangeLocations(rawFile, rawFile.offset(), rawFile.length(), deletionFile);
+    }
+
+    private void addRawFileScanRangeLocations(RawFile rawFile,
+                                              long offset,
+                                              long length,
+                                              @Nullable DeletionFile deletionFile) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        hdfsScanRange.setUse_paimon_jni_reader(true);
+        hdfsScanRange.setUse_paimon_jni_reader(false);
+        hdfsScanRange.setFull_path(rawFile.path());
+        hdfsScanRange.setOffset(offset);
+        hdfsScanRange.setFile_length(rawFile.length());
+        hdfsScanRange.setLength(length);
+        hdfsScanRange.setFile_format(fromType(rawFile.format()));
+
+        if (null != deletionFile) {
+            TPaimonDeletionFile paimonDeletionFile = new TPaimonDeletionFile();
+            paimonDeletionFile.setPath(deletionFile.path());
+            paimonDeletionFile.setOffset(deletionFile.offset());
+            paimonDeletionFile.setLength(deletionFile.length());
+            hdfsScanRange.setPaimon_deletion_file(paimonDeletionFile);
+        }
+
+        TScanRange scanRange = new TScanRange();
+        scanRange.setHdfs_scan_range(hdfsScanRange);
+        scanRangeLocations.setScan_range(scanRange);
+
+        TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+        scanRangeLocations.addToLocations(scanRangeLocation);
+
+        scanRangeLocationsList.add(scanRangeLocations);
+    }
+
+    static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor) {
+        for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
+            if (slot.getType().containsVariant()) {
+                throw new StarRocksConnectorException(
+                        "Paimon VARIANT column '%s' requires the native reader, but this split must use the JNI " +
+                        "reader (merge-on-read data, system table, or paimon_force_jni_reader=true). Reading " +
+                        "VARIANT through the Paimon JNI reader is not yet supported. Compact the table or " +
+                        "exclude the VARIANT column from the query.",
+                        slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel());
+            }
+        }
+    }
+
+    // Split in the function will read by paimon-java or paimon-cpp
+    public void addSDKSplitScanRangeLocations(PaimonReaderMode paimonReaderMode, Split split, String predicateInfo,
+                                              long totalFileLength) {
+        TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+
+        THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setPaimon_split_info(encodeObjectToString(split));
-        hdfsScanRange.setPaimon_predicate_info(predicateInfo);
-        long totalFileLength = getTotalFileLength(split);
+        hdfsScanRange.setJni_predicate_info(predicateInfo);
         hdfsScanRange.setFile_length(totalFileLength);
         hdfsScanRange.setLength(totalFileLength);
+        hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);
+        // Only uses for hasher in HDFSBackendSelector to select BE
+        if (split instanceof DataSplit dataSplit) {
+            hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode()));
+        } else {
+            // For splits that are not DataSplit, we have to fall back to JNI
+            paimonReaderMode = PaimonReaderMode.JNI;
+        }
 
+        // TODO We will change later
+        // Only an explicit NATIVE choice routes SDK splits to paimon-cpp; under AUTO they keep
+        // the legacy JNI reader.
+        if (paimonReaderMode == PaimonReaderMode.NATIVE) {
+            hdfsScanRange.setUse_paimon_jni_reader(false);
+            hdfsScanRange.setUse_paimon_native_reader(true);
+            try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+                ((DataSplit) split).serialize(new DataOutputViewStreamWrapper(outputStream));
+                hdfsScanRange.setPaimon_split_info_binary(outputStream.toByteArray());
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to serialize Paimon data split", e);
+            }
+        } else {
+            checkJniReaderVariantSupport(desc);
+            hdfsScanRange.setUse_paimon_jni_reader(true);
+            hdfsScanRange.setUse_paimon_native_reader(false);
+        }
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
@@ -172,23 +401,24 @@ public class PaimonScanNode extends ScanNode {
         }
         if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
+                paimonTable.getCatalogName(), paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(),
+                ConnectorMetadataRequestContext.DEFAULT);
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
@@ -204,6 +434,8 @@ public class PaimonScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -214,11 +446,6 @@ public class PaimonScanNode extends ScanNode {
         }
 
         return output.toString();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
     }
 
     @Override
@@ -237,7 +464,12 @@ public class PaimonScanNode extends ScanNode {
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

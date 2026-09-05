@@ -16,13 +16,13 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -46,7 +47,11 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -57,6 +62,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
     public ScalarApply2JoinRule() {
         super(RuleType.TF_SCALAR_APPLY_TO_JOIN,
                 Pattern.create(OperatorType.LOGICAL_APPLY, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF));
+    }
+
+    @Override
+    public List<Rule> predecessorRules() {
+        return List.of(new ScalarApplyNormalizeCountRule());
     }
 
     @Override
@@ -196,9 +206,9 @@ public class ScalarApply2JoinRule extends TransformationRule {
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, countRowsIsNullPredicate,
                         countRowsLEOneRowPredicate);
         Function assertTrueFn =
-                Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN, Type.VARCHAR},
+                ExprUtils.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {BooleanType.BOOLEAN, VarcharType.VARCHAR},
                         Function.CompareMode.IS_IDENTICAL);
-        CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
+        CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, BooleanType.BOOLEAN,
                 Lists.newArrayList(countRowsPredicate,
                         ConstantOperator.createVarchar("correlate scalar subquery result must 1 row")), assertTrueFn);
         ColumnRefOperator assertion =
@@ -243,15 +253,18 @@ public class ScalarApply2JoinRule extends TransformationRule {
     private List<OptExpression> transformUnCorrelateCheckOneRows(OptExpression input, LogicalApplyOperator apply,
                                                                  OptimizerContext context) {
         // assert one rows will check rows, and fill null row if result is empty
-        OptExpression assertOptExpression = new OptExpression(LogicalAssertOneRowOperator.createLessEqOne(""));
-        assertOptExpression.getInputs().add(input.getInputs().get(1));
+        OptExpression rightInput = input.getInputs().get(1);
+        if (!checkIsLessOneRows(rightInput)) {
+            rightInput = new OptExpression(LogicalAssertOneRowOperator.createLessEqOne(""));
+            rightInput.getInputs().add(input.getInputs().get(1));
+        }
 
         // use hint, forbidden reorder un-correlate subquery
         OptExpression joinOptExpression = new OptExpression(LogicalJoinOperator.builder()
                 .setJoinType(JoinOperator.CROSS_JOIN)
-                .setJoinHint(JoinOperator.HINT_BROADCAST).build());
+                .setJoinHint(HintNode.HINT_JOIN_BROADCAST).build());
         joinOptExpression.getInputs().add(input.getInputs().get(0));
-        joinOptExpression.getInputs().add(assertOptExpression);
+        joinOptExpression.getInputs().add(rightInput);
 
         ColumnRefFactory factory = context.getColumnRefFactory();
         Map<ColumnRefOperator, ScalarOperator> allOutput = Maps.newHashMap();
@@ -265,5 +278,19 @@ public class ScalarApply2JoinRule extends TransformationRule {
         projectExpression.getInputs().add(joinOptExpression);
 
         return Lists.newArrayList(projectExpression);
+    }
+
+    private boolean checkIsLessOneRows(OptExpression input) {
+        if (input.getOp().getOpType() == OperatorType.LOGICAL_AGGR) {
+            // if child is aggregation and none grouping key, remove AssertOneRow node
+            LogicalAggregationOperator lao = (LogicalAggregationOperator) input.getOp();
+            return lao.getGroupingKeys().isEmpty() && (lao.getPredicate() == null);
+        } else if (input.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            return checkIsLessOneRows(input.getInputs().get(0));
+        } else if (input.getOp().getOpType() == OperatorType.LOGICAL_VALUES) {
+            LogicalValuesOperator lvo = (LogicalValuesOperator) input.getOp();
+            return lvo.getRows().size() <= 1;
+        }
+        return false;
     }
 }

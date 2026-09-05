@@ -17,22 +17,21 @@
 #include <memory>
 #include <utility>
 
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
-#include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
-#include "exec/exec_node.h"
+#include "compute_env/spill/spiller.h"
 #include "exec/hash_join_components.h"
-#include "exec/hash_join_node.h"
-#include "exec/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/spiller.h"
+#include "exec_primitive/exec_node.h"
 #include "exprs/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
-#include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 
@@ -66,33 +65,41 @@ enum HashJoinPhase {
     EOS = 4,
 };
 struct HashJoinerParam {
-    HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, TPlanNodeId node_id,
-                    TPlanNodeType::type node_type, std::vector<bool> is_null_safes,
+    HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, std::vector<bool> is_null_safes,
                     std::vector<ExprContext*> build_expr_ctxs, std::vector<ExprContext*> probe_expr_ctxs,
                     std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
-                    const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
-                    const RowDescriptor& row_descriptor, TPlanNodeType::type build_node_type,
-                    TPlanNodeType::type probe_node_type, bool build_conjunct_ctxs_is_empty,
-                    std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters, std::set<SlotId> output_slots,
-                    const TJoinDistributionMode::type distribution_mode)
+                    const RecordDescriptor& build_record_desc, const RecordDescriptor& probe_record_desc,
+                    TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
+                    bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
+                    std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots, size_t max_dop,
+                    const TJoinDistributionMode::type distribution_mode, bool enable_late_materialization,
+                    bool enable_partition_hash_join, bool is_skew_join,
+                    const std::map<SlotId, ExprContext*>& common_expr_ctxs, TExprOpcode::type asof_join_condition_op,
+                    ExprContext* asof_join_condition_probe_expr_ctx, ExprContext* asof_join_condition_build_expr_ctx)
             : _pool(pool),
               _hash_join_node(hash_join_node),
-              _node_id(node_id),
-              _node_type(node_type),
               _is_null_safes(std::move(is_null_safes)),
               _build_expr_ctxs(std::move(build_expr_ctxs)),
               _probe_expr_ctxs(std::move(probe_expr_ctxs)),
               _other_join_conjunct_ctxs(std::move(other_join_conjunct_ctxs)),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _build_row_descriptor(build_row_descriptor),
-              _probe_row_descriptor(probe_row_descriptor),
-              _row_descriptor(row_descriptor),
+              _build_record_descriptor(build_record_desc),
+              _probe_record_descriptor(probe_record_desc),
               _build_node_type(build_node_type),
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
               _build_runtime_filters(std::move(build_runtime_filters)),
-              _output_slots(std::move(output_slots)),
-              _distribution_mode(distribution_mode) {}
+              _build_output_slots(std::move(build_output_slots)),
+              _probe_output_slots(std::move(probe_output_slots)),
+              _max_dop(max_dop),
+              _distribution_mode(distribution_mode),
+              _enable_late_materialization(enable_late_materialization),
+              _enable_partition_hash_join(enable_partition_hash_join),
+              _is_skew_join(is_skew_join),
+              _common_expr_ctxs(common_expr_ctxs),
+              _asof_join_condition_op(asof_join_condition_op),
+              _asof_join_condition_probe_expr_ctx(asof_join_condition_probe_expr_ctx),
+              _asof_join_condition_build_expr_ctx(asof_join_condition_build_expr_ctx) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -100,23 +107,30 @@ struct HashJoinerParam {
 
     ObjectPool* _pool;
     const THashJoinNode& _hash_join_node;
-    TPlanNodeId _node_id;
-    TPlanNodeType::type _node_type;
     const std::vector<bool> _is_null_safes;
     const std::vector<ExprContext*> _build_expr_ctxs;
     const std::vector<ExprContext*> _probe_expr_ctxs;
     const std::vector<ExprContext*> _other_join_conjunct_ctxs;
     const std::vector<ExprContext*> _conjunct_ctxs;
-    const RowDescriptor _build_row_descriptor;
-    const RowDescriptor _probe_row_descriptor;
-    const RowDescriptor _row_descriptor;
+    const RecordDescriptor _build_record_descriptor;
+    const RecordDescriptor _probe_record_descriptor;
     TPlanNodeType::type _build_node_type;
     TPlanNodeType::type _probe_node_type;
     bool _build_conjunct_ctxs_is_empty;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
-    std::set<SlotId> _output_slots;
+    std::set<SlotId> _build_output_slots;
+    std::set<SlotId> _probe_output_slots;
+
+    size_t _max_dop;
 
     const TJoinDistributionMode::type _distribution_mode;
+    const bool _enable_late_materialization;
+    const bool _enable_partition_hash_join;
+    const bool _is_skew_join;
+    const std::map<SlotId, ExprContext*> _common_expr_ctxs;
+    TExprOpcode::type _asof_join_condition_op;
+    ExprContext* _asof_join_condition_probe_expr_ctx;
+    ExprContext* _asof_join_condition_build_expr_ctx;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -128,6 +142,14 @@ inline bool could_short_circuit(TJoinOp::type join_type) {
 inline bool has_post_probe(TJoinOp::type join_type) {
     return join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
            join_type == TJoinOp::FULL_OUTER_JOIN;
+}
+
+inline bool support_partitioned(TJoinOp::type join_type, bool has_other_conjuncts) {
+    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN ||
+           join_type == TJoinOp::LEFT_ANTI_JOIN || join_type == TJoinOp::LEFT_OUTER_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::FULL_OUTER_JOIN ||
+           (join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && !has_other_conjuncts);
 }
 
 inline bool is_spillable(TJoinOp::type join_type) {
@@ -144,11 +166,14 @@ struct HashJoinProbeMetrics {
     RuntimeProfile::Counter* other_join_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* where_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
+    RuntimeProfile::Counter* probe_counter = nullptr;
+    RuntimeProfile::Counter* partition_probe_overhead = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
 
 struct HashJoinBuildMetrics {
+    RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* build_ht_timer = nullptr;
     RuntimeProfile::Counter* copy_right_table_chunk_timer = nullptr;
     RuntimeProfile::Counter* build_runtime_filter_timer = nullptr;
@@ -157,10 +182,13 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* runtime_filter_num = nullptr;
     RuntimeProfile::Counter* build_keys_per_bucket = nullptr;
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
+    RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
+    RuntimeProfile::Counter* partition_nums = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
 
+// TODO: rename HashJoiner to HashJoinController
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     explicit HashJoiner(const HashJoinerParam& param);
@@ -171,8 +199,8 @@ public:
         }
     }
 
-    [[nodiscard]] Status prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile);
-    [[nodiscard]] Status prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile);
+    Status prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile);
+    Status prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
     bool need_input() const;
@@ -199,20 +227,21 @@ public:
 
     void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
-    [[nodiscard]] Status append_chunk_to_ht(const ChunkPtr& chunk);
+    Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
 
-    [[nodiscard]] Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
+    Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
 
-    [[nodiscard]] Status append_spill_task(RuntimeState* state, std::function<StatusOr<ChunkPtr>()>& spill_task);
+    Status append_spill_task(RuntimeState* state, std::function<StatusOr<ChunkPtr>()>& spill_task);
 
-    [[nodiscard]] Status build_ht(RuntimeState* state);
+    Status build_ht(RuntimeState* state);
     // probe phase
-    [[nodiscard]] Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
+    Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
+    Status probe_input_finished(RuntimeState* state);
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
-    pipeline::RuntimeBloomFilters& get_runtime_bloom_filters() { return _build_runtime_filters; }
-    pipeline::OptRuntimeBloomFilterBuildParams& get_runtime_bloom_filter_build_params() {
+    pipeline::RuntimeMembershipFilters& get_runtime_bloom_filters() { return _build_runtime_filters; }
+    pipeline::OpTRuntimeBloomFilterBuildParams& get_runtime_bloom_filter_build_params() {
         return _runtime_bloom_filter_build_params;
     }
 
@@ -220,7 +249,7 @@ public:
 
     HashJoinBuilder* hash_join_builder() { return _hash_join_builder; }
 
-    [[nodiscard]] Status create_runtime_filters(RuntimeState* state);
+    Status create_runtime_filters(RuntimeState* state);
 
     void reference_hash_table(HashJoiner* src_join_builder);
 
@@ -231,22 +260,17 @@ public:
     bool has_referenced_hash_table() const { return _has_referenced_hash_table; }
 
     Columns string_key_columns() { return _string_key_columns; }
-    [[nodiscard]] Status reset_probe(RuntimeState* state);
+    Status reset_probe(RuntimeState* state);
 
     float avg_keys_per_bucket() const;
 
     const HashJoinBuildMetrics& build_metrics() { return *_build_metrics; }
     const HashJoinProbeMetrics& probe_metrics() { return *_probe_metrics; }
+    bool is_skew_join() const { return _is_skew_join; }
 
     size_t runtime_in_filter_row_limit() const { return 1024; }
 
-    size_t runtime_bloom_filter_row_limit() const {
-        uint64_t runtime_join_filter_pushdown_limit = 1024000;
-        if (_runtime_state->query_options().__isset.runtime_join_filter_pushdown_limit) {
-            runtime_join_filter_pushdown_limit = _runtime_state->query_options().runtime_join_filter_pushdown_limit;
-        }
-        return runtime_join_filter_pushdown_limit;
-    }
+    size_t runtime_bloom_filter_row_limit() const;
 
     // hash table param.
     // this function only valid in hash_joiner_builder
@@ -256,28 +280,33 @@ public:
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
     const auto& spiller() { return _spiller; }
     const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
-    auto& io_executor() { return *spill_channel()->io_executor(); }
     void set_spill_strategy(spill::SpillStrategy strategy) { _spill_strategy = strategy; }
     spill::SpillStrategy spill_strategy() { return _spill_strategy; }
 
-    [[nodiscard]] Status prepare_probe_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
+    Status prepare_probe_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
         SCOPED_TIMER(probe_metrics().probe_conjunct_evaluate_timer);
         RETURN_IF_ERROR(_prepare_key_columns(*key_columns, chunk, _probe_expr_ctxs));
         return Status::OK();
     }
 
-    [[nodiscard]] Status prepare_build_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
+    Status prepare_build_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
         SCOPED_TIMER(build_metrics().build_conjunct_evaluate_timer);
         RETURN_IF_ERROR(_prepare_key_columns(*key_columns, chunk, _build_expr_ctxs));
         return Status::OK();
     }
 
-    const std::vector<ExprContext*> probe_expr_ctxs() { return _probe_expr_ctxs; }
+    const std::vector<ExprContext*>& probe_expr_ctxs() { return _probe_expr_ctxs; }
+    const std::vector<ExprContext*>& build_expr_ctxs() { return _build_expr_ctxs; }
 
     HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
-    HashJoinBuilder* new_builder(ObjectPool* pool) { return _hash_join_builder->clone_empty(pool); }
+    HashJoinBuilder* new_builder(ObjectPool* pool) {
+        // We don't support spill partition hash join now.
+        HashJoinBuildOptions options;
+        options.enable_partitioned_hash_join = false;
+        return HashJoinBuilderFactory::create(pool, options, *this);
+    }
 
-    [[nodiscard]] Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
+    Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
         // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
         // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
@@ -294,7 +323,16 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
+    template <bool is_remain>
+    Status lazy_output_chunk(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* chunk, JoinHashTable& hash_table) {
+        if (_enable_late_materialization && (*chunk) && !(*chunk)->is_empty()) {
+            return hash_table.lazy_output<is_remain>(state, probe_chunk, chunk);
+        } else {
+            return Status::OK();
+        }
+    }
+
+    Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
         // Post probe needn't process _other_join_conjunct_ctxs, because they
         // are `ON` predicates, which need to be processed only on probe phase.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
@@ -306,26 +344,43 @@ public:
 
     const TJoinOp::type& join_type() const { return _join_type; }
 
+    void attach_probe_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _builder_observable.add_observer(state, observer);
+    }
+    void attach_build_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _probe_observable.add_observer(state, observer);
+    }
+
+    // build status changed. notify probe
+    auto defer_notify_probe() {
+        return DeferOp([this]() { _builder_observable.notify_source_observers(); });
+    }
+    auto defer_notify_build() {
+        return DeferOp([this]() { _probe_observable.notify_source_observers(); });
+    }
+
+    size_t max_dop() const { return _max_dop; }
+    TJoinDistributionMode::type distribution_mode() const { return _hash_join_node.distribution_mode; }
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
-    void _init_hash_table_param(HashTableParam* param);
+    void _init_hash_table_param(HashTableParam* param, RuntimeState* state);
 
-    [[nodiscard]] Status _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk,
-                                              const vector<ExprContext*>& expr_ctxs) {
+    Status _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk, const vector<ExprContext*>& expr_ctxs) {
         key_columns.resize(0);
         for (auto& expr_ctx : expr_ctxs) {
             ASSIGN_OR_RETURN(auto column_ptr, expr_ctx->evaluate(chunk.get()));
             if (column_ptr->only_null()) {
-                ColumnPtr column = ColumnHelper::create_column(expr_ctx->root()->type(), true);
+                MutableColumnPtr column = ColumnHelper::create_column(expr_ctx->root()->type(), true);
                 column->append_nulls(chunk->num_rows());
-                key_columns.emplace_back(column);
+                key_columns.emplace_back(std::move(column));
             } else if (column_ptr->is_constant()) {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(chunk->num_rows(), 0);
+                const_column->data_column()->as_mutable_raw_ptr()->assign(chunk->num_rows(), 0);
                 key_columns.emplace_back(const_column->data_column());
             } else {
-                key_columns.emplace_back(column_ptr);
+                key_columns.emplace_back(std::move(column_ptr));
             }
         }
         return Status::OK();
@@ -348,11 +403,9 @@ private:
             return;
         }
 
-        auto& ht = _hash_join_builder->hash_table();
-
         if (row_count > 0) {
-            if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && ht.get_key_columns().size() == 1 &&
-                _has_null(ht.get_key_columns()[0]) && _other_join_conjunct_ctxs.empty()) {
+            if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN &&
+                _hash_join_builder->anti_join_key_column_has_null() && _other_join_conjunct_ctxs.empty()) {
                 // The current implementation of HashTable will reserve a row for judging the end of the linked list.
                 // When performing expression calculations (such as cast string to int),
                 // it is possible that this reserved row will generate Null,
@@ -364,25 +417,22 @@ private:
         }
     }
 
-    [[nodiscard]] Status _build(RuntimeState* state);
+    StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
 
-    [[nodiscard]] StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
-
-    [[nodiscard]] Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all,
-                                                         bool& hit_all);
+    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all);
     static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                 bool filter_all, bool hit_all, const Filter& filter);
 
-    [[nodiscard]] Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column,
-                                                                 size_t column_count, JoinHashTable& hash_table);
-    [[nodiscard]] Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
-    [[nodiscard]] Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
-    [[nodiscard]] Status _process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
-    [[nodiscard]] Status _process_where_conjunct(ChunkPtr* chunk);
+    Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
+                                                   JoinHashTable& hash_table);
+    Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
+    Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
+    Status _process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
+    Status _process_where_conjunct(ChunkPtr* chunk);
 
-    [[nodiscard]] Status _create_runtime_in_filters(RuntimeState* state);
+    Status _create_runtime_in_filters(RuntimeState* state);
 
-    [[nodiscard]] Status _create_runtime_bloom_filters(RuntimeState* state, int64_t limit);
+    Status _create_runtime_bloom_filters(RuntimeState* state, int64_t limit);
 
 private:
     const THashJoinNode& _hash_join_node;
@@ -392,7 +442,6 @@ private:
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;
-    bool _is_closed = false;
 
     const std::vector<bool>& _is_null_safes;
     // Equal conjuncts in Join On.
@@ -403,17 +452,18 @@ private:
     const std::vector<ExprContext*>& _other_join_conjunct_ctxs;
     // Conjuncts in Join followed by a filter predicate, usually in Where and Having.
     const std::vector<ExprContext*>& _conjunct_ctxs;
-    const RowDescriptor& _build_row_descriptor;
-    const RowDescriptor& _probe_row_descriptor;
-    const RowDescriptor& _row_descriptor;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
+    const RecordDescriptor& _build_record_descriptor;
+    const RecordDescriptor& _probe_record_descriptor;
     const TPlanNodeType::type _build_node_type;
     const TPlanNodeType::type _probe_node_type;
     const bool _build_conjunct_ctxs_is_empty;
-    const std::set<SlotId>& _output_slots;
+    const std::set<SlotId>& _build_output_slots;
+    const std::set<SlotId>& _probe_output_slots;
 
     pipeline::RuntimeInFilters _runtime_in_filters;
-    pipeline::RuntimeBloomFilters _build_runtime_filters;
-    pipeline::OptRuntimeBloomFilterBuildParams _runtime_bloom_filter_build_params;
+    pipeline::RuntimeMembershipFilters _build_runtime_filters;
+    pipeline::OpTRuntimeBloomFilterBuildParams _runtime_bloom_filter_build_params;
     bool _build_runtime_filters_from_planner;
 
     bool _is_push_down = false;
@@ -422,8 +472,8 @@ private:
     // in-filter constructed from string-typed key columns reference the memory of this column, and the in-filter's
     // lifetime can last beyond HashJoiner.
     Columns _string_key_columns;
-    size_t _probe_column_count = 0;
-    size_t _build_column_count = 0;
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
 
     // hash table doesn't have reserved data
     // bool _ht_has_remain = false;
@@ -448,6 +498,18 @@ private:
     HashJoinBuildMetrics* _build_metrics;
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
+    bool _enable_late_materialization = false;
+    // probe side notify build observe
+    pipeline::Observable _builder_observable;
+    pipeline::Observable _probe_observable;
+
+    size_t _max_dop = 0;
+
+    bool _is_skew_join = false;
+
+    TExprOpcode::type _asof_join_condition_op = TExprOpcode::INVALID_OPCODE;
+    ExprContext* _asof_join_condition_probe_expr_ctx = nullptr;
+    ExprContext* _asof_join_condition_build_expr_ctx = nullptr;
 };
 
 } // namespace starrocks

@@ -54,8 +54,7 @@ public:
     // Create a new transaction in TxnManager and return a AsyncDeltaWriter for write.
     static StatusOr<std::unique_ptr<AsyncDeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
 
-    AsyncDeltaWriter(private_type, std::unique_ptr<DeltaWriter> writer)
-            : _writer(std::move(writer)), _queue_id{kInvalidQueueId}, _closed(false) {}
+    AsyncDeltaWriter(private_type, std::unique_ptr<DeltaWriter> writer) : _writer(std::move(writer)), _closed(false) {}
 
     ~AsyncDeltaWriter();
 
@@ -103,12 +102,17 @@ public:
 
     int64_t write_buffer_size() const { return _writer->write_buffer_size(); }
 
+    // Just for testing
+    DeltaWriter* writer() { return _writer.get(); }
+
 private:
     struct private_type {
         explicit private_type(int) {}
     };
 
     struct Task {
+        Task() : create_time_ns(MonotonicNanos()) {}
+
         // If chunk == nullptr, this is a commit task
         Chunk* chunk = nullptr;
         const uint32_t* indexes = nullptr;
@@ -118,6 +122,7 @@ private:
         bool abort = false;
         bool abort_with_log = false;
         bool flush_after_write = false;
+        int64_t create_time_ns;
     };
 
     static int _execute(void* meta, bthread::TaskIterator<AsyncDeltaWriter::Task>& iter);
@@ -126,9 +131,8 @@ private:
     void _close();
 
     std::shared_ptr<DeltaWriter> _writer;
-    bthread::ExecutionQueueId<Task> _queue_id;
+    bthread::ExecutionQueueId<Task> _queue_id{kInvalidQueueId};
     std::atomic<bool> _closed;
-    std::unique_ptr<starrocks::SegmentFlushToken> _segment_flush_executor = nullptr;
 };
 
 class CommittedRowsetInfo {

@@ -17,6 +17,11 @@
 
 package com.starrocks.transaction;
 
+import com.starrocks.proto.TransactionStatusPB;
+import com.starrocks.thrift.TTransactionStatus;
+
+import java.util.Arrays;
+
 public enum TransactionStatus {
     UNKNOWN(0),
     PREPARE(1),
@@ -27,30 +32,64 @@ public enum TransactionStatus {
 
     private final int flag;
 
-    private TransactionStatus(int flag) {
+    TransactionStatus(int flag) {
         this.flag = flag;
     }
 
-    public int value() {
-        return flag;
+    public static TransactionStatus valueOf(int flag) {
+        return Arrays.stream(values())
+                .filter(status -> status.getFlag() == flag)
+                .findFirst()
+                .orElse(UNKNOWN);
     }
 
-    public static TransactionStatus valueOf(int flag) {
-        switch (flag) {
+    public TTransactionStatus toThrift() {
+        switch (this.getFlag()) {
+            // UNKNOWN
             case 0:
-                return UNKNOWN;
+                return TTransactionStatus.UNKNOWN;
+            // PREPARE
             case 1:
-                return PREPARE;
+                return TTransactionStatus.PREPARE;
+            // COMMITTED
             case 2:
-                return COMMITTED;
+                return TTransactionStatus.COMMITTED;
+            // VISIBLE
             case 3:
-                return VISIBLE;
+                return TTransactionStatus.VISIBLE;
+            // ABORTED
             case 4:
-                return ABORTED;
+                return TTransactionStatus.ABORTED;
+            // PREPARED
             case 5:
-                return PREPARED;
+                return TTransactionStatus.PREPARED;
             default:
-                return UNKNOWN;
+                return TTransactionStatus.UNKNOWN;
+        }
+    }
+
+    public TransactionStatusPB toProto() {
+        switch (this.getFlag()) {
+            // UNKNOWN
+            case 0:
+                return TransactionStatusPB.TRANS_UNKNOWN;
+            // PREPARE
+            case 1:
+                return TransactionStatusPB.TRANS_PREPARE;
+            // COMMITTED
+            case 2:
+                return TransactionStatusPB.TRANS_COMMITTED;
+            // VISIBLE
+            case 3:
+                return TransactionStatusPB.TRANS_VISIBLE;
+            // ABORTED
+            case 4:
+                return TransactionStatusPB.TRANS_ABORTED;
+            // PREPARED
+            case 5:
+                return TransactionStatusPB.TRANS_PREPARED;
+            default:
+                return TransactionStatusPB.TRANS_UNKNOWN;
         }
     }
 
@@ -64,21 +103,10 @@ public enum TransactionStatus {
 
     @Override
     public String toString() {
-        switch (this) {
-            case UNKNOWN:
-                return "UNKNOWN";
-            case PREPARE:
-                return "PREPARE";
-            case COMMITTED:
-                return "COMMITTED";
-            case VISIBLE:
-                return "VISIBLE";
-            case ABORTED:
-                return "ABORTED";
-            case PREPARED:
-                return "PREPARED";
-            default:
-                return "UNKNOWN";
-        }
+        return this.name();
+    }
+
+    public int getFlag() {
+        return flag;
     }
 }

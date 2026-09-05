@@ -34,21 +34,24 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -63,30 +66,53 @@ public class ShowDataAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/show_data", new ShowDataAction(controller));
     }
 
+    // Historically anonymous; gated for backward compatibility until enable_http_auth flips on.
+    @Override
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
     public long getDataSizeOfDatabase(Database db) {
+        // The result of the total size is not necessary to be absolutely accurate.
+        // So we can avoid holding the database lock for a long time.
         long totalSize = 0;
+        List<Long> tableIds = new ArrayList<>();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            // sort by table name
-            List<Table> tables = db.getTables();
-            for (Table table : tables) {
+            // get the table id list under the READ lock
+            db.getTables().forEach(x -> tableIds.add(x.getId()));
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+        for (long tableId : tableIds) {
+            if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
+                // db is dropped
+                return 0;
+            }
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                if (table == null) {
+                    // table is dropped after we get the table id list.
+                    continue;
+                }
                 if (!table.isNativeTableOrMaterializedView()) {
                     continue;
                 }
-                long tableSize = ((OlapTable) table).getDataSize();
-                totalSize += tableSize;
-            } // end for tables
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
+                totalSize += ((OlapTable) table).getDataSize();
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+            }
         }
         return totalSize;
     }
 
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String dbName = request.getSingleParameter("db");
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
         long totalSize = 0;
         if (dbName != null) {
             Database db = fullNameToDb.get(dbName);
@@ -98,7 +124,6 @@ public class ShowDataAction extends RestBaseAction {
             totalSize = getDataSizeOfDatabase(db);
         } else {
             for (Database db : fullNameToDb.values()) {
-                LOG.info("database name: {}", db.getOriginName());
                 totalSize += getDataSizeOfDatabase(db);
             }
         }

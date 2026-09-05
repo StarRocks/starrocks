@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+sidebar_position: 40
+displayed_sidebar: docs
+description: "使用 StarRocks Kubernetes Operator 在 Kubernetes 集群上自动化部署和管理集群。"
 ---
 
 # 使用 Operator 部署 StarRocks 集群
@@ -8,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 ## 工作原理
 
-![sr operator and src](../assets/starrocks_operator.png)
+![sr operator and src](../_assets/starrocks_operator.png)
 
 ## **环境准备**
 
@@ -28,11 +30,11 @@ displayed_sidebar: "Chinese"
 
 **创建  GKE 集群**
 
-创建前，请确保已经完成所有前置工作。创建步骤，请参考[创建 GKE 集群](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster)。
+创建前，请确保已经完成所有前置工作。创建步骤，请参考[创建 GKE 集群](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster)。
 
 **创建私有 Kubernetes 集群**
 
-创建 [Kubernetes 集群](https://kubernetes.io/zh-cn/docs/setup/production-environment/tools/kubeadm/)。如需快速体验本特性，则可以使用 [Minikube](https://kubernetes.io/zh-cn/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) 创建单节点 Kubernetes 集群。
+创建 [Kubernetes 集群](https://kubernetes.io/docs/)。如需快速体验本特性，则可以使用 Minikube 创建单节点 Kubernetes 集群。
 
 ### 部署 StarRocks Operator
 
@@ -206,7 +208,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 
 ### 扩缩容 StarRocks 集群
 
-本文以扩容 BE 集群和 FE 集群为例。
+以扩缩容 BE 集群和 FE 集群为例。
 
 **扩容 BE 集群**
 
@@ -215,6 +217,19 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 ```Bash
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
 ```
+
+**缩容 BE 集群**
+
+BE 缩容时需要逐个缩容，每次缩容一个 BE 节点， 等待 BE 的 Tablet 在剩余 BE 节点上补齐后再继续扩容。如果存在单副本的表，BE 下线有可能造成数据丢失。
+执行如下命令，将有 10 个 BE 节点的集群，缩容至 9 个节点。
+
+```Bash
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
+```
+
+节点缩容后需要通过 SQL 命令手动 DROP alive 状态为 false 的节点。
+
+下线的 BE 节点的 Tablet 自动补齐需要一些时间，可以通过执行 `show proc '/statistic';` 命令查询副本修复进度。
 
 **扩容 FE 集群**
 
@@ -234,7 +249,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 >
 > 如果配置了 CN 自动扩缩容策略，则请删除 CN 的 `replicas` 字段。
 
-Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为，实现快速扩容，缓慢缩容，禁用缩容等。更多自动扩容容策略的说明，请参见 [Pod 水平自动扩缩](https://kubernetes.io/zh-cn/docs/tasks/run-application/horizontal-pod-autoscale/)。
+Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为，实现快速扩容，缓慢缩容，禁用缩容等。更多自动扩容容策略的说明，请参见 [Pod 水平自动扩缩](https://kubernetes.io/zh-cn/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)。
 
 如下是 StarRocks 提供的 [CN 自动扩缩策略模版](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml)。
 
@@ -252,7 +267,7 @@ Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为�
       maxReplicas: 10 # The maximum number of CNs is set to 10.
       minReplicas: 1 # The minimum number of CNs is set to 1.
       # operator creates an HPA resource based on the following field.
-      # see https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ for more information.
+      # see https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/ for more information.
       hpaPolicy:
         metrics: # Resource metrics
           - type: Resource

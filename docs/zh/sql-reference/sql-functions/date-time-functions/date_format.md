@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将日期按照指定的格式转化为字符串。"
 ---
 
 # date_format
 
-## 功能
+
 
 将日期类型按照 `format` 的类型转化为字符串。
 

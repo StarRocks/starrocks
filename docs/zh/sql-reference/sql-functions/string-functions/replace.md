@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将字符串中符合指定模式的所有字符替换为其他字符。"
 ---
 
 # replace
 
-## 功能
+
 
 将一个字符串 (`str`) 中符合指定模式的字符 (`pattern`) 全部替换成其他字符 (`repl`)。注意替换时会区分大小写。
 
@@ -12,7 +13,7 @@ displayed_sidebar: "Chinese"
 
 > **注意**
 >
-> 在 3.0 版本之前，该函数通过 [regexp_replace](../like_predicate-functions/regexp_replace.md) 来实现。
+> 在 3.0 版本之前，该函数是 [regexp_replace](../like-predicate-functions/regexp_replace.md) 的别名。
 
 ## 语法
 

@@ -12,10 +12,10 @@ starrocks_home=$(dirname $(dirname $curdir))
 # generate symbol's file in Breakpad's own format.
 $(dirname $curdir)/installed/bin/dump_syms $starrocks_home/output/be/lib/starrocks_be > $starrocks_home/output/be/starrocks_be.sym
 
-((starrocks_be_size_original=`ls -l output/be/lib/starrocks_be | awk '{print $5}'` / (1024*1024)))
+((starrocks_be_size_original=`ls -l $starrocks_home/output/be/lib/starrocks_be | awk '{print $5}'` / (1024*1024)))
 # remove debugging infos
 strip $starrocks_home/output/be/lib/starrocks_be
-((starrocks_be_size_simplify=`ls -l output/be/lib/starrocks_be | awk '{print $5}'` / (1024*1024)))
+((starrocks_be_size_simplify=`ls -l $starrocks_home/output/be/lib/starrocks_be | awk '{print $5}'` / (1024*1024)))
 
 # echo size reduction
 echo "starrocks_be'size ("$starrocks_be_size_original"mb) reduced to ("$starrocks_be_size_simplify"mb)"

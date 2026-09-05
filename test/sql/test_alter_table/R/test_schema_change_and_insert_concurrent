@@ -1,0 +1,62 @@
+-- name: test_schema_change_and_insert_concurrent
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    c0 int
+) duplicate key (c0)
+distributed by hash (c0) buckets 1
+properties (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t values (1);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_txn_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Db": "db_5bd33b14660640aaa6d04122f2d23b6f",
+    "Table": "t",
+    "Label": "test_txn_5bd33b14660640aaa6d04122f2d23b6f",
+    "TxnId": 1004,
+    "BeginTxnTimeMs": 14
+}
+-- !result
+alter table t add column c1 int key NOT NULL default "2";
+-- result:
+-- !result
+function: wait_alter_table_waiting_txn()
+-- result:
+WAITING_TXN
+-- !result
+insert into t values (2);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:test_txn_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/rollback
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Db": "",
+    "Table": "",
+    "Label": "test_txn_5bd33b14660640aaa6d04122f2d23b6f"
+}
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t order by c0;
+-- result:
+1	2
+2	2
+-- !result

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回数值的按位取反结果。"
 ---
 
 # bitnot
 
-## 功能
+
 
 返回参数 `x` 进行取反运算后的结果。
 

@@ -1,0 +1,50 @@
+-- name: test_ivm_with_iceberg_group_by
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table bug_base (
+  k int,
+  v bigint
+);
+
+insert into bug_base values (1, 10), (2, 20), (3, 30), (1, 11);
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+set enable_materialized_view_rewrite = false;
+
+CREATE MATERIALIZED VIEW test_mv1
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.bug_base;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+-- Baseline: count(*) and SELECT * worked even before the fix.
+SELECT count(*) FROM test_mv1;
+SELECT k, v FROM test_mv1 ORDER BY k, v;
+
+-- Regression coverage: every GROUP BY shape that used to fail analyzer-time
+-- with "Table null.null.test_mv1 is not found" because of the auto-generated
+-- self-referencing UniqueConstraint on the IVM MV's PRIMARY_KEYS.
+SELECT k, count(*) FROM test_mv1 GROUP BY k ORDER BY k;
+SELECT k FROM test_mv1 GROUP BY k ORDER BY k;
+SELECT DISTINCT k FROM test_mv1 ORDER BY k;
+SELECT k, sum(v) FROM test_mv1 GROUP BY k HAVING sum(v) >= 20 ORDER BY k;
+
+DROP MATERIALIZED VIEW test_mv1;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.bug_base force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;

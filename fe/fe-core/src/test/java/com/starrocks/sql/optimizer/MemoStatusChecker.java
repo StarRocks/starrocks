@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer;
 
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 public class MemoStatusChecker {
     private final int relNum;
@@ -32,16 +32,16 @@ public class MemoStatusChecker {
 
     public void checkStatus() {
         long groupNum = getGroupsNum();
-        Assert.assertEquals(groupNum, memo.getGroups().size());
+        Assertions.assertEquals(groupNum, memo.getGroups().size());
 
-        Assert.assertEquals(getLogicalMExprNum(), getLogicalGroupExprsSize());
-        Assert.assertEquals(getPhysicalMExprNum(), getPhysicalGroupExprsSize());
+        Assertions.assertEquals(getLogicalMExprNum(), getLogicalGroupExprsSize());
+        Assertions.assertEquals(getPhysicalMExprNum(), getPhysicalGroupExprsSize());
 
         long planNum = getPlanNum();
-        Assert.assertEquals(planNum, getPlanCount(memo.getRootGroup()));
+        Assertions.assertEquals(planNum, getPlanCount(memo.getRootGroup()));
 
         LogicalProperty logicalProperty = memo.getRootGroup().getLogicalProperty();
-        Assert.assertTrue(logicalProperty.getOutputColumns().isSame(outputColumns));
+        Assertions.assertTrue(logicalProperty.getOutputColumns().isSame(outputColumns));
     }
 
     private int getLogicalGroupExprsSize() {

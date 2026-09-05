@@ -14,17 +14,22 @@
 
 #pragma once
 
+#include <functional>
+#include <limits>
+#include <memory>
+#include <ostream>
 #include <string>
 #include <vector>
 
 #include "common/status.h"
+#include "common/statusor.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
 class Field;
-class ObjectPool;
-class RuntimeState;
 
 /*
  * Used to describe the access path of the subfield, it's like a file path.
@@ -36,10 +41,19 @@ class RuntimeState;
  */
 class ColumnAccessPath {
 public:
-    Status init(const TColumnAccessPath& column_path, RuntimeState* state, ObjectPool* pool);
+    using PathResolver = std::function<StatusOr<std::string>(const TColumnAccessPath&)>;
 
-    // for test
-    Status init(const TAccessPathType::type& type, const std::string& path, uint32_t index);
+    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TColumnAccessPath& column_path,
+                                                              const PathResolver& path_resolver);
+
+    Status init(const std::string& parent_path, const TColumnAccessPath& column_path,
+                const PathResolver& path_resolver);
+
+    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TAccessPathType::type& type,
+                                                              const std::string& path, uint32_t index,
+                                                              const std::string& prefix = "");
+    // the path doesn't contains root
+    static void insert_json_path(ColumnAccessPath* root, LogicalType type, const std::string& path);
 
     const std::string& path() const { return _path; }
 
@@ -48,6 +62,10 @@ public:
     const std::vector<std::unique_ptr<ColumnAccessPath>>& children() const { return _children; }
 
     std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
+
+    void set_from_compaction(bool from_compaction) { _from_compaction = from_compaction; }
+
+    bool is_from_compaction() const { return _from_compaction; }
 
     bool is_key() const { return _type == TAccessPathType::type::KEY; }
 
@@ -59,18 +77,40 @@ public:
 
     bool is_index() const { return _type == TAccessPathType::type::INDEX; }
 
+    bool is_root() const { return _type == TAccessPathType::type::ROOT; }
+
     bool is_from_predicate() const { return _from_predicate; }
+
+    bool is_extended() const { return _extended; }
+
+    const std::string& absolute_path() const { return _absolute_path; }
+
+    // flat json use this to get the type of the path
+    const TypeDescriptor& value_type() const { return _value_type; }
 
     // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path
     StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* field, uint32_t index);
 
+    ColumnAccessPath* get_child(const std::string& path);
+
+    // For linear path like a.b.c
+    std::string linear_path() const;
+    const TypeDescriptor& leaf_value_type() const;
+
     const std::string to_string() const;
 
+    size_t leaf_size() const;
+
+    void get_all_leafs(std::vector<ColumnAccessPath*>* result);
+
 private:
+    // path type, to mark the path is KEY/OFFSET/FIELD/ALL/INDEX
     TAccessPathType::type _type;
 
     std::string _path;
+
+    std::string _absolute_path;
 
     // column index in storage
     // the root index is the offset of table schema
@@ -80,6 +120,13 @@ private:
 
     bool _from_predicate;
 
+    bool _from_compaction = false;
+
+    bool _extended = false;
+
+    // the data type of the subfield
+    TypeDescriptor _value_type;
+
     std::vector<std::unique_ptr<ColumnAccessPath>> _children;
 };
 
@@ -88,6 +135,21 @@ using ColumnAccessPathPtr = std::unique_ptr<ColumnAccessPath>;
 inline std::ostream& operator<<(std::ostream& out, const ColumnAccessPath& val) {
     out << val.to_string();
     return out;
+}
+
+// Use next_column_unique_id instead of num_columns to avoid unique_id conflicts.
+// num_columns() returns the current column count, but unique_ids may have gaps
+// after ADD/DROP COLUMN operations. Using num_columns() can cause extended columns
+// (flat JSON subfields) to get unique_ids that conflict with existing columns.
+
+// Returns the next unique ID. only used in flat json column access path.
+template <class ScanNodeType>
+size_t next_uniq_id(const ScanNodeType& tnode) {
+    if (tnode.__isset.next_uniq_id) {
+        return tnode.next_uniq_id;
+    }
+    // provide a large number to avoid conflict
+    return std::numeric_limits<int32_t>::max() - 1000000;
 }
 
 } // namespace starrocks

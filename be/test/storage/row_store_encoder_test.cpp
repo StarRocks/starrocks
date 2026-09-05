@@ -17,13 +17,14 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 #include "storage/row_store_encoder_factory.h"
+#include "types/datum.h"
 
 using namespace std;
 
@@ -38,23 +39,28 @@ static unique_ptr<Schema> create_schema(const vector<pair<LogicalType, bool>>& t
         fd->set_aggregate_method(STORAGE_AGGREGATE_NONE);
         fields.emplace_back(fd);
     }
-    return unique_ptr<Schema>(new Schema(std::move(fields), PRIMARY_KEYS, {}));
+    return std::make_unique<Schema>(std::move(fields), PRIMARY_KEYS, std::vector<ColumnId>{});
 }
 
 void common_encode_decode(RowStoreEncoderPtr& row_encoder, std::unique_ptr<Schema>& schema,
                           std::unique_ptr<Schema>& schema_with_row, ChunkUniquePtr& pchunk, const int n) {
     //encode
-    auto full_row_col = std::make_unique<BinaryColumn>();
+    auto full_row_col = BinaryColumn::create();
     row_encoder->encode_chunk_to_full_row_column(*schema, *pchunk, full_row_col.get());
     ASSERT_EQ(full_row_col->size(), pchunk->num_rows());
 
     //decode
-    auto read_value_schema = create_schema({{TYPE_VARCHAR, false}, {TYPE_INT, false}, {TYPE_BOOLEAN, false}});
-    std::vector<ColumnId> value_column_ids{1, 2, 3};
-    std::vector<MutableColumnPtr> read_value_columns(value_column_ids.size());
+    auto read_value_schema = create_schema({{TYPE_VARCHAR, false},
+                                            {TYPE_INT, false},
+                                            {TYPE_BOOLEAN, false},
+                                            {TYPE_HLL, false},
+                                            {TYPE_PERCENTILE, false},
+                                            {TYPE_OBJECT, false}});
+    std::vector<ColumnId> value_column_ids{1, 2, 3, 4, 5, 6};
+    MutableColumns read_value_columns(value_column_ids.size());
     read_value_columns.reserve(value_column_ids.size());
     for (uint32_t i = 0; i < value_column_ids.size(); ++i) {
-        auto column = ChunkHelper::column_from_field(*read_value_schema->field(i).get());
+        auto column = ChunkFactory::column_from_field(*read_value_schema->field(i).get());
         read_value_columns[i] = column->clone_empty();
     }
     row_encoder->decode_columns_from_full_row_column(*schema_with_row, *full_row_col, value_column_ids,
@@ -91,24 +97,52 @@ TEST(RowStoreEncoderTest, testBitmap) {
 
 TEST(RowStoreEncoderTest, testEncodeFullRowColumn) {
     // init schema
-    auto schema = create_schema({{TYPE_INT, true}, {TYPE_VARCHAR, false}, {TYPE_INT, false}, {TYPE_BOOLEAN, false}});
-    auto schema_with_row = create_schema(
-            {{TYPE_INT, true}, {TYPE_VARCHAR, false}, {TYPE_INT, false}, {TYPE_BOOLEAN, false}, {TYPE_VARCHAR, false}});
+    auto schema = create_schema({{TYPE_INT, true},
+                                 {TYPE_VARCHAR, false},
+                                 {TYPE_INT, false},
+                                 {TYPE_BOOLEAN, false},
+                                 {TYPE_HLL, false},
+                                 {TYPE_PERCENTILE, false},
+                                 {TYPE_OBJECT, false}});
+    auto schema_with_row = create_schema({{TYPE_INT, true},
+                                          {TYPE_VARCHAR, false},
+                                          {TYPE_INT, false},
+                                          {TYPE_BOOLEAN, false},
+                                          {TYPE_HLL, false},
+                                          {TYPE_PERCENTILE, false},
+                                          {TYPE_OBJECT, false},
+                                          {TYPE_VARCHAR, false}});
     // fill chunk
     const int n = 2;
-    auto pchunk = ChunkHelper::new_chunk(*schema, n);
+    auto pchunk = ChunkFactory::new_chunk(*schema, n);
+    auto obj_column = down_cast<ObjectColumn<BitmapValue>*>(pchunk->columns()[6]->as_mutable_ptr().get());
+    size_t ss = 0;
     for (int i = 0; i < n; i++) {
         Datum tmp;
         string tmpstr = StringPrintf("slice000%d", i * 17);
         tmp.set_int32(i * 2343);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_slice(tmpstr);
-        pchunk->columns()[1]->append_datum(tmp);
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_int32(i * 2343);
-        pchunk->columns()[2]->append_datum(tmp);
+        pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_uint8(i % 2);
-        pchunk->columns()[3]->append_datum(tmp);
+        pchunk->columns()[3]->as_mutable_ptr()->append_datum(tmp);
+        down_cast<ObjectColumn<HyperLogLog>*>(pchunk->columns()[4]->as_mutable_ptr().get())->append(HyperLogLog(1));
+        down_cast<ObjectColumn<PercentileValue>*>(pchunk->columns()[5]->as_mutable_ptr().get())
+                ->append(PercentileValue());
+        down_cast<ObjectColumn<BitmapValue>*>(pchunk->columns()[6]->as_mutable_ptr().get())->append(BitmapValue());
+        ss += obj_column->byte_size(i);
     }
+    EXPECT_EQ(ss, obj_column->byte_size(0, n));
+    uint8_t obj_buffer[1024];
+    Buffer<uint32_t> slice_sizes(n);
+    obj_column->serialize_batch(obj_buffer, slice_sizes, n, 128);
+    size_t ss2 = 0;
+    for (int i = 0; i < n; i++) {
+        ss2 += slice_sizes[i];
+    }
+    EXPECT_EQ(ss, ss2);
 
     // simple encoder
     auto simple_row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);

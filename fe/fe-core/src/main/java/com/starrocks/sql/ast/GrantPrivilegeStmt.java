@@ -46,9 +46,9 @@ public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
     /**
      * The following functions is used to generate sql when excuting `show grants` in old privilege framework
      */
-    public GrantPrivilegeStmt(List<String> privilegeTypeUnResolved, String objectTypeUnResolved, UserIdentity userIdentity,
+    public GrantPrivilegeStmt(List<String> privilegeTypeUnResolved, String objectTypeUnResolved, UserRef user,
                               boolean withGrantOption) {
-        super(privilegeTypeUnResolved, objectTypeUnResolved, new GrantRevokeClause(userIdentity, null),
+        super(privilegeTypeUnResolved, objectTypeUnResolved, new GrantRevokeClause(user, null),
                 new GrantRevokePrivilegeObjects());
         this.withGrantOption = withGrantOption;
     }

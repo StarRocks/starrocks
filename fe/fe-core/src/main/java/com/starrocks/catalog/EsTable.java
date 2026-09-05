@@ -36,23 +36,21 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.connector.elasticsearch.EsMajorVersion;
 import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
 import com.starrocks.connector.elasticsearch.EsRestClient;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TEsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -124,7 +122,8 @@ public class EsTable extends Table implements GsonPostProcessable {
     // Instead,  the (almost) surprising thing is that, by returning less than 20 fields,
     // DocValues performs better than stored fields and the difference gets little as the number of fields returned increases.
     // Asking for 9 DocValues fields and 1 stored field takes an average query time is 6.86 (more than returning 10 stored fields)
-    // Here we have a slightly conservative value of 20, but at the same time we also provide configurable parameters for expert-using
+    // Here we have a slightly conservative value of 20, but at the same time we also provide configurable parameters for
+    // expert-using
     // @see `MAX_DOCVALUE_FIELDS`
     private static final int DEFAULT_MAX_DOCVALUE_FIELDS = 20;
 
@@ -202,6 +201,14 @@ public class EsTable extends Table implements GsonPostProcessable {
         }
         hosts = properties.get(KEY_HOSTS).trim();
         seeds = hosts.split(",");
+        for (int i = 0; i < seeds.length; i++) {
+            seeds[i] = seeds[i].trim();
+        }
+        for (String seed : seeds) {
+            if (!seed.startsWith("http://") && !seed.startsWith("https://")) {
+                throw new DdlException("Host of ES table should start with 'http:// or 'https://'. Current value is " + seed);
+            }
+        }
 
         if (!Strings.isNullOrEmpty(properties.get(KEY_USER))
                 && !Strings.isNullOrEmpty(properties.get(KEY_USER).trim())) {
@@ -341,6 +348,13 @@ public class EsTable extends Table implements GsonPostProcessable {
         return tTableDescriptor;
     }
 
+    @Override
+    public String getCatalogName() {
+        // EsTable has no resource-mapping path (unlike HiveTable), so fall back directly to the internal catalog
+        // for old-style ES external tables created without an external catalog.
+        return catalogName != null ? catalogName : InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    }
+
     // TODO, identify the remote table that created after deleted
     @Override
     public String getUUID() {
@@ -365,75 +379,6 @@ public class EsTable extends Table implements GsonPostProcessable {
         }
 
         return Math.abs((int) adler32.getValue());
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeInt(tableContext.size());
-        for (Map.Entry<String, String> entry : tableContext.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-        Text.writeString(out, partitionInfo.getType().name());
-        partitionInfo.write(out);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; ++i) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            tableContext.put(key, value);
-        }
-        hosts = tableContext.get("hosts");
-        seeds = hosts.split(",");
-        userName = tableContext.get("userName");
-        passwd = tableContext.get("passwd");
-        indexName = tableContext.get("indexName");
-        mappingType = tableContext.get("mappingType");
-        transport = tableContext.get("transport");
-        if (tableContext.containsKey("majorVersion")) {
-            try {
-                majorVersion = EsMajorVersion.parse(tableContext.get("majorVersion"));
-            } catch (Exception e) {
-                majorVersion = EsMajorVersion.V_5_X;
-            }
-        }
-
-        enableDocValueScan = Boolean.parseBoolean(tableContext.get("enableDocValueScan"));
-        if (tableContext.containsKey("enableKeywordSniff")) {
-            enableKeywordSniff = Boolean.parseBoolean(tableContext.get("enableKeywordSniff"));
-        } else {
-            enableKeywordSniff = true;
-        }
-        if (tableContext.containsKey("maxDocValueFields")) {
-            try {
-                maxDocValueFields = Integer.parseInt(tableContext.get("maxDocValueFields"));
-            } catch (Exception e) {
-                maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
-            }
-        }
-        if (tableContext.containsKey(KEY_WAN_ONLY)) {
-            wanOnly = Boolean.parseBoolean(tableContext.get(KEY_WAN_ONLY));
-        } else {
-            wanOnly = false;
-        }
-        if (tableContext.containsKey(KEY_ES_NET_SSL)) {
-            sslEnabled = Boolean.parseBoolean(tableContext.get(KEY_ES_NET_SSL));
-        } else {
-            sslEnabled = false;
-        }
-
-        PartitionType partType = PartitionType.valueOf(Text.readString(in));
-        if (partType == PartitionType.UNPARTITIONED) {
-            partitionInfo = SinglePartitionInfo.read(in);
-        } else if (partType == PartitionType.RANGE) {
-            partitionInfo = RangePartitionInfo.read(in);
-        } else {
-            throw new IOException("invalid partition type: " + partType);
-        }
     }
 
     @Override
@@ -553,6 +498,7 @@ public class EsTable extends Table implements GsonPostProcessable {
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
         GlobalStateMgr.getCurrentState().getEsRepository().deRegisterTable(this.id);
     }
 

@@ -14,15 +14,22 @@
 
 #include "exec/pipeline/sink/export_sink_operator.h"
 
-#include "exec/data_sink.h"
-#include "exec/file_builder.h"
+#include "base/uid_util.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
+#include "data_sink/file/file_builder.h"
+#include "data_sink/file/plain_text_builder.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
-#include "exec/plain_text_builder.h"
+#include "exec_primitive/data_sink.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream.h"
-#include "fs/fs_broker.h"
+#include "formats/io/formatted_output_stream.h"
+#include "fs/fs_factory.h"
+#include "platform/fs_broker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -38,12 +45,10 @@ public:
 
     ~ExportSinkIOBuffer() override = default;
 
-    Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) override;
-
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    void _add_chunk(const ChunkPtr& chunk) override;
 
     Status _open_file_writer();
 
@@ -55,26 +60,6 @@ private:
     FragmentContext* _fragment_ctx;
 };
 
-Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
-    bool expected = false;
-    if (!_is_prepared.compare_exchange_strong(expected, true)) {
-        return Status::OK();
-    }
-    _state = state;
-
-    bthread::ExecutionQueueOptions options;
-    options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
-                                                       &ExportSinkIOBuffer::execute_io_task, this);
-    if (ret != 0) {
-        _exec_queue_id.reset();
-        return Status::InternalError("start execution queue error");
-    }
-
-    return Status::OK();
-}
-
 void ExportSinkIOBuffer::close(RuntimeState* state) {
     if (_file_builder != nullptr) {
         set_io_status(_file_builder->finish());
@@ -83,40 +68,18 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    DeferOp op([&]() {
-        --_num_pending_chunks;
-        DCHECK(_num_pending_chunks >= 0);
-    });
-
-    if (_is_finished) {
-        return;
-    }
-
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 1) {
-            close(_state);
-        }
-        return;
-    }
-
+void ExportSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (_file_builder == nullptr) {
         if (Status status = _open_file_writer(); !status.ok()) {
             LOG(WARNING) << "open file write failed, error: " << status.to_string();
-            _fragment_ctx->cancel(status);
+            cancel_fragment_context(_fragment_ctx, status);
             return;
         }
     }
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 1);
-        close(_state);
-        return;
-    }
+
     if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to file builder failed, error: " << status.to_string();
-        _fragment_ctx->cancel(status);
+        cancel_fragment_context(_fragment_ctx, status);
         return;
     }
 }
@@ -136,7 +99,7 @@ Status ExportSinkIOBuffer::_open_file_writer() {
     }
     case TFileType::FILE_BROKER: {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
         } else {
             if (_t_export_sink.broker_addresses.empty()) {
@@ -153,10 +116,23 @@ Status ExportSinkIOBuffer::_open_file_writer() {
         return Status::NotSupported(strings::Substitute("Unsupported file type $0", file_type));
     }
 
-    _file_builder = std::make_unique<PlainTextBuilder>(
-            PlainTextBuilderOptions{.column_terminated_by = _t_export_sink.column_separator,
-                                    .line_terminated_by = _t_export_sink.row_delimiter},
-            std::move(output_file), _output_expr_ctxs);
+    PlainTextBuilderOptions builder_options{.column_terminated_by = _t_export_sink.column_separator,
+                                            .line_terminated_by = _t_export_sink.row_delimiter};
+
+    // Set header options if configured
+    if (_t_export_sink.__isset.with_header && _t_export_sink.with_header) {
+        builder_options.with_header = true;
+        if (_t_export_sink.__isset.column_names && !_t_export_sink.column_names.empty()) {
+            builder_options.column_names = _t_export_sink.column_names;
+        } else {
+            LOG(WARNING) << "with_header is enabled but column_names is empty, header row will be skipped"
+                         << ", query_id=" << print_id(_fragment_ctx->query_id())
+                         << ", fragment_instance_id=" << print_id(_fragment_ctx->fragment_instance_id());
+        }
+    }
+
+    _file_builder =
+            std::make_unique<PlainTextBuilder>(std::move(builder_options), std::move(output_file), _output_expr_ctxs);
 
     _state->add_export_output_file(file_path);
     return Status::OK();
@@ -193,7 +169,8 @@ bool ExportSinkOperator::is_finished() const {
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
     }
     return _export_sink_buffer->set_finishing();
 }
@@ -217,9 +194,9 @@ Status ExportSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
 
 Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
 
     _export_sink_buffer =
             std::make_shared<ExportSinkIOBuffer>(_t_export_sink, _output_expr_ctxs, _total_num_sinkers, _fragment_ctx);
@@ -227,7 +204,7 @@ Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ExportSinkOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

@@ -18,22 +18,27 @@
 
 #include "column/chunk.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
+#include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 // forehead declar class, because jni function init in StarRocksServer.
 class StarRocksServer;
 class RuntimeState;
+class TAuthInfo;
 } // namespace starrocks
 
 namespace starrocks {
 
 // scanner parameter from frontend
 struct SchemaScannerParam {
+    SchemaScannerParam() = default;
+
     const std::string* catalog{nullptr};
     const std::string* db{nullptr};
     const std::string* table{nullptr};
@@ -70,7 +75,17 @@ struct SchemaScannerParam {
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
     std::vector<TFrontend> frontends;
 
-    SchemaScannerParam() = default;
+    // schema scanner's predicates
+    const std::vector<ExprContext*>* expr_contexts;
+    std::unordered_map<SlotId, SlotDescriptor*> slot_id_mapping;
+};
+
+// schema scanner runtime state
+struct SchemaScannerState {
+    std::string ip;
+    int32_t port;
+    int timeout_ms;
+    SchemaScannerParam* param;
 };
 
 // virtual scanner for all schema table
@@ -78,7 +93,7 @@ class SchemaScanner {
 public:
     struct ColumnDesc {
         const char* name;
-        LogicalType type;
+        TypeDescriptor type;
         int size;
         bool is_null;
     };
@@ -91,21 +106,30 @@ public:
     virtual Status start(RuntimeState* state);
     // Must only return one row at most each time
     virtual Status get_next(ChunkPtr* chunk, bool* eos);
-    // factory function
-    static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
-
     TAuthInfo build_auth_info();
 
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }
 
     const std::vector<SlotDescriptor*>& get_slot_descs() { return _slot_descs; }
 
+    Status init_schema_scanner_state(RuntimeState* state);
+
 protected:
     Status _create_slot_descs(ObjectPool* pool);
 
-    bool _is_init;
+    // Parse scan conjuncts and extract the literal value from an equality predicate
+    // in the form of `col_name = <literal>` (or `<literal> = col_name`).
+    // NOTE: currently only supports STRING literal predicates.
+    // Returns true and fills `result` when a matched predicate is found; otherwise false.
+    // Intended for schema scanners to push simple equality filters to FE RPC requests.
+    bool _parse_expr_predicate(const std::string& col_name, std::string& result);
+    bool _parse_expr_predicate(Expr* conjunct, const std::string& col_name, std::string& result);
+
+    // schema scanner state
+    SchemaScannerState _ss_state;
+    bool _is_init{false};
     // this is used for sub class
-    SchemaScannerParam* _param;
+    SchemaScannerParam* _param{nullptr};
     // pointer to schema table's column desc
     ColumnDesc* _columns;
     int _column_num;

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "移除数组中的重复元素。"
 ---
 
 # array_distinct
 
-## 功能
+
 
 数组元素去重。
 

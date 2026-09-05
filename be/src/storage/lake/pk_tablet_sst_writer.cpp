@@ -1,0 +1,107 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/pk_tablet_sst_writer.h"
+
+#include <fmt/format.h>
+
+#include "column/chunk.h"
+#include "column/serde/column_array_serde.h"
+#include "common/config_rowset_fwd.h"
+#include "fs/bundle_file.h"
+#include "fs/fs_util.h"
+#include "platform/key_cache.h"
+#include "runtime/current_thread.h"
+#include "storage/chunk_helper.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/primary_index.h"
+#include "storage/rowset/segment_writer.h"
+#include "storage/sstable/table_builder.h"
+#include "storage_primitive/primary_key_encoder.h"
+
+namespace starrocks::lake {
+
+StatusOr<const Slice*> PkTabletSSTWriter::encode_pk_keys(const Chunk& data, Buffer<Slice>* keys,
+                                                         MutableColumnPtr* owned_column) {
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet_schema_ptr->primary_key_encoding_type_or_error());
+    if (_pk_column == nullptr) {
+        vector<uint32_t> pk_columns;
+        pk_columns.reserve(_tablet_schema_ptr->num_key_columns());
+        for (size_t i = 0; i < _tablet_schema_ptr->num_key_columns(); i++) {
+            pk_columns.push_back((uint32_t)i);
+        }
+        _pkey_schema = ChunkHelper::convert_schema(_tablet_schema_ptr, pk_columns);
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &_pk_column, pk_encoding_type));
+        _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pkey_schema, pk_encoding_type);
+    }
+    auto clone_pk_column = _pk_column->clone_empty();
+    TRY_CATCH_BAD_ALLOC(
+            PrimaryKeyEncoder::encode(_pkey_schema, data, 0, data.num_rows(), clone_pk_column.get(), pk_encoding_type));
+    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(*clone_pk_column, _key_size, 0,
+                                                                             clone_pk_column->size(), keys));
+    *owned_column = std::move(clone_pk_column);
+    return vkeys;
+}
+
+Status PkTabletSSTWriter::append_sst_record(const Chunk& data, const std::vector<uint64_t>* rssid_rowids,
+                                            const std::vector<uint32_t>* column_indexes) {
+    if (_pk_sst_builder == nullptr) {
+        return Status::InternalError("pk sst writer not initialized");
+    }
+    Buffer<Slice> keys;
+    MutableColumnPtr owned_column;
+    ASSIGN_OR_RETURN(const Slice* vkeys, encode_pk_keys(data, &keys, &owned_column));
+    for (size_t i = 0; i < owned_column->size(); i++) {
+        RETURN_IF_ERROR(_pk_sst_builder->add(vkeys[i]));
+    }
+    return Status::OK();
+}
+
+Status PkTabletSSTWriter::reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
+                                           const std::shared_ptr<FileSystem>& fs) {
+    WritableFileOptions wopts;
+    std::string encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        encryption_meta = std::move(pair.encryption_meta);
+    }
+    std::unique_ptr<WritableFile> sst_wf;
+    if (location_provider && fs) {
+        ASSIGN_OR_RETURN(sst_wf,
+                         fs->new_writable_file(wopts, location_provider->sst_location(_tablet_id, gen_sst_filename())));
+    } else {
+        ASSIGN_OR_RETURN(sst_wf,
+                         fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename())));
+    }
+    _pk_sst_builder = std::make_unique<PersistentIndexSstableStreamBuilder>(std::move(sst_wf), encryption_meta);
+    return Status::OK();
+}
+
+StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> PkTabletSSTWriter::flush_sst_writer() {
+    if (_pk_sst_builder == nullptr) {
+        return Status::InternalError("pk sst writer not initialized");
+    }
+    RETURN_IF_ERROR(_pk_sst_builder->finish());
+    auto sst_file_info = _pk_sst_builder->file_info();
+    auto sst_range = _pk_sst_builder->key_range();
+    PersistentIndexSstableRangePB range_pb;
+    range_pb.set_start_key(sst_range.first.to_string());
+    range_pb.set_end_key(sst_range.second.to_string());
+    _pk_sst_builder.reset();
+    return std::make_pair(sst_file_info, range_pb);
+}
+
+} // namespace starrocks::lake

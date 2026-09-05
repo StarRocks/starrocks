@@ -16,25 +16,62 @@
 #include <immintrin.h>
 #endif
 
-#include <runtime/decimalv3.h>
+#include <base/decimal_types.h>
+#include <types/decimalv3.h>
 #include <types/logical_type.h>
-#include <util/decimal_types.h>
 
 #include <cmath>
 #include <random>
 
+#include "base/hash/murmur_hash3.h"
 #include "column/array_column.h"
+#include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "exprs/expr.h"
+#include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
-#include "util/time.h"
+#include "runtime/runtime_state.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 
-static const double MAX_EXP_PARAMETER = std::log(std::numeric_limits<double>::max());
-
 static std::uniform_real_distribution<double> distribution(0.0, 1.0);
 static thread_local std::mt19937_64 generator{std::random_device{}()};
+
+namespace {
+
+int64_t iceberg_datetime_to_epoch_microseconds(const TimestampValue& timestamp) {
+    auto ts = timestamp.timestamp();
+    int64_t value = timestamp::to_julian(ts);
+    value *= SECS_PER_DAY;
+    value -= timestamp::UNIX_EPOCH_SECONDS;
+    value *= 1000000L;
+    value += timestamp::to_time(ts);
+    return value;
+}
+
+bool iceberg_timestamptz_to_epoch_microseconds(FunctionContext* context, const TimestampValue& timestamp,
+                                               int64_t* value) {
+    cctz::time_zone timezone = cctz::utc_time_zone();
+    if (context != nullptr && context->state() != nullptr) {
+        timezone = context->state()->timezone_obj();
+    }
+
+    int year, month, day, hour, minute, second, usec;
+    timestamp.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+    DateTimeValue datetime(TIME_DATETIME, year, month, day, hour, minute, second, usec);
+
+    int64_t unix_second;
+    if (!datetime.unix_timestamp(&unix_second, timezone)) {
+        return false;
+    }
+
+    *value = unix_second * 1000000L + usec;
+    return true;
+}
+
+} // namespace
 
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
@@ -49,8 +86,8 @@ DEFINE_UNARY_FN_WITH_IMPL(NanCheck, value) {
     return std::isnan(value);
 }
 
-DEFINE_UNARY_FN_WITH_IMPL(ExpCheck, value) {
-    return std::isnan(value) || value > MAX_EXP_PARAMETER;
+DEFINE_UNARY_FN_WITH_IMPL(InfNanCheck, value) {
+    return std::isinf(value) || std::isnan(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
@@ -95,10 +132,10 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
         return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));       \
     }
 
-#define DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN(NAME, TYPE, RESULT_TYPE, NULL_FN)                 \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {  \
-        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NULL_FN>; \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));      \
+#define DEFINE_MATH_UNARY_WITH_OUTPUT_INF_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE)                      \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {      \
+        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, InfNanCheck>; \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));          \
     }
 
 #define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                 \
@@ -106,6 +143,13 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
         using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>;   \
         return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
                                                                              VECTORIZED_FN_ARGS(1)); \
+    }
+
+#define DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)              \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {       \
+        using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, InfNanCheck>; \
+        return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),   \
+                                                                             VECTORIZED_FN_ARGS(1));  \
     }
 
 // ============ math function macro ==========
@@ -146,9 +190,9 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     DEFINE_UNARY_FN(NAME##Impl, FN);                                                      \
     DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE);
 
-#define DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN_WITH_IMPL(NAME, TYPE, RESULT_TYPE, FN, NULL_FN) \
-    DEFINE_UNARY_FN(NAME##Impl, FN);                                                           \
-    DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN(NAME, TYPE, RESULT_TYPE, NULL_FN);
+#define DEFINE_MATH_UNARY_WITH_OUTPUT_INF_NAN_CHECK_FN_WITH_IMPL(NAME, TYPE, RESULT_TYPE, FN) \
+    DEFINE_UNARY_FN(NAME##Impl, FN);                                                          \
+    DEFINE_MATH_UNARY_WITH_OUTPUT_INF_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE);
 
 #define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(NAME, LTYPE, RTYPE, RESULT_TYPE, FN) \
     DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                                        \
@@ -243,9 +287,9 @@ DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_float, TYPE_FLOAT, TYPE_FLOAT, std::fabs);
 
 // integer abs
 // std::abs(TYPE_MIN) is still TYPE_MIN, so integers except largeint need to cast to ResultType
-// before std::abs.
-DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_largeint, TYPE_LARGEINT, TYPE_LARGEINT, std::abs);
-DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_bigint, TYPE_BIGINT, TYPE_LARGEINT, std::abs);
+// before std::abs. largeint uses starrocks::abs so int128 remains portable across libstdc++ and libc++.
+DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_largeint, TYPE_LARGEINT, TYPE_LARGEINT, starrocks::abs);
+DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_bigint, TYPE_BIGINT, TYPE_LARGEINT, starrocks::abs);
 DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_int, TYPE_INT, TYPE_BIGINT, std::abs);
 DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_smallint, TYPE_SMALLINT, TYPE_INT, std::abs);
 DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_tinyint, TYPE_TINYINT, TYPE_SMALLINT, std::abs);
@@ -253,7 +297,8 @@ DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_tinyint, TYPE_TINYINT, TYPE_SMALLINT, st
 // decimal abs
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal32, TYPE_DECIMAL32, TYPE_DECIMAL32, std::abs);
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal64, TYPE_DECIMAL64, TYPE_DECIMAL64, std::abs);
-DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal128, TYPE_DECIMAL128, TYPE_DECIMAL128, std::abs);
+DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal128, TYPE_DECIMAL128, TYPE_DECIMAL128, starrocks::abs);
+DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal256, TYPE_DECIMAL256, TYPE_DECIMAL256, std::abs);
 
 // degrees
 DEFINE_UNARY_FN_WITH_IMPL(abs_decimalv2valImpl, v) {
@@ -281,11 +326,13 @@ DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan, TYPE_DOUBLE, TYPE_DOU
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(tanh, TYPE_DOUBLE, TYPE_DOUBLE, std::tanh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(ceil, TYPE_DOUBLE, TYPE_BIGINT, std::ceil);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(floor, TYPE_DOUBLE, TYPE_BIGINT, std::floor);
-DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_DOUBLE, std::exp, ExpCheck);
+
+DEFINE_MATH_UNARY_WITH_OUTPUT_INF_NAN_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_DOUBLE, std::exp);
 
 DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN_WITH_IMPL(ln, TYPE_DOUBLE, TYPE_DOUBLE, std::log);
 DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN_WITH_IMPL(log10, TYPE_DOUBLE, TYPE_DOUBLE, std::log10);
 DEFINE_MATH_UNARY_WITH_NEGATIVE_CHECK_FN_WITH_IMPL(sqrt, TYPE_DOUBLE, TYPE_DOUBLE, std::sqrt);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cbrt, TYPE_DOUBLE, TYPE_DOUBLE, std::cbrt);
 
 DEFINE_BINARY_FUNCTION_WITH_IMPL(truncateImpl, l, r) {
     return MathFunctions::double_round(l, r, false, true);
@@ -295,11 +342,280 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(round_up_toImpl, l, r) {
     return MathFunctions::double_round(l, r, false, false);
 }
 
+DEFINE_BINARY_FUNCTION_WITH_IMPL(powImpl, l, r) {
+    // fast path
+    if (r == 1.0) {
+        return l;
+    } else if (r == 2.0) {
+        return l * l;
+    } else if (r == -1.0) {
+        return 1.0 / l;
+    } else if (r == 0) {
+        return 1.0;
+    }
+    return std::pow(l, r);
+}
+DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN(pow, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE);
+
 // binary math
 DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(truncate, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
 DEFINE_MATH_BINARY_FN(round_up_to, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
-DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(pow, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::pow);
 DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan2, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::atan2);
+
+// Iceberg truncate/bucket transforms use the second argument (truncate width /
+// number of buckets) directly as a modulo divisor. Iceberg requires it to be a
+// positive number; reject width <= 0 here so a width of 0 returns a normal error
+// instead of raising SIGFPE on the integer idiv.
+static Status check_iceberg_transform_width(int64_t width) {
+    if (width <= 0) {
+        return Status::InvalidArgument(
+                fmt::format("The width/num_buckets of iceberg transform must be greater than 0, but got: {}", width));
+    }
+    return Status::OK();
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    const int32_t original_scale = viewer.column()->scale();
+    const int32_t original_precision = viewer.column()->precision();
+    RunTimeCppType<Type> max_val = 1;
+    for (int32_t p = original_precision; p > 0; p--) {
+        max_val *= 10;
+    }
+
+#define ABS(x) ((x) < 0 ? -(x) : (x))
+    ColumnBuilder<Type> builder(size, original_precision, original_scale);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            RunTimeCppType<Type> val = viewer.value(i);
+            RunTimeCppType<Type> res = val - ((val % width) + width) % width;
+            if (ABS(res) >= max_val) {
+                std::stringstream error;
+                error << "Truncate to decimal(" << original_precision << ", " << original_scale
+                      << ") failed, because the result is overflow.";
+                context->set_error(error.str().c_str());
+                return Status::RuntimeError(error.str());
+            }
+            builder.append(res);
+        }
+    }
+#undef ABS
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL32>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL128>(FunctionContext*, const Columns&);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+#define haveDifferentSigns(x, y) (((x) ^ (y)) < 0)
+    ColumnBuilder<Type> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            RunTimeCppType<Type> val = viewer.value(i);
+            RunTimeCppType<Type> res = val - ((val % width) + width) % width;
+            if (haveDifferentSigns(res, val)) {
+                std::stringstream error;
+                error << "Truncate to integer failed, because the result is overflow.";
+                context->set_error(error.str().c_str());
+                return Status::RuntimeError(error.str());
+            }
+            builder.append(res);
+        }
+    }
+#undef haveDifferentSigns
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_INT>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = viewer.value(i);
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(val), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_INT>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            auto val = viewer.value(i);
+            int32_t hash;
+            murmur_hash3_x86_32(val.data, val.size, 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATE> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = viewer.value(i).julian() - date::UNIX_EPOCH_JULIAN;
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = iceberg_datetime_to_epoch_microseconds(viewer.value(i));
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionContext* context,
+                                                                       const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val;
+            if (!iceberg_timestamptz_to_epoch_microseconds(context, viewer.value(i), &val)) {
+                builder.append_null();
+                continue;
+            }
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template <typename T>
+vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
+    std::vector<uint8_t> byteArray(sizeof(value));
+    memcpy(byteArray.data(), &value, sizeof(value));
+    if (value < 0) {
+        value = ~value;
+    }
+    int bitLength = 0;
+    while (value > 0) {
+        value >>= 1;
+        bitLength++;
+    }
+    // Convert the integer to its byte representation (Big Endian)
+    byteArray.resize(bitLength / 8 + 1);
+    std::reverse(byteArray.begin(), byteArray.end());
+    return byteArray;
+}
+
+template vector<uint8_t> MathFunctions::int_to_byte_array<int32_t>(int32_t value);
+template vector<uint8_t> MathFunctions::int_to_byte_array<int64_t>(int64_t value);
+template vector<uint8_t> MathFunctions::int_to_byte_array<int128_t>(int128_t value);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            auto val = viewer.value(i);
+            auto byte_array = int_to_byte_array(val);
+            int32_t hash;
+            murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>(FunctionContext*, const Columns&);
 
 #undef DEFINE_MATH_UNARY_FN
 #undef DEFINE_MATH_UNARY_FN_WITH_IMPL
@@ -487,13 +803,12 @@ template <DecimalRoundRule rule>
 StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const Columns& columns) {
     const auto& type = context->get_return_type();
 
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    if (c0->only_null() || c1->only_null()) {
-        return ColumnHelper::create_const_null_column(c0->size());
-    }
 
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     if (c0->has_null() || c1->has_null()) {
         has_null = true;
@@ -516,17 +831,22 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     c0 = FunctionHelper::get_data_column_of_nullable(c0);
     c1 = FunctionHelper::get_data_column_of_nullable(c1);
 
-    ColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
+    MutableColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
     res->resize_uninitialized(size);
 
     const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->scale();
 
-    int128_t* raw_c0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->get_data().data();
-    int32_t* raw_c1 = ColumnHelper::cast_to_raw<TYPE_INT>(c1)->get_data().data();
-    int128_t* raw_res = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res)->get_data().data();
-    uint8_t* raw_null_flags = null_flags->get_data().data();
+    auto* res_col = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res.get());
+    auto* c0_col = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0);
+    auto* c1_col = ColumnHelper::cast_to_raw<TYPE_INT>(c1);
 
-    // If c2 is not const, than we need to keep the originl scale
+    const int128_t* raw_c0 = c0_col->get_data().data();
+    const int32_t* raw_c1 = c1_col->get_data().data();
+    int128_t* raw_res = res_col->get_data().data();
+    auto& null_data = null_flags->get_data();
+    uint8_t* raw_null_flags = null_data.data();
+
+    // If c2 is not const, than we need to keep the original scale
     // TODO(hcf) For truncate(v, d), we also to keep the scale if d is constant
     if (c0_is_const && c1_is_const) {
         bool is_over_flow;
@@ -536,7 +856,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
             res = ColumnHelper::create_const_null_column(size);
         } else {
             res->resize(1);
-            res = ConstColumn::create(res, size);
+            res = ConstColumn::create(std::move(res), size);
         }
     } else if (c0_is_const) {
         for (auto i = 0; i < size; i++) {
@@ -692,7 +1012,7 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
 }
 
 Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?
@@ -748,77 +1068,468 @@ static float sum_m256(__m256 v) {
     __m128 result = _mm_add_ss(vlow, vhigh);
     return _mm_cvtss_f32(result);
 }
+
+static inline float fast_rsqrt_nr(float x) {
+    // Guard against denormal/very-small inputs where _mm_rsqrt_ss produces infinity.
+    // Fall back to standard sqrt for such cases.
+    if (x < 1e-30f) {
+        return 1.0f / std::sqrt(x);
+    }
+    __m128 vx = _mm_set_ss(x);
+    __m128 y = _mm_rsqrt_ss(vx);
+    // One Newton-Raphson refinement step for better accuracy.
+    const __m128 half = _mm_set_ss(0.5f);
+    const __m128 three_halves = _mm_set_ss(1.5f);
+    y = _mm_mul_ss(y, _mm_sub_ss(three_halves, _mm_mul_ss(half, _mm_mul_ss(vx, _mm_mul_ss(y, y)))));
+    return _mm_cvtss_f32(y);
+}
 #endif
 
-template <LogicalType TYPE, bool isNorm>
-StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
+#ifndef __AVX2__
+static inline bool offsets_equal_dim_scalar(const uint32_t* offsets, size_t num_rows, uint32_t dim) {
+    if (dim == 0) {
+        return false;
+    }
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (offsets[i + 1] - offsets[i] != dim) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool offsets_equal_dim_two_scalar(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                                size_t num_rows, uint32_t dim) {
+    if (dim == 0) {
+        return false;
+    }
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (base_offsets[i + 1] - base_offsets[i] != dim || target_offsets[i + 1] - target_offsets[i] != dim) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool offsets_equal_nonzero_scalar(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                                size_t num_rows) {
+    for (size_t i = 0; i < num_rows; ++i) {
+        uint32_t b_dim = base_offsets[i + 1] - base_offsets[i];
+        uint32_t t_dim = target_offsets[i + 1] - target_offsets[i];
+        if (b_dim == 0 || b_dim != t_dim) {
+            return false;
+        }
+    }
+    return true;
+}
+#else // __AVX2__
+static inline bool offsets_equal_dim_avx2(const uint32_t* offsets, size_t num_rows, uint32_t dim) {
+    if (dim == 0) {
+        return false;
+    }
+    __m256i dim_vec = _mm256_set1_epi32(static_cast<int>(dim));
+    size_t i = 0;
+    for (; i + 8 <= num_rows; i += 8) {
+        __m256i o0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offsets + i));
+        __m256i o1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offsets + i + 1));
+        __m256i diff = _mm256_sub_epi32(o1, o0);
+        __m256i eq = _mm256_cmpeq_epi32(diff, dim_vec);
+        if (_mm256_movemask_epi8(eq) != -1) {
+            return false;
+        }
+    }
+    for (; i < num_rows; ++i) {
+        if (offsets[i + 1] - offsets[i] != dim) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool offsets_equal_dim_two_avx2(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                              size_t num_rows, uint32_t dim) {
+    if (dim == 0) {
+        return false;
+    }
+    __m256i dim_vec = _mm256_set1_epi32(static_cast<int>(dim));
+    size_t i = 0;
+    for (; i + 8 <= num_rows; i += 8) {
+        __m256i b0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(base_offsets + i));
+        __m256i b1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(base_offsets + i + 1));
+        __m256i t0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(target_offsets + i));
+        __m256i t1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(target_offsets + i + 1));
+        __m256i bdiff = _mm256_sub_epi32(b1, b0);
+        __m256i tdiff = _mm256_sub_epi32(t1, t0);
+        __m256i b_eq = _mm256_cmpeq_epi32(bdiff, dim_vec);
+        __m256i t_eq = _mm256_cmpeq_epi32(tdiff, dim_vec);
+        __m256i ok = _mm256_and_si256(b_eq, t_eq);
+        if (_mm256_movemask_epi8(ok) != -1) {
+            return false;
+        }
+    }
+    for (; i < num_rows; ++i) {
+        if (base_offsets[i + 1] - base_offsets[i] != dim || target_offsets[i + 1] - target_offsets[i] != dim) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool offsets_equal_nonzero_avx2(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                              size_t num_rows) {
+    __m256i zero = _mm256_setzero_si256();
+    size_t i = 0;
+    for (; i + 8 <= num_rows; i += 8) {
+        __m256i b0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(base_offsets + i));
+        __m256i b1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(base_offsets + i + 1));
+        __m256i t0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(target_offsets + i));
+        __m256i t1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(target_offsets + i + 1));
+        __m256i bdiff = _mm256_sub_epi32(b1, b0);
+        __m256i tdiff = _mm256_sub_epi32(t1, t0);
+        __m256i eq = _mm256_cmpeq_epi32(bdiff, tdiff);
+        __m256i gt0 = _mm256_cmpgt_epi32(bdiff, zero);
+        __m256i ok = _mm256_and_si256(eq, gt0);
+        if (_mm256_movemask_epi8(ok) != -1) {
+            return false;
+        }
+    }
+    for (; i < num_rows; ++i) {
+        uint32_t b_dim = base_offsets[i + 1] - base_offsets[i];
+        uint32_t t_dim = target_offsets[i + 1] - target_offsets[i];
+        if (b_dim == 0 || b_dim != t_dim) {
+            return false;
+        }
+    }
+    return true;
+}
+#endif
+
+static inline bool offsets_equal_dim(const uint32_t* offsets, size_t num_rows, uint32_t dim) {
+#ifdef __AVX2__
+    return offsets_equal_dim_avx2(offsets, num_rows, dim);
+#else
+    return offsets_equal_dim_scalar(offsets, num_rows, dim);
+#endif
+}
+
+static inline bool offsets_equal_dim_two(const uint32_t* base_offsets, const uint32_t* target_offsets, size_t num_rows,
+                                         uint32_t dim) {
+#ifdef __AVX2__
+    return offsets_equal_dim_two_avx2(base_offsets, target_offsets, num_rows, dim);
+#else
+    return offsets_equal_dim_two_scalar(base_offsets, target_offsets, num_rows, dim);
+#endif
+}
+
+static inline bool offsets_equal_nonzero(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                         size_t num_rows) {
+#ifdef __AVX2__
+    return offsets_equal_nonzero_avx2(base_offsets, target_offsets, num_rows);
+#else
+    return offsets_equal_nonzero_scalar(base_offsets, target_offsets, num_rows);
+#endif
+}
+
+static inline float sum_squares_float(const float* data, size_t dim) {
+    float sum = 0.0f;
+#ifdef __AVX2__
+    __m256 sum_vec = _mm256_setzero_ps();
+    size_t j = 0;
+    for (; j + 7 < dim; j += 8) {
+        __m256 v = _mm256_loadu_ps(data + j);
+        sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(v, v));
+    }
+    sum += sum_m256(sum_vec);
+    for (; j < dim; ++j) {
+        sum += data[j] * data[j];
+    }
+#else
+    for (size_t j = 0; j < dim; ++j) {
+        sum += data[j] * data[j];
+    }
+#endif
+    return sum;
+}
+
+enum class VectorSimilarityAlgorithm {
+    kCosineSimilarity,
+    kNormalizedCosineSimilarity,
+    kInnerProduct,
+};
+
+template <VectorSimilarityAlgorithm algorithm>
+static inline void vector_similarity_fixed_query(const float* base_vec, size_t dim, const float* column_data,
+                                                 size_t num_rows, float* out) {
+    float base_sum = 0.0f;
+    float base_inv_norm = 0.0f;
+    if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+        base_sum = sum_squares_float(base_vec, dim);
+        if (base_sum == 0.0f) {
+            for (size_t i = 0; i < num_rows; ++i) {
+                out[i] = 0.0f;
+            }
+            return;
+        }
+#ifdef __AVX2__
+        base_inv_norm = fast_rsqrt_nr(base_sum);
+#else
+        base_inv_norm = 1.0f / std::sqrt(base_sum);
+#endif
+    }
+
+    for (size_t i = 0; i < num_rows; ++i) {
+        const float* target = column_data + i * dim;
+        float sum = 0.0f;
+        float target_sum = 0.0f;
+        size_t j = 0;
+#ifdef __AVX2__
+        __m256 sum_vec = _mm256_setzero_ps();
+        __m256 target_sum_vec = _mm256_setzero_ps();
+        for (; j + 7 < dim; j += 8) {
+            __m256 base_vec_data = _mm256_loadu_ps(base_vec + j);
+            __m256 target_vec_data = _mm256_loadu_ps(target + j);
+            __m256 mul_vec = _mm256_mul_ps(base_vec_data, target_vec_data);
+            sum_vec = _mm256_add_ps(sum_vec, mul_vec);
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+                __m256 target_mul_vec = _mm256_mul_ps(target_vec_data, target_vec_data);
+                target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
+            }
+        }
+        sum += sum_m256(sum_vec);
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+            target_sum += sum_m256(target_sum_vec);
+        }
+#endif
+        for (; j < dim; ++j) {
+            sum += base_vec[j] * target[j];
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+                target_sum += target[j] * target[j];
+            }
+        }
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+            if (target_sum == 0.0f) {
+                out[i] = 0.0f;
+            } else {
+#ifdef __AVX2__
+                float target_inv_norm = fast_rsqrt_nr(target_sum);
+                out[i] = sum * base_inv_norm * target_inv_norm;
+#else
+                out[i] = sum * base_inv_norm / std::sqrt(target_sum);
+#endif
+            }
+        } else {
+            out[i] = sum;
+        }
+    }
+}
+
+template <VectorSimilarityAlgorithm algorithm>
+static inline void vector_similarity_fixed_dim_float(const float* base_data, const float* target_data, size_t num_rows,
+                                                     size_t dim, float* out) {
+    for (size_t i = 0; i < num_rows; ++i) {
+        const float* base = base_data + i * dim;
+        const float* target = target_data + i * dim;
+        float sum = 0.0f;
+        float base_sum = 0.0f;
+        float target_sum = 0.0f;
+        size_t j = 0;
+#ifdef __AVX2__
+        __m256 sum_vec = _mm256_setzero_ps();
+        __m256 base_sum_vec = _mm256_setzero_ps();
+        __m256 target_sum_vec = _mm256_setzero_ps();
+        for (; j + 7 < dim; j += 8) {
+            __m256 base_data_vec = _mm256_loadu_ps(base + j);
+            __m256 target_data_vec = _mm256_loadu_ps(target + j);
+
+            __m256 mul_vec = _mm256_mul_ps(base_data_vec, target_data_vec);
+            sum_vec = _mm256_add_ps(sum_vec, mul_vec);
+
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+                __m256 base_mul_vec = _mm256_mul_ps(base_data_vec, base_data_vec);
+                base_sum_vec = _mm256_add_ps(base_sum_vec, base_mul_vec);
+                __m256 target_mul_vec = _mm256_mul_ps(target_data_vec, target_data_vec);
+                target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
+            }
+        }
+        sum += sum_m256(sum_vec);
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+            base_sum += sum_m256(base_sum_vec);
+            target_sum += sum_m256(target_sum_vec);
+        }
+#endif
+        for (; j < dim; ++j) {
+            sum += base[j] * target[j];
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+                base_sum += base[j] * base[j];
+                target_sum += target[j] * target[j];
+            }
+        }
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+            if (base_sum == 0.0f || target_sum == 0.0f) {
+                out[i] = 0.0f;
+            } else {
+                out[i] = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            }
+        } else {
+            out[i] = sum;
+        }
+    }
+}
+
+template <LogicalType TYPE, VectorSimilarityAlgorithm algorithm>
+static StatusOr<ColumnPtr> vector_similarity(FunctionContext* context, const Columns& columns,
+                                             const char* function_name) {
     DCHECK_EQ(columns.size(), 2);
 
     const Column* base = columns[0].get();
     const Column* target = columns[1].get();
     size_t target_size = target->size();
     if (base->size() != target_size) {
-        return Status::InvalidArgument(fmt::format(
-                "cosine_similarity requires equal length arrays. base array size is {} and target array size is {}.",
-                base->size(), target->size()));
+        return Status::InvalidArgument(
+                fmt::format("{} requires equal length arrays. base array size is {} and target array size is {}.",
+                            function_name, base->size(), target->size()));
     }
     if (base->has_null() || target->has_null()) {
-        return Status::InvalidArgument(
-                fmt::format("cosine_similarity does not support null values. {} array has null value.",
-                            base->has_null() ? "base" : "target"));
+        return Status::InvalidArgument(fmt::format("{} does not support null values. {} array has null value.",
+                                                   function_name, base->has_null() ? "base" : "target"));
     }
-    if (base->is_nullable()) {
+
+    bool base_is_const = base->is_constant();
+    bool target_is_const = target->is_constant();
+
+    // If both are const, expand one side to N rows to reuse the single-const fast path.
+    // This avoids dereferencing size-1 offsets with target_size rows.
+    if (base_is_const && target_is_const) {
+        const auto* const_column = down_cast<const ConstColumn*>(target);
+        const_column->data_column()->as_mutable_raw_ptr()->assign(target_size, 0);
+        target = const_column->data_column().get();
+        target_is_const = false;
+    }
+
+    // Helper: strip ConstColumn/NullableColumn wrappers to reach the underlying ArrayColumn.
+    // For const columns we intentionally do NOT call assign() to avoid copying dim*N floats.
+    // Instead we keep the original size-1 data_column and read its first-row pointer directly
+    // inside the const fast-paths below.
+    auto unwrap_to_array = [](const Column* col) -> const Column* {
+        if (col->is_constant()) {
+            col = down_cast<const ConstColumn*>(col)->data_column().get();
+        }
+        if (col->is_nullable()) {
+            col = down_cast<const NullableColumn*>(col)->data_column().get();
+        }
+        return col;
+    };
+
+    // For non-const columns we still need the full N-row view.
+    if (!base_is_const && base->is_nullable()) {
         base = down_cast<const NullableColumn*>(base)->data_column().get();
     }
-    if (target->is_nullable()) {
+    if (!target_is_const && target->is_nullable()) {
         target = down_cast<const NullableColumn*>(target)->data_column().get();
     }
 
     // check dimension equality.
-    const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
-    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().get_data().data();
-    size_t base_flat_size = base_flat->size();
+    // For const columns use the unwrapped size-1 ArrayColumn; for non-const use the N-row one.
+    const Column* base_arr_for_meta = base_is_const ? unwrap_to_array(columns[0].get()) : base;
+    const Column* target_arr_for_meta = target_is_const ? unwrap_to_array(columns[1].get()) : target;
 
-    const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
-    size_t target_flat_size = target_flat->size();
-    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().get_data().data();
+    const Column* base_flat_meta = down_cast<const ArrayColumn*>(base_arr_for_meta)->elements_column().get();
+    const uint32_t* base_offset_meta =
+            down_cast<const ArrayColumn*>(base_arr_for_meta)->offsets().immutable_data().data();
 
-    if (base_flat_size != target_flat_size) {
-        return Status::InvalidArgument("cosine_similarity requires equal length arrays");
+    const Column* target_flat_meta = down_cast<const ArrayColumn*>(target_arr_for_meta)->elements_column().get();
+    const uint32_t* target_offset_meta =
+            down_cast<const ArrayColumn*>(target_arr_for_meta)->offsets().immutable_data().data();
+
+    if (base_flat_meta->has_null() || target_flat_meta->has_null()) {
+        return Status::InvalidArgument(fmt::format("{} does not support null values", function_name));
+    }
+    if (base_flat_meta->is_nullable()) {
+        base_flat_meta = down_cast<const NullableColumn*>(base_flat_meta)->data_column().get();
+    }
+    if (target_flat_meta->is_nullable()) {
+        target_flat_meta = down_cast<const NullableColumn*>(target_flat_meta)->data_column().get();
     }
 
-    if (base_flat->has_null() || target_flat->has_null()) {
-        return Status::InvalidArgument("cosine_similarity does not support null values");
-    }
-    if (base_flat->is_nullable()) {
-        base_flat = down_cast<const NullableColumn*>(base_flat)->data_column().get();
-    }
-    if (target_flat->is_nullable()) {
-        target_flat = down_cast<const NullableColumn*>(target_flat)->data_column().get();
-    }
+    const Column* base_flat = base_flat_meta;
+    const uint32_t* base_offset = base_offset_meta;
+    const Column* target_flat = target_flat_meta;
+    const uint32_t* target_offset = target_offset_meta;
 
     using CppType = RunTimeCppType<TYPE>;
     using ColumnType = RunTimeColumnType<TYPE>;
 
-    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->get_data().data();
-    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->get_data().data();
+    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->immutable_data().data();
+    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->immutable_data().data();
 
     // prepare result with nullable value.
-    ColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
     ColumnType* data_result = down_cast<ColumnType*>(result.get());
     CppType* result_data = data_result->get_data().data();
+
+    if constexpr (std::is_same_v<CppType, float>) {
+        if (target_size == 0) {
+            return result;
+        }
+        // base is const (size-1), target has N rows.
+        // base_data_head points to the single base vector (dim floats, no copy needed).
+        if (base_is_const && !target_is_const) {
+            uint32_t dim = base_offset_meta[1] - base_offset_meta[0];
+            if (!offsets_equal_dim(target_offset, target_size, dim)) {
+                return Status::InvalidArgument(fmt::format(
+                        "{} requires equal length arrays in each row. base array dimension size is {}, target array "
+                        "dimension size is {}.",
+                        function_name, dim, target_offset[1] - target_offset[0]));
+            }
+            const float* base_vec = reinterpret_cast<const float*>(base_data_head);
+            const float* target_data = reinterpret_cast<const float*>(target_data_head);
+            vector_similarity_fixed_query<algorithm>(base_vec, dim, target_data, target_size, result_data);
+            return result;
+        }
+        // target is const (size-1), base has N rows.
+        // target_data_head points to the single query vector (dim floats, no copy needed).
+        if (!base_is_const && target_is_const) {
+            uint32_t dim = target_offset_meta[1] - target_offset_meta[0];
+            if (!offsets_equal_dim(base_offset, target_size, dim)) {
+                return Status::InvalidArgument(fmt::format(
+                        "{} requires equal length arrays in each row. base array dimension size is {}, target array "
+                        "dimension size is {}.",
+                        function_name, base_offset[1] - base_offset[0], dim));
+            }
+            const float* target_vec = reinterpret_cast<const float*>(target_data_head);
+            const float* base_data = reinterpret_cast<const float*>(base_data_head);
+            vector_similarity_fixed_query<algorithm>(target_vec, dim, base_data, target_size, result_data);
+            return result;
+        }
+        uint32_t dim = target_offset[1] - target_offset[0];
+        if (offsets_equal_dim_two(base_offset, target_offset, target_size, dim)) {
+            if (dim == 0) {
+                return Status::InvalidArgument(fmt::format("{} requires non-empty arrays in each row", function_name));
+            }
+            vector_similarity_fixed_dim_float<algorithm>(reinterpret_cast<const float*>(base_data_head),
+                                                         reinterpret_cast<const float*>(target_data_head), target_size,
+                                                         dim, result_data);
+            return result;
+        }
+        if (!offsets_equal_nonzero(base_offset, target_offset, target_size)) {
+            return Status::InvalidArgument(fmt::format(
+                    "{} requires equal length arrays in each row. base array dimension size is inconsistent with "
+                    "target array dimension size",
+                    function_name));
+        }
+    }
 
     for (size_t i = 0; i < target_size; i++) {
         size_t t_dim_size = target_offset[i + 1] - target_offset[i];
         size_t b_dim_size = base_offset[i + 1] - base_offset[i];
         if (t_dim_size != b_dim_size) {
-            return Status::InvalidArgument(
-                    fmt::format("cosine_similarity requires equal length arrays in each row. base array dimension size "
-                                "is {}, target array dimension size is {}.",
-                                b_dim_size, t_dim_size));
+            return Status::InvalidArgument(fmt::format(
+                    "{} requires equal length arrays in each row. base array dimension size is {}, target array "
+                    "dimension size is {}.",
+                    function_name, b_dim_size, t_dim_size));
         }
         if (t_dim_size == 0) {
-            return Status::InvalidArgument("cosine_similarity requires non-empty arrays in each row");
+            return Status::InvalidArgument(fmt::format("{} requires non-empty arrays in each row", function_name));
         }
     }
 
@@ -830,56 +1541,153 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         CppType target_sum = 0;
         size_t dim_size = target_offset[i + 1] - target_offset[i];
         CppType result_value = 0;
-        size_t j = 0;
-#ifdef __AVX2__
-        if (std::is_same_v<CppType, float>) {
-            __m256 sum_vec = _mm256_setzero_ps();
-            __m256 base_sum_vec = _mm256_setzero_ps();
-            __m256 target_sum_vec = _mm256_setzero_ps();
-            for (; j + 7 < dim_size; j += 8) {
-                __m256 base_data_vec = _mm256_loadu_ps(base_data + j);
-                __m256 target_data_vec = _mm256_loadu_ps(target_data + j);
-
-                __m256 mul_vec = _mm256_mul_ps(base_data_vec, target_data_vec);
-                sum_vec = _mm256_add_ps(sum_vec, mul_vec);
-
-                if constexpr (!isNorm) {
-                    __m256 base_mul_vec = _mm256_mul_ps(base_data_vec, base_data_vec);
-                    base_sum_vec = _mm256_add_ps(base_sum_vec, base_mul_vec);
-                    __m256 target_mul_vec = _mm256_mul_ps(target_data_vec, target_data_vec);
-                    target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
-                }
-            }
-            sum += sum_m256(sum_vec);
-            if constexpr (!isNorm) {
-                base_sum += sum_m256(base_sum_vec);
-                target_sum += sum_m256(target_sum_vec);
-            }
-        }
-#endif
-        for (; j < dim_size; j++) {
+        for (size_t j = 0; j < dim_size; j++) {
             sum += base_data[j] * target_data[j];
-            if constexpr (!isNorm) {
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
                 base_sum += base_data[j] * base_data[j];
                 target_sum += target_data[j] * target_data[j];
             }
         }
-
-        if constexpr (!isNorm) {
-            result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
+            if (base_sum == 0 || target_sum == 0) {
+                result_value = 0;
+            } else {
+                result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            }
         } else {
             result_value = sum;
         }
         result_data[i] = result_value;
         target_data += dim_size;
+        base_data += dim_size;
     }
     return result;
 }
 
-// explicitly instaniate template function.
+template <LogicalType TYPE, bool isNorm>
+StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
+    if constexpr (isNorm) {
+        return vector_similarity<TYPE, VectorSimilarityAlgorithm::kNormalizedCosineSimilarity>(context, columns,
+                                                                                               "cosine_similarity");
+    }
+    return vector_similarity<TYPE, VectorSimilarityAlgorithm::kCosineSimilarity>(context, columns, "cosine_similarity");
+}
+
+template <LogicalType TYPE>
+StatusOr<ColumnPtr> MathFunctions::inner_product(FunctionContext* context, const Columns& columns) {
+    return vector_similarity<TYPE, VectorSimilarityAlgorithm::kInnerProduct>(context, columns, "inner_product");
+}
+
+// explicitly instantiate template function.
 template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, true>(FunctionContext* context,
                                                                                 const Columns& columns);
 template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, false>(FunctionContext* context,
                                                                                  const Columns& columns);
+template StatusOr<ColumnPtr> MathFunctions::inner_product<TYPE_FLOAT>(FunctionContext* context, const Columns& columns);
+
+template <LogicalType TYPE>
+StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+
+    const Column* base = columns[0].get();
+    const Column* target = columns[1].get();
+    size_t target_size = target->size();
+    if (base->size() != target_size) {
+        return Status::InvalidArgument(fmt::format(
+                "l2_distance requires equal length arrays. base array size is {} and target array size is {}.",
+                base->size(), target->size()));
+    }
+    if (base->has_null() || target->has_null()) {
+        return Status::InvalidArgument(fmt::format("l2_distance does not support null values. {} array has null value.",
+                                                   base->has_null() ? "base" : "target"));
+    }
+    if (base->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(base);
+        const_column->data_column()->as_mutable_raw_ptr()->assign(base->size(), 0);
+        base = const_column->data_column().get();
+    }
+    if (target->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(target);
+        const_column->data_column()->as_mutable_raw_ptr()->assign(target->size(), 0);
+        target = const_column->data_column().get();
+    }
+    if (base->is_nullable()) {
+        base = down_cast<const NullableColumn*>(base)->data_column().get();
+    }
+    if (target->is_nullable()) {
+        target = down_cast<const NullableColumn*>(target)->data_column().get();
+    }
+
+    // check dimension equality.
+    const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
+    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().immutable_data().data();
+    size_t base_flat_size = base_flat->size();
+
+    const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
+    size_t target_flat_size = target_flat->size();
+    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().immutable_data().data();
+
+    if (base_flat_size != target_flat_size) {
+        return Status::InvalidArgument("l2_distance requires equal length arrays");
+    }
+
+    if (base_flat->has_null() || target_flat->has_null()) {
+        return Status::InvalidArgument("l2_distance does not support null values");
+    }
+    if (base_flat->is_nullable()) {
+        base_flat = down_cast<const NullableColumn*>(base_flat)->data_column().get();
+    }
+    if (target_flat->is_nullable()) {
+        target_flat = down_cast<const NullableColumn*>(target_flat)->data_column().get();
+    }
+
+    using CppType = RunTimeCppType<TYPE>;
+    using ColumnType = RunTimeColumnType<TYPE>;
+
+    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->immutable_data().data();
+    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->immutable_data().data();
+
+    // prepare result with nullable value.
+    MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    ColumnType* data_result = down_cast<ColumnType*>(result.get());
+    CppType* result_data = data_result->get_data().data();
+
+    for (size_t i = 0; i < target_size; i++) {
+        size_t t_dim_size = target_offset[i + 1] - target_offset[i];
+        size_t b_dim_size = base_offset[i + 1] - base_offset[i];
+        if (t_dim_size != b_dim_size) {
+            return Status::InvalidArgument(
+                    fmt::format("l2_distance requires equal length arrays in each row. base array dimension size "
+                                "is {}, target array dimension size is {}.",
+                                b_dim_size, t_dim_size));
+        }
+        if (t_dim_size == 0) {
+            return Status::InvalidArgument("l2_distance requires non-empty arrays in each row");
+        }
+    }
+
+    const CppType* target_data = target_data_head;
+    const CppType* base_data = base_data_head;
+
+    for (size_t i = 0; i < target_size; i++) {
+        CppType sum = 0;
+        size_t dim_size = target_offset[i + 1] - target_offset[i];
+        for (size_t j = 0; j < dim_size; j++) {
+            CppType distance;
+            distance = (base_data[j] - target_data[j]) * (base_data[j] - target_data[j]);
+            sum += distance;
+        }
+        result_data[i] = sum;
+        target_data += dim_size;
+        base_data += dim_size;
+    }
+
+    return result;
+}
+
+// explicitly instantiate template function.
+template StatusOr<ColumnPtr> MathFunctions::l2_distance<TYPE_FLOAT>(FunctionContext* context, const Columns& columns);
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/MathFunctions.inc"

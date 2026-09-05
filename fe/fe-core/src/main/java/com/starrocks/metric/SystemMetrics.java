@@ -42,6 +42,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 
@@ -72,7 +74,15 @@ public class SystemMetrics {
         if (FeConstants.runningUnitTest) {
             procFile = getClass().getClassLoader().getResource("data/net_snmp_normal").getFile();
         }
-        if (Files.notExists(Paths.get(procFile))) {
+
+        Path path;
+        try {
+            path = Paths.get(procFile);
+        } catch (InvalidPathException e) {
+            return;
+        }
+
+        if (Files.notExists(path)) {
             LOG.warn("{} doesn't exist", procFile);
             return;
         }

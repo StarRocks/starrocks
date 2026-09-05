@@ -1,0 +1,133 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.ast.expression;
+
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Objects;
+
+public class BoolLiteral extends LiteralExpr {
+    private boolean value;
+
+    private BoolLiteral() {
+    }
+
+    public BoolLiteral(boolean value) {
+        this(value, NodePosition.ZERO);
+    }
+
+    public BoolLiteral(boolean value, NodePosition pos) {
+        super(pos);
+        this.value = value;
+        type = BooleanType.BOOLEAN;
+    }
+
+    public BoolLiteral(String value) {
+        this(value, NodePosition.ZERO);
+    }
+
+    public BoolLiteral(String value, NodePosition pos) {
+        super(pos);
+        this.type = BooleanType.BOOLEAN;
+        if (value.trim().equalsIgnoreCase("true") || value.trim().equals("1")) {
+            this.value = true;
+        } else if (value.trim().equalsIgnoreCase("false") || value.trim().equals("0")) {
+            this.value = false;
+        } else {
+            throw new ParsingException("Invalid BOOLEAN literal: " + value);
+        }
+    }
+
+    protected BoolLiteral(BoolLiteral other) {
+        super(other);
+        value = other.value;
+    }
+
+    @Override
+    public Expr clone() {
+        return new BoolLiteral(this);
+    }
+
+    @Override
+    public ByteBuffer getHashValue(Type type) {
+        ByteBuffer buffer = ByteBuffer.allocate(8);
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        if (type.getPrimitiveType() == PrimitiveType.BOOLEAN) {
+            if (value) {
+                buffer.put((byte) 1);
+            } else {
+                buffer.put((byte) 0);
+            }
+        } else {
+            return super.getHashValue(type);
+        }
+        buffer.flip();
+        return buffer;
+    }
+
+    public boolean getValue() {
+        return value;
+    }
+
+    @Override
+    public boolean isMinValue() {
+        return false;
+    }
+
+    @Override
+    public int compareLiteral(LiteralExpr expr) {
+        if (expr instanceof NullLiteral) {
+            return 1;
+        }
+        return Long.signum(getLongValue() - expr.getLongValue());
+    }
+
+    @Override
+    public Object getRealObjectValue() {
+        return value;
+    }
+
+    @Override
+    public String getStringValue() {
+        return value ? "TRUE" : "FALSE";
+    }
+
+    @Override
+    public long getLongValue() {
+        return value ? 1 : 0;
+    }
+
+    @Override
+    public double getDoubleValue() {
+        return value ? 1.0 : 0.0;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBoolLiteral(this, context);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), value);
+    }
+}

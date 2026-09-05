@@ -1,12 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Use the IMPERSONATE privilege with EXECUTE AS statements to switch the execution context of the current session to the impersonated user."
 ---
 
 # EXECUTE AS
 
-## Description
-
-After you obtain the privilege to impersonate a user, you can use the EXECUTE AS statement to switch the execution context of the current session to the user.
+Use the IMPERSONATE privilege with EXECUTE AS statements to switch the execution context of the current session to the impersonated user.
 
 This command is supported from v2.4.
 
@@ -22,7 +21,7 @@ EXECUTE AS user WITH NO REVERT
 
 ## Usage notes
 
-- The current login user (who calls the EXECUTE AS statement) must be granted the privilege to impersonate another user. For more information, see [GRANT](../account-management/GRANT.md).
+- The current login user (who calls the EXECUTE AS statement) must be granted the privilege to impersonate another user. For more information, see [GRANT](./GRANT.md).
 - The EXECUTE AS statement must contain the WITH NO REVERT clause, which means the execution context of the current session cannot be switched back to the original login user before the current session ends.
 
 ## Examples

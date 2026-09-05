@@ -14,48 +14,48 @@
 
 #pragma once
 
+#include "base/container/raw_container.h"
 #include "gutil/casts.h"
-#include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
-#include "storage/rowset/common.h"
-#include "util/raw_container.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
 // Instead of return a batch of column values, RowIdColumnIterator just return a batch
 // of row id when you call `next_batch`.
 // This is used for late materialization, check `SegmentIterator` for a reference.
-class RowIdColumnIterator final : public starrocks::ColumnIterator {
+template <typename RowIdType>
+class TRowIdColumnIterator final : public starrocks::ColumnIterator {
     using ColumnIterator = starrocks::ColumnIterator;
     using ColumnIteratorOptions = starrocks::ColumnIteratorOptions;
     using ordinal_t = starrocks::ordinal_t;
-    using rowid_t = starrocks::rowid_t;
 
 public:
-    RowIdColumnIterator() = default;
+    TRowIdColumnIterator() = default;
 
-    ~RowIdColumnIterator() override = default;
+    ~TRowIdColumnIterator() override = default;
 
-    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override {
+    Status init(const ColumnIteratorOptions& opts) override {
         _opts = opts;
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_first() override {
+    Status seek_to_first() override {
         _current_rowid = 0;
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override {
+    Status seek_to_ordinal(ordinal_t ord) override {
         _current_rowid = ord;
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override {
-        Buffer<rowid_t>& v = down_cast<FixedLengthColumn<rowid_t>*>(dst)->get_data();
+    Status next_batch(size_t* n, Column* dst) override {
+        Buffer<RowIdType>& v = down_cast<FixedLengthColumn<RowIdType>*>(dst)->get_data();
         const size_t sz = v.size();
         raw::stl_vector_resize_uninitialized(&v, sz + *n);
-        rowid_t* ptr = &v[sz];
+        RowIdType* ptr = &v[sz];
         for (size_t i = 0; i < *n; i++) {
             ptr[i] = _current_rowid + i;
         }
@@ -63,16 +63,28 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+    Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
+                                  size_t* processed_rows) override {
+        size_t original_col_size = dst->size();
+        RETURN_IF_ERROR(next_batch(range, dst));
+        size_t current_col_size = dst->size();
+        dst->filter_range(*selection, original_col_size, current_col_size);
+        return Status::OK();
+    }
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
+        RETURN_IF(dst->is_nullable(), Status::NotSupported("RowIdColumnIterator does not support nullable column"));
         SparseRangeIterator<> iter = range.new_iterator();
         size_t to_read = range.span_size();
         while (to_read > 0) {
             _current_rowid = iter.begin();
             Range<> r = iter.next(to_read);
-            Buffer<rowid_t>& v = down_cast<FixedLengthColumn<rowid_t>*>(dst)->get_data();
+            Buffer<RowIdType>& v = down_cast<FixedLengthColumn<RowIdType>*>(dst)->get_data();
             const size_t sz = v.size();
             raw::stl_vector_resize_uninitialized(&v, sz + r.span_size());
-            rowid_t* ptr = &v[sz];
+            RowIdType* ptr = &v[sz];
             for (size_t i = 0; i < r.span_size(); i++) {
                 ptr[i] = _current_rowid + i;
             }
@@ -82,33 +94,41 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
-        return Status::NotSupported("Not supported by RowIdColumnIterator: fetch_values_by_rowid");
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
+        RETURN_IF(values->is_nullable(), Status::NotSupported("RowIdColumnIterator does not support nullable column"));
+        Buffer<RowIdType>& v = down_cast<FixedLengthColumn<RowIdType>*>(values)->get_data();
+        size_t prev_size = v.size();
+        v.resize(prev_size + size);
+        auto* data = v.data() + prev_size;
+        for (size_t i = 0; i < size; i++) {
+            data[i] = rowids[i];
+        }
+        return Status::OK();
     }
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override {
-        return Status::NotSupported("Not supported by RowIdColumnIterator: get_row_ranges_by_zone_map");
-    }
+    ordinal_t num_rows() const override { return std::numeric_limits<ordinal_t>::max(); }
 
     bool all_page_dict_encoded() const override { return false; }
 
     int dict_lookup(const Slice& word) override { return -1; }
 
-    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override {
+    Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("Not supported by RowIdColumnIterator: next_dict_codes");
     }
 
-    [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
         return Status::NotSupported("Not supported by RowIdColumnIterator: decode_dict_codes");
     }
+
+    std::string name() const override { return "RowIdColumnIterator"; }
 
 private:
     ColumnIteratorOptions _opts;
     ordinal_t _current_rowid = 0;
 };
+
+using RowIdColumnIterator = starrocks::TRowIdColumnIterator<starrocks::rowid_t>;
 
 } // namespace starrocks

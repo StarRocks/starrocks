@@ -17,16 +17,18 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
-import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SetOperationNode;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.FragmentScanRangeAssignment;
@@ -44,6 +46,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Collectors;
 
@@ -65,6 +68,7 @@ public class ExecutionFragment {
 
     private final List<TPlanFragmentDestination> destinations;
     private final Map<Integer, Integer> numSendersPerExchange;
+    private final Map<Integer, Integer> numFetchersPerLookUp;
 
     private final List<FragmentInstance> instances;
 
@@ -75,6 +79,7 @@ public class ExecutionFragment {
         public List<Integer> bucketSeqToInstance;
         public List<Integer> bucketSeqToDriverSeq;
         public List<Integer> bucketSeqToPartition;
+        public Optional<List<BucketProperty>> bucketProperties;
     }
     private BucketSeqAssignment cachedBucketSeqAssignment = null;
     private boolean bucketSeqToInstanceForFilterIsSet = false;
@@ -85,7 +90,12 @@ public class ExecutionFragment {
     private Boolean cachedIsReplicated = null;
     private Boolean cachedIsLocalBucketShuffleJoin = null;
 
+    private Boolean cachedIsColocateSet = null;
+
     private boolean isRightOrFullBucketShuffle = false;
+    // used for phased schedule
+    private boolean isScheduled = false;
+    private boolean needReportFragmentFinish = false;
 
     public ExecutionFragment(ExecutionDAG executionDAG, PlanFragment planFragment, int fragmentIndex) {
         this.executionDAG = executionDAG;
@@ -95,6 +105,7 @@ public class ExecutionFragment {
 
         this.destinations = Lists.newArrayList();
         this.numSendersPerExchange = Maps.newHashMap();
+        this.numFetchersPerLookUp = Maps.newHashMap();
 
         this.instances = Lists.newArrayList();
         this.scanRangeAssignment = new FragmentScanRangeAssignment();
@@ -150,6 +161,7 @@ public class ExecutionFragment {
             rf.setBucketSeqToInstance(bucketSeqAssignment.bucketSeqToInstance);
             rf.setBucketSeqToDriverSeq(bucketSeqAssignment.bucketSeqToDriverSeq);
             rf.setBucketSeqToPartition(bucketSeqAssignment.bucketSeqToPartition);
+            bucketSeqAssignment.bucketProperties.ifPresent(rf::setBucketProperties);
         }
     }
 
@@ -161,9 +173,17 @@ public class ExecutionFragment {
         return colocatedAssignment;
     }
 
-    public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(OlapScanNode scanNode) {
+    public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(ScanNode scanNode)
+            throws StarRocksException {
+        // Validate THIS scan node's bucketing on every call, not only when first creating the
+        // assignment. A range-colocate join has one scan node per table and alignment is per-table, so
+        // a transiently-unaligned peer table must also fail closed here (getBucketNums() throws) rather
+        // than silently pairing by a position-based bucketSeq. The first node's count sizes the
+        // assignment; later calls validate their own node and reuse it.
+        int bucketNum = scanNode.getBucketNums();
         if (colocatedAssignment == null) {
-            colocatedAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            colocatedAssignment = new ColocatedBackendSelector.Assignment(bucketNum, scanNodes.size(),
+                    scanNode.getBucketProperties());
         }
         return colocatedAssignment;
     }
@@ -227,6 +247,7 @@ public class ExecutionFragment {
             cachedBucketSeqAssignment.bucketSeqToDriverSeq = Arrays.asList(bucketSeqToDriverSeq);
             cachedBucketSeqAssignment.bucketSeqToPartition = Arrays.asList(bucketSeqToPartition);
         }
+        cachedBucketSeqAssignment.bucketProperties = colocatedAssignment.getBucketProperties();
         return cachedBucketSeqAssignment;
     }
 
@@ -274,6 +295,10 @@ public class ExecutionFragment {
         return numSendersPerExchange;
     }
 
+    public Map<Integer, Integer> getNumFetchersPerLookUp() {
+        return numFetchersPerLookUp;
+    }
+
     public TRuntimeFilterParams getRuntimeFilterParams() {
         return runtimeFilterParams;
     }
@@ -303,6 +328,23 @@ public class ExecutionFragment {
 
         cachedIsLocalBucketShuffleJoin = isLocalBucketShuffleJoin(planFragment.getPlanRoot());
         return cachedIsLocalBucketShuffleJoin;
+    }
+
+    private boolean isColocateSet(PlanNode root) {
+        if (root instanceof ExchangeNode) {
+            return false;
+        }
+        if (root instanceof SetOperationNode) {
+            return root.isColocate();
+        }
+        return root.getChildren().stream().anyMatch(this::isColocateSet);
+    }
+
+    public boolean isColocateSet() {
+        if (cachedIsColocateSet == null) {
+            cachedIsColocateSet = isColocateSet(planFragment.getPlanRoot());
+        }
+        return cachedIsColocateSet;
     }
 
     public boolean isRightOrFullBucketShuffle() {
@@ -424,19 +466,34 @@ public class ExecutionFragment {
             return false;
         }
 
+        boolean hasBucketShuffle = false;
         if (root instanceof JoinNode) {
             JoinNode joinNode = (JoinNode) root;
             if (joinNode.isLocalHashBucket()) {
-                isRightOrFullBucketShuffle = joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin();
-                return true;
+                hasBucketShuffle = true;
+                isRightOrFullBucketShuffle |= joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin();
             }
         }
 
-        boolean childHasBucketShuffle = false;
         for (PlanNode child : root.getChildren()) {
-            childHasBucketShuffle |= isLocalBucketShuffleJoin(child);
+            hasBucketShuffle |= isLocalBucketShuffleJoin(child);
         }
 
-        return childHasBucketShuffle;
+        return hasBucketShuffle;
+    }
+
+    public boolean isScheduled() {
+        return isScheduled;
+    }
+
+    public void setIsScheduled(boolean isScheduled) {
+        this.isScheduled = isScheduled;
+    }
+
+    public boolean isNeedReportFragmentFinish() {
+        return needReportFragmentFinish;
+    }
+    public void setNeedReportFragmentFinish(boolean needReportFragmentFinish) {
+        this.needReportFragmentFinish = needReportFragmentFinish;
     }
 }

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算两个 Bitmap 的交集并返回新的 Bitmap。"
 ---
 
 # bitmap_and
 
-## 功能
+
 
 计算两个 bitmap 的交集，返回新的 bitmap。
 

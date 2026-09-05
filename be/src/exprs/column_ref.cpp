@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "exprs/expr.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks {
 
@@ -29,6 +30,9 @@ ColumnRef::ColumnRef(const TypeDescriptor& type, SlotId slot) : Expr(type, true)
 int ColumnRef::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     slot_ids->push_back(_column_id);
     return 1;
+}
+void ColumnRef::for_each_slot_id(const std::function<void(SlotId)>& cb) const {
+    cb(_column_id);
 }
 
 bool ColumnRef::is_bound(const std::vector<TupleId>& tuple_ids) const {
@@ -48,6 +52,13 @@ std::string ColumnRef::debug_string() const {
 }
 
 StatusOr<ColumnPtr> ColumnRef::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    if (ptr != nullptr && !ptr->is_slot_exist(slot_id())) {
+        if (auto* provider = ptr->missing_column_provider()) {
+            if (provider->can_provide(slot_id())) {
+                return provider->provide(slot_id());
+            }
+        }
+    }
     return get_column(this, ptr);
 }
 

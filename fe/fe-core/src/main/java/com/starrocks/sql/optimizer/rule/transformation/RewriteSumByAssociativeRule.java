@@ -17,13 +17,10 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -39,6 +36,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -229,7 +232,8 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                             List<ScalarOperator> arguments = callOperator.getArguments();
                             Preconditions.checkState(arguments.size() == 2);
                             // there is at least one constant in arguments
-                            if (arguments.get(0).isConstant() || arguments.get(1).isConstant()) {
+                            if (arguments.get(0) instanceof ConstantOperator ||
+                                    arguments.get(1) instanceof ConstantOperator) {
                                 // sometimes expr need to be cast before evaluating ADD/SUB operation.
                                 // for example, suppose the type of expr is SMALLINT,
                                 // sum(expr + 1) will translate to sum(add(cast(expr as INT), 1)),
@@ -237,6 +241,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                                 // we can remove it and get sum(expr) + count() * 1
                                 ScalarOperator newArg0 = rewriteCastForAggExpr(arguments.get(0));
                                 ScalarOperator newArg1 = rewriteCastForAggExpr(arguments.get(1));
+                                // @TODO what if cast cannot evaul on FE
 
                                 ScalarOperator agg0 = createNewAggFunction(
                                         newArg0, newArg1, aggFunction.getType());
@@ -305,17 +310,17 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         }
 
         private ScalarOperator createNewAggFunction(ScalarOperator arg0, ScalarOperator arg1, Type returnType) {
-            if (arg0.isConstant()) {
+            if (arg0 instanceof ConstantOperator) {
                 // generate count(arg1) * arg0
                 List<ScalarOperator> countArguments = Lists.newArrayList(createColumnRefForAggArgument(arg1));
                 List<Type> argTypes = Lists.newArrayList(arg1.getType());
 
                 AggregateFunction countFunction = AggregateFunction.createBuiltin(
-                        FunctionSet.COUNT, argTypes, Type.BIGINT, Type.BIGINT,
+                        FunctionSet.COUNT, argTypes, IntegerType.BIGINT, IntegerType.BIGINT,
                         false, true, true);
 
                 CallOperator newAggFunction = new CallOperator(FunctionSet.COUNT,
-                        Type.BIGINT, countArguments, countFunction);
+                        IntegerType.BIGINT, countArguments, countFunction);
 
                 ColumnRefOperator newAggRef = columnRefFactory.create(
                         newAggFunction, newAggFunction.getType(), false);
@@ -328,28 +333,28 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 switch (primitiveType) {
                     case DECIMAL128:
                         countOperator = new CastOperator(
-                                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 18, 0),
+                                TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 18, 0),
                                 newAggRef, false);
                         int precision = ((ScalarType) arg0.getType()).getScalarPrecision();
                         int scale = ((ScalarType) arg0.getType()).getScalarScale();
-                        Type constType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                        Type constType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
                         constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(constType) :
                                 ConstantOperator.createDecimal(new BigDecimal(arg0.toString()), constType);
                         break;
                     case DOUBLE:
                         countOperator = new CastOperator(returnType, newAggRef, false);
-                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.DOUBLE) :
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(FloatType.DOUBLE) :
                                 ConstantOperator.createDouble(((ConstantOperator) arg0).getDouble());
                         break;
                     case LARGEINT:
                         countOperator = new CastOperator(returnType, newAggRef, false);
-                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.LARGEINT) :
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(IntegerType.LARGEINT) :
                                 ConstantOperator.createLargeInt(new BigInteger(arg0.toString()));
                         break;
                     case BIGINT:
                         // count() always return BIGINT, no need to cast
                         countOperator = newAggRef;
-                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.BIGINT) :
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(IntegerType.BIGINT) :
                                 ConstantOperator.createBigint(Long.parseLong(arg0.toString()));
                         break;
                     default:
@@ -377,7 +382,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 if (returnType.isDecimalV3()) {
                     // for decimal type, we should keep the result's scale same as the input's scale
                     int argScale = ((ScalarType) arg0.getType()).getScalarScale();
-                    sumFunctionType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, argScale);
+                    sumFunctionType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, argScale);
                 }
 
                 AggregateFunction sumFunction = AggregateFunction.createBuiltin(

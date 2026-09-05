@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Removes input from the Bitmap value lhs and returns a result set."
 ---
 
 # bitmap_remove
 
-## Description
+
 
 Removes `input` from the Bitmap value `lhs` and returns a result set.
 

@@ -15,71 +15,79 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import io.delta.kernel.types.BinaryType;
+import io.delta.kernel.types.DataType;
+import io.delta.kernel.types.IntegerType;
+import io.delta.kernel.types.StringType;
+import io.delta.kernel.types.StructField;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromDeltaLakeType;
+import static io.delta.kernel.internal.util.ColumnMapping.ColumnMappingMode.NONE;
 
 public class DeltaLakeApiConverterTest {
     @Test
     public void testArray() {
-        io.delta.standalone.types.DataType deltaType = new io.delta.standalone.types.ArrayType(
-                new io.delta.standalone.types.IntegerType(),
+        DataType deltaType = new io.delta.kernel.types.ArrayType(
+                IntegerType.INTEGER,
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
-        Assert.assertEquals(srType, new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+        Type srType = fromDeltaLakeType(deltaType, NONE.value);
+        Assertions.assertEquals(srType, new ArrayType(com.starrocks.type.IntegerType.INT));
     }
 
     @Test
     public void testUnsupported() {
-        io.delta.standalone.types.StructField[] fields = {
-                new io.delta.standalone.types.StructField("k1", new io.delta.standalone.types.IntegerType()),
-                new io.delta.standalone.types.StructField("k2", new io.delta.standalone.types.StringType())
-        };
-        io.delta.standalone.types.DataType innerType = new io.delta.standalone.types.StructType(fields);
+        List<StructField> fields = ImmutableList.of(
+                new StructField("k1", IntegerType.INTEGER, true),
+                new StructField("k2", StringType.STRING, true)
+        );
+        DataType innerType = new io.delta.kernel.types.StructType(fields);
 
-        io.delta.standalone.types.DataType deltaType = new io.delta.standalone.types.MapType(
+        DataType deltaType = new io.delta.kernel.types.MapType(
                 innerType,
                 innerType,
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
-        Assert.assertTrue(srType.isUnknown());
+        Type srType = fromDeltaLakeType(deltaType, NONE.value);
+        Assertions.assertTrue(srType.isUnknown());
     }
 
     @Test
     public void testMap() {
-        io.delta.standalone.types.DataType deltaType = new io.delta.standalone.types.MapType(
-                new io.delta.standalone.types.IntegerType(),
-                new io.delta.standalone.types.BinaryType(),
+        DataType deltaType = new io.delta.kernel.types.MapType(
+                IntegerType.INTEGER,
+                BinaryType.BINARY,
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
-        Assert.assertEquals(srType,
-                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.VARBINARY)));
+        Type srType = fromDeltaLakeType(deltaType, NONE.value);
+        Assertions.assertEquals(srType,
+                new MapType(com.starrocks.type.IntegerType.INT, VarbinaryType.VARBINARY));
     }
 
     @Test
     public void testStruct() {
-        io.delta.standalone.types.StructField[] fields = {
-                new io.delta.standalone.types.StructField("col1", new io.delta.standalone.types.IntegerType()),
-                new io.delta.standalone.types.StructField("col2", new io.delta.standalone.types.NullType())
-        };
-        io.delta.standalone.types.DataType deltaType = new io.delta.standalone.types.StructType(fields);
+        List<StructField> fields = ImmutableList.of(
+                new StructField("col1", IntegerType.INTEGER, true),
+                new StructField("col2", StringType.STRING, true)
+        );
+        DataType deltaType = new io.delta.kernel.types.StructType(fields);
 
-        Type srType = fromDeltaLakeType(deltaType);
-        Assert.assertEquals(srType, new StructType(ImmutableList.of(
-                ScalarType.createType(PrimitiveType.INT),
-                ScalarType.createType(PrimitiveType.NULL_TYPE))));
+        Type srType = fromDeltaLakeType(deltaType, NONE.value);
+        Assertions.assertEquals(srType, new StructType(ImmutableList.of(
+                com.starrocks.type.IntegerType.INT,
+                TypeFactory.createDefaultCatalogString())));
     }
 }

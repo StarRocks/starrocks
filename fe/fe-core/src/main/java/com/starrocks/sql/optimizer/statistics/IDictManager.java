@@ -15,25 +15,57 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface IDictManager {
-    boolean hasGlobalDict(long tableId, String columnName, long versionTime);
+    boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime);
 
-    void updateGlobalDict(long tableId, String columnName, long collectedVersion, long versionTime);
+    void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion, long versionTime);
 
-    boolean hasGlobalDict(long tableId, String columnName);
+    boolean hasGlobalDict(long tableId, ColumnId columnName);
 
-    void removeGlobalDict(long tableId, String columnName);
+    void removeGlobalDict(OlapTable table, ColumnId columnName);
 
     void disableGlobalDict(long tableId);
 
     void enableGlobalDict(long tableId);
 
+    // Clear the in-memory forbid state for specific columns (used by ALTER TABLE ... ENABLE DICTIONARY
+    // and its edit-log replay, so an explicit ENABLE takes effect immediately on every FE).
+    default void clearForbiddenColumns(long tableId, java.util.Set<String> columnNames) {
+    }
+
+    // True if the column currently has an in-memory low-cardinality dict forbid (thrash guard or
+    // cardinality blacklist). Used to coordinate a pending async guard write with a concurrent ENABLE.
+    default boolean isColumnForbidden(long tableId, String columnName) {
+        return false;
+    }
+
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
-    Optional<ColumnDict> getGlobalDict(long tableId, String columnName);
+    Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName);
+
+    /**
+     * For JSON type column, we use a different dict manager
+     * For example, '{"f1": "a", "f2": "b"}' will be stored as multiple entries in the cache.
+     * Cache Invalidation: All fields in the JSON will be invalidated when the JSON is updated
+     * Cache Population: the cache is populated when the JSON field is first accessed
+     * TODO(murphy) invalidate individual json field when the JSON is updated
+     */
+    default boolean hasGlobalDictForJson(long tableId, ColumnId columnName) {
+        return false;
+    }
+
+    default List<ColumnDict> getGlobalDictForJson(long tableId, ColumnId columnName) {
+        return List.of();
+    }
+
+    default void removeGlobalDictForJson(long tableId, ColumnId columnName) {
+    }
 
     static IDictManager getInstance() {
         if (FeConstants.USE_MOCK_DICT_MANAGER) {

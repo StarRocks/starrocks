@@ -18,7 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -32,10 +34,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -167,9 +171,23 @@ public class LogicalProperty implements Property {
         }
 
         @Override
+        public OneTabletProperty visitLogicalViewScan(LogicalViewScanOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
+        }
+
+        @Override
         public OneTabletProperty visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
             if (node instanceof LogicalOlapScanOperator) {
-                if (((LogicalOlapScanOperator) node).getSelectedTabletId().size() <= 1) {
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
+                if (olapScanOperator.getSelectedTabletId() != null && olapScanOperator.getSelectedTabletId().size() <= 1) {
+                    ConnectContext connectContext = ConnectContext.get();
+                    long maxTabletRows = connectContext == null ? -1
+                            : connectContext.getSessionVariable().getOneTabletOptMaxTabletRows();
+                    if (Utils.isSelectedSingleTabletTooLarge(olapScanOperator.getTable(),
+                            olapScanOperator.getSelectedIndexMetaId(), olapScanOperator.getSelectedPartitionId(),
+                            olapScanOperator.getSelectedTabletId(), maxTabletRows)) {
+                        return OneTabletProperty.notSupport();
+                    }
                     Set<String> distributionColumnNames = node.getTable().getDistributionColumnNames();
                     List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
                     for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
@@ -188,6 +206,11 @@ public class LogicalProperty implements Property {
 
         @Override
         public OneTabletProperty visitLogicalValues(LogicalValuesOperator node, ExpressionContext context) {
+            return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
+        }
+
+        @Override
+        public OneTabletProperty visitLogicalRawValues(LogicalRawValuesOperator node, ExpressionContext context) {
             return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
         }
 
@@ -213,6 +236,10 @@ public class LogicalProperty implements Property {
             OneTabletProperty isExecuteInOneTablet = context.oneTabletProperty(0);
             if (isExecuteInOneTablet.distributionIntact) {
                 ColumnRefSet groupByColumns = new ColumnRefSet(node.getGroupingKeys());
+                // if multi stage agg,we don't support one Tablet optimization
+                if (Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0))) {
+                    return OneTabletProperty.notSupport();
+                }
                 if (groupByColumns.isSame(isExecuteInOneTablet.bucketColumns)) {
                     return isExecuteInOneTablet;
                 }

@@ -53,6 +53,19 @@ public class UDFClassLoader extends URLClassLoader {
     }
 
     public Class<?> generateCallStubV(String name, Class<?> clazz, Method method, int genType) {
+        return generateCallStubV(name, clazz, method, genType, 0);
+    }
+
+    /**
+     * Generate a call stub class for the given method.
+     *
+     * @param name            stub class name
+     * @param clazz           UDF/UDAF class
+     * @param method          the method to wrap
+     * @param genType         stub type (SINGLE_BATCH_UPDATE or BATCH_EVALUATE)
+     * @param numActualVarArgs actual number of varargs columns; only meaningful when method.isVarArgs() is true
+     */
+    public Class<?> generateCallStubV(String name, Class<?> clazz, Method method, int genType, int numActualVarArgs) {
         String clazzName = name.replace("/", ".");
         if (!clazzName.startsWith(CallStubGenerator.GEN_KEYWORD)) {
             throw new UnsupportedOperationException(
@@ -60,9 +73,9 @@ public class UDFClassLoader extends URLClassLoader {
         }
         byte[] bytes = null;
         if (genType == SINGLE_BATCH_UPDATE) {
-            bytes = CallStubGenerator.generateCallStubV(clazz, method);
+            bytes = CallStubGenerator.generateCallStubV(clazz, method, numActualVarArgs);
         } else if (genType == BATCH_EVALUATE) {
-            bytes = CallStubGenerator.generateScalarCallStub(clazz, method);
+            bytes = CallStubGenerator.generateScalarCallStub(clazz, method, numActualVarArgs);
         } else {
             throw new UnsupportedOperationException("Unsupported generate stub type:" + genType);
         }

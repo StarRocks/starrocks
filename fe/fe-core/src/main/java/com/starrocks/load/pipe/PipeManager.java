@@ -14,13 +14,18 @@
 
 package com.starrocks.load.pipe;
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -33,6 +38,7 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -47,9 +53,7 @@ public class PipeManager {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    @SerializedName(value = "pipes")
     private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
-    @SerializedName(value = "nameToId")
     private Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
 
     private final PipeRepo repo;
@@ -64,18 +68,26 @@ public class PipeManager {
             Pair<Long, String> dbIdAndName = resolvePipeNameUnlock(stmt.getPipeName());
             boolean existed = nameToId.containsKey(dbIdAndName);
             if (existed) {
-                if (!stmt.isIfNotExists()) {
+                if (!stmt.isIfNotExists() && !stmt.isReplace()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_PIPE_EXISTS);
                 }
-                return;
+                if (stmt.isIfNotExists()) {
+                    return;
+                } else if (stmt.isReplace()) {
+                    LOG.info("Pipe {} already exist, replace it with a new one", stmt.getPipeName());
+                    Pipe pipe = pipeMap.get(nameToId.get(dbIdAndName));
+                    dropPipeImpl(pipe);
+                }
             }
 
             // Add pipe
             long id = GlobalStateMgr.getCurrentState().getNextId();
             Pipe pipe = Pipe.fromStatement(id, stmt);
-            putPipe(pipe);
 
-            repo.addPipe(pipe);
+            PipeOpEntry opEntry = new PipeOpEntry();
+            opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_CREATE);
+            opEntry.setPipeJson(pipe.toJson());
+            GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry, wal -> putPipe(pipe));
         } finally {
             lock.writeLock().unlock();
         }
@@ -96,18 +108,22 @@ public class PipeManager {
             }
             pipe = pipeMap.get(nameToId.get(dbAndName));
 
-            pipe.suspend();
-            pipe.destroy();
-            removePipe(pipe);
-
-            // persistence
-            repo.deletePipe(pipe);
+            dropPipeImpl(pipe);
         } catch (Throwable e) {
             LOG.error("drop pipe {} failed", pipe, e);
             throw e;
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    private void dropPipeImpl(Pipe pipe) {
+        pipe.suspend(false);
+        pipe.destroy();
+        PipeOpEntry opEntry = new PipeOpEntry();
+        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_DROP);
+        opEntry.setPipeJson(pipe.toJson());
+        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry, wal -> removePipe(pipe));
     }
 
     public void dropPipesOfDb(String dbName, long dbId) {
@@ -118,13 +134,10 @@ public class PipeManager {
                     .filter(kv -> kv.getKey().first == dbId)
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toList());
-            nameToId.keySet().removeIf(x -> x.first == dbId);
             for (PipeId id : removed) {
                 Pipe pipe = pipeMap.get(id);
                 if (pipe != null) {
-                    pipe.suspend();
-                    pipe.destroy();
-                    pipeMap.remove(id);
+                    dropPipeImpl(pipe);
                 }
             }
             LOG.info("drop pipes in database " + dbName + ": " + removed);
@@ -147,7 +160,7 @@ public class PipeManager {
             if (alterClause instanceof AlterPipePauseResume) {
                 AlterPipePauseResume pauseResume = (AlterPipePauseResume) alterClause;
                 if (pauseResume.isSuspend()) {
-                    pipe.suspend();
+                    pipe.suspend(true);
                 } else if (pauseResume.isResume()) {
                     pipe.resume();
                 }
@@ -156,28 +169,16 @@ public class PipeManager {
                 pipe.retry(retry);
             } else if (alterClause instanceof AlterPipeSetProperty) {
                 AlterPipeSetProperty setProperty = (AlterPipeSetProperty) alterClause;
-                pipe.processProperties(setProperty.getProperties());
+                pipe.alterProperties(setProperty.getProperties());
                 LOG.info("alter pipe {} properties {}", pipe, setProperty.getProperties());
             }
-
-            // persistence
-            repo.alterPipe(pipe);
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-
-    protected void updatePipe(Pipe pipe) {
-        try {
-            lock.writeLock().lock();
-            repo.alterPipe(pipe);
         } finally {
             lock.writeLock().unlock();
         }
     }
 
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
-        long dbId = GlobalStateMgr.getCurrentState().mayGetDb(name.getDbName())
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(name.getDbName())
                 .map(Database::getId)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_NO_DB_ERROR));
         return Pair.create(dbId, name.getPipeName());
@@ -214,15 +215,15 @@ public class PipeManager {
         return repo;
     }
 
-    //============================== RAW CRUD ===========================================
-    public Pair<String, Integer> toJson() {
-        try {
-            lock.readLock().lock();
-            return Pair.create(GsonUtils.GSON.toJson(this), pipeMap.size());
-        } finally {
-            lock.readLock().unlock();
-        }
+    protected CloseableLock takeWriteLock() {
+        return CloseableLock.lock(this.lock.writeLock());
     }
+
+    protected CloseableLock takeReadLock() {
+        return CloseableLock.lock(this.lock.readLock());
+    }
+
+    //============================== RAW CRUD ===========================================
 
     public List<Pipe> getAllPipesOfDb(long dbId) {
         try {
@@ -244,6 +245,15 @@ public class PipeManager {
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toList());
             return GsonUtils.GSON.toJson(pipes);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public Pipe getPipeById(PipeId pipeId) {
+        try {
+            lock.readLock().lock();
+            return pipeMap.get(pipeId);
         } finally {
             lock.readLock().unlock();
         }
@@ -297,6 +307,21 @@ public class PipeManager {
         try {
             lock.readLock().lock();
             return Optional.ofNullable(getPipeByNameUnlock(name));
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        try {
+            lock.readLock().lock();
+            final int cnt = 1 + pipeMap.size();
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.PIPE_MGR, cnt);
+            writer.writeInt(pipeMap.size());
+            for (Pipe pipe : pipeMap.values()) {
+                writer.writeJson(pipe);
+            }
+            writer.close();
         } finally {
             lock.readLock().unlock();
         }

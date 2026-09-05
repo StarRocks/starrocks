@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回指定日期中的秒部分，取值范围 0 到 59。"
 ---
 
 # second
 
-## 功能
+
 
 获得日期中的秒的信息，返回值范围 0~59。
 

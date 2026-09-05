@@ -1,0 +1,57 @@
+-- name: test_iceberg_logical_metadata_table
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="false");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (
+  id bigint,
+  data string
+);
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 1, "aa";
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 2, "bb";
+-- result:
+-- !result
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$logical_iceberg_metadata;
+-- result:
+2
+-- !result
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$logical_iceberg_metadata where column_stats is null;
+-- result:
+2
+-- !result
+set enable_iceberg_column_statistics=true;
+-- result:
+-- !result
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$logical_iceberg_metadata where column_stats is null;
+-- result:
+0
+-- !result
+set enable_connector_incremental_scan_ranges=false;
+-- result:
+-- !result
+set enable_profile=true;
+-- result:
+-- !result
+set plan_mode=local;
+-- result:
+-- !result
+function: assert_trace_values_contains("select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where id=1;", "resultDataFiles=CounterResult{unit=COUNT, value=1}")
+-- result:
+None
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

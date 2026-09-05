@@ -14,21 +14,27 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableList;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
 
-    @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         prepareDatas();
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         try {
             starRocksAssert.dropTable("tbl_1");
@@ -105,7 +111,7 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "\"replication_num\"=\"1\",\n" +
                 "\"in_memory\"=\"false\",\n" +
                 "\"storage_format\"=\"DEFAULT\",\n" +
-                "\"enable_persistent_index\"=\"false\",\n" +
+                "\"enable_persistent_index\"=\"true\",\n" +
                 "\"compression\"=\"LZ4\"\n" +
                 ")");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
@@ -132,7 +138,7 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "AS SELECT " +
                 "p1.dt, p1.p1_col1, p1.p1_col2, p1.p1_col3, " +
                 "p2.p2_col2, p2.p2_col4, " +
-                "p3.p3_col1, p4.p4_col2, p4.p4_col1, " +
+                "p3.p3_col1, " +
                 "p5.sum_p1_col4, " +
                 "sum(p1.p1_col4) AS p1_col4\n" +
                 "FROM " +
@@ -143,13 +149,11 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "   ON p2.p2_col1='1' AND p1.p1_col2=p2.p2_col2 " +
                 "   AND p2.start_dt <= p1.dt AND p2.end_dt > p1.dt " +
                 "LEFT OUTER JOIN tbl_3 AS p3 ON p1.p1_col2=p3.p3_col2 AND p3.dt=p1.dt " +
-                "LEFT OUTER JOIN tbl_4 AS p4 ON p1.p1_col1=p4.p4_col1 AND p4.dt=p1.dt\n" +
-                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;");
+                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8;");
         {
             String query = "select " +
                     " p1.p1_col2, p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -162,9 +166,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt=p1.dt \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt=p1.dt \n" +
-                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' and p4.p4_col2='200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' \n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -178,7 +181,6 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             String query = "select " +
                     " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -192,9 +194,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = p1.dt \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = p1.dt \n" +
-                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' \n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -208,7 +209,6 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             String query = "select " +
                     " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -222,9 +222,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = '2023-03-31' \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = '2023-03-31' \n" +
-                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31'\n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -247,7 +246,7 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "AS SELECT " +
                 "p1.dt, p1.p1_col1, p1.p1_col2, p1.p1_col3, " +
                 "p2.p2_col2, p2.p2_col4, " +
-                "p3.p3_col1, p4.p4_col2, p4.p4_col1, " +
+                "p3.p3_col1, " +
                 "p5.p1_col3 as p5_col3, p5.sum_p1_col4, " +
                 "sum(p1.p1_col4) AS p1_col4\n" +
                 "FROM " +
@@ -258,13 +257,11 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "   ON p2.p2_col1='1' AND p1.p1_col2=p2.p2_col2 " +
                 "   AND p2.start_dt <= p1.dt AND p2.end_dt > p1.dt " +
                 "LEFT OUTER JOIN tbl_3 AS p3 ON p1.p1_col2=p3.p3_col2 AND p3.dt=p1.dt " +
-                "LEFT OUTER JOIN tbl_4 AS p4 ON p1.p1_col1=p4.p4_col1 AND p4.dt=p1.dt\n" +
-                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11;");
+                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9;");
         {
             String query = "select " +
                     " p1.p1_col2, p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -277,9 +274,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt=p1.dt \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt=p1.dt \n" +
-                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' and p4.p4_col2='200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' \n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -292,7 +288,6 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             String query = "select " +
                     " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -306,9 +301,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = p1.dt \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = p1.dt \n" +
-                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31'\n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -321,7 +315,6 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             String query = "select " +
                     " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
                     " ,p2.p2_col2, p2.p2_col4 \n" +
-                    " ,p4.p4_col2 \n" +
                     " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
                     " from tbl_1 p1 \n" +
                     " inner join \n" +
@@ -335,9 +328,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                     " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
                     " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
                     " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = '2023-03-31' \n" +
-                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = '2023-03-31' \n" +
-                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
-                    " group by 1,2,3,4,5,6 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' \n" +
+                    " group by 1,2,3,4,5 \n" +
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
@@ -347,6 +339,89 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             PlanTestBase.assertNotContains(plan, "rollup: test_mv2");
         }
         starRocksAssert.dropMaterializedView("test_mv2");
+    }
+
+    @Test
+    public void testRuleExhausted_SingleTable() throws Exception {
+        String mvName = "test_exhaused";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT " +
+                "sum(p1.p1_col4) AS p1_col4\n" +
+                "FROM " +
+                        "tbl_1 AS p1 ",
+                true, true);
+        String query = "select sum(p1.p1_col4) from tbl_1 p1";
+        starRocksAssert.query(query).explainContains(mvName);
+
+        // Exhaust the rule
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public boolean ruleExhausted(RuleType ruleType) {
+                return true;
+            }
+        };
+        starRocksAssert.query(query).explainWithout(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testRuleExhausted_MultiTable() throws Exception {
+        String mvName = "test_exhaused";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT " +
+                "sum(p1.p1_col4) AS p1_col4\n" +
+                "FROM tbl_1 AS p1 " +
+                        "JOIN tbl_2 AS p2",
+                true, true);
+        String query = "select sum(p1.p1_col4) from tbl_1 p1 JOIN tbl_2 AS p2";
+        starRocksAssert.query(query).explainContains(mvName);
+
+        // Exhaust the rule
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public boolean ruleExhausted(RuleType ruleType) {
+                return true;
+            }
+        };
+        starRocksAssert.query(query).explainWithout(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testRuleExhausted_SameTablePermutation() throws Exception {
+        String mvName = "test_exhaused";
+
+        for (int numTables : ImmutableList.of(4, 10)) {
+            StringBuilder sb = new StringBuilder("select sum(p1.p1_col4) from tbl_1 p1 ");
+            for (int i = 2; i < numTables; i++) {
+                String alias = "p" + i;
+                sb.append(String.format(" LEFT JOIN tbl_2 AS %s on %s.p2_col1 = p1_col1", alias, alias));
+            }
+            String query = sb.toString();
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                    "REFRESH MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\"=\"1\"\n" +
+                    ")\n" +
+                            "AS " + query,
+                    true, true);
+
+            int limit = SessionVariable.DEFAULT_SESSION_VARIABLE.getMaterializedViewJoinSameTablePermutationLimit();
+            if (numTables >= limit) {
+                starRocksAssert.query(query).explainWithout(mvName);
+            } else {
+                starRocksAssert.query(query).explainContains(mvName);
+            }
+            starRocksAssert.dropMaterializedView(mvName);
+        }
     }
 
 }

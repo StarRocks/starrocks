@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the negative of input arg."
 ---
 
 # negative
 
-## Description
+
 
 Returns the negative of input `arg`.
 

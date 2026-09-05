@@ -1,0 +1,166 @@
+-- name: test_jvm_vararg_udf @no_arrow_flight_sql
+
+-- Setup: create a test table
+CREATE TABLE `t_varargs` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` varchar(64) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t_varargs VALUES
+  (1, 10, 'hello'),
+  (2, 20, 'world'),
+  (3, 30, 'foo'),
+  (null, null, null);
+
+-- Test 1: Register varargs UDF
+CREATE FUNCTION sumint_va(int, ...)
+RETURNS int
+symbol = "Sumint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+
+CREATE FUNCTION concat_str_va(string, ...)
+RETURNS string
+symbol = "ConcatString"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+
+
+-- Test 2: Call varargs UDF with exactly the declared arg count (1 int)
+select sumint_va(42);
+
+select c0, sumint_va(c0) from t_varargs order by c0;
+
+-- Test 3: Call varargs UDF with extra args of matching type
+select sumint_va(5, 10);
+select concat_str_va(5, "10");
+
+select sumint_va(5, 10, 15, 20);
+select concat_str_va(5, 10, 15, 20);
+
+select c0, sumint_va(c0, c1) from t_varargs order by c0;
+select c0, concat_str_va(c0, c1) from t_varargs order by c0;
+
+
+-- Test 4: Varargs UDF with NULL handling
+select sumint_va(null);
+select concat_str_va(null);
+
+select sumint_va(1, null);
+select concat_str_va(1, null);
+
+-- Test 5: Type mismatch in extra varargs arg should be rejected by FE
+[UC]select sumint_va(1, [1,2,3]);
+
+
+-- Test 6: Too few args (zero args when at least one int required) → FE error
+[UC]select sumint_va();
+
+
+-- Test 7: Varargs UDF in aggregation context
+select sum(sumint_va(c0)) from t_varargs;
+select sum(sumint_va(c0, c1)) from t_varargs;
+
+
+-- Test 8: Varargs UDF in WHERE clause
+select c0 from t_varargs where sumint_va(c0) > 1 order by c0;
+select c0 from t_varargs where sumint_va(c0) > 1 order by c0;
+
+select c0 from t_varargs where length(concat_str_va(c0, c1)) > 1 order by c0;
+
+
+-- Test 9: Attempt to register a two-arg varargs UDF using a one-param class
+-- Echoint.evaluate(Integer) has 1 param; sumint_va2(int, int, ...) declares 2.
+CREATE FUNCTION sumint_va2(int, int, ...)
+RETURNS int
+symbol = "Sumint2"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+
+[UC]select sumint_va2(1);
+
+select sumint_va2(5, 10);
+
+select sumint_va2(5, 10, 15);
+
+
+-- complex type test
+CREATE TABLE `t_complex` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` array<int> NULL,
+  `c2` map<int, string> NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t_complex VALUES
+  (1, [1,2,3], map(1,'a',2,'b')),
+  (2, [4,5], map(3,'c')),
+  (3, null, null);
+
+CREATE FUNCTION echo_array_va(array<int>, ...)
+RETURNS array<int>
+symbol = "EchoArray"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+
+CREATE FUNCTION echo_map_va(map<int,string>, ...)
+RETURNS map<int,string>
+symbol = "EchoMap"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+
+-- Minimum required args (exactly one array<int>)
+select echo_array_va([1,2,3]);
+ 
+-- With one extra array arg of the same type
+select echo_array_va([1,2,3], [4,5,6]);
+ 
+-- With multiple extra array args
+select echo_array_va([1,2,3], [4,5,6], [7,8,9]);
+ 
+-- With null as extra vararg (null is castable to any type)
+select echo_array_va([1,2,3], null);
+ 
+-- NULL as first (required) arg
+select echo_array_va(null);
+
+-- Minimum required args (exactly one map<int,string>)
+select echo_map_va(map(1,'a',2,'b'));
+ 
+-- With one extra map arg of the same type
+select echo_map_va(map(1,'a'), map(2,'b'));
+ 
+-- With multiple extra map args
+select echo_map_va(map(1,'a'), map(2,'b'), map(3,'c'));
+ 
+-- With null as extra vararg
+select echo_map_va(map(1,'a'), null);
+ 
+-- NULL as first (required) arg
+select echo_map_va(null);
+ 
+-- Wrong type: int scalar as extra arg → FE error
+[UC]select echo_map_va(map(1,'a'), 42);
+ 
+-- Wrong type: array as extra arg → FE error
+[UC]select echo_map_va(map(1,'a'), [1,2,3]);
+ 
+-- Too few args → FE error
+[UC]select echo_map_va();
+ 
+-- Column-based: single arg
+select c0, echo_map_va(c2) from t_complex order by c0;
+ 
+-- Column-based: extra matching-type arg
+select c0, echo_map_va(c2, map(99,'x')) from t_complex order by c0;
+ 

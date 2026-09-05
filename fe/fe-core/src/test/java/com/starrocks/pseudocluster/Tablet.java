@@ -101,8 +101,8 @@ public class Tablet {
         info.setSchema_hash(schemaHash);
         info.setStorage_medium(TStorageMedium.SSD);
         info.setPath_hash(PseudoBackend.PATH_HASH);
-        info.setIs_in_memory(false);
         info.setVersion(maxContinuousVersion());
+        info.setMax_readable_version(maxContinuousVersion());
         info.setMin_readable_version(minVersion());
         info.setVersion_miss(!pendingRowsets.isEmpty());
         info.setRow_count(getRowCount());
@@ -212,12 +212,29 @@ public class Tablet {
         totalReadExecuted.incrementAndGet();
         readExecuted++;
         lastReadVersion = version;
+        
+        // Try to commit pending rowsets first to make versions continuous
+        tryCommitPendingRowsets();
+        
         long currentVersion = maxContinuousVersion();
         if (version > currentVersion) {
+            // Check if the requested version exists in pendingRowsets
+            // This can happen when versions are committed out of order
+            if (pendingRowsets.containsKey(version)) {
+                // Allow reading pending version, similar to real BE behavior
+                totalReadSucceed.incrementAndGet();
+                lastSuccessReadVersion = version;
+                LOG.debug("be:{} read tablet:{} version:{} from pending (currentVersion:{})",
+                        PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion);
+                return;
+            }
+            
+            // Version doesn't exist in pending either, fail the read
             totalReadFailed.incrementAndGet();
             lastFailedReadVersion = version;
-            String msg = String.format("be:%d read tablet:%d version:%d > currentVersion:%d",
-                    PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion);
+            String msg = String.format("be:%d read tablet:%d version:%d > currentVersion:%d (pending versions: %s)",
+                    PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion,
+                    pendingRowsets.keySet().toString());
             LOG.warn(msg);
             throw new Exception(msg);
         }
@@ -337,6 +354,7 @@ public class Tablet {
 
     public TTabletInfo getTabletInfo() {
         TTabletInfo info = new TTabletInfo(id, schemaHash, maxContinuousVersion(), 0, getRowCount(), getDataSize());
+        info.setMax_readable_version(maxContinuousVersion());
         info.setMin_readable_version(minVersion());
         return info;
     }
@@ -384,7 +402,7 @@ public class Tablet {
                 pendingRowsets.size());
     }
 
-    public synchronized void cloneFrom(Tablet src, long srcBackendId) throws Exception {
+    public synchronized void cloneFrom(Tablet src, long srcBackendId, Long destBackendId) throws Exception {
         if (maxContinuousVersion() >= src.maxContinuousVersion()) {
             LOG.warn("tablet {} clone, nothing to copy src:{} dest:{}", id, src.versionInfo(),
                     versionInfo());
@@ -394,7 +412,7 @@ public class Tablet {
         if (missingVersions.get(0) < src.minVersion()) {
             LOG.warn(String.format("incremental clone failed src:%d versions:[%d,%d] dest:%d missing::%s", srcBackendId,
                     src.minVersion(), src.maxContinuousVersion(), id, missingVersions));
-            fullCloneFrom(src, srcBackendId);
+            fullCloneFrom(src, srcBackendId, destBackendId);
         } else {
             String oldInfo = versionInfo();
             List<Pair<Long, Rowset>> versionAndRowsets = src.getRowsetsByMissingVersionList(missingVersions);
@@ -412,7 +430,7 @@ public class Tablet {
         }
     }
 
-    public synchronized void fullCloneFrom(Tablet src, long srcBackendId) throws Exception {
+    public synchronized void fullCloneFrom(Tablet src, long srcBackendId, Long destBackendId) throws Exception {
         String oldInfo = versionInfo();
         // only copy the maxContinuousVersion, not pendingRowsets, to be same as current BE's behavior
         EditVersion srcVersion = src.getMaxContinuousEditVersion();
@@ -429,7 +447,8 @@ public class Tablet {
         totalFullClone.incrementAndGet();
         totalClone.incrementAndGet();
         cloneExecuted.incrementAndGet();
-        String msg = String.format("tablet:%d full clone src:%d %s before:%s after:%s", id, srcBackendId, src.versionInfo(),
+        String msg = String.format("tablet:%d full clone src:%d %s dest:%d before:%s after:%s", id,
+                srcBackendId, src.versionInfo(), destBackendId,
                 oldInfo, versionInfo());
         System.out.println(msg);
         LOG.info(msg);
@@ -514,10 +533,18 @@ public class Tablet {
                 versionInfo());
     }
 
+    @Override
+    public String toString() {
+        return "Tablet{" +
+                "id=" + id +
+                ", tableId=" + tableId +
+                ", cloneExecuted=" + cloneExecuted +
+                '}';
+    }
+
     public static void main(String[] args) {
         Tablet tablet = new Tablet(1, 1, 1, 1, true);
         String json = GsonUtils.GSON.toJson(tablet);
         System.out.println(json);
-        Tablet newTablet = GsonUtils.GSON.fromJson(json, Tablet.class);
     }
 }

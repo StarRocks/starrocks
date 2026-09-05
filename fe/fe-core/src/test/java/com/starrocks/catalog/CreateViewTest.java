@@ -20,72 +20,73 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-public class CreateViewTest {
+public class CreateViewTest extends StarRocksTestBase  {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
+
         Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+
+        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
     }
 
     @Test
     public void testCreateViewNullable() throws Exception {
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
         starRocksAssert.withTable("CREATE TABLE `site_access` (\n" +
-                "  `event_day` date NULL COMMENT \"\",\n" +
-                "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
-                "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
-                "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
-                "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE(`event_day`)\n" +
-                "(PARTITION p20200321 VALUES [(\"0000-01-01\"), (\"2020-03-22\")),\n" +
-                "PARTITION p20200322 VALUES [(\"2020-03-22\"), (\"2020-03-23\")),\n" +
-                "PARTITION p20200323 VALUES [(\"2020-03-23\"), (\"2020-03-24\")),\n" +
-                "PARTITION p20200324 VALUES [(\"2020-03-24\"), (\"2020-03-25\")))\n" +
-                "DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 32 \n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
-                "\"compression\" = \"LZ4\"\n" +
-                ");")
+                        "  `event_day` date NULL COMMENT \"\",\n" +
+                        "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PARTITION BY RANGE(`event_day`)\n" +
+                        "(PARTITION p20200321 VALUES [(\"0000-01-01\"), (\"2020-03-22\")),\n" +
+                        "PARTITION p20200322 VALUES [(\"2020-03-22\"), (\"2020-03-23\")),\n" +
+                        "PARTITION p20200323 VALUES [(\"2020-03-23\"), (\"2020-03-24\")),\n" +
+                        "PARTITION p20200324 VALUES [(\"2020-03-24\"), (\"2020-03-25\")))\n" +
+                        "DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 32 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ");")
                 .withView("create view test_null_view as select * from site_access;");
 
         Table view = starRocksAssert.getCtx().getGlobalStateMgr()
-                .getDb("test").getTable("test_null_view");
-        Assert.assertTrue(view instanceof View);
+                .getLocalMetastore().getDb("test").getTable("test_null_view");
+        Assertions.assertTrue(view instanceof View);
         List<Column> columns = view.getColumns();
         for (Column column : columns) {
-            Assert.assertTrue(column.isAllowNull());
+            Assertions.assertTrue(column.isAllowNull());
         }
     }
 
     @Test
     public void createReplace() throws Exception {
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
         starRocksAssert.withTable("CREATE TABLE `test_replace_site_access` (\n" +
                 "  `event_day` date NULL COMMENT \"\",\n" +
                 "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
@@ -99,22 +100,168 @@ public class CreateViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
         // create non existed view
         starRocksAssert.withView("create or replace view test_null_view as select event_day " +
                 "from test_replace_site_access;");
-        Assert.assertNotNull(starRocksAssert.getTable("test", "test_null_view"));
+        Assertions.assertNotNull(starRocksAssert.getTable("test", "test_null_view"));
 
         // replace existed view
         starRocksAssert.withView("create or replace view test_null_view as select site_id " +
                 "from test_replace_site_access;");
         View view = (View) starRocksAssert.getTable("test", "test_null_view");
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "SELECT `test`.`test_replace_site_access`.`site_id`\nFROM `test`.`test_replace_site_access`",
                 view.getInlineViewDef());
-        Assert.assertNotNull(view.getColumn("site_id"));
+        Assertions.assertNotNull(view.getColumn("site_id"));
+    }
+
+    @Test
+    public void testCreateViewWithWindowFunctionIgnoreNulls() throws Exception {
+        starRocksAssert.withTable("create table sample_data (\n" +
+                        "    timestamp DATETIME not null,\n" +
+                        "    username string,\n" +
+                        "    price int null\n" +
+                        ")PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\");")
+                .withView("create view test_ignore_nulls as select\n" +
+                        "    timestamp,\n" +
+                        "    username,\n" +
+                        "    last_value(price ignore nulls) over (partition by username) as price\n" +
+                        ", lead(price ignore nulls,1,0) over (partition by username) as leadValue\n" +
+                        "from sample_data;");
+
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                .getDb("test").getTable("test_ignore_nulls");
+        Assertions.assertTrue(view instanceof View);
+        String str = ((View) view).getInlineViewDef();
+        Assertions.assertEquals(str, "SELECT `test`.`sample_data`.`timestamp`, `test`.`sample_data`.`username`, " +
+                "last_value(`test`.`sample_data`.`price` ignore nulls) OVER " +
+                "(PARTITION BY `test`.`sample_data`.`username` ) AS `price`, " +
+                "lead(`test`.`sample_data`.`price` ignore nulls, 1, 0) OVER " +
+                "(PARTITION BY `test`.`sample_data`.`username` ) AS `leadValue`\n" +
+                "FROM `test`.`sample_data`");
+    }
+
+    @Test
+    public void testCreateViewWithWindowFunctionIgnoreNullsWithExpression() throws Exception {
+        starRocksAssert.withTable("create table sample_data2 (\n" +
+                        "    timestamp DATETIME not null,\n" +
+                        "    username string,\n" +
+                        "    price int null\n" +
+                        ")PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\");")
+                .withView("create view test_ignore_nulls_expr as select\n" +
+                        "    timestamp,\n" +
+                        "    username,\n" +
+                        "    last_value(if(price > 0, price, null) ignore nulls) over (partition by username) as price\n" +
+                        ", lead(if(price > 0, price, null) ignore nulls, 1, 0) over (partition by username) as leadValue\n" +
+                        "from sample_data2;");
+
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                .getDb("test").getTable("test_ignore_nulls_expr");
+        Assertions.assertTrue(view instanceof View);
+        String str = ((View) view).getInlineViewDef();
+        Assertions.assertTrue(str.contains("ignore nulls"),
+                "Expected 'ignore nulls' in view def but got: " + str);
+    }
+
+    @Test
+    public void createViewWithComment() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_table1 (\n" +
+                "  `event_day` date NULL COMMENT \"\" ,\n" +
+                "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                ") \n" +
+                "DUPLICATE KEY(`event_day`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`event_day`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ");");
+
+        // create non existed view
+        starRocksAssert.withView("create or replace view test_view1 as select \n" +
+                "`event_day` -- This is a comment from user\n" +
+                "from test_table1;");
+
+        List<List<String>> result = starRocksAssert.show("show create view test_view1;");
+        Assertions.assertEquals(1, result.size());
+        String createViewSql = result.get(0).get(1);
+        Assertions.assertTrue(createViewSql.contains("-- This is a comment from user"));
+    }
+
+    @Test
+    public void testDefaultViewSqlSecurity() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE security_base (\n" +
+                "  k1 int NULL,\n" +
+                "  k2 int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        String original = connectContext.getSessionVariable().getDefaultViewSqlSecurity().name();
+        try {
+            // Default is NONE: a view without a SECURITY clause is non-secure (equivalent to SECURITY NONE).
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("NONE");
+            starRocksAssert.withView("create view v_default_none as select k1 from security_base;");
+            Assertions.assertFalse(((View) starRocksAssert.getTable("test", "v_default_none")).isSecurity());
+
+            // INVOKER default: a view without a SECURITY clause becomes secure (equivalent to SECURITY INVOKER).
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("INVOKER");
+            starRocksAssert.withView("create view v_default_invoker as select k1 from security_base;");
+            Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_default_invoker")).isSecurity());
+
+            // An explicit SECURITY NONE clause always wins over the INVOKER default.
+            starRocksAssert.withView("create view v_explicit_none security none as select k1 from security_base;");
+            Assertions.assertFalse(((View) starRocksAssert.getTable("test", "v_explicit_none")).isSecurity());
+
+            // An explicit SECURITY INVOKER clause always wins over the NONE default.
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("NONE");
+            starRocksAssert.withView(
+                    "create view v_explicit_invoker security invoker as select k1 from security_base;");
+            Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_explicit_invoker")).isSecurity());
+        } finally {
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity(original);
+        }
+    }
+
+    @Test
+    public void testDefaultViewSqlSecurityWithReplace() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE security_replace_base (\n" +
+                "  k1 int NULL,\n" +
+                "  k2 int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        String original = connectContext.getSessionVariable().getDefaultViewSqlSecurity().name();
+        try {
+            // CREATE OR REPLACE on a brand-new view honors the INVOKER default.
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("INVOKER");
+            starRocksAssert.withView("create or replace view v_replace as select k1 from security_replace_base;");
+            Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_replace")).isSecurity());
+
+            // Replacing the existing view while NONE is the default flips it back to non-secure.
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("NONE");
+            starRocksAssert.withView("create or replace view v_replace as select k2 from security_replace_base;");
+            View replaced = (View) starRocksAssert.getTable("test", "v_replace");
+            Assertions.assertFalse(replaced.isSecurity());
+            Assertions.assertNotNull(replaced.getColumn("k2"));
+
+            // An explicit SECURITY INVOKER clause on REPLACE wins over the NONE default.
+            starRocksAssert.withView(
+                    "create or replace view v_replace security invoker as select k1 from security_replace_base;");
+            Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_replace")).isSecurity());
+        } finally {
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity(original);
+        }
     }
 }

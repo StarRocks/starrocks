@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Computes the percentile value of expr with linear interpolation."
 ---
 
 # percentile_cont
 
-## Description
+
 
 Computes the percentile value of `expr` with linear interpolation.
 

@@ -1,47 +1,3 @@
-[sql]
-select
-    s_acctbal,
-    s_name,
-    n_name,
-    p_partkey,
-    p_mfgr,
-    s_address,
-    s_phone,
-    s_comment
-from
-    part,
-    supplier,
-    partsupp,
-    nation,
-    region
-where
-        p_partkey = ps_partkey
-  and s_suppkey = ps_suppkey
-  and p_size = 12
-  and p_type like '%COPPER'
-  and s_nationkey = n_nationkey
-  and n_regionkey = r_regionkey
-  and r_name = 'AMERICA'
-  and ps_supplycost = (
-    select
-        min(ps_supplycost)
-    from
-        partsupp,
-        supplier,
-        nation,
-        region
-    where
-            p_partkey = ps_partkey
-      and s_suppkey = ps_suppkey
-      and s_nationkey = n_nationkey
-      and n_regionkey = r_regionkey
-      and r_name = 'AMERICA'
-)
-order by
-    s_acctbal desc,
-    n_name,
-    s_name,
-    p_partkey limit 100;
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:15: s_acctbal | 11: s_name | 23: n_name | 1: p_partkey | 3: p_mfgr | 12: s_address | 14: s_phone | 16: s_comment
@@ -149,6 +105,7 @@ OutPut Exchange Id: 26
 |
 21:SORT
 |  order by: [1, INT, true] ASC
+|  analytic partition by: [1: p_partkey, INT, true]
 |  offset: 0
 |  cardinality: 80000
 |  column statistics:
@@ -270,6 +227,7 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 17: ps_partkey IS NOT NULL, 18: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=24.0
+dataCacheOptions={populate: false}
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (17: ps_partkey)
@@ -299,6 +257,7 @@ NON-PARTITION PREDICATES: 6: p_size = 12, 5: p_type LIKE '%COPPER'
 MIN/MAX PREDICATES: 6: p_size <= 12, 6: p_size >= 12
 partitions=1/1
 avgRowSize=62.0
+dataCacheOptions={populate: false}
 cardinality: 100000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
@@ -357,6 +316,7 @@ OutPut Exchange Id: 10
 TABLE: supplier
 partitions=1/1
 avgRowSize=197.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (13: s_nationkey)
@@ -407,6 +367,7 @@ TABLE: nation
 NON-PARTITION PREDICATES: 22: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+dataCacheOptions={populate: false}
 cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (24: n_regionkey)
@@ -434,9 +395,9 @@ NON-PARTITION PREDICATES: 27: r_name = 'AMERICA'
 MIN/MAX PREDICATES: 27: r_name <= 'AMERICA', 27: r_name >= 'AMERICA'
 partitions=1/1
 avgRowSize=10.8
+dataCacheOptions={populate: false}
 cardinality: 1
 column statistics:
 * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * r_name-->[-Infinity, Infinity, 0.0, 6.8, 1.0] ESTIMATE
 [end]
-

@@ -71,6 +71,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_struct_column_writer(const Column
         value_options.need_zone_map = false;
         value_options.need_bloom_filter = field_column.is_bf_column();
         value_options.need_bitmap_index = field_column.has_bitmap_index();
+        value_options.need_flat = opts.need_flat;
+        value_options.is_compaction = opts.is_compaction;
         ASSIGN_OR_RETURN(auto field_writer, ColumnWriter::create(value_options, &field_column, wfile));
         field_writers.emplace_back(std::move(field_writer));
     }
@@ -85,6 +87,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_struct_column_writer(const Column
         null_options.meta->set_length(1);
         null_options.meta->set_encoding(DEFAULT_ENCODING);
         null_options.meta->set_compression(opts.meta->compression());
+        null_options.meta->set_compression_level(opts.meta->compression_level());
         null_options.meta->set_is_nullable(false);
 
         TypeInfoPtr tiny_type_info = get_type_info(TYPE_TINYINT);
@@ -114,11 +117,11 @@ Status StructColumnWriter::init() {
 
 Status StructColumnWriter::append(const Column& column) {
     const StructColumn* struct_column = nullptr;
-    NullColumn* null_column = nullptr;
+    const NullColumn* null_column = nullptr;
     if (is_nullable()) {
         const auto& nullable_column = down_cast<const NullableColumn&>(column);
-        struct_column = down_cast<StructColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
+        struct_column = down_cast<const StructColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<const NullColumn*>(nullable_column.null_column().get());
     } else {
         struct_column = down_cast<const StructColumn*>(&column);
     }

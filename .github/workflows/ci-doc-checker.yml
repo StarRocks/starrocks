@@ -10,6 +10,7 @@ on:
       - 'branch*'
 
 permissions:
+  contents: read
   issues: write
   pull-requests: write
 
@@ -24,7 +25,7 @@ jobs:
     outputs:
       output1: ${{ steps.doc-changes-info.outputs.doc }}
     steps:
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
@@ -34,6 +35,18 @@ jobs:
         id: doc-changes-info
         run: |
           echo "doc=${{ steps.changes.outputs.doc }}" >> $GITHUB_OUTPUT
+
+  remove-doc-label:
+    needs: doc-checker
+    runs-on: ubuntu-latest
+    name: REMOVE DOC LABEL
+    if: ${{ needs.doc-checker.outputs.output1 != 'true' }}
+    steps:
+      - name: remove document label
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: documentation
 
   add-doc-label:
     needs: doc-checker
@@ -46,6 +59,62 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
+
+  link-check:
+    runs-on: ubuntu-latest
+    needs: add-doc-label
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: BRANCH INFO
+        id: branch
+        run: echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "docs-automation[bot]"
+          git config --global user.email "docs-automation[bot]@starrocks.io"
+          git checkout $BRANCH
+          git pull
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}"
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME}
+          git checkout $BRANCH_NAME
+          git checkout -b merge_pr
+          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1)
+
+      - uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
+        id: changed-files
+        with:
+          files: |
+            docs/en/**/*.md
+            docs/en/**/*.mdx
+            docs/ja/**/*.md
+            docs/ja/**/*.mdx
+            docs/zh/**/*.md
+            docs/zh/**/*.mdx
+          separator: " "
+
+      - name: Check links in changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: lycheeverse/lychee-action@v2.8.0
+        with:
+          fail: true
+          failIfEmpty: false
+          args: >
+            --config docs/lychee.toml
+            --scheme https
+            --scheme file
+            ${{ steps.changed-files.outputs.all_changed_files }}
 
   markdownlint:
     runs-on: ubuntu-latest
@@ -63,7 +132,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -80,57 +149,108 @@ jobs:
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v6
         with:
-          node-version: 18
+          node-version: 24
 
-      - uses: articulate/actions-markdownlint@v1.1.0
+      - uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
+        id: changed-files
         with:
-          config: "docs/.markdownlint.yaml"
-          files: 'docs/**/*.md'
-          ignore: node_modules
-          version: 0.28.1
+          files: |
+            docs/en/**/*.md
+            docs/ja/**/*.md
+            docs/zh/**/*.md
+          separator: ","
+      - name: List all changed files
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          for file in ${ALL_CHANGED_FILES}; do
+            echo "$file was changed"
+          done
+      - uses: DavidAnson/markdownlint-cli2-action@v21
+        if: steps.changed-files.outputs.any_changed == 'true'
+        with:
+          config: 'docs/.markdownlint.json'
+          globs: ${{ steps.changed-files.outputs.all_changed_files }}
+          separator: ","
+
+  docusaurus-build:
+    runs-on: ubuntu-latest
+    needs: markdownlint # Only runs if markdownlint passes!
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+
+
+      # 1. Replicate the branch info and complex checkout logic
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+          
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "docs-automation[bot]"
+          git config --global user.email "docs-automation[bot]@starrocks.io"
+          git checkout $BRANCH
+          git pull
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}"
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME}
+          git checkout $BRANCH_NAME
+          git checkout -b merge_pr
+          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1)
+
+      # 2. Replicate the Node.js setup
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
 
       - name: docusaurus-mdx-checker
-        if: always()
         run: |
           npx docusaurus-mdx-checker -c docs
 
       - name: link check
         if: always()
-        uses: lycheeverse/lychee-action@v1.8.0
+        uses: lycheeverse/lychee-action@v2.8.0
         with:
           fail: true
           args: >
             --config docs/lychee.toml
             --offline "docs/**/*.md"
 
-      # To run a Docusaurus build on the docs as a final check
-      # checkout the test-harness
-      - uses: actions/checkout@v4
-        with:
-          repository: 'StarRocks/docusaurus-build'
-          path: 'docusaurus'
-      # mv the docs into the docusaurus dir where the
-      # docusaurus build job expects them to be
-      - run: mv docs/en docusaurus/docs
-      - run: mkdir -p docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
-      - run: mv docs/zh docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
-      - run: mv docs/docusaurus/sidebars.json docusaurus/
-      # The README and contrib files have some sample markdown that fails
-      # link checking. StarRocks_intro.md uses a Gatsby component and will
-      # be replaced when we switch Gatsby off. Release notes we grab from
-      # main, so don't check in PRs.
-      - run: rm -f docusaurus/docs/README.md
-      - run: rm -f docusaurus/docs/feedback-and-contribute.md
-      - run: rm -f docusaurus/docs/introduction/StarRocks_intro.md
-      - run: rm -f docusaurus/docs/TOC.md
-      - run: rm -rf docusaurus/docs/release_notes
-
-      - name: Run Docusaurus build
-        working-directory: ./docusaurus
+      # 3. Your original Docusaurus build logic
+      - name: Docusaurus build
+        env:
+          NODE_OPTIONS: --max-old-space-size=9216
+          DISABLE_VERSIONING: true
+          DOCUSAURUS_IGNORE_SSG_WARNINGS: true
+        working-directory: ./docs/docusaurus
         run: |
+          rm -rf ./docs
+          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current
+          mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
+          mv ../en ./docs
+          rm -rf ./docs/release_notes ./docs/ecosystem_release
+          mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
+          # Using package.json and yarn.lock from a PR is not safe, so copy from main branch.
+          rm package.json
+          rm yarn.lock
+          curl -O https://raw.githubusercontent.com/StarRocks/starrocks/refs/heads/main/docs/docusaurus/package.json
+          curl -O https://raw.githubusercontent.com/StarRocks/starrocks/refs/heads/main/docs/docusaurus/yarn.lock
           yarn install --frozen-lockfile
+          yarn clear
           yarn build
 
   behavior-unchange:

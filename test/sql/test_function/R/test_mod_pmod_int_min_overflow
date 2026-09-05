@@ -1,0 +1,28 @@
+-- name: test_mod_pmod_int_min_overflow
+-- Regression: mod()/pmod() of TYPE_MIN % -1 used to abort the BE with SIGFPE
+-- (x86 idiv #DE: the quotient TYPE_MIN / -1 overflows the result width).
+-- Operands are read from columns so the FE cannot constant-fold them away.
+CREATE TABLE t_mod_min (
+  k INT,
+  c_tiny TINYINT, c_small SMALLINT, c_int INT, c_big BIGINT, c_large LARGEINT,
+  d_tiny TINYINT, d_small SMALLINT, d_int INT, d_big BIGINT, d_large LARGEINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_mod_min VALUES
+ (1, -128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728, -1, -1, -1, -1, -1);
+-- result:
+-- !result
+SELECT mod(c_tiny, d_tiny), mod(c_small, d_small), mod(c_int, d_int), mod(c_big, d_big), mod(c_large, d_large) FROM t_mod_min;
+-- result:
+0	0	0	0	0
+-- !result
+SELECT pmod(c_int, d_int), pmod(c_big, d_big) FROM t_mod_min;
+-- result:
+0	0
+-- !result
+SELECT c_int % d_int, c_big % d_big FROM t_mod_min;
+-- result:
+0	0
+-- !result

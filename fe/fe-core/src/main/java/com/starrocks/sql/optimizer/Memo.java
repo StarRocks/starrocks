@@ -166,12 +166,31 @@ public class Memo {
 
     private void mergeGroup(Group srcGroup, Group dstGroup) {
         mergeGroupImpl(srcGroup, dstGroup);
+        removeSelfReferencing(dstGroup);
         // When some rule merge two groups to one group, or
         // the GroupExpressions of one group are all removed.
         // The group is empty, We should remove it.
         Set<Group> groups = getAllEmptyGroups();
         for (Group group : groups) {
             removeOneGroup(group);
+        }
+    }
+
+    private void removeSelfReferencing(Group group) {
+        List<GroupExpression> removeList = Lists.newArrayList();
+        for (GroupExpression ge : group.getLogicalExpressions()) {
+            if (ge.getInputs().stream().anyMatch(g -> g == group)) {
+                removeList.add(ge);
+            }
+        }
+        for (GroupExpression ge : group.getPhysicalExpressions()) {
+            if (ge.getInputs().stream().anyMatch(g -> g == group)) {
+                removeList.add(ge);
+            }
+        }
+        for (GroupExpression ge : removeList) {
+            group.removeGroupExpression(ge);
+            groupExpressions.remove(ge);
         }
     }
 
@@ -225,13 +244,13 @@ public class Memo {
 
         Map<Group, Group> needMergeGroup = Maps.newHashMap();
         for (GroupExpression reinsertExpression : needReinsertedExpressions) {
-            // reinsert maybe in groupExpressions because his input was modify
+            // reinsert maybe in groupExpressions because this input was modified
             if (!groupExpressions.containsKey(reinsertExpression)) {
                 groupExpressions.put(reinsertExpression, reinsertExpression);
                 reinsertExpression.getGroup().addExpression(reinsertExpression);
             } else {
                 // group expression is already in the Memo's groupExpressions, this indicates that
-                // this is a redundant group Expression, it's should be remove.
+                // this is a redundant group Expression, it should be removed.
                 // And the redundant group expression may be already in the TaskScheduler stack, so it should be
                 // set unused.
                 reinsertExpression.setUnused(true);

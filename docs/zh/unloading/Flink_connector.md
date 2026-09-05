@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+sidebar_position: 30
+displayed_sidebar: docs
+description: "StarRocks provides a self-developed connector for Apache Flink to read data in bulk from a StarRocks cluster using SQL or DataStream."
 ---
 
 # 使用 Flink Connector 读取数据
@@ -20,20 +22,22 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
   Flink 先从 FE 节点获取查询计划 (Query Plan)，然后将获取到的查询计划作为参数，下发至 BE 节点，最后获取 BE 节点返回的数据。
 
-  ![Unload data - Flink Connector](../assets/unload_flink_connector_1.png)
+  ![Unload data - Flink Connector](../_assets/unload_flink_connector_1.png)
 
 - Flink JDBC Connector
 
   Flink JDBC Connector 仅能从 FE 单点上串行读取数据，数据读取效率较低。
 
-  ![Unload data - JDBC Connector](../assets/unload_flink_connector_2.png)
+  ![Unload data - JDBC Connector](../_assets/unload_flink_connector_2.png)
 
 ## 版本要求
 
-| Connector | Flink       | StarRocks  | Java | Scala      |
-| --------- | ----------- | ---------- | ---- | ---------- |
-| 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
-| 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
 
 ## 前提条件
 
@@ -53,7 +57,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
    OpenJDK 64-Bit Server VM (Temurin)(build 25.322-b06, mixed mode)
    ```
 
-2. 下载并解压 [Flink](https://flink.apache.org/downloads.html)。
+2. 下载并解压 [Flink](https://flink.apache.org/downloads/)。
 
    > **说明**
    >
@@ -80,23 +84,27 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
    Starting taskexecutor daemon on host.
    ```
 
-您也可以参考 [Flink 官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/) 完成部署。
+您也可以参考 [Flink 官方文档](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/getting-started/local_installation/#option-b-local-installation) 完成部署。
 
 ## 准备工作
 
+### 部署 Flink Connector
+
 通过如下步骤完成 Flink Connector 的部署：
 
-1. 根据 Flink 的版本，选择和下载对应版本的 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR 包。
+1. 根据 Flink 的版本，选择和下载对应版本的 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR 包。如需调试代码，可选择对应分支代码自行编译。
 
    > **注意**
    >
    > 推荐您下载 Flink Connector 版本在 1.2.x 及以上、并且配套的 Flink 版本与您的业务环境中安装的 Flink 版本前两位一致的 JAR 包。例如，如果您的业务环境中安装的 Flink 版本为 1.14.x，可以下载 `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`。
 
-2. 如需调试代码，可选择对应分支代码自行编译。
+2. 将下载或者编译的 JAR 包放在 Flink 的 `lib` 目录中。
 
-3. 将下载或者编译的 JAR 包放在 Flink 的 `lib` 目录中。
+3. 重启 Flink。
 
-4. 重启 Flink。
+### 网络设置
+
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port) 端口（默认 `9060`）。
 
 ## 参数说明
 
@@ -109,7 +117,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | connector                   | 是       | STRING   | 固定设置为 `starrocks`。                                     |
 | scan-url                    | 是       | STRING   | FE 节点的连接地址，用于通过 Web 服务器访问 FE 节点。 格式如下：`<fe_host>:<fe_http_port>`。默认端口号为 `8030`。多个地址之间用逗号 (,) 分隔。例如 `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
 | jdbc-url                    | 是       | STRING   | FE 节点的连接地址，用于访问 FE 节点上的 MySQL 客户端。格式如下：`jdbc:mysql://<fe_host>:<fe_query_port>`。默认端口号为 `9030`。 |
-| username                    | 是       | STRING   | 用于访问 StarRocks 集群的用户名。该账号需具备待读取数据的 StarRocks 表的读权限。有关用户权限的说明，请参见[用户权限](../administration/privilege_overview.md)。 |
+| username                    | 是       | STRING   | 用于访问 StarRocks 集群的用户名。该账号需具备待读取数据的 StarRocks 表的读权限。有关用户权限的说明，请参见[用户权限](../administration/user_privs/authorization/user_privs.md)。 |
 | password                    | 是       | STRING   | 用于访问 StarRocks 集群的用户密码。                          |
 | database-name               | 是       | STRING   | 待读取数据的 StarRocks 数据库的名称。                        |
 | table-name                  | 是       | STRING   | 待读取数据的 StarRocks 表的名称。                            |
@@ -154,6 +162,11 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
+| JSON       | STRING <br /> **说明** <br /> **自 1.2.10 版起支持。** |
+| ARRAY      | ARRAY  <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| STRUCT     | ROW    <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| MAP        | MAP    <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+
 
 ## 使用示例
 
@@ -278,6 +291,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 - 使用 SQL 语句时，支持自动进行谓词下推。如过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 Flink Connector 中并转换成适用于 StarRocks 的语句后，再执行查询，不需要额外配置。
 - 不支持 LIMIT 语句。
 - StarRocks 暂时不支持 Checkpoint 机制。因此，如果读取任务失败，则无法保证数据一致性。
+- 建表中的字段顺序需要与StarRocks表建表的字段顺序一致。
 
 ### 使用 Flink DataStream 读取数据
 
@@ -338,6 +352,12 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
        }
    ```
 
+## FAQ
+
+#### 在使用 Flink Connector 导出数据时，我收到错误提示 “Failed to get next from be”，该如何处理？
+
+您可以将 BE 配置项 `scan_context_gc_interval_min`（默认值：5，单位：分钟）设置为更大数值，以延长 Scan Context 清理的时间间隔。
+
 ## 后续操作
 
-Flink 成功读取 StarRocks 中的数据后，您可以使用 Flink 官方的 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/zh/docs/try-flink/flink-operations-playground/#flink-webui-界面) 界面观察读取任务，比如，可以在 **Metrics** 页面上查看 `totalScannedRows` 指标，从而获悉成功读取的数据行数。您还可以使用 Flink SQL 对读取的数据进行计算，比如 Join。
+Flink 成功读取 StarRocks 中的数据后，您可以使用 Flink 官方的 Flink WebUI 界面观察读取任务，比如，可以在 **Metrics** 页面上查看 `totalScannedRows` 指标，从而获悉成功读取的数据行数。您还可以使用 Flink SQL 对读取的数据进行计算，比如 Join。

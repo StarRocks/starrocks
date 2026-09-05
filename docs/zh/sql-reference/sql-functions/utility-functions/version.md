@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回当前 MySQL 数据库的版本。"
 ---
 
 # version
 
-## 功能
+
 
 返回当前 MySQL 数据库的版本。可以使用 `current_version` 函数查询 StarRocks 当前的版本。
 

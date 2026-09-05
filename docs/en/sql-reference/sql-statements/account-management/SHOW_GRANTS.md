@@ -1,27 +1,30 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "SHOW GRANTS displays all the privileges that have been granted to a user or role."
 ---
 
 # SHOW GRANTS
 
-## Description
+SHOW GRANTS displays all the privileges that have been granted to a user or role.
 
-Displays all the privileges that have been granted to a user or role.
+For more information about roles and privileges, see [Overview of privileges](../../../administration/user_privs/authorization/user_privs.md).
 
-For more information about roles and privileges, see [Overview of privileges](../../../administration/privilege_overview.md).
-
-> NOTE: All the roles and users can view the privileges granted to them or the roles assigned to them. However, only the `user_admin` role can view the privileges of a specific user or role.
+:::tip
+All roles and users can view the privileges granted to them or the roles assigned to them. Only users with the `user_admin` role can view the privileges of a specified user or role.
+:::
 
 ## Syntax
 
 ```SQL
 SHOW GRANTS; -- View the privileges of the current user.
+SHOW GRANTS FOR CURRENT_USER[()]; -- View the privileges of the current user (MySQL-compatible syntax).
 SHOW GRANTS FOR ROLE <role_name>; -- View the privileges of a specific role.
 SHOW GRANTS FOR <user_identity>; -- View the privileges of a specific user.
 ```
 
 ## Parameters
 
+- `CURRENT_USER[()]`: Returns the privileges of the current session user. The parentheses are optional. This form is equivalent to `SHOW GRANTS` and is provided for compatibility with MySQL clients (such as Metabase and DBeaver) that issue this statement automatically during connection initialization.
 - role_name
 - user_identity
 
@@ -56,12 +59,19 @@ mysql> SHOW GRANTS;
 | 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
 +--------------+---------+----------------------------------------+
 
+mysql> SHOW GRANTS FOR CURRENT_USER();
++--------------+---------+----------------------------------------+
+| UserIdentity | Catalog | Grants                                 |
++--------------+---------+----------------------------------------+
+| 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
++--------------+---------+----------------------------------------+
+
 mysql> SHOW GRANTS FOR 'user_g'@'%';
 +-------------+-------------+-----------------------------------------------------------------------------------------------+
 |UserIdentity |Catalog      |Grants                                                                                         |
 +-------------+-------------------------------------------------------------------------------------------------------------+
 |'user_g'@'%' |NULL         |GRANT role_g, public to `user_g`@`%`;                                                          | 
-|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON `user_a`@`%`, `user_b`@`%`TO `user_g`@`%`;                                |    
+|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON USER `user_a`@`%` TO USER `user_g`@`%`;                                |    
 |'user_g'@'%' |default      |GRANT CREATE_DATABASE ON CATALOG default_catalog TO USER `user_g`@`%`;                         | 
 |'user_g'@'%' |default      |GRANT ALTER, DROP, CREATE_TABLE ON DATABASE db1 TO USER `user_g`@`%`;                          | 
 |'user_g'@'%' |default      |GRANT CREATE_VIEW ON DATABASE db1 TO USER `user_g`@`%` WITH GRANT OPTION;                      | 

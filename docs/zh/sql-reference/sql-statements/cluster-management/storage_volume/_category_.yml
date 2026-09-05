@@ -1,0 +1,7 @@
+position: 30 # float position is supported
+label: '存储卷'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: storage_volume

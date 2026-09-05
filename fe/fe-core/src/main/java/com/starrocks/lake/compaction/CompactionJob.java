@@ -14,34 +14,77 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.proto.CompactStat;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class CompactionJob {
+    private static final Logger LOG = LogManager.getLogger(CompactionJob.class);
     private final Database db;
     private final Table table;
-    private final Partition partition;
+    private final PhysicalPartition partition;
     private final long txnId;
     private final long startTs;
     private volatile long commitTs;
     private volatile long finishTs;
     private VisibleStateWaiter visibleStateWaiter;
-    private List<CompactionTask> tasks;
+    private List<CompactionTask> tasks = Collections.emptyList();
+    // Set once every abort RPC has been delivered, so abort() (re-issued every scheduler tick by the
+    // tablet-reshard cleaning loop) stops resending after delivery but still retries a failed abort RPC.
+    // volatile for cross-thread visibility (abort() is called from both the compaction scheduler thread
+    // and the reshard cleaning thread); the check-then-set is deliberately not atomic — see abort().
+    private volatile boolean aborted = false;
+    private boolean allowPartialSuccess = false;
+    private final ComputeResource computeResource;
+    private String warehouse;
+    private final Quantiles scoreBefore;
+    private final boolean unshare;
+    private Quantiles scoreAfter;
+    private boolean partialSuccess; // whether job is partial successful
+    private CompactionProfile profile;
 
-    public CompactionJob(Database db, Table table, Partition partition, long txnId) {
+    public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
+            boolean allowPartialSuccess, ComputeResource computeResource, String warehouse,
+            Quantiles scoreBefore) {
+        this(db, table, partition, txnId, allowPartialSuccess, computeResource, warehouse, scoreBefore, false);
+    }
+
+    public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
+            boolean allowPartialSuccess, ComputeResource computeResource, String warehouse,
+            Quantiles scoreBefore, boolean unshare) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.txnId = txnId;
         this.startTs = System.currentTimeMillis();
+        this.commitTs = 0L;
+        this.finishTs = 0L;
+        this.allowPartialSuccess = allowPartialSuccess;
+        this.computeResource = computeResource;
+        this.warehouse = warehouse;
+        this.scoreBefore = scoreBefore;
+        this.unshare = unshare;
+        this.scoreAfter = null;
+        this.partialSuccess = false;
+        this.profile = null;
+    }
+
+    Database getDb() {
+        return db;
     }
 
     public long getTxnId() {
@@ -52,12 +95,13 @@ public class CompactionJob {
         this.tasks = Objects.requireNonNull(tasks, "tasks is null");
     }
 
-    public boolean isFailed() {
-        return tasks.stream().anyMatch(CompactionTask::isFailed);
+    public void setAggregateTask(CompactionTask task) {
+        this.tasks = Collections.singletonList(task);
     }
 
     public String getFailMessage() {
-        CompactionTask task = tasks.stream().filter(CompactionTask::isFailed).findAny().orElse(null);
+        CompactionTask task = tasks.stream().filter(t ->
+                t.getResult() != CompactionTask.TaskResult.ALL_SUCCESS).findAny().orElse(null);
         return task != null ? task.getFailMessage() : null;
     }
 
@@ -77,12 +121,41 @@ public class CompactionJob {
         return tasks.stream().map(CompactionTask::buildTabletCommitInfo).flatMap(List::stream).collect(Collectors.toList());
     }
 
-    public boolean isCompleted() {
-        return tasks.stream().allMatch(CompactionTask::isCompleted);
+    public CompactionTask.TaskResult getResult() {
+        int allSuccess = 0;
+        int noneSuccess = 0;
+        for (CompactionTask task : tasks) {
+            CompactionTask.TaskResult subTaskResult = task.getResult();
+            switch (subTaskResult) {
+                case NOT_FINISHED:
+                    return subTaskResult; // early return
+                case PARTIAL_SUCCESS:
+                    break;
+                case NONE_SUCCESS:
+                    noneSuccess++;
+                    break;
+                case ALL_SUCCESS:
+                    allSuccess++;
+                    break;
+                default:
+                    Preconditions.checkArgument(false, "unhandled compaction task result: %s", subTaskResult.name());
+                    break;
+            }
+        }
+        if (allSuccess == tasks.size()) {
+            this.partialSuccess = false;
+            return CompactionTask.TaskResult.ALL_SUCCESS;
+        } else if (noneSuccess == tasks.size()) {
+            this.partialSuccess = false;
+            return CompactionTask.TaskResult.NONE_SUCCESS;
+        } else {
+            this.partialSuccess = true;
+            return CompactionTask.TaskResult.PARTIAL_SUCCESS;
+        }
     }
 
     public int getNumTabletCompactionTasks() {
-        return tasks.stream().mapToInt(CompactionTask::tabletCount).sum();
+        return tasks.stream().filter(Predicate.not(CompactionTask::isDone)).mapToInt(CompactionTask::tabletCount).sum();
     }
 
     public long getStartTs() {
@@ -105,19 +178,149 @@ public class CompactionJob {
         this.finishTs = System.currentTimeMillis();
     }
 
-    public void abort() {
-        tasks.forEach(CompactionTask::abort);
+    public void setScoreAfter(Quantiles scoreAfter) {
+        this.scoreAfter = scoreAfter;
     }
 
-    public Partition getPartition() {
+    /**
+     * Requests abort of every task's compaction RPC. Idempotent: the tablet-reshard cleaning loop
+     * re-issues it every scheduler tick until the job leaves the running set, and it stops resending
+     * once all abort RPCs have been delivered. A caller can watch {@link #isAborted()} across a call to
+     * detect the false-&gt;true transition and, e.g., abort the compaction transaction exactly once.
+     */
+    public void abort() {
+        // The check-then-set is intentionally not atomic (see the volatile field): concurrent callers may
+        // resend duplicate (idempotent) abort RPCs for the same tasks, but the flag must only be set after
+        // delivery succeeds, which a compareAndSet at entry could not express.
+        if (aborted) {
+            return;
+        }
+        boolean allDelivered = true;
+        for (CompactionTask task : tasks) {
+            if (!task.abort()) {
+                allDelivered = false;
+            }
+        }
+        // Only mark the job aborted once every abort RPC was delivered, so a transient RPC failure is
+        // retried on the next tick instead of leaving the compaction running.
+        if (allDelivered) {
+            aborted = true;
+        }
+    }
+
+    public boolean isAborted() {
+        return aborted;
+    }
+
+    public PhysicalPartition getPartition() {
         return partition;
     }
 
     public String getFullPartitionName() {
-        return String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName());
+        return String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getId());
     }
 
     public String getDebugString() {
-        return String.format("TxnId=%d partition=%s", txnId, getFullPartitionName());
+        if (finishTs > 0) {
+            return String.format("txnId=%d, partition=%s, warehouse=%s, cnGroup=%d, profile=%s",
+                    txnId, getFullPartitionName(), warehouse, computeResource.getWorkerGroupId(),
+                    profile);
+        } else {
+            return String.format("txnId=%d, partition=%s, warehouse=%s, cnGroup=%d, scoreBefore=%s",
+                    txnId, getFullPartitionName(), warehouse, computeResource.getWorkerGroupId(),
+                    scoreBefore);
+        }
+    }
+
+    public boolean getAllowPartialSuccess() {
+        return allowPartialSuccess;
+    }
+
+    public boolean isUnshare() {
+        return unshare;
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
+    }
+
+    public Quantiles getScoreBefore() {
+        return scoreBefore;
+    }
+
+    public Quantiles getScoreAfter() {
+        return scoreAfter;
+    }
+
+    public boolean isPartialSuccess() {
+        return partialSuccess;
+    }
+
+    public String getExecutionProfile() {
+        if (profile != null) {
+            return profile.toString();
+        }
+        if (tasks.isEmpty() || finishTs == 0L) {
+            return "";
+        }
+        CompactStat stat = new CompactStat();
+        stat.subTaskCount = 0;
+        stat.readTimeRemote = 0L;
+        stat.readBytesRemote = 0L;
+        stat.readTimeLocal = 0L;
+        stat.readBytesLocal = 0L;
+        stat.readSegmentCount = 0L;
+        stat.writeSegmentCount = 0L;
+        stat.writeSegmentBytes = 0L;
+        stat.writeTimeRemote = 0L;
+        stat.inQueueTimeSec = 0;
+        for (CompactionTask task : tasks) {
+            List<CompactStat> subStats = task.getCompactStats();
+            if (subStats == null) {
+                continue;
+            }
+            for (CompactStat subStat : subStats) {
+                if (subStat.subTaskCount != null) {
+                    stat.subTaskCount += subStat.subTaskCount;
+                }
+                if (subStat.readTimeRemote != null) {
+                    stat.readTimeRemote += subStat.readTimeRemote;
+                }
+                if (subStat.readBytesRemote != null) {
+                    stat.readBytesRemote += subStat.readBytesRemote;
+                }
+                if (subStat.readTimeLocal != null) {
+                    stat.readTimeLocal += subStat.readTimeLocal;
+                }
+                if (subStat.readBytesLocal != null) {
+                    stat.readBytesLocal += subStat.readBytesLocal;
+                }
+                if (subStat.inQueueTimeSec != null) {
+                    stat.inQueueTimeSec += subStat.inQueueTimeSec;
+                }
+                if (subStat.readSegmentCount != null) {
+                    stat.readSegmentCount += subStat.readSegmentCount;
+                }
+                if (subStat.writeSegmentCount != null) {
+                    stat.writeSegmentCount += subStat.writeSegmentCount;
+                }
+                if (subStat.writeSegmentBytes != null) {
+                    stat.writeSegmentBytes += subStat.writeSegmentBytes;
+                }
+                if (subStat.writeTimeRemote != null) {
+                    stat.writeTimeRemote += subStat.writeTimeRemote;
+                }
+            }
+        }
+        profile = new CompactionProfile(stat, scoreBefore, scoreAfter, partialSuccess);
+        return profile.toString();
+    }
+
+    public long getSuccessCompactInputFileSize() {
+        long res = 0;
+        for (CompactionTask task : tasks) {
+            res += task.getSuccessCompactInputFileSize();
+        }
+        return res;
     }
 }

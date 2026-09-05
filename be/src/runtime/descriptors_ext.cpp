@@ -1,0 +1,518 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "runtime/descriptors_ext.h"
+
+#include <protocol/TDebugProtocol.h>
+
+#include <ios>
+#include <sstream>
+
+#include "base/base64.h"
+#include "base/compression/block_compression.h"
+#include "base/time/timezone_utils.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+#include "common/util/thrift_util.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+
+namespace starrocks {
+// ============== HDFS Table Descriptor ============
+
+HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsPartition& thrift_partition, std::pmr::memory_resource* mr)
+        : _file_format(thrift_partition.file_format),
+          _location(thrift_partition.location.suffix, mr),
+          _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
+
+std::string HdfsPartitionDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "HdfsPartition(id=" << _id << ", location=" << _location << ", file_format=" << _file_format
+        << ", partition_key_exprs=[";
+    for (size_t i = 0; i < _thrift_partition_key_exprs.size(); ++i) {
+        if (i > 0) out << ", ";
+        out << apache::thrift::ThriftDebugString(_thrift_partition_key_exprs[i]);
+    }
+    out << "])";
+    return out.str();
+}
+
+HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool, std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr),
+          _serde_lib(tdesc.hdfsTable.serde_lib, mr),
+          _input_format(tdesc.hdfsTable.input_format, mr),
+          _hive_column_names(tdesc.hdfsTable.hive_column_names, mr),
+          _hive_column_types(tdesc.hdfsTable.hive_column_types, mr),
+          _serde_properties(tdesc.hdfsTable.serde_properties),
+          _avro_schema_json(tdesc.hdfsTable.__isset.avro_schema_json
+                                    ? std::pmr::string(tdesc.hdfsTable.avro_schema_json, mr)
+                                    : std::pmr::string(mr)),
+          _time_zone(tdesc.hdfsTable.time_zone, mr) {
+    _hdfs_base_path.assign(tdesc.hdfsTable.hdfs_base_dir);
+    _columns = tdesc.hdfsTable.columns;
+    _partition_columns = tdesc.hdfsTable.partition_columns;
+    for (const auto& entry : tdesc.hdfsTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(entry.second, mr));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
+}
+
+std::string_view HdfsTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+std::string_view HdfsTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+std::string_view HdfsTableDescriptor::get_input_format() const {
+    return _input_format;
+}
+
+std::string_view HdfsTableDescriptor::get_serde_lib() const {
+    return _serde_lib;
+}
+
+const std::map<std::string, std::string> HdfsTableDescriptor::get_serde_properties() const {
+    return _serde_properties;
+}
+
+std::string_view HdfsTableDescriptor::get_avro_schema_json() const {
+    return _avro_schema_json;
+}
+
+std::string_view HdfsTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
+FileTableDescriptor::FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool, std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr),
+          _serde_lib(tdesc.fileTable.serde_lib, mr),
+          _input_format(tdesc.fileTable.input_format, mr),
+          _hive_column_names(tdesc.fileTable.hive_column_names, mr),
+          _hive_column_types(tdesc.fileTable.hive_column_types, mr),
+          _time_zone(tdesc.fileTable.time_zone, mr) {
+    _table_location.assign(tdesc.fileTable.location);
+    _columns = tdesc.fileTable.columns;
+}
+
+std::string_view FileTableDescriptor::get_table_locations() const {
+    return _table_location;
+}
+
+std::string_view FileTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+std::string_view FileTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+std::string_view FileTableDescriptor::get_input_format() const {
+    return _input_format;
+}
+
+std::string_view FileTableDescriptor::get_serde_lib() const {
+    return _serde_lib;
+}
+
+std::string_view FileTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
+IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                                               std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr) {
+    _table_location.assign(tdesc.icebergTable.location);
+    _columns = tdesc.icebergTable.columns;
+    _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
+    if (tdesc.icebergTable.__isset.partition_info) {
+        for (const auto& part_info : tdesc.icebergTable.partition_info) {
+            _source_column_names.push_back(part_info.source_column_name);
+            _partition_column_names.push_back(part_info.partition_column_name);
+            _transform_exprs.push_back(part_info.transform_expr);
+            _partition_exprs.push_back(part_info.partition_expr);
+        }
+    } else {
+        _source_column_names = tdesc.icebergTable.partition_column_names; //to compat with lower fe, set this also
+        _partition_column_names = tdesc.icebergTable.partition_column_names;
+        for ([[maybe_unused]] const auto& _ : tdesc.icebergTable.partition_column_names) {
+            _transform_exprs.emplace_back("identity"); //to compat with lower fe, set this also
+        }
+    }
+    if (tdesc.icebergTable.__isset.sort_order) {
+        _t_sort_order = tdesc.icebergTable.sort_order;
+    }
+}
+
+std::vector<int32_t> IcebergTableDescriptor::partition_source_index_in_schema() {
+    std::vector<int32_t> indexes;
+    indexes.reserve(_source_column_names.size());
+
+    for (const auto& name : _source_column_names) {
+        bool found = false;
+        for (int i = 0; !found && i < _columns.size(); ++i) {
+            if (_columns[i].column_name == name) {
+                indexes.emplace_back(i);
+                found = true;
+            }
+        }
+        if (!found) {
+            indexes.emplace_back(-1);
+        }
+    }
+
+    return indexes;
+}
+
+const std::vector<std::string> IcebergTableDescriptor::full_column_names() {
+    std::vector<std::string> full_column_names;
+    full_column_names.reserve(_columns.size());
+    for (const auto& column : _columns) {
+        full_column_names.emplace_back(column.column_name);
+    }
+
+    return full_column_names;
+}
+
+Status IcebergTableDescriptor::set_partition_desc_map(const starrocks::TIcebergTable& thrift_table,
+                                                      starrocks::ObjectPool* pool) {
+    if (thrift_table.__isset.compressed_partitions) {
+        ASSIGN_OR_RETURN(TPartitionMap * tPartitionMap,
+                         deserialize_partition_map(thrift_table.compressed_partitions, pool));
+        for (const auto& entry : tPartitionMap->partitions) {
+            auto* partition = pool->add(new HdfsPartitionDescriptor(entry.second, _mr));
+            _partition_id_to_desc_map[entry.first] = partition;
+        }
+    } else {
+        for (const auto& entry : thrift_table.partitions) {
+            auto* partition = pool->add(new HdfsPartitionDescriptor(entry.second, _mr));
+            _partition_id_to_desc_map[entry.first] = partition;
+        }
+    }
+    return Status::OK();
+}
+
+DeltaLakeTableDescriptor::DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                                                   std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr) {
+    _table_location.assign(tdesc.deltaLakeTable.location);
+    _columns = tdesc.deltaLakeTable.columns;
+    _partition_columns = tdesc.deltaLakeTable.partition_columns;
+    for (const auto& entry : tdesc.deltaLakeTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(entry.second, mr));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
+}
+
+HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool, std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr),
+          _hudi_instant_time(tdesc.hudiTable.instant_time, mr),
+          _hive_column_names(tdesc.hudiTable.hive_column_names, mr),
+          _hive_column_types(tdesc.hudiTable.hive_column_types, mr),
+          _input_format(tdesc.hudiTable.input_format, mr),
+          _serde_lib(tdesc.hudiTable.serde_lib, mr),
+          _time_zone(tdesc.hudiTable.time_zone, mr) {
+    _table_location.assign(tdesc.hudiTable.location);
+    _columns = tdesc.hudiTable.columns;
+    _partition_columns = tdesc.hudiTable.partition_columns;
+    for (const auto& entry : tdesc.hudiTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(entry.second, mr));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
+}
+
+std::string_view HudiTableDescriptor::get_instant_time() const {
+    return _hudi_instant_time;
+}
+
+std::string_view HudiTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+std::string_view HudiTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+std::string_view HudiTableDescriptor::get_input_format() const {
+    return _input_format;
+}
+
+std::string_view HudiTableDescriptor::get_serde_lib() const {
+    return _serde_lib;
+}
+
+std::string_view HudiTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
+PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                                             std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr),
+          _paimon_native_table(tdesc.paimonTable.paimon_native_table, mr),
+          _time_zone(tdesc.paimonTable.time_zone, mr),
+          _paimon_table_path(tdesc.paimonTable.paimon_table_path, mr),
+          _paimon_table_schema_json(tdesc.paimonTable.paimon_table_schema_json, mr),
+          _t_paimon_schema(tdesc.paimonTable.paimon_schema) {}
+
+std::string_view PaimonTableDescriptor::get_paimon_native_table() const {
+    return _paimon_native_table;
+}
+
+std::string_view PaimonTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
+std::string_view PaimonTableDescriptor::get_paimon_table_path() const {
+    return _paimon_table_path;
+}
+
+std::string_view PaimonTableDescriptor::get_paimon_table_schema_json() const {
+    return _paimon_table_schema_json;
+}
+
+FlussTableDescriptor::FlussTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                                           std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr),
+          _runtime_conf(tdesc.flussTable.runtime_conf, mr),
+          _time_zone(tdesc.flussTable.time_zone, mr),
+          _catalog_name(tdesc.flussTable.catalog_name, mr) {}
+
+std::string_view FlussTableDescriptor::get_runtime_conf() const {
+    return _runtime_conf;
+}
+
+std::string_view FlussTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
+std::string_view FlussTableDescriptor::get_catalog_name() const {
+    return _catalog_name;
+}
+
+OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool, std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr),
+          _database_name(tdesc.dbName, mr),
+          _table_name(tdesc.tableName, mr),
+          _time_zone(tdesc.hdfsTable.time_zone, mr) {
+    _columns = tdesc.hdfsTable.columns;
+    _partition_columns = tdesc.hdfsTable.partition_columns;
+}
+
+std::string_view OdpsTableDescriptor::get_database_name() const {
+    return _database_name;
+}
+
+std::string_view OdpsTableDescriptor::get_table_name() const {
+    return _table_name;
+}
+
+std::string_view OdpsTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
+KuduTableDescriptor::KuduTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool, std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr) {}
+
+HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr), _hdfs_base_path(mr), _table_location(mr), _mr(mr) {}
+
+bool HiveTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
+    return get_partition_col_index(slot) >= 0;
+}
+
+HdfsPartitionDescriptor* HiveTableDescriptor::get_partition(int64_t partition_id) const {
+    std::shared_lock lock(_map_mutex);
+    auto it = _partition_id_to_desc_map.find(partition_id);
+    if (it == _partition_id_to_desc_map.end()) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+int HiveTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) const {
+    int idx = 0;
+    for (const auto& partition_column : _partition_columns) {
+        if (partition_column.column_name == slot->col_name()) {
+            return idx;
+        }
+        ++idx;
+    }
+    return -1;
+}
+
+std::optional<std::string> HiveTableDescriptor::get_column_default_value(const SlotDescriptor* slot) const {
+    for (const auto& column : _columns) {
+        if (column.column_name != slot->col_name()) {
+            continue;
+        }
+        if (column.__isset.default_value) {
+            return column.default_value;
+        }
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+IcebergMetadataTableDescriptor::IcebergMetadataTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                                                               std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr),
+          _hive_column_names(tdesc.hdfsTable.hive_column_names, mr),
+          _hive_column_types(tdesc.hdfsTable.hive_column_types, mr),
+          _time_zone(tdesc.hdfsTable.__isset.time_zone ? std::pmr::string(tdesc.hdfsTable.time_zone, mr)
+                                                       : std::pmr::string(TimezoneUtils::default_time_zone, mr)) {}
+
+std::string_view IcebergMetadataTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+std::string_view IcebergMetadataTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+std::string_view IcebergMetadataTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
+StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
+        const TCompressedPartitionMap& compressed_partition_map, ObjectPool* pool) {
+    const std::string& base64_partition_map = compressed_partition_map.compressed_serialized_partitions;
+    std::string compressed_buf;
+    compressed_buf.resize(base64_partition_map.size() + 3);
+    base64_decode2(base64_partition_map.data(), base64_partition_map.size(), compressed_buf.data());
+    compressed_buf.resize(compressed_partition_map.compressed_len);
+
+    std::string uncompressed_buf;
+    uncompressed_buf.resize(compressed_partition_map.original_len);
+    Slice uncompress_output(uncompressed_buf);
+    const BlockCompressionCodec* zlib_uncompress_codec = nullptr;
+    RETURN_IF_ERROR(get_block_compression_codec(starrocks::CompressionTypePB::ZLIB, &zlib_uncompress_codec));
+    RETURN_IF_ERROR(zlib_uncompress_codec->decompress(compressed_buf, &uncompress_output));
+
+    TPartitionMap* tPartitionMap = pool->add(new TPartitionMap());
+    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<uint8_t*>(uncompress_output.data),
+                                           reinterpret_cast<uint32_t*>(&uncompress_output.size), TProtocolType::BINARY,
+                                           tPartitionMap));
+
+    return tPartitionMap;
+}
+
+Status HiveTableDescriptor::add_partition_value(ObjectPool* pool, int64_t id, const THdfsPartition& thrift_partition) {
+    // Produce a uniform mismatch error so that callers see the same wording and
+    // fields regardless of which branch (fast-path shared-lock hit, or slow-path
+    // emplace() race loss) actually detected the conflict.
+    auto mismatch_status = [&](const HdfsPartitionDescriptor* old_partition) {
+        return Status::InternalError(
+                fmt::format("Partition id {} already exists with different partition_key_exprs. "
+                            "new partition (thrift) = {}, old_partition = {}",
+                            id, apache::thrift::ThriftDebugString(thrift_partition), old_partition->debug_string()));
+    };
+
+    // Fast path: shared-lock lookup. If the partition is already registered, just
+    // verify the thrift is consistent and return. Multiple fragments registering
+    // the same partition can read the map concurrently.
+    {
+        std::shared_lock lock(_map_mutex);
+        const auto it = _partition_id_to_desc_map.find(id);
+        if (it != _partition_id_to_desc_map.end()) {
+            auto* old_partition = it->second;
+            if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
+                return mismatch_status(old_partition);
+            }
+            return Status::OK();
+        }
+    }
+
+    // Slow path: construct the descriptor (thrift copy only — opened ExprContexts
+    // are not stored on the descriptor; consumers build their own per-fragment, see
+    // HiveDataSource::_init_partition_values) and insert under a write lock.
+    // Double-check `inserted` to tolerate a race where another caller inserted the
+    // same id between the shared-lock release and the unique-lock acquire.
+    auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_partition, _mr));
+    std::unique_lock lock(_map_mutex);
+    auto [it, inserted] = _partition_id_to_desc_map.emplace(id, partition);
+    if (!inserted) {
+        auto* old_partition = it->second;
+        if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
+            return mismatch_status(old_partition);
+        }
+        // The locally built `partition` is unreferenced; it will be freed when `pool` dies.
+    }
+    return Status::OK();
+}
+
+// =============================================
+
+OlapTableDescriptor::OlapTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr) {}
+
+std::string OlapTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "OlapTable(" << TableDescriptor::debug_string() << ")";
+    return out.str();
+}
+
+SchemaTableDescriptor::SchemaTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr), _schema_table_type(tdesc.schemaTable.tableType) {}
+SchemaTableDescriptor::~SchemaTableDescriptor() = default;
+
+std::string SchemaTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "SchemaTable(" << TableDescriptor::debug_string() << ")";
+    return out.str();
+}
+
+BrokerTableDescriptor::BrokerTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr) {}
+
+BrokerTableDescriptor::~BrokerTableDescriptor() = default;
+
+std::string BrokerTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "BrokerTable(" << TableDescriptor::debug_string() << ")";
+    return out.str();
+}
+
+EsTableDescriptor::EsTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr) {}
+
+EsTableDescriptor::~EsTableDescriptor() = default;
+
+std::string EsTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "EsTable(" << TableDescriptor::debug_string() << ")";
+    return out.str();
+}
+
+JDBCTableDescriptor::JDBCTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr),
+          _jdbc_driver_name(tdesc.jdbcTable.jdbc_driver_name, mr),
+          _jdbc_driver_url(tdesc.jdbcTable.jdbc_driver_url, mr),
+          _jdbc_driver_checksum(tdesc.jdbcTable.jdbc_driver_checksum, mr),
+          _jdbc_driver_class(tdesc.jdbcTable.jdbc_driver_class, mr),
+          _jdbc_url(tdesc.jdbcTable.jdbc_url, mr),
+          _jdbc_table(tdesc.jdbcTable.jdbc_table, mr),
+          _jdbc_user(tdesc.jdbcTable.jdbc_user, mr),
+          _jdbc_passwd(tdesc.jdbcTable.jdbc_passwd, mr) {}
+
+std::string JDBCTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "JDBCTable(" << TableDescriptor::debug_string() << " jdbc_driver_name=" << _jdbc_driver_name
+        << " jdbc_driver_url=" << _jdbc_driver_url << " jdbc_driver_checksum=" << _jdbc_driver_checksum
+        << " jdbc_driver_class=" << _jdbc_driver_class << " jdbc_url=" << _jdbc_url << " jdbc_table=" << _jdbc_table
+        << " jdbc_user=" << _jdbc_user << " jdbc_passwd=" << _jdbc_passwd << "}";
+    return out.str();
+}
+
+} // namespace starrocks

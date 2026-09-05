@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "If point is of a valid Point type, return the corresponding Y-coordinate value."
 ---
 
 # ST_Y
 
-## Description
+
 
 If point is of a valid Point type, return the corresponding Y-coordinate value.
 

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "根据输入的 ASCII 值返回对应的字符。"
 ---
 
 # char
 
-## 功能
+
 
 根据输入的 ASCII 值返回对应的字符。
 

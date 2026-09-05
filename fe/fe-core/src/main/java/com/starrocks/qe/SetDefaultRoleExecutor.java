@@ -13,22 +13,25 @@
 // limitations under the License.
 package com.starrocks.qe;
 
-import com.starrocks.common.UserException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 
 import java.util.HashSet;
 import java.util.Set;
 
 public class SetDefaultRoleExecutor {
-    public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
+    public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws StarRocksException, PrivilegeException {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-        UserIdentity user = stmt.getUserIdentity();
-        Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);
+
+        UserRef user = stmt.getUser();
+        UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        Set<Long> roleIdsForUser = manager.getRoleIdsByUser(userIdentity);
         Set<Long> roleIds;
 
         if (stmt.getSetRoleType().equals(SetRoleType.NONE)) {
@@ -46,6 +49,6 @@ public class SetDefaultRoleExecutor {
             }
         }
 
-        manager.setUserDefaultRole(roleIds, user);
+        manager.setUserDefaultRole(roleIds, userIdentity);
     }
 }

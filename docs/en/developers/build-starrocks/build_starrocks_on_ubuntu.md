@@ -1,77 +1,107 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "How to compile StarRocks from source on Ubuntu."
 ---
 
-Support build on x86_64 and aarch64
+# Compile StarRocks on Ubuntu
 
-### Prerequisite
+This topic describes how to compile StarRocks on the Ubuntu operating system. StarRocks supports compilation on both x86_64 and AArch64 architectures.
 
+:::note
+
+Build StarRocks v4.1 and earlier on Ubuntu 22.04, and StarRocks v4.2 and later on Ubuntu 24.04.
+
+:::
+
+## Prerequisites
+
+### Install Dependencies
+
+Run the following commands to install necessary dependencies:
+
+```bash
+sudo apt update
 ```
-sudo apt-get update
+
+```bash
+sudo apt install build-essential automake bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 bzip2 -y
 ```
 
-```
-sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 -y
-```
+### Install Compiler
 
-### Compiler
+If you are using Ubuntu 22.04 or later, run the following command to install the tools and compilers:
 
-If the ubuntu version >= 22.04, you can
-```
-sudo apt-get install cmake gcc g++ default-jdk -y
+```bash
+sudo apt install cmake gcc g++ openjdk-17-jdk -y
 ```
 
-If the ubuntu version < 22.04.
-Check the version of following tools and compilers
+If you are using an Ubuntu version earlier than 22.04, run the following commands to check the versions of tools and compilers:
 
-##### 1. GCC/G++
+1. Check GCC/G++ versions:
 
-GCC/G++ version must be >= 10.3
+   ```bash
+   gcc --version
+   g++ --version
+   ```
+
+   GCC/G++ versions must be 10.3 or later. If you are using earlier versions, [click here to install GCC/G++](https://gcc.gnu.org/releases.html).
+
+2. Check JDK version:
+
+   ```bash
+   java --version
+   ```
+
+   OpenJDK version must be 17 or later. If you are using an earlier version, [click here to install OpenJDK](https://openjdk.org/install).
+
+3. Check CMake version:
+
+   ```bash
+   cmake --version
+   ```
+
+   CMake version must be 3.20.1 or later. If you are using an earlier version, [click here to install CMake](https://cmake.org/download).
+
+## Compile StarRocks
+
+### Download Source Code
+
+Run the following command to clone the StarRocks repository and navigate into the directory:
+
+```bash
+git clone https://github.com/StarRocks/starrocks.git
+cd starrocks
 ```
-gcc --version
-g++ --version
-```
-Install GCC/G++(https://gcc.gnu.org/releases.html)
 
-##### 2. JDK
+### Build StarRocks
 
-OpenJDK version must be >= 8
-```
-java --version
-```
-Install OpenJdk(https://openjdk.org/install)
+Run the following command to start the compilation:
 
-##### 3. CMake
-
-cmake version must be >= 3.20.1
-
-```
-cmake --version
-```
-Install cmake(https://cmake.org/download)
-
-
-### Improve the compile speed
-
-The default compiling paralleilsim equals to the **CPU Cores / 4**.
-If you want to improve the compile speed. If You can improve the paralleilsim.
-
-1. Suppose you have 32 Cpu cores, the default paralleilsim is 8.
-
-```
+```bash
 ./build.sh
 ```
 
-2. Suppose you have 32 Cpu cores, want to use 24 cores to compile.
+The default compilation parallelism is equal to **CPU core count/4**. Assuming you have 32 CPU cores, the default parallelism is 8.
 
-```
+If you want to adjust the parallelism, you can specify the number of CPU cores to be used for compilation via `-j` in the command line.
+
+The following example uses 24 CPU cores for compilation:
+
+```bash
 ./build.sh -j 24
 ```
 
-### FAQ
+## FAQ
 
-1. Failed to build `aws_cpp_sdk` in the Ubuntu 20.04.
+Q-1: Building `aws_cpp_sdk` fails on Ubuntu 20.04 with the error "Error: undefined reference to pthread_create". How can I resolve this?
+
+A: This error occurs due to a lower version of CMake. Please upgrade CMake to version 3.20.1 or above.
+
+Q-2: Building StarRocks fails on Ubuntu 24.04 or GCC 12+ with strict warning errors. How can I resolve this?
+
+A: To prevent build failures in third-party libraries, export the following flag before building:
+
+```bash
+export DISABLE_WARNING_AS_ERROR=1
+./build.sh
 ```
-Error: undefined reference to pthread_create
-```
-The error comes from the lower CMake version; you can upgrade the CMake version to at least 3.20.1

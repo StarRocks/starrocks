@@ -43,6 +43,7 @@ import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Catalog;
 import org.apache.hadoop.hive.metastore.api.CheckConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.CheckLockRequest;
 import org.apache.hadoop.hive.metastore.api.ClientCapabilities;
 import org.apache.hadoop.hive.metastore.api.ClientCapability;
 import org.apache.hadoop.hive.metastore.api.CmRecycleRequest;
@@ -72,6 +73,7 @@ import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleResponse;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalRequest;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalResponse;
 import org.apache.hadoop.hive.metastore.api.GetTableRequest;
+import org.apache.hadoop.hive.metastore.api.HeartbeatRequest;
 import org.apache.hadoop.hive.metastore.api.HeartbeatTxnRangeResponse;
 import org.apache.hadoop.hive.metastore.api.HiveObjectPrivilege;
 import org.apache.hadoop.hive.metastore.api.HiveObjectRef;
@@ -157,12 +159,11 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.layered.TFramedTransport;
 
-import javax.security.auth.login.LoginException;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -182,6 +183,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.security.auth.login.LoginException;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
 
@@ -242,6 +244,8 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         } else {
             this.conf = new Configuration(conf);
         }
+
+        HadoopExt.getInstance().rewriteConfiguration(this.conf);
 
         version = MetastoreConf.getBoolVar(conf, ConfVars.HIVE_IN_TEST) ? TEST_VERSION : VERSION;
 
@@ -360,7 +364,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                         JavaUtils.getClassLoader());
                 return (URIResolverHook) ReflectionUtils.newInstance(uriResolverClass, null);
             } catch (Exception e) {
-                LOG.error("Exception loading uri resolver hook" + e);
+                LOG.error("Exception loading uri resolver hook", e);
                 return null;
             }
         }
@@ -517,6 +521,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                         transport, MetaStoreUtils.getMetaStoreSaslProperties(conf, useSSL));
                             }
                         } catch (IOException ioe) {
+                            tte = new TTransportException(ioe);
                             LOG.error("Couldn't create client transport", ioe);
                             throw new MetaException(ioe.toString());
                         }
@@ -569,7 +574,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                     + "Continuing without it.", e);
                         }
                     }
-                } catch (MetaException e) {
+                } catch (MetaException | TTransportException e) {
+                    if (e instanceof TTransportException) {
+                        tte = (TTransportException) e;
+                    }
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }
@@ -623,9 +631,22 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         }
     }
 
+    public Table getTable(String dbName, String tableName, boolean isCheckTableExist)
+            throws MetaException, TException, NoSuchObjectException {
+        try {
+            return getTable(null, dbName, tableName);
+        } catch (NoSuchObjectException e) {
+            // Do not log warning if it's checking table existence.
+            if (!isCheckTableExist) {
+                LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
+            }
+            throw e;
+        }
+    }
+
     @Override
     public Table getTable(String dbName, String tableName) throws MetaException, TException, NoSuchObjectException {
-        return getTable(null, dbName, tableName);
+        return getTable(dbName, tableName, false);
     }
 
     @Override
@@ -636,10 +657,13 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             return client.get_table(dbName, tableName);
         } catch (NoSuchObjectException e) {
             // NoSuchObjectException need to be thrown when creating iceberg table.
-            LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
             throw e;
         } catch (Exception e) {
             LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
+            // Reconnect first: get_table() may have failed on a read timeout that left an
+            // undrained response on the socket; reusing it for get_table_req() desyncs the
+            // Thrift seqid ("out of sequence response").
+            reconnect();
             GetTableRequest req = new GetTableRequest(dbName, tableName);
             req.setCapabilities(version);
             return client.get_table_req(req).getTable();
@@ -875,7 +899,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public List<String> getTables(String dbName, String tablePattern, TableType tableType)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_all_tables(dbName);
     }
 
     @Override
@@ -1043,14 +1067,22 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public boolean tableExists(String databaseName, String tableName)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        throws MetaException, TException, UnknownDBException {
+        try {
+            Table table = getTable(databaseName, tableName, true);
+            return table != null;
+        } catch (UnknownDBException | NoSuchObjectException e) {
+            return false;
+        } catch (TException e) {
+            LOG.warn("Failed to check table {}.{} existence", databaseName, tableName, e);
+            throw e;
+        }
     }
 
     @Override
     public boolean tableExists(String catName, String dbName, String tableName)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        throws MetaException, TException, UnknownDBException {
+        return tableExists(dbName, tableName);
     }
 
     @Override
@@ -2031,7 +2063,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public LockResponse checkLock(long lockid)
             throws NoSuchTxnException, TxnAbortedException, NoSuchLockException, TException {
-        throw new TException("method not implemented");
+        return client.check_lock(new CheckLockRequest(lockid));
     }
 
     @Override
@@ -2052,7 +2084,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public void heartbeat(long txnid, long lockid)
             throws NoSuchLockException, NoSuchTxnException, TxnAbortedException, TException {
-        throw new TException("method not implemented");
+        HeartbeatRequest heartbeatRequest = new HeartbeatRequest();
+        heartbeatRequest.setTxnid(txnid);
+        heartbeatRequest.setLockid(lockid);
+        client.heartbeat(heartbeatRequest);
 
     }
 

@@ -14,17 +14,27 @@
 
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 
+#include <glog/logging.h>
+
 #include <memory>
 
+#include "base/concurrency/race_detect.h"
+#include "base/failpoint/fail_point.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/query/fragment_runtime_state.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/sorting/sorting.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller.hpp"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+
+DEFINE_FAIL_POINT(spill_always_streaming);
+DEFINE_FAIL_POINT(spill_always_selection_streaming);
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
@@ -32,13 +42,20 @@ bool SpillableAggregateBlockingSinkOperator::need_input() const {
 }
 
 bool SpillableAggregateBlockingSinkOperator::is_finished() const {
-    if (!spilled()) {
-        return _is_finished || AggregateBlockingSinkOperator::is_finished();
+    if (_is_finished) {
+        return true;
     }
-    return _is_finished || _aggregator->is_finished();
+    if (!spilled()) {
+        return AggregateBlockingSinkOperator::is_finished();
+    }
+    return _aggregator->is_finished();
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) {
+        return Status::OK();
+    }
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
         _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
@@ -49,37 +66,32 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         _aggregator->spiller()->cancel();
     }
 
-    if (!_aggregator->spiller()->spilled()) {
+    if (!_aggregator->spiller()->spilled() && _streaming_chunks.empty()) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
     }
-    if (!_aggregator->spill_channel()->has_task()) {
-        if (_aggregator->hash_map_variant().size() > 0 || !_streaming_chunks.empty()) {
-            _aggregator->hash_map_variant().visit(
-                    [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
-            _aggregator->spill_channel()->add_spill_task(_build_spill_task(state));
-        }
-    }
+    // Always queue a spill task for residual hash table and streaming data.
+    // Even if channel has_task(), the in-flight task may have been created with
+    // should_spill_hash_table=false and won't drain the hash table.
+    _aggregator->spill_channel()->add_spill_task(_build_spill_task(state));
 
-    auto io_executor = _aggregator->spill_channel()->io_executor();
-
-    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+    auto flush_function = [this](RuntimeState* state) {
         auto& spiller = _aggregator->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+    auto set_call_back_function = [this](RuntimeState* state) {
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
+                state, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
     };
 
-    SpillProcessTasksBuilder task_builder(state, io_executor);
+    SpillProcessTasksBuilder task_builder(state);
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
@@ -89,20 +101,27 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
 void SpillableAggregateBlockingSinkOperator::close(RuntimeState* state) {
     AggregateBlockingSinkOperator::close(state);
+    // On cancellation the operator is closed without having finished; only assert the
+    // normal-completion invariants when the query is still running.
+    DCHECK(state->is_cancelled() || is_finished());
+    DCHECK(state->is_cancelled() || !need_input());
 }
 
 Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare(state));
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare_local_state(state));
+
     DCHECK(!_aggregator->is_none_group_by_exprs());
     _aggregator->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }
-    _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
-            "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    _peak_revocable_mem_bytes = ADD_PEAK_COUNTER(_unique_metrics, "PeakRevocableMemoryBytes", TUnit::BYTES);
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
+    _agg_group_by_with_limit = false;
+    _aggregator->params()->enable_pipeline_share_limit = false;
 
     return Status::OK();
 }
@@ -129,6 +148,7 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
 Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
                                                            const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::reset_state(state, refill_chunks));
     return Status::OK();
@@ -154,35 +174,54 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     bool ht_need_expansion = _aggregator->hash_map_variant().need_expand(chunk_size);
     const size_t max_mem_usage = state->spill_mem_table_size();
 
-    auto io_executor = _aggregator->spill_channel()->io_executor();
     auto spiller = _aggregator->spiller();
 
     // goal: control buffered data memory usage, aggregate data as much as possible before spill
     // this strategy is similar to the LIMITED_MEM mode in agg streaming
 
-    if (_streaming_bytes + ht_mem_usage > max_mem_usage) {
+    bool always_streaming = false;
+    bool always_selection_streaming = false;
+
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_streaming = true;
+        }
+    });
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_selection_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_selection_streaming = true;
+        }
+    });
+
+    // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    bool build_hash_table =
+            !ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage);
+    build_hash_table = build_hash_table && !always_selection_streaming;
+    if (_streaming_bytes + ht_mem_usage > max_mem_usage || always_streaming) {
         // if current memory usage exceeds limit,
         // use force streaming mode and spill all data
         SCOPED_TIMER(_aggregator->streaming_timer());
         ChunkPtr res = std::make_shared<Chunk>();
-        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res, true));
         _add_streaming_chunk(res);
         return _spill_all_data(state, true);
-    } else if (!ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage)) {
-        // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    } else if (build_hash_table) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
-        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+        TRY_CATCH_ALLOC_SCOPE_START()
+        _aggregator->build_hash_map(chunk_size);
+        _aggregator->try_convert_to_two_level_map();
         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
+        TRY_CATCH_ALLOC_SCOPE_END()
 
         _aggregator->update_num_input_rows(chunk_size);
         RETURN_IF_ERROR(_aggregator->check_has_error());
         _continuous_low_reduction_chunk_num = 0;
     } else {
+        TRY_CATCH_ALLOC_SCOPE_START()
         // selective preaggregation
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
+            _aggregator->build_hash_map_with_selection(chunk_size);
         }
 
         size_t hit_count = SIMD::count_zero(_aggregator->streaming_selection());
@@ -190,7 +229,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         if (hit_count == 0) {
             // put all data into buffer
             ChunkPtr tmp = std::make_shared<Chunk>();
-            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp));
+            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp, true));
             _add_streaming_chunk(std::move(tmp));
         } else if (hit_count == _aggregator->streaming_selection().size()) {
             // very high reduction
@@ -205,7 +244,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
             {
                 SCOPED_TIMER(_aggregator->streaming_timer());
                 ChunkPtr res = std::make_shared<Chunk>();
-                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res));
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res, true));
                 _add_streaming_chunk(std::move(res));
             }
         }
@@ -214,10 +253,11 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         }
 
         _aggregator->update_num_input_rows(hit_count);
+        TRY_CATCH_ALLOC_SCOPE_END()
         RETURN_IF_ERROR(_aggregator->check_has_error());
     }
-    // finally, check memory usage of streaming_chunks and hash table, decide wether to spill
 
+    // finally, check memory usage of streaming_chunks and hash table, decide whether to spill
     size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_map_memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
     if (revocable_mem_bytes > max_mem_usage) {
@@ -236,10 +276,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
 }
 
 Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
-    if (should_spill_hash_table) {
-        _aggregator->hash_map_variant().visit(
-                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
-    }
+    RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
     CHECK(!_aggregator->spill_channel()->has_task());
     RETURN_IF_ERROR(_aggregator->spill_aggregate_data(state, _build_spill_task(state, should_spill_hash_table)));
     return Status::OK();
@@ -247,18 +284,20 @@ Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* sta
 
 std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_build_spill_task(
         RuntimeState* state, bool should_spill_hash_table) {
-    return [this, state, should_spill_hash_table]() -> StatusOr<ChunkPtr> {
+    return [this, state, should_spill_hash_table, iterator_initialized = false]() mutable -> StatusOr<ChunkPtr> {
         if (!_streaming_chunks.empty()) {
             auto chunk = _streaming_chunks.front();
             _streaming_chunks.pop();
             return chunk;
         }
-        if (should_spill_hash_table) {
-            bool use_intermediate_as_output = true;
+        if (should_spill_hash_table && _aggregator->hash_map_variant().size() > 0) {
+            if (!iterator_initialized) {
+                _aggregator->it_hash() = _aggregator->state_allocator().begin();
+                iterator_initialized = true;
+            }
             if (!_aggregator->is_ht_eos()) {
                 auto chunk = std::make_shared<Chunk>();
-                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk,
-                                                                       &use_intermediate_as_output));
+                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
                 return chunk;
             }
             COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
@@ -280,7 +319,7 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     RETURN_IF_ERROR(_sort_exprs.init(group_by_expr, nullptr, &_pool, state));
     _sort_desc = SortDescs::asc_null_first(group_by_expr.size());
 
-    RETURN_IF_ERROR(_sort_exprs.prepare(state, {}, {}));
+    RETURN_IF_ERROR(_sort_exprs.prepare(state));
     RETURN_IF_ERROR(_sort_exprs.open(state));
 
     // init spill options
@@ -293,10 +332,14 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
         _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     }
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
+    _spill_options->block_manager = state->query_runtime_state()->query_spill_manager()->block_manager();
     _spill_options->name = "agg-blocking-spill";
+    _spill_options->enable_block_compaction = state->spill_enable_compaction();
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 
     return Status::OK();
 }
@@ -305,14 +348,16 @@ OperatorPtr SpillableAggregateBlockingSinkOperatorFactory::create(int32_t degree
                                                                   int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
 
-    auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id,
-                                                                       driver_sequence);
+    auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(
+            aggregator, this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_shared_limit_countdown());
     // create spiller
     auto spiller = _spill_factory->create(*_spill_options);
     // create spill process channel
     auto spill_channel = _spill_channel_factory->get_or_create(driver_sequence);
 
     spill_channel->set_spiller(spiller);
+    // Anchor the spill channel to the aggregator's lifetime (see SpillProcessOperator prepare/close).
+    spill_channel->set_guarded_context(aggregator.get());
     aggregator->set_spiller(spiller);
     aggregator->set_spill_channel(std::move(spill_channel));
 

@@ -1,0 +1,89 @@
+-- name: test_partial_update_upsert
+show backends;
+create database test_partial_update_upsert;
+-- result:
+-- !result
+use test_partial_update_upsert;
+-- result:
+-- !result
+DROP TABLE IF EXISTS tab1;
+-- result:
+-- !result
+DROP TABLE IF EXISTS tab2;
+-- result:
+-- !result
+CREATE table IF NOT EXISTS tab1 (
+          k1 INTEGER,
+          k2 INTEGER,
+          k3 INTEGER,
+          v1 INTEGER,
+          v2 INTEGER,
+          v3 INTEGER,
+          v4 INTEGER
+    )
+    ENGINE=OLAP
+    PRIMARY KEY(`k1`, `k2`)
+    DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+    ORDER BY(`k3`, `k2`)
+    PROPERTIES (
+        "replication_num" = "1"
+    );
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_4.csv -XPUT -H partial_update:true -H partial_update_mode:column -H label:test_partial_update_upsert1 -H column_separator:, -H columns:k1,k2,k3,v1 ${url}/api/test_partial_update_upsert/tab1/_stream_load | grep "partial update on table with sort key must provide all sort key columns" | wc -l
+-- result:
+0
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_5.csv -XPUT -H partial_update:true -H partial_update_mode:column -H label:test_partial_update_upsert2 -H column_separator:, -H columns:k1,k2,v1 ${url}/api/test_partial_update_upsert/tab1/_stream_load | grep "partial update on table with sort key must provide all sort key columns" | wc -l
+-- result:
+0
+1
+-- !result
+select * from tab1 order by k1, k2;
+-- result:
+-- !result
+CREATE table IF NOT EXISTS tab2 (
+          k1 INTEGER,
+          k2 INTEGER,
+          k3 INTEGER,
+          v1 INTEGER,
+          v2 INTEGER,
+          v3 INTEGER,
+          v4 INTEGER
+    )
+    ENGINE=OLAP
+    PRIMARY KEY(`k1`, `k2`)
+    DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+    ORDER BY(`k1`, `k2`)
+    PROPERTIES (
+        "replication_num" = "1"
+    );
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_4.csv -XPUT -H partial_update:true -H partial_update_mode:column -H label:test_partial_update_upsert1 -H column_separator:, -H columns:k1,k2,k3,v1 ${url}/api/test_partial_update_upsert/tab2/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_5.csv -XPUT -H partial_update:true -H partial_update_mode:column -H label:test_partial_update_upsert2 -H column_separator:, -H columns:k1,k2,v1 ${url}/api/test_partial_update_upsert/tab2/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select * from tab2 order by k1, k2;
+-- result:
+100	1112	2222	111	None	None	None
+200	1112	None	2222	None	None	None
+400	4444	432	222	None	None	None
+500	4444	None	432	None	None	None
+-- !result
+drop database test_partial_update_upsert force;
+-- result:
+-- !result

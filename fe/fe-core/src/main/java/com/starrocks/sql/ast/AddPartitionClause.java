@@ -15,26 +15,37 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
 import java.util.Map;
 
 // clause which is used to add partition
 public class AddPartitionClause extends AlterTableClause {
 
-    private final PartitionDesc partitionDesc;
-    private final DistributionDesc distributionDesc;
+    private PartitionDesc partitionDesc;
+    private DistributionDesc distributionDesc;
     private final Map<String, String> properties;
     // true if this is to add a temporary partition
     private final boolean isTempPartition;
+
+    //Object Resolved by Analyzer
+    private List<PartitionDesc> resolvedPartitionDescList;
 
     public PartitionDesc getPartitionDesc() {
         return partitionDesc;
     }
 
+    public void setPartitionDesc(PartitionDesc desc) {
+        this.partitionDesc = desc;
+    }
+
     public DistributionDesc getDistributionDesc() {
         return distributionDesc;
+    }
+
+    public void setDistributionDesc(DistributionDesc distributionDesc) {
+        this.distributionDesc = distributionDesc;
     }
 
     public boolean isTempPartition() {
@@ -52,21 +63,27 @@ public class AddPartitionClause extends AlterTableClause {
                               DistributionDesc distributionDesc,
                               Map<String, String> properties,
                               boolean isTempPartition, NodePosition pos) {
-        super(AlterOpType.ADD_PARTITION, pos);
+        super(pos);
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.isTempPartition = isTempPartition;
-        this.needTableStable = false;
     }
 
-    @Override
+    public List<PartitionDesc> getResolvedPartitionDescList() {
+        return resolvedPartitionDescList;
+    }
+
+    public void setResolvedPartitionDescList(List<PartitionDesc> resolvedPartitionDescList) {
+        this.resolvedPartitionDescList = resolvedPartitionDescList;
+    }
+
     public Map<String, String> getProperties() {
         return this.properties;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddPartitionClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddPartitionClause(this, context);
     }
 }

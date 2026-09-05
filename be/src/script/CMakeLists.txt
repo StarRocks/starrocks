@@ -17,10 +17,14 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/script")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/script")
 
 set(EXEC_FILES
+    command_executor.cpp
     script.cpp
     ../thirdparty/wren/wren.c
 )
 
-add_library(Script STATIC ${EXEC_FILES})
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+
+ADD_BE_LIB(Script ${EXEC_FILES})
+target_link_libraries(Script PRIVATE Storage StoragePrimitive Runtime Runtime IO Platform Common Base Gutil StarRocksGen)
 
 target_include_directories(Script PRIVATE ${SRC_DIR}/script ${SRC_DIR}/thirdparty/wren ${SRC_DIR}/thirdparty/wrenbind17)

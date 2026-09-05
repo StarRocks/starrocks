@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the second part for a given date."
 ---
 
 # second
 
-## Description
+
 
 Returns the second part for a given date. The return value ranges from 0 to 59.
 

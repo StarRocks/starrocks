@@ -16,6 +16,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.connector.DatabaseTableName;
 
 import java.util.List;
 import java.util.Optional;
@@ -24,20 +25,20 @@ public class HivePartitionValue {
     // use empty list to represent all partition values when get partition names from partitionKeysCache
     public static final List<Optional<String>> ALL_PARTITION_VALUES = ImmutableList.of();
 
-    private final HiveTableName tableName;
+    private final DatabaseTableName tableName;
 
     private final List<Optional<String>> partitionValues;
 
-    public HivePartitionValue(HiveTableName tableName, List<Optional<String>> partitionValues) {
+    public HivePartitionValue(DatabaseTableName tableName, List<Optional<String>> partitionValues) {
         this.tableName = tableName;
         this.partitionValues = partitionValues;
     }
 
-    public static HivePartitionValue of(HiveTableName tableName, List<Optional<String>> partitionValues) {
+    public static HivePartitionValue of(DatabaseTableName tableName, List<Optional<String>> partitionValues) {
         return new HivePartitionValue(tableName, partitionValues);
     }
 
-    public HiveTableName getHiveTableName() {
+    public DatabaseTableName getHiveTableName() {
         return tableName;
     }
 

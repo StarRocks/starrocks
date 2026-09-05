@@ -20,11 +20,12 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -32,6 +33,7 @@ import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.aws.glue.GlueCatalog;
@@ -48,10 +50,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 
 public class IcebergGlueCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergGlueCatalog.class);
-    public static final String LOCATION_PROPERTY = "location";
 
     private final Configuration conf;
     private final GlueCatalog delegate;
@@ -73,19 +75,24 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+    public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         return delegate.loadTable(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
-    public List<String> listAllDatabases() {
+    public boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(TableIdentifier.of(dbName, tableName));
+    }
+
+    @Override
+    public List<String> listAllDatabases(ConnectContext context) {
         return delegate.listNamespaces().stream()
                 .map(ns -> ns.level(0))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) {
+    public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -97,7 +104,8 @@ public class IcebergGlueCatalog implements IcebergCatalog {
                     fileSystem.exists(new Path(value));
                 } catch (Exception e) {
                     LOG.error("Invalid location URI: {}", value, e);
-                    throw new StarRocksConnectorException("Invalid location URI: %s. msg: %s", value, e.getMessage());
+                    throw new StarRocksConnectorException(
+                            String.format("Invalid location URI: %s", value), e);
                 }
             } else {
                 throw new IllegalArgumentException("Unrecognized property: " + key);
@@ -108,13 +116,13 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void dropDb(String dbName) throws MetaNotFoundException {
+    public void dropDB(ConnectContext context, String dbName) throws MetaNotFoundException {
         Database database;
         try {
-            database = getDB(dbName);
+            database = getDB(context, dbName);
         } catch (Exception e) {
             LOG.error("Failed to access database {}", dbName, e);
-            throw new MetaNotFoundException("Failed to access database " + dbName);
+            throw new StarRocksConnectorException("Failed to access database " + dbName, e);
         }
 
         if (database == null) {
@@ -130,28 +138,41 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Database getDB(String dbName) {
+    public Database getDB(ConnectContext context, String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
-        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.getOrDefault(LOCATION_PROPERTY, ""));
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.getOrDefault(LOCATION_PROPERTY, ""));
     }
 
     @Override
-    public List<String> listTables(String dbName) {
+    public List<String> listTables(ConnectContext context, String dbName) {
         List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Override
     public boolean createTable(
+            ConnectContext context,
             String dbName,
             String tableName,
             Schema schema,
             PartitionSpec partitionSpec,
             String location,
+            SortOrder sortOrder,
             Map<String, String> properties) {
+        if (Strings.isNullOrEmpty(location)) {
+            String dbLocation = getDB(context, dbName).getLocation();
+            if (Strings.isNullOrEmpty(dbLocation)) {
+                throw new StarRocksConnectorException("Failed to find location in database '%s'. Please define the location" +
+                        " when you create table or recreate another database with location." +
+                        " You could execute the SQL command like 'CREATE TABLE <table_name> <columns> " +
+                        "PROPERTIES('location' = '<location>')", dbName);
+            }
+        }
+
         Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
+                .withSortOrder(sortOrder)
                 .withProperties(properties)
                 .create();
 
@@ -159,8 +180,14 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     }
 
     @Override
-    public boolean dropTable(String dbName, String tableName, boolean purge) {
+    public boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
         return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
+    }
+
+    @Override
+    public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName)
+            throws StarRocksConnectorException {
+        delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
     }
 
     @Override
@@ -178,6 +205,21 @@ public class IcebergGlueCatalog implements IcebergCatalog {
             }
         } catch (Exception e) {
             LOG.error("Failed to delete uncommitted files", e);
+        }
+    }
+
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, 
+                                 String metadataFileLocation) {
+        try {
+            TableIdentifier tableIdentifier = TableIdentifier.of(dbName, tableName);
+            Table table = delegate.registerTable(tableIdentifier, metadataFileLocation);
+            return table != null;
+        } catch (Exception e) {
+            LOG.error("Failed to register table {}.{} with metadata file location {}", 
+                    dbName, tableName, metadataFileLocation, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to register table %s.%s", dbName, tableName), e);
         }
     }
 

@@ -18,13 +18,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 public class SimplifiedCaseWhenRule extends BottomUpScalarOperatorRewriteRule {
-    private SimplifiedCaseWhenRule() {
+    private final boolean skipComplexFunctions;
+
+    private SimplifiedCaseWhenRule(boolean skipComplexFunctions) {
+        this.skipComplexFunctions = skipComplexFunctions;
     }
 
-    public static final SimplifiedCaseWhenRule INSTANCE = new SimplifiedCaseWhenRule();
+    public static final SimplifiedCaseWhenRule INSTANCE = new SimplifiedCaseWhenRule(false);
+    public static final SimplifiedCaseWhenRule SKIP_COMPLEX_FUNCTIONS_INSTANCE = new SimplifiedCaseWhenRule(true);
 
     @Override
     public ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context) {
-        return InvertedCaseWhen.simplify(root);
+        return InvertedCaseWhen.simplify(root, skipComplexFunctions);
     }
 }

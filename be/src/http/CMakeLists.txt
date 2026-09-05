@@ -12,30 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
-add_library(Webserver STATIC
+set(HTTP_SERVICE_FILES
   download_action.cpp
-  http_headers.cpp
-  http_method.cpp
-  http_request.cpp
-  http_channel.cpp
-  http_status.cpp
-  http_parser.cpp
-  http_stream_channel.cpp
   web_page_handler.cpp
   monitor_action.cpp
   default_path_handlers.cpp
   utils.cpp
-  ev_http_server.cpp
-  http_client.cpp
   action/health_action.cpp
   action/checksum_action.cpp
   action/greplog_action.cpp
@@ -43,6 +30,9 @@ add_library(Webserver STATIC
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
   action/pprof_actions.cpp
+  action/proc_profile_action.cpp
+  action/proc_profile_file_action.cpp
+  action/profile_utils.cpp
   action/memory_metrics_action.cpp
   action/metrics_action.cpp
   action/stream_load.cpp
@@ -53,19 +43,18 @@ add_library(Webserver STATIC
   action/update_config_action.cpp
   action/runtime_filter_cache_action.cpp
   action/query_cache_action.cpp
+  action/datacache_action.cpp
   action/pipeline_blocking_drivers_action.cpp
   action/lake/dump_tablet_metadata_action.cpp
+  action/lake/dump_tablet_metadata_serializer.cpp
   action/stop_be_action.cpp)
 
-# target_link_libraries(Webserver pthread dl Util)
-#ADD_BE_TEST(integer-array-test)
-#ADD_BE_TEST(runtime-profile-test)
-#ADD_BE_TEST(benchmark-test)
-#ADD_BE_TEST(decompress-test)
-#ADD_BE_TEST(metrics-test)
-#ADD_BE_TEST(debug-util-test)
-#ADD_BE_TEST(url-coding-test)
-#ADD_BE_TEST(thrift-util-test)
-#ADD_BE_TEST(bit-util-test)
-#ADD_BE_TEST(rle-test)
-##ADD_BE_TEST(perf-counters-test)
+if(STARROCKS_JIT_ENABLE)
+    set(HTTP_SERVICE_FILES ${HTTP_SERVICE_FILES} action/jit_cache_action.cpp)
+endif()
+
+ADD_BE_LIB(HttpService ${HTTP_SERVICE_FILES})
+target_link_libraries(HttpService PUBLIC Platform PRIVATE Storage DataWorkflows Orchestration)
+if(STARROCKS_JIT_ENABLE)
+    target_link_libraries(HttpService PRIVATE Expr)
+endif()

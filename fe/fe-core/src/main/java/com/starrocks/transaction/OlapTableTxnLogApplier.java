@@ -15,6 +15,8 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -33,6 +35,7 @@ import java.util.Set;
 
 public class OlapTableTxnLogApplier implements TransactionLogApplier {
     private static final Logger LOG = LogManager.getLogger(OlapTableTxnLogApplier.class);
+
     // olap table or olap materialized view
     private final OlapTable table;
 
@@ -44,14 +47,14 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
                 continue;
             }
             List<MaterializedIndex> allIndices =
-                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                    txnState.getPartitionLoadedIndexesWithoutLock(table.getId(), partition);
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -62,7 +65,24 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                     }
                 }
             }
-            partition.setNextVersion(partition.getNextVersion() + 1);
+            // The version of a replication transaction may not continuously
+            if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+            } else if (txnState.isVersionOverwrite()) {
+                // overwrite empty partition, it's next version will less than overwrite version
+                // otherwise, it's next version will not change
+                if (partitionCommitInfo.getVersion() + 1 > partition.getNextVersion()) {
+                    partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                }
+            } else if (partitionCommitInfo.isDoubleWrite()) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+            }
+            // data version == visible version in shared-nothing mode
+            partition.setNextDataVersion(partition.getNextVersion());
+
+            LOG.debug("partition[{}] next version[{}]", partitionId, partition.getNextVersion());
         }
     }
 
@@ -70,20 +90,18 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         long tableId = table.getId();
-        OlapTable table = (OlapTable) db.getTable(tableId);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;
         }
-        List<String> validDictCacheColumns = Lists.newArrayList();
+        List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
 
-        table.lastVersionUpdateStartTime.set(System.currentTimeMillis());
-
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
@@ -92,7 +110,8 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
             long version = partitionCommitInfo.getVersion();
             List<MaterializedIndex> allIndices =
-                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                    txnState.getPartitionLoadedIndexesWithoutLock(table.getId(), partition);
+            List<String> skipUpdateReplicas = Lists.newArrayList();
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     boolean hasFailedVersion = false;
@@ -104,8 +123,30 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         }
                         long lastFailedVersion = replica.getLastFailedVersion();
                         long newVersion = version;
-                        long lastSucessVersion = replica.getLastSuccessVersion();
-                        if (!errorReplicaIds.contains(replica.getId())) {
+                        long lastSuccessVersion = replica.getLastSuccessVersion();
+                        if (txnState.checkReplicaNeedSkip(tablet, replica, partitionCommitInfo)
+                                || errorReplicaIds.contains(replica.getId())) {
+                            // There are 2 cases that we can't update version to visible version and need to
+                            // set lastFailedVersion.
+                            // 1. this replica doesn't have version publish yet. This maybe happen when clone concurrent
+                            //    with data loading.
+                            // 2. this replica has data loading failure.
+                            //
+                            // for example, A,B,C 3 replicas, B,C failed during publish version (Or never publish),
+                            // then B C will be set abnormal and all loadings will be failed, B,C will have to recover
+                            // by clone, it is very inefficient and may lose data.
+                            // Using this method, B,C will publish failed, and fe will publish again,
+                            // not update their last failed version.
+                            // if B is published successfully in next turn, then B is normal and C will be set
+                            // abnormal so that quorum is maintained and loading will go on.
+                            String combinedId = String.format("%d_%d", tablet.getId(), replica.getBackendId());
+                            skipUpdateReplicas.add(combinedId);
+                            newVersion = replica.getVersion();
+                            if (version > lastFailedVersion) {
+                                lastFailedVersion = version;
+                                hasFailedVersion = true;
+                            }
+                        } else {
                             if (replica.getLastFailedVersion() > 0) {
                                 // if the replica is a failed replica, then not changing version
                                 newVersion = replica.getVersion();
@@ -121,22 +162,9 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                             }
 
                             // success version always move forward
-                            lastSucessVersion = version;
-                        } else {
-                            // for example, A,B,C 3 replicas, B,C failed during publish version,
-                            // then B C will be set abnormal and all loadings will be failed, B,C will have to recover
-                            // by clone, it is very inefficient and may lose data.
-                            // Using this method, B,C will publish failed, and fe will publish again,
-                            // not update their last failed version.
-                            // if B is published successfully in next turn, then B is normal and C will be set
-                            // abnormal so that quorum is maintained and loading will go on.
-                            newVersion = replica.getVersion();
-                            if (version > lastFailedVersion) {
-                                lastFailedVersion = version;
-                                hasFailedVersion = true;
-                            }
+                            lastSuccessVersion = version;
                         }
-                        replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
+                        replica.updateVersionInfo(newVersion, lastFailedVersion, lastSuccessVersion);
                     } // end for replicas
 
                     if (hasFailedVersion && replicationNum == 1) {
@@ -144,11 +172,32 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                     }
                 } // end for tablets
             } // end for indices
+            if (!skipUpdateReplicas.isEmpty()) {
+                LOG.warn("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
+            }
+
             long versionTime = partitionCommitInfo.getVersionTime();
-            partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+            if (txnState.isVersionOverwrite()) {
+                if (partition.getVisibleVersion() < version) {
+                    partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                    partition.setDataVersion(version); // data version == visible version in shared-nothing mode
+                    if (partitionCommitInfo.getVersionEpoch() > 0) {
+                        partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                    }
+                    partition.setVersionTxnType(txnState.getTransactionType());
+                }
+            } else {
+                partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                partition.setDataVersion(version); // data version == visible version in shared-nothing mode
+                if (partitionCommitInfo.getVersionEpoch() > 0) {
+                    partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                }
+                partition.setVersionTxnType(txnState.getTransactionType());
+            }
+
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
-                for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
-                    IDictManager.getInstance().removeGlobalDict(tableId, column);
+                for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                    IDictManager.getInstance().removeGlobalDict(table, column);
                 }
             }
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
@@ -157,16 +206,27 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
             }
+            if (txnState.isUserWriteSource()) {
+                partition.updateLastUpdateTime(versionTime);
+            }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
-        table.lastVersionUpdateEndTime.set(System.currentTimeMillis());
+        // TODO(murphy) don't invalidate all cache columns, only invalidate the columns that are changed
+        // Invalidate the dict for JSON type
+        List<Column> jsonColumns = table.getColumns().stream()
+                .filter(x -> x.getType().isJsonType())
+                .toList();
+        for (Column column : jsonColumns) {
+            IDictManager.getInstance().removeGlobalDictForJson(tableId, column.getColumnId());
+        }
+
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
-                String columnName = validDictCacheColumns.get(i);
+                ColumnId columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
-                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+                        .updateGlobalDict(table, columnName, collectedVersion, maxPartitionVersionTime);
             }
         }
     }

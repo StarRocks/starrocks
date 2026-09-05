@@ -17,16 +17,16 @@
 
 package com.starrocks.mysql;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 
 public class MysqlChangeUserPacketTest {
     private ByteBuffer byteBuffer;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         // code
@@ -44,6 +44,13 @@ public class MysqlChangeUserPacketTest {
         serializer.writeNulTerminateString("testDb");
         // character set
         serializer.writeInt2(33);
+        //plugin
+        serializer.writeNulTerminateString("");
+
+        //conn attribute
+        serializer.writeVInt(10);
+        serializer.writeLenEncodedString("key");
+        serializer.writeLenEncodedString("value");
 
         byteBuffer = serializer.toByteBuffer();
     }
@@ -51,9 +58,10 @@ public class MysqlChangeUserPacketTest {
     @Test
     public void testRead() {
         MysqlChangeUserPacket packet = new MysqlChangeUserPacket(MysqlCapability.DEFAULT_CAPABILITY);
-        Assert.assertTrue(packet.readFrom(byteBuffer));
-        Assert.assertEquals("testUser", packet.getUser());
-        Assert.assertEquals("testDb", packet.getDb());
+        Assertions.assertTrue(packet.readFrom(byteBuffer));
+        Assertions.assertEquals("testUser", packet.getUser());
+        Assertions.assertEquals("testDb", packet.getDb());
+        Assertions.assertEquals("value", packet.getConnectAttributes().get("key"));
     }
 
 }

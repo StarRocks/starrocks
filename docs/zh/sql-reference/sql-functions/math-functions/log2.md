@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算以2为底的数值对数。"
 ---
 
 # log2
 
-## 功能
+
 
 返回以 2 为底数的 `x` 的对数。
 

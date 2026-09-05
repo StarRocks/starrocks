@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "从数组中移除指定元素。"
 ---
 
 # array_remove
 
-## 功能
+
 
 从数组中移除指定元素。
 

@@ -15,13 +15,12 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Splitter;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -29,20 +28,16 @@ import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class JDBCTable extends Table {
-    private static final Logger LOG = LogManager.getLogger(JDBCTable.class);
 
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
@@ -54,12 +49,23 @@ public class JDBCTable extends Table {
     private String jdbcTable;
     @SerializedName(value = "rn")
     private String resourceName;
+    @SerializedName(value = "qt")
+    private boolean queryTable;
 
-    private Map<String, String> properties;
+    private Map<String, String> connectInfo;
     private String catalogName;
     private String dbName;
     private List<Column> partitionColumns;
 
+    // Transient: original JDBC column types (java.sql.Types) from the external database.
+    // Used for Oracle datetime predicate pushdown to determine TO_DATE/TO_TIMESTAMP wrapping.
+    private transient Map<String, Integer> originalJdbcColumnTypes;
+
+    // Transient: marker for {@link com.starrocks.connector.jdbc.JDBCMetadata#getTableComment}
+    // dedup. Once REMARKS has been fetched for this cached instance, further calls return the
+    // already-stored comment without another remote round-trip. Reset when the cache entry is
+    // evicted or refreshTable creates a new JDBCTable.
+    private transient boolean commentFetched;
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -87,6 +93,7 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
@@ -96,11 +103,13 @@ public class JDBCTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return dbName;
     }
 
-    public String getJdbcTable() {
+    @Override
+    public String getCatalogTableName() {
         return jdbcTable;
     }
 
@@ -109,12 +118,11 @@ public class JDBCTable extends Table {
         return partitionColumns;
     }
 
-    @Override
-    public Map<String, String> getProperties() {
-        if (properties == null) {
-            this.properties = new HashMap<>();
+    public Map<String, String> getConnectInfo() {
+        if (connectInfo == null) {
+            this.connectInfo = new HashMap<>();
         }
-        return properties;
+        return connectInfo;
     }
 
     @Override
@@ -122,8 +130,112 @@ public class JDBCTable extends Table {
         return partitionColumns == null || partitionColumns.size() == 0;
     }
 
-    public String getProperty(String propertyKey) {
-        return properties.get(propertyKey);
+    public String getConnectInfo(String connectInfoKey) {
+        return connectInfo.get(connectInfoKey);
+    }
+
+    public String getJdbcUri() {
+        if (!Strings.isNullOrEmpty(resourceName)) {
+            JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
+                    .getResource(resourceName);
+            return resource != null ? resource.getProperty(JDBCResource.URI) : null;
+        }
+        return connectInfo != null ? connectInfo.get(JDBCResource.URI) : null;
+    }
+
+    public boolean isMySQLCompatible() {
+        String uri = getJdbcUri();
+        return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
+    }
+
+    public Map<String, Integer> getOriginalJdbcColumnTypes() {
+        if (originalJdbcColumnTypes == null) {
+            originalJdbcColumnTypes = new HashMap<>();
+        }
+        return originalJdbcColumnTypes;
+    }
+
+    public void setOriginalJdbcColumnTypes(Map<String, Integer> originalJdbcColumnTypes) {
+        if (originalJdbcColumnTypes == null) {
+            this.originalJdbcColumnTypes = new HashMap<>();
+        } else {
+            this.originalJdbcColumnTypes = new HashMap<>(originalJdbcColumnTypes);
+        }
+    }
+
+    public boolean isCommentFetched() {
+        return commentFetched;
+    }
+
+    public void setCommentFetched(boolean commentFetched) {
+        this.commentFetched = commentFetched;
+    }
+
+    public boolean isQueryTable() {
+        return queryTable;
+    }
+
+    public void setPassThroughQuery(String query) {
+        jdbcTable = "(" + normalizePassThroughQuery(query) + ") starrocks_query";
+        queryTable = true;
+    }
+
+    public static String normalizePassThroughQuery(String query) {
+        String normalizedQuery = StringUtils.trimToEmpty(query);
+        while (normalizedQuery.endsWith(";")) {
+            normalizedQuery = StringUtils.stripEnd(normalizedQuery.substring(0, normalizedQuery.length() - 1), null);
+        }
+        if (normalizedQuery.isEmpty()) {
+            throw new IllegalArgumentException("pass-through query cannot be empty");
+        }
+        validatePassThroughQuery(normalizedQuery);
+        return normalizedQuery;
+    }
+
+    private static void validatePassThroughQuery(String query) {
+        String leadingSql = stripLeadingComments(query);
+        if (!startsWithSqlKeyword(leadingSql, "select")) {
+            throw new IllegalArgumentException("JDBC query table function only supports SELECT queries");
+        }
+    }
+
+    private static String stripLeadingComments(String query) {
+        int offset = 0;
+        while (offset < query.length()) {
+            char ch = query.charAt(offset);
+            if (Character.isWhitespace(ch)) {
+                offset++;
+                continue;
+            }
+            if (ch == '-' && offset + 1 < query.length() && query.charAt(offset + 1) == '-') {
+                offset += 2;
+                while (offset < query.length() && query.charAt(offset) != '\n' && query.charAt(offset) != '\r') {
+                    offset++;
+                }
+                continue;
+            }
+            if (ch == '/' && offset + 1 < query.length() && query.charAt(offset + 1) == '*') {
+                int commentEnd = query.indexOf("*/", offset + 2);
+                if (commentEnd < 0) {
+                    throw new IllegalArgumentException("JDBC query table function only supports SELECT queries");
+                }
+                offset = commentEnd + 2;
+                continue;
+            }
+            break;
+        }
+        return query.substring(offset);
+    }
+
+    private static boolean startsWithSqlKeyword(String query, String keyword) {
+        if (!query.regionMatches(true, 0, keyword, 0, keyword.length())) {
+            return false;
+        }
+        if (query.length() == keyword.length()) {
+            return true;
+        }
+        char next = query.charAt(keyword.length());
+        return !Character.isLetterOrDigit(next) && next != '_';
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -148,7 +260,7 @@ public class JDBCTable extends Table {
             } else {
                 jdbcTable = properties.get(JDBCTable.JDBC_TABLENAME);
             }
-            this.properties = properties;
+            this.connectInfo = properties;
             return;
         }
 
@@ -176,6 +288,36 @@ public class JDBCTable extends Table {
         }
     }
 
+    private static String buildCatalogDriveName(String uri) {
+        // jdbc:postgresql://172.26.194.237:5432/db_pg_select
+        // -> jdbc_postgresql_172.26.194.237_5432_db_pg_select
+        // requirement: it should be used as local path.
+        // and there is no ':' in it to avoid be parsed into non-local filesystem.
+        String ans = uri.replaceAll("[^0-9a-zA-Z]", "_");
+
+        // currently we use this uri as part of name of download file.
+        // so if this uri is too long, we might fail to write file on BE side.
+        // so here we have to shorten it to reduce fail probability because of long file name.
+
+        final String prefix = "jdbc_";
+        try {
+            // 256bits = 32bytes = 64hex chars.
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(ans.getBytes());
+            byte[] hashBytes = digest.digest();
+            StringBuilder sb = new StringBuilder();
+            // it's for be side parsing: expect a _ in name.
+            sb.append(prefix);
+            for (byte b : hashBytes) {
+                sb.append(String.format("%02x", b));
+            }
+            ans = sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // don't update `ans`.
+        }
+        return ans;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TJDBCTable tJDBCTable = new TJDBCTable();
@@ -192,21 +334,36 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_user(resource.getProperty(JDBCResource.USER));
             tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
         } else {
-            String uri = properties.get(JDBCResource.URI);
-            String driverName = uri.replace("//", "").replace("/", "_");
+            String uri = connectInfo.get(JDBCResource.URI);
+            String driverName = buildCatalogDriveName(uri);
             tJDBCTable.setJdbc_driver_name(driverName);
-            tJDBCTable.setJdbc_driver_url(properties.get(JDBCResource.DRIVER_URL));
-            tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));
-            tJDBCTable.setJdbc_driver_class(properties.get(JDBCResource.DRIVER_CLASS));
+            tJDBCTable.setJdbc_driver_url(connectInfo.get(JDBCResource.DRIVER_URL));
+            tJDBCTable.setJdbc_driver_checksum(connectInfo.get(JDBCResource.CHECK_SUM));
+            tJDBCTable.setJdbc_driver_class(connectInfo.get(JDBCResource.DRIVER_CLASS));
 
-            if (properties.get(JDBC_TABLENAME) != null) {
-                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI));
+            if (connectInfo.get(JDBC_TABLENAME) != null || queryTable || Strings.isNullOrEmpty(dbName)) {
+                tJDBCTable.setJdbc_url(uri);
             } else {
-                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI) + "/" + dbName);
+                int delimiterIndex = uri.indexOf("?");
+                if (delimiterIndex > 0) {
+                    String urlPrefix = uri.substring(0, delimiterIndex);
+                    String urlSuffix = uri.substring(delimiterIndex + 1);
+                    if (urlPrefix.endsWith("/")) {
+                        tJDBCTable.setJdbc_url(urlPrefix + dbName + "?" + urlSuffix);
+                    } else {
+                        tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                    }
+                } else {
+                    if (uri.endsWith("/")) {
+                        tJDBCTable.setJdbc_url(uri + dbName);
+                    } else {
+                        tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                    }
+                }
             }
             tJDBCTable.setJdbc_table(jdbcTable);
-            tJDBCTable.setJdbc_user(properties.get(JDBCResource.USER));
-            tJDBCTable.setJdbc_passwd(properties.get(JDBCResource.PASSWORD));
+            tJDBCTable.setJdbc_user(connectInfo.get(JDBCResource.USER));
+            tJDBCTable.setJdbc_passwd(connectInfo.get(JDBCResource.PASSWORD));
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.JDBC_TABLE,
@@ -216,31 +373,12 @@ public class JDBCTable extends Table {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        JsonObject obj = new JsonObject();
-        obj.addProperty(TABLE, jdbcTable);
-        obj.addProperty(RESOURCE, resourceName);
-        Text.writeString(out, obj.toString());
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String jsonStr = Text.readString(in);
-        JsonObject obj = JsonParser.parseString(jsonStr).getAsJsonObject();
-        jdbcTable = obj.getAsJsonPrimitive(TABLE).getAsString();
-        resourceName = obj.getAsJsonPrimitive(RESOURCE).getAsString();
-    }
-
-    @Override
     public boolean isSupported() {
         return true;
     }
 
     public ProtocolType getProtocolType() {
-        String uri = properties.get(JDBCResource.URI);
+        String uri = connectInfo.get(JDBCResource.URI);
         if (StringUtils.isEmpty(uri)) {
             return ProtocolType.UNKNOWN;
         }
@@ -263,6 +401,14 @@ public class JDBCTable extends Table {
         UNKNOWN,
         MYSQL,
         POSTGRES,
-        ORACLE
+        ORACLE,
+        MARIADB,
+
+        CLICKHOUSE
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.ALTER);
     }
 }

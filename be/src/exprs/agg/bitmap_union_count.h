@@ -25,6 +25,8 @@ namespace starrocks {
 class BitmapUnionCountAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionCountAggregateFunction> {
 public:
+    bool is_exception_safe() const override { return false; }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).clear();
     }
@@ -64,8 +66,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

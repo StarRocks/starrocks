@@ -14,9 +14,10 @@
 
 package com.starrocks.load.pipe.filelist;
 
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,72 +29,44 @@ public class RepoCreator {
     private static final Logger LOG = LogManager.getLogger(RepoCreator.class);
     private static final RepoCreator INSTANCE = new RepoCreator();
 
-    private static boolean databaseExists = false;
-    private boolean tableExists = false;
-    private boolean tableCorrected = false;
-
     public static RepoCreator getInstance() {
         return INSTANCE;
     }
 
-    public void run() {
+    public synchronized void run() {
         try {
-            if (!databaseExists) {
-                databaseExists = checkDatabaseExists();
-                if (!databaseExists) {
-                    LOG.warn("database not exists: " + FileListTableRepo.FILE_LIST_DB_NAME);
-                    return;
-                }
+            if (!checkDatabaseExists()) {
+                LOG.warn("database not exists: " + FileListTableRepo.FILE_LIST_DB_NAME);
+                return;
             }
-            if (!tableExists) {
+            if (!checkTableExists()) {
                 createTable();
                 LOG.info("table created: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
-                tableExists = true;
             }
-            if (!tableCorrected) {
-                correctTable();
-                LOG.info("table corrected: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
-                tableCorrected = true;
-            }
+            correctTable();
         } catch (Exception e) {
             LOG.error("error happens in RepoCreator: ", e);
         }
     }
 
     public boolean checkDatabaseExists() {
-        return GlobalStateMgr.getCurrentState().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
     }
 
-    public static void createTable() throws UserException {
-        String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql();
-        RepoExecutor.getInstance().executeDDL(sql);
+    public boolean checkTableExists() {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .mayGetTable(FileListTableRepo.FILE_LIST_DB_NAME, FileListTableRepo.FILE_LIST_TABLE_NAME)
+                .isPresent();
     }
 
-    public static void correctTable() {
-        int numBackends = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
-        int replica = GlobalStateMgr.getCurrentState()
-                .mayGetDb(FileListTableRepo.FILE_LIST_DB_NAME)
-                .flatMap(db -> db.mayGetTable(FileListTableRepo.FILE_LIST_TABLE_NAME))
-                .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
-                .orElse((short) 1);
-        if (numBackends >= 3 && replica < 3) {
-            String sql = FileListTableRepo.SQLBuilder.buildAlterTableSql();
-            RepoExecutor.getInstance().executeDDL(sql);
-        } else {
-            LOG.info("table {} already has {} replicas, no need to alter replication_num",
-                    FileListTableRepo.FILE_LIST_FULL_NAME, replica);
-        }
+    public static void createTable() throws StarRocksException {
+        int expectedReplicationNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
+        String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql(expectedReplicationNum);
+        SimpleExecutor.getRepoExecutor().executeDDL(sql);
     }
 
-    public boolean isDatabaseExists() {
-        return databaseExists;
-    }
-
-    public boolean isTableExists() {
-        return tableExists;
-    }
-
-    public boolean isTableCorrected() {
-        return tableCorrected;
+    public static boolean correctTable() {
+        return StatisticUtils.alterSystemTableReplicationNumIfNecessary(FileListTableRepo.FILE_LIST_TABLE_NAME);
     }
 }

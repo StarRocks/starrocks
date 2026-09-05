@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算两个日期表达式的分钟数差（expr1 − expr2），精确到分钟。"
 ---
 
 # minutes_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差多少分钟 (`expr1` − `expr2`)。
 

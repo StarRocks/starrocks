@@ -300,13 +300,13 @@ StatusOr<ColumnPtr> GeoFunctions::st_as_wkt(FunctionContext* context, const Colu
 }
 
 struct StContainsState {
-    StContainsState() : shapes{nullptr, nullptr} {}
+    StContainsState() = default;
     ~StContainsState() {
         delete shapes[0];
         delete shapes[1];
     }
     bool is_null{false};
-    GeoShape* shapes[2];
+    GeoShape* shapes[2]{nullptr, nullptr};
 };
 
 Status GeoFunctions::st_contains_close(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {
@@ -435,3 +435,5 @@ Status GeoFunctions::st_polygon_prepare(FunctionContext* ctx, FunctionContext::F
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/GeoFunctions.inc"

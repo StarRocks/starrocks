@@ -34,12 +34,15 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 
 public class HealthAction extends RestBaseAction {
     public HealthAction(ActionController controller) {
@@ -51,13 +54,33 @@ public class HealthAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/health", new HealthAction(controller));
     }
 
+    // Liveness probe. Historically anonymous; gated for backward compatibility so it
+    // requires Basic auth (AuthN-only, no privilege check) only when the operator opts
+    // in via `enable_http_auth`.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
-        response.setContentType("application/json");
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
 
-        RestResult result = new RestResult();
-        result.addResultEntry("total_backend_num", GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
-        result.addResultEntry("online_backend_num", GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
-        sendResult(request, response, result);
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+        if (GracefulExitFlag.isGracefulExit()) {
+            sendResult(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+        } else {
+            response.setContentType("application/json");
+
+            RestResult result = new RestResult();
+            result.addResultEntry("total_backend_num",
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber());
+            result.addResultEntry("online_backend_num",
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber());
+            sendResult(request, response, result);
+        }
+    }
+
+    @Override
+    public boolean supportAsyncHandler() {
+        // Health Action need to be handled synchronously
+        return false;
     }
 }

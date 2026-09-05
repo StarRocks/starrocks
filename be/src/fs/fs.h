@@ -9,28 +9,29 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
+#include "base/string/slice.h"
 #include "common/statusor.h"
-#include "fs/credential/cloud_configuration_factory.h"
-#include "gen_cpp/PlanNodes_types.h"
+#include "fs/encryption.h"
+#include "fs/fs_options.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
-#include "runtime/descriptors.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
 class RandomAccessFile;
 class WritableFile;
 class SequentialFile;
-struct ResultFileOptions;
-class TUploadReq;
-class TDownloadReq;
 struct WritableFileOptions;
+class FileSystem;
 
 struct SpaceInfo {
     // Total size of the filesystem, in bytes
@@ -41,56 +42,24 @@ struct SpaceInfo {
     int64_t available = 0;
 };
 
-struct FSOptions {
-private:
-    FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
-              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
-              const TCloudConfiguration* cloud_configuration)
-            : scan_range_params(scan_range_params),
-              export_sink(export_sink),
-              result_file_options(result_file_options),
-              upload(upload),
-              download(download),
-              cloud_configuration(cloud_configuration) {}
-
-public:
-    FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
-
-    FSOptions(const TBrokerScanRangeParams* scan_range_params)
-            : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr, nullptr) {}
-
-    FSOptions(const TExportSink* export_sink) : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr, nullptr) {}
-
-    FSOptions(const ResultFileOptions* result_file_options)
-            : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr, nullptr) {}
-
-    FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr, nullptr) {}
-
-    FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download, nullptr) {}
-
-    FSOptions(const TCloudConfiguration* cloud_configuration)
-            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_configuration) {}
-
-    const THdfsProperties* hdfs_properties() const;
-
-    const TBrokerScanRangeParams* scan_range_params;
-    const TExportSink* export_sink;
-    const ResultFileOptions* result_file_options;
-    const TUploadReq* upload;
-    const TDownloadReq* download;
-    const TCloudConfiguration* cloud_configuration;
-};
-
 struct SequentialFileOptions {
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
+    // Specify different buffer size for different read scenarios
+    int64_t buffer_size = -1;
+    FileEncryptionInfo encryption_info;
+    bool skip_disk_cache = false;
 };
 
 struct RandomAccessFileOptions {
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
+    // Specify different buffer size for different read scenarios
+    int64_t buffer_size = -1;
+    FileEncryptionInfo encryption_info;
+    bool skip_disk_cache = false;
 };
 
 struct DirEntry {
@@ -98,6 +67,30 @@ struct DirEntry {
     std::optional<int64_t> mtime;
     std::optional<int64_t> size; // Undefined if "is_dir" is true
     std::optional<bool> is_dir;
+};
+
+struct FileInfo {
+    std::string path;
+    std::optional<int64_t> size;
+    std::string encryption_meta;
+    std::shared_ptr<FileSystem> fs;
+    // It is used to store the file offset of the bundle file.
+    std::optional<int64_t> bundle_file_offset;
+    // Masked CRC32C (crc32c::Mask) of the file's logical content -- the bytes handed to append(),
+    // i.e. before encryption. Set only by producers that compute it (currently lake del files);
+    // absent means "not recorded" and consumers skip verification.
+    std::optional<uint32_t> crc32c;
+
+    // Cache key uniquely identifying this FileInfo as a *slice* of a physical file. Caches keyed
+    // on file identity (e.g. lake metacache for Segments) must use this rather than `path` so two
+    // slices of the same physical file at different `bundle_file_offset` get distinct entries.
+    // Non-bundled files collapse to the path alone, preserving the pre-existing cache layout.
+    std::string cache_key() const {
+        if (bundle_file_offset.has_value() && bundle_file_offset.value() > 0) {
+            return path + "#" + std::to_string(bundle_file_offset.value());
+        }
+        return path;
+    }
 };
 
 struct FileWriteStat {
@@ -109,7 +102,7 @@ struct FileWriteStat {
 
 class FileSystem {
 public:
-    enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET };
+    enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET, AZBLOB };
 
     // Governs if/how the file is created.
     //
@@ -123,11 +116,6 @@ public:
 
     FileSystem() = default;
     virtual ~FileSystem() = default;
-
-    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
-                                                                        FSOptions options = FSOptions());
-
-    static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own FileSystem
@@ -159,8 +147,22 @@ public:
         return new_random_access_file(RandomAccessFileOptions(), fname);
     }
 
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const FileInfo& file_info) {
+        return new_random_access_file(RandomAccessFileOptions(), file_info);
+    }
+
     virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                const std::string& fname) = 0;
+
+    // Implementations may make use of the file info to make some optimizations, such as getting the file size directly.
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                               const FileInfo& file_info) {
+        return new_random_access_file(opts, file_info.path);
+    }
+
+    // Used for sharing segment files only.
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file_with_bundling(
+            const RandomAccessFileOptions& opts, const FileInfo& file_info);
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
@@ -229,6 +231,7 @@ public:
     // NOTE: The dir must be empty.
     virtual Status delete_dir(const std::string& dirname) = 0;
 
+    // TODO: Rename this method, because this method can also delete a normal file.
     // Deletes the contents of 'dirname' (if it is a directory) and the contents of all its subdirectories,
     // recursively, then deletes 'dirname' itself. Symlinks are not followed (symlink is removed, not its target).
     virtual Status delete_dir_recursive(const std::string& dirname) = 0;
@@ -264,12 +267,19 @@ public:
 
     // Given the path to a remote file, delete the file's cache on the local file system, if any.
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
-    virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
+    virtual Status drop_local_cache(const std::string& path, int64_t offset = 0, int64_t size = -1) {
+        return Status::NotFound(path);
+    }
+
+    // Get file cache stats, return <cached_bytes, total_bytes>.
+    virtual StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset, int64_t size) {
+        return Status::NotSupported("FileSystem::get_cache_stats");
+    }
 
     // Batch delete the given files.
     // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message
     // possibly stop at the first error if is simulating batch deletes.
-    virtual Status delete_files(const std::vector<std::string>& paths) {
+    virtual Status delete_files(std::span<const std::string> paths) {
         for (auto&& path : paths) {
             auto st = delete_file(path);
             if (!st.ok() && !st.is_not_found()) {
@@ -286,8 +296,18 @@ struct WritableFileOptions {
     bool sync_on_close = true;
     // For remote filesystem, skip filling local filesystem cache on write requests
     bool skip_fill_local_cache = false;
+
+    bool direct_write = false;
+
     // See OpenMode for details.
     FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
+    FileEncryptionInfo encryption_info;
+
+    // Content type for cloud storage (S3, Azure, etc.)
+    // Use constants from common/http/content_type.h:
+    //   http::ContentType::CSV, http::ContentType::PARQUET, http::ContentType::ORC, http::ContentType::OCTET_STREAM
+    // If empty, defaults to http::ContentType::OCTET_STREAM ("application/octet-stream")
+    std::string content_type;
 };
 
 // A `SequentialFile` is an `io::InputStream` with a name.
@@ -302,6 +322,9 @@ public:
 
     std::shared_ptr<io::InputStream> stream() { return _stream; }
 
+    static std::unique_ptr<SequentialFile> from(std::unique_ptr<io::SeekableInputStream> stream,
+                                                const std::string& name, const FileEncryptionInfo& info);
+
 private:
     std::shared_ptr<io::InputStream> _stream;
     std::string _name;
@@ -315,23 +338,41 @@ public:
               _stream(std::move(stream)),
               _name(std::move(name)) {}
 
-    explicit RandomAccessFile(std::shared_ptr<io::SeekableInputStream> stream, std::string name, bool is_cache_hit)
+    explicit RandomAccessFile(std::shared_ptr<io::SeekableInputStream> stream, std::string name, bool is_cache_hit,
+                              int64_t bundle_offset = 0)
             : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
               _stream(std::move(stream)),
               _name(std::move(name)),
-              _is_cache_hit(is_cache_hit) {}
+              _is_cache_hit(is_cache_hit),
+              _bundle_offset(bundle_offset) {}
 
     std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
-    const std::string& filename() const { return _name; }
+    const std::string& filename() const override { return _name; }
 
-    bool is_cache_hit() const { return _is_cache_hit; }
+    bool is_cache_hit() const override { return _is_cache_hit; }
+
+    // When this RandomAccessFile names a bundled-slice view of a physical file (the wrapper
+    // hides the slice's start offset behind a stream-relative coordinate), the slice's base
+    // offset must be folded into the page-cache key, otherwise two slices that share the same
+    // physical-file `_name` collide at the same stream-relative offset. For non-bundled files
+    // `_bundle_offset` is 0 and the encoding is `(path, stream_offset)` as before.
+    std::string page_cache_key(int64_t stream_offset) const override {
+        return io::SeekableInputStream::page_cache_key(_bundle_offset + stream_offset);
+    }
+
+    static std::unique_ptr<RandomAccessFile> from(std::unique_ptr<io::SeekableInputStream> stream,
+                                                  const std::string& name, bool is_cache_hit,
+                                                  const FileEncryptionInfo& info);
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     std::string _name;
-    // for cachefs in fs_starlet
+    // for cachefs in starlet_filesystem
     bool _is_cache_hit{false};
+    // Slice base offset within the underlying physical file when this RandomAccessFile wraps a
+    // BundleSeekableInputStream; 0 otherwise. Used only by page_cache_key to keep slices distinct.
+    int64_t _bundle_offset{0};
 };
 
 // A file abstraction for sequential writing.  The implementation
@@ -385,6 +426,23 @@ public:
 
     // Returns the filename provided when the WritableFile was constructed.
     virtual const std::string& filename() const = 0;
+
+    // The offset is the position of the file in the shared file.
+    // It will return -1 if the file is not a shared file.
+    virtual int64_t bundle_file_offset() const { return -1; }
+
+    virtual void set_encryption_info(const FileEncryptionInfo& info) {}
+
+    // Return statistics about file written, like how many time is spent on IO
+    virtual StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() {
+        return Status::NotSupported("get_numeric_statistics");
+    }
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::FileSystem::OpenMode>
+        : formatter<std::underlying_type_t<starrocks::FileSystem::OpenMode>> {
+    auto format(starrocks::FileSystem::OpenMode value, format_context& ctx) const -> format_context::iterator;
+};

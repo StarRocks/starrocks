@@ -14,12 +14,18 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <algorithm>
 #include <memory>
+#include <unordered_map>
 
 #include "column/chunk.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
+#include "connector/common/hive_partition_utils.h"
+#include "connector/iceberg/iceberg_utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
-#include "util/runtime_profile.h"
+#include "exprs/expr_executor.h"
 
 namespace starrocks::pipeline {
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
@@ -32,10 +38,8 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
     // step2: shuffle chunk into dest partitions.
     {
         _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
-        _partition_memory_usage.assign(num_partitions, 0);
         for (size_t i = 0; i < num_rows; ++i) {
             _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
-            _partition_memory_usage[_shuffle_channel_id[i]] += chunk->bytes_usage(i, 1);
         }
         // We make the last item equal with number of rows of this chunk.
         for (int32_t i = 1; i <= num_partitions; ++i) {
@@ -50,8 +54,20 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
     return Status::OK();
 }
 
-Status Partitioner::send_chunk(const ChunkPtr& chunk, std::shared_ptr<std::vector<uint32_t>> partition_row_indexes) {
+Status Partitioner::send_chunk(const ChunkPtr& chunk,
+                               const std::shared_ptr<std::vector<uint32_t>>& partition_row_indexes) {
     size_t num_partitions = _source->get_sources().size();
+    // Unpack const columns now (instead of inside each per-source add_chunk) so the
+    // accounted memory reflects the materialized post-unpack footprint. For const
+    // columns the pre-unpack memory is O(1) while the buffered, unpacked memory is
+    // O(num_rows); accounting before the unpack would let the manager undercount by
+    // orders of magnitude and weaken is_full() back-pressure.
+    chunk->unpack_and_duplicate_const_columns();
+    // Account this chunk against the shared memory manager exactly once. The entry is
+    // shared by every partition shard via shared_ptr, so the record is only released
+    // when the last shard is consumed across all source operators.
+    auto memory_entry = std::make_shared<ChunkBufferMemoryEntry>(_source->memory_manager(), chunk->memory_usage(),
+                                                                 chunk->num_rows());
     for (size_t i = 0; i < num_partitions; ++i) {
         size_t from = partition_begin_offset(i);
         size_t size = partition_end_offset(i) - from;
@@ -60,8 +76,7 @@ Status Partitioner::send_chunk(const ChunkPtr& chunk, std::shared_ptr<std::vecto
             continue;
         }
 
-        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size,
-                                                             partition_memory_usage(i)));
+        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size, memory_entry));
     }
     return Status::OK();
 }
@@ -80,16 +95,37 @@ Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t nu
 
     // Compute hash for each partition column
     if (_part_type == TPartitionType::HASH_PARTITIONED) {
-        _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-        for (const ColumnPtr& column : _partitions_columns) {
-            column->fnv_hash(&_hash_values[0], 0, num_rows);
+        if (_exchange_hash_function_version == 1) {
+            // Use xxh3_hash for better performance
+            _hash_values.assign(num_rows, HashUtil::XXH3_SEED_32);
+            for (const ColumnPtr& column : _partitions_columns) {
+                column->xxh3_hash(&_hash_values[0], 0, num_rows);
+            }
+        } else {
+            // Default: use fnv_hash for backward compatibility
+            _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+            for (const ColumnPtr& column : _partitions_columns) {
+                column->fnv_hash(&_hash_values[0], 0, num_rows);
+            }
         }
-    } else {
+    } else if (_bucket_properties.empty()) {
         // The data distribution was calculated using CRC32_HASH,
         // and bucket shuffle need to use the same hash function when sending data
         _hash_values.assign(num_rows, 0);
         for (const ColumnPtr& column : _partitions_columns) {
             column->crc32_hash(&_hash_values[0], 0, num_rows);
+        }
+    } else {
+        _hash_values.assign(num_rows, 0);
+        // TODO, enhance it if we try to support more bucket functions.
+        for (int i = 0; i < _partitions_columns.size(); ++i) {
+            DCHECK(_bucket_properties[i].bucket_func == TBucketFunction::MURMUR3_X86_32);
+            _round_hashes.assign(num_rows, 0);
+            _partitions_columns[i]->murmur_hash3_x86_32(&_round_hashes[0], 0, num_rows);
+            // carefully keep same with exchange node
+            for (int j = 0; j < num_rows; j++) {
+                _hash_values[j] ^= _round_hashes[j];
+            }
         }
     }
 
@@ -120,38 +156,36 @@ Status RandomPartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num
 
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                                       const std::vector<ExprContext*>& partition_expr_ctxs)
+                                       std::vector<ExprContext*> partition_expr_ctxs,
+                                       std::vector<TBucketProperty> bucket_properties)
         : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source),
           _part_type(part_type),
-          _partition_exprs(partition_expr_ctxs) {}
-
-KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
-                                             LocalExchangeSourceOperatorFactory* source,
-                                             const std::vector<ExprContext*>& partition_expr_ctxs,
-                                             const size_t num_sinks)
-        : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
-          _source(source),
-          _partition_expr_ctxs(partition_expr_ctxs) {
-    _channel_partitions_columns.reserve(num_sinks);
-    for (int i = 0; i < num_sinks; ++i) {
-        _channel_partitions_columns.emplace_back(_partition_expr_ctxs.size());
-    }
-}
+          _partition_exprs(std::move(partition_expr_ctxs)),
+          _bucket_properties(std::move(bucket_properties)) {}
 
 void PartitionExchanger::incr_sinker() {
     LocalExchanger::incr_sinker();
-    _partitioners.emplace_back(std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs));
+    auto partitioner = std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs, _bucket_properties);
+    // Set hash function version from runtime state if available
+    if (_source->runtime_state() != nullptr) {
+        int32_t exchange_hash_function_version = 0;
+        if (_source->runtime_state()->query_options().__isset.exchange_hash_function_version) {
+            exchange_hash_function_version = _source->runtime_state()->query_options().exchange_hash_function_version;
+        }
+        partitioner->set_exchange_hash_function_version(exchange_hash_function_version);
+    }
+    _partitioners.emplace_back(std::move(partitioner));
 }
 
 Status PartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     return Status::OK();
 }
 
 void PartitionExchanger::close(RuntimeState* state) {
-    Expr::close(_partition_exprs, state);
+    ExprExecutor::close(_partition_exprs, state);
     LocalExchanger::close(state);
 }
 
@@ -170,8 +204,158 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
     // it will be overwritten by the next time calling partitioner.partition_chunk().
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
+}
+
+OrderedPartitionExchanger::OrderedPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                                                     LocalExchangeSourceOperatorFactory* source,
+                                                     std::vector<ExprContext*> partition_expr_ctxs)
+        : LocalExchanger("OrderedPartition", memory_manager, source),
+          _partition_exprs(std::move(partition_expr_ctxs)) {}
+
+Status OrderedPartitionExchanger::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(LocalExchanger::prepare(state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
+    return Status::OK();
+}
+
+void OrderedPartitionExchanger::close(RuntimeState* state) {
+    ExprExecutor::close(_partition_exprs, state);
+    LocalExchanger::close(state);
+}
+
+Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    DCHECK_EQ(sink_driver_sequence, 0);
+
+    const size_t cur_num_rows = chunk->num_rows();
+    // Drop empty chunks: they carry no rows to route and no partition boundary. This also guards the
+    // `cur_num_rows - 1` boundary-row indexing below from wrapping. Matches the other row-partition
+    // exchangers, which all early-return on empty input.
+    if (cur_num_rows == 0) {
+        return Status::OK();
+    }
+
+    Columns partition_columns(_partition_exprs.size());
+    for (size_t i = 0; i < partition_columns.size(); ++i) {
+        ASSIGN_OR_RETURN(partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
+        DCHECK(partition_columns[i] != nullptr);
+    }
+
+    if (_channel_row_nums.empty()) {
+        _channel_row_nums.resize(source_dop());
+        _channel_row_nums.assign(source_dop(), 0);
+    }
+
+    std::vector<std::pair<size_t, ChunkPtr>> chunks;
+
+    size_t min_channel_id = _find_min_channel_id();
+    if (!_has_previous || _previous_channel_id == min_channel_id) {
+        chunks.emplace_back(min_channel_id, chunk);
+    } else {
+        auto is_equal = [](const Columns& columns1, size_t offset1, const Columns& columns2, size_t offset2) {
+            for (size_t i = 0; i < columns1.size(); ++i) {
+                auto cmp = columns1[i]->compare_at(offset1, offset2, *columns2[i], 1);
+                if (cmp != 0) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        // Check if the joint of two consecutive chunks are the same.
+        // _previous_partition_columns is an owned single-row copy of the previous chunk's last row (at
+        // offset 0), so it stays valid even after the previous chunk has been handed to and mutated by
+        // downstream operators.
+        bool is_joint_equal = is_equal(_previous_partition_columns, 0, partition_columns, 0);
+
+        if (!is_joint_equal) {
+            // The first row of current chunk is the start of a new partition, so
+            // send the chunk to the channel with the minimum number of rows.
+            chunks.emplace_back(min_channel_id, chunk);
+        } else {
+            bool is_current_of_same_partition = is_equal(partition_columns, 0, partition_columns, cur_num_rows - 1);
+            if (is_current_of_same_partition) {
+                chunks.emplace_back(_previous_channel_id, chunk);
+            } else {
+                // Found partition end that belongs to the first row of current chunk, and split the chunk into two parts:
+                // 1. The first part is the rows of the same partition as the last row of previous chunk, and send it to previous channel
+                // 2. The second part is the rows of the different partition, and send it to the channel with the minimum number of rows.
+
+                int64_t end = cur_num_rows;
+                for (auto& column : partition_columns) {
+                    end = ColumnHelper::find_first_not_equal(column.get(), 0, 0, end);
+                }
+                // First part: [0, end)
+                ChunkPtr first_part = chunk->clone_empty();
+                first_part->append(*chunk, 0, end);
+                chunks.emplace_back(_previous_channel_id, first_part);
+
+                // Second part: [end, cur_num_rows)
+                ChunkPtr second_part = chunk->clone_empty();
+                second_part->append(*chunk, end, cur_num_rows - end);
+                chunks.emplace_back(min_channel_id, second_part);
+            }
+        }
+    }
+
+    // Clone the boundary (last) row of the partition key BEFORE publishing the chunk downstream. At this
+    // point the chunk is still owned solely by this driver thread, so reading partition_columns is safe.
+    // After add_chunk() the chunk may be mutated concurrently by downstream operators (AnalyticSinkOperator
+    // appends window result columns and, on the LIMIT path, set_num_rows() resizes columns in place), so we
+    // must not retain any reference that aliases it.
+    Columns boundary_partition_columns = _clone_partition_key_row(partition_columns, cur_num_rows - 1);
+
+    for (auto& kv : chunks) {
+        _channel_row_nums[kv.first] += kv.second->num_rows();
+        _source->get_sources()[kv.first]->add_chunk(kv.second);
+    }
+
+    _previous_channel_id = chunks.back().first;
+    _previous_partition_columns = std::move(boundary_partition_columns);
+    _has_previous = true;
+
+    return Status::OK();
+}
+
+Columns OrderedPartitionExchanger::_clone_partition_key_row(const Columns& partition_columns, size_t row) {
+    Columns result(partition_columns.size());
+    for (size_t i = 0; i < partition_columns.size(); ++i) {
+        auto cloned = partition_columns[i]->clone_empty();
+        cloned->append(*partition_columns[i], row, 1);
+        result[i] = std::move(cloned);
+    }
+    return result;
+}
+
+size_t OrderedPartitionExchanger::_find_min_channel_id() {
+    return std::distance(_channel_row_nums.begin(),
+                         std::min_element(_channel_row_nums.begin(), _channel_row_nums.end()));
+}
+
+KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                                             LocalExchangeSourceOperatorFactory* source,
+                                             std::vector<ExprContext*> partition_expr_ctxs, const size_t num_sinks,
+                                             std::vector<std::string> transform_exprs)
+        : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
+          _source(source),
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)),
+          _transform_exprs(std::move(transform_exprs)) {}
+
+Status KeyPartitionExchanger::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(LocalExchanger::prepare(state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_expr_ctxs, state));
+    // Read exchange_hash_function_version from query options
+    if (state->query_options().__isset.exchange_hash_function_version) {
+        _exchange_hash_function_version = state->query_options().exchange_hash_function_version;
+    }
+    return Status::OK();
+}
+
+void KeyPartitionExchanger::close(RuntimeState* state) {
+    ExprExecutor::close(_partition_expr_ctxs, state);
+    LocalExchanger::close(state);
 }
 
 Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
@@ -182,40 +366,65 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
         return Status::OK();
     }
 
-    auto& partitions_columns = _channel_partitions_columns[sink_driver_sequence];
-    for (size_t i = 0; i < partitions_columns.size(); ++i) {
-        ASSIGN_OR_RETURN(partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()))
-        DCHECK(partitions_columns[i] != nullptr);
+    Columns partition_columns;
+    for (size_t i = 0; i < _partition_expr_ctxs.size(); i++) {
+        ASSIGN_OR_RETURN(auto partition_column, _partition_expr_ctxs[i]->evaluate(chunk.get()));
+        partition_columns.push_back(std::move(partition_column));
     }
 
-    Partition2RowIndexes partition_row_indexes;
-    auto partition_columns_ptr = std::make_shared<Columns>(partitions_columns);
-    for (int i = 0; i < num_rows; ++i) {
-        auto partition_key = std::make_shared<PartitionKey>(partition_columns_ptr, i);
-        auto partition_row_index = partition_row_indexes.find(partition_key);
-        if (partition_row_index == partition_row_indexes.end()) {
-            partition_row_indexes.emplace(std::move(partition_key), std::make_shared<std::vector<uint32_t>>(1, i));
-        } else {
-            partition_row_index->second->emplace_back(i);
+    std::map<std::vector<std::optional<std::string>>, std::vector<uint32_t>> key2indices;
+    std::map<std::vector<std::optional<std::string>>, std::vector<std::pair<TypeDescriptor, ColumnPtr>>> key2datum;
+    for (int i = 0; i < num_rows; i++) {
+        std::vector<std::optional<std::string>> partition_key;
+
+        for (int j = 0; j < partition_columns.size(); j++) {
+            auto type = _partition_expr_ctxs[j]->root()->type();
+            int8_t is_null = 0;
+            std::string partition_value;
+
+            if (_transform_exprs.size() > 0) {
+                ASSIGN_OR_RETURN(partition_value, connector::IcebergUtils::iceberg_column_value(
+                                                          type, partition_columns[j], i, _transform_exprs[j], is_null));
+            } else {
+                ASSIGN_OR_RETURN(partition_value,
+                                 connector::HivePartitionUtils::column_value(type, partition_columns[j], i));
+            }
+            partition_key.emplace_back(is_null ? std::nullopt : std::make_optional(partition_value));
+        }
+        key2indices[partition_key].push_back(i);
+        //record the origin datum of partition key
+        if (key2datum.find(partition_key) == key2datum.end()) {
+            std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_datum;
+            for (int j = 0; j < partition_columns.size(); j++) {
+                auto column = partition_columns[j]->clone_empty();
+                column->append_datum(partition_columns[j]->get(i));
+                partition_datum.emplace_back(_partition_expr_ctxs[j]->root()->type(), column);
+            }
+            key2datum[partition_key] = std::move(partition_datum);
         }
     }
 
-    std::vector<uint32_t> hash_values(chunk->num_rows());
-    for (auto& [_, indexes] : partition_row_indexes) {
-        hash_values[(*indexes)[0]] = HashUtil::FNV_SEED;
-        for (const ColumnPtr& column : partitions_columns) {
-            column->fnv_hash(&hash_values[0], (*indexes)[0], (*indexes)[0] + 1);
+    std::vector<uint32_t> hash_values(chunk->num_rows(), HashUtil::FNV_SEED);
+    if (_exchange_hash_function_version == 1) {
+        // Use xxh3_hash for better performance
+        hash_values.assign(chunk->num_rows(), HashUtil::XXH3_SEED_32);
+        for (auto& column : partition_columns) {
+            column->xxh3_hash(hash_values.data(), 0, num_rows);
         }
-
-        uint32_t shuffle_channel_id = hash_values[(*indexes)[0]] % source_op_cnt;
-
-        size_t memory_usage = 0;
-        for (unsigned int row_index : *indexes) {
-            memory_usage += chunk->bytes_usage(row_index, 1);
+    } else {
+        // Default: use fnv_hash for backward compatibility
+        hash_values.assign(chunk->num_rows(), HashUtil::FNV_SEED);
+        for (auto& column : partition_columns) {
+            column->fnv_hash(hash_values.data(), 0, num_rows);
         }
+    }
 
-        RETURN_IF_ERROR(_source->get_sources()[shuffle_channel_id]->add_chunk(
-                chunk, std::move(indexes), 0, indexes->size(), partitions_columns, _partition_expr_ctxs, memory_usage));
+    for (auto& [key, indices] : key2indices) {
+        uint32_t shuffle_channel_id = hash_values[indices[0]] % source_op_cnt;
+        auto partial_chunk = chunk->clone_empty_with_slot();
+        partial_chunk->append_selective(*chunk, indices.data(), 0, indices.size());
+        RETURN_IF_ERROR(
+                _source->get_sources()[shuffle_channel_id]->add_chunk(key, key2datum[key], std::move(partial_chunk)));
     }
 
     return Status::OK();
@@ -234,6 +443,38 @@ Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_dr
         _source->get_sources()[0]->add_chunk(chunk);
     } else {
         _source->get_sources()[(_next_accept_source++) % sources_num]->add_chunk(chunk);
+    }
+
+    return Status::OK();
+}
+
+Status DirectThroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t sources_num = _source->get_sources().size();
+    _source->get_sources()[(sink_driver_sequence) % sources_num]->add_chunk(chunk);
+
+    return Status::OK();
+}
+
+Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t sources_num = _source->get_sources().size();
+    if (sources_num == 1) {
+        _source->get_sources()[0]->add_chunk(chunk);
+    } else {
+        // Scale up writers when current buffer memory utilization is more than 50% of the maximum and data processed
+        // is greater than current writer count * connector_sink_scaling_min_size. This also mean that we won't scale
+        // local writers if the writing speed can cope up with incoming data. In another word, buffer utilization is
+        // below 50%.
+        if (_writer_count < sources_num && _memory_manager->is_half_full() &&
+            _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
+            _writer_count++;
+        }
+        // Snapshot and clamp locally so the index computation is immune to concurrent increments
+        // that may push _writer_count transiently above sources_num between the clamp write and use.
+        size_t writer_count = std::min(_writer_count.load(), sources_num);
+        _source->get_sources()[(_next_accept_source++) % writer_count]->add_chunk(chunk);
+        if (writer_count < sources_num) {
+            _data_processed += chunk->bytes_usage();
+        }
     }
 
     return Status::OK();
@@ -259,7 +500,7 @@ Status RandomPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t s
     auto& partitioner = _random_partitioners[sink_driver_sequence];
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -295,7 +536,7 @@ Status AdaptivePassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t
         std::shared_ptr<std::vector<uint32_t>> partition_row_indexes =
                 std::make_shared<std::vector<uint32_t>>(num_rows);
         RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-        RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+        RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     }
     return Status::OK();
 }

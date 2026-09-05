@@ -1,0 +1,39 @@
+-- name: test_colocate_range_cross_table_join @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table tenants (tenant_id int, created_time int, id int)
+    order by(tenant_id, created_time, id)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_join_${uuid0}:tenant_id');
+-- result:
+-- !result
+create table events (tenant_id int, created_time int, event_id int)
+    order by(tenant_id, created_time, event_id)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_join_${uuid0}:tenant_id');
+-- result:
+-- !result
+insert into tenants values (1, 100, 1), (2, 200, 2), (3, 300, 3);
+-- result:
+-- !result
+insert into events values (1, 100, 11), (2, 200, 22), (3, 300, 33);
+-- result:
+-- !result
+select count(*) from tenants t join events e on t.tenant_id = e.tenant_id;
+-- result:
+3
+-- !result
+drop table events;
+-- result:
+-- !result
+drop table tenants;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

@@ -1,0 +1,48 @@
+-- name: test_query_cache_light_schema_change
+-- The cache key is [digest, partition id, partition range, tablet id] and its freshness comes from
+-- the partition version. A fast schema evolution deliberately does NOT rewrite data, so it leaves
+-- every partition version untouched while changing what the very same query returns. Without the
+-- schema in the digest, entries populated before the DDL keep being served after it.
+--
+-- Unlike the other query cache cases in this directory, this one is not two concurrent queries
+-- poisoning each other -- it is one query poisoning itself across a DDL, which is easier to hit in
+-- practice: any ADD/DROP COLUMN leaves stale entries behind until a write bumps the partition.
+CREATE TABLE ls1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  v1 bigint NOT NULL,
+  x int NOT NULL DEFAULT "1"
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "fast_schema_evolution" = "true");
+
+INSERT INTO ls1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 1, 1
+FROM TABLE(generate_series(1, 620));
+
+set pipeline_dop = 1;
+set query_cache_hot_partition_num = 100;
+
+-- Populate the per-tablet entries while x defaults to 1.
+set enable_query_cache = true;
+select sum(s) from (select c1, sum(x) s from ls1 where dt >= '2022-01-01' group by c1) x;
+
+-- Drop and re-add the same column with a different default. Data is not rewritten, so the existing
+-- rows now read back as 7 and the correct answer becomes 620 * 7.
+ALTER TABLE ls1 DROP COLUMN x;
+function: wait_alter_table_finish()
+ALTER TABLE ls1 ADD COLUMN x int NOT NULL DEFAULT "7";
+function: wait_alter_table_finish()
+
+-- Must reflect the new schema, not the entries populated before the DDL.
+set enable_query_cache = true;
+select sum(s) from (select c1, sum(x) s from ls1 where dt >= '2022-01-01' group by c1) x;
+set enable_query_cache = false;
+select sum(s) from (select c1, sum(x) s from ls1 where dt >= '2022-01-01' group by c1) x;
+
+-- And the cache must still be usable afterwards -- the entry is invalidated, not disabled.
+set enable_query_cache = true;
+select sum(s) from (select c1, sum(x) s from ls1 where dt >= '2022-01-01' group by c1) x;

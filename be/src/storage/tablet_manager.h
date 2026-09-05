@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <list>
 #include <map>
 #include <mutex>
@@ -43,24 +45,29 @@
 #include <unordered_set>
 #include <vector>
 
-#include "agent/status.h"
+#include "base/concurrency/spinlock.h"
+#include "base/statusor.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gutil/macros.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
-#include "storage/options.h"
 #include "storage/tablet.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 
 class Tablet;
+class BaseTablet;
+using BaseTabletSharedPtr = std::shared_ptr<BaseTablet>;
 class DataDir;
+class BaseRowset;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 struct TabletBasicInfo;
+class MetadataCache;
+class TableMetricsManager;
 
 // RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
 class RowsetsAcqRel;
@@ -79,7 +86,7 @@ private:
 };
 
 using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>, RowsetsAcqRelPtr>;
-using TabletAndScore = std::pair<TabletSharedPtr, double>;
+using TabletAndScore = std::pair<int64_t, double>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
@@ -92,7 +99,10 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(int64_t tablet_map_lock_shard_size);
+    TabletManager(const TabletManager&) = delete;
+    const TabletManager& operator=(const TabletManager&) = delete;
+
+    explicit TabletManager(int64_t tablet_map_lock_shard_size, TableMetricsManager* table_metrics_mgr = nullptr);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -112,6 +122,8 @@ public:
                                                    std::pair<int32_t, int32_t> tablet_shards_range);
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
+
+    StatusOr<TabletSharedPtr> get_tablet_by_id(TTabletId tablet_id, bool include_deleted = false);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
@@ -150,7 +162,9 @@ public:
                                 const std::string& schema_hash_path, bool force = false, bool restore = false);
 
     Status create_tablet_from_meta_snapshot(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                            const std::string& schema_hash_path, bool restore = false);
+                                            const std::string& schema_hash_path, bool restore = false,
+                                            bool need_rebuild_pk_index = false,
+                                            int32_t rebuild_pk_index_wait_seconds = 0);
 
     void release_schema_change_lock(TTabletId tablet_id);
 
@@ -163,8 +177,8 @@ public:
     // Prevent schema change executed concurrently.
     bool try_schema_change_lock(TTabletId tablet_id);
 
-    void try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                       const string& tablet_id_path);
+    Status try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
+                                         const string& tablet_id_path);
 
     void update_root_path_info(std::map<std::string, DataDirInfo>* path_map, size_t* tablet_counter);
 
@@ -192,9 +206,11 @@ public:
     void get_tablets_by_partition(int64_t partition_id, std::vector<TabletInfo>& tablet_infos);
 
     void get_tablets_basic_infos(int64_t table_id, int64_t partition_id, int64_t tablet_id,
-                                 std::vector<TabletBasicInfo>& tablet_infos);
+                                 std::vector<TabletBasicInfo>& tablet_infos, std::set<int64_t>* authorized_table_ids);
 
     std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
+
+    Status generate_pk_dump();
 
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
@@ -225,9 +241,6 @@ private:
         SpinLock _latches[kNumShard];
         std::unordered_set<int64_t> _locks[kNumShard];
     };
-
-    TabletManager(const TabletManager&) = delete;
-    const TabletManager& operator=(const TabletManager&) = delete;
 
     // Add a tablet pointer to StorageEngine
     // If force, drop the existing tablet add this new one
@@ -265,28 +278,38 @@ private:
 
     int64_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
 
+    // make sure use this function to add shutdown tablets
+    // caller should acquire _shutdown_tablets_lock
+    void _add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabletInfo&& drop_info);
+    void sweep_shutdown_tablet(const DroppedTabletInfo& info, std::vector<DroppedTabletInfo>& finished_tablets);
+
+    std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard);
+    std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard, KeysType keys_type);
+
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
 
     std::vector<TabletsShard> _tablets_shards;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
     const int64_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 
     // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock
     mutable std::shared_mutex _partition_tablet_map_lock;
-    // Protect _shutdown_tablets, should not be obtained before _tablet_map_lock to avoid deadlock
+    // Protect _shutdown_tablets/_shutdown_tablets_redundant_map, should not be obtained before _tablet_map_lock to avoid deadlock
     mutable std::shared_mutex _shutdown_tablets_lock;
     // partition_id => tablet_info
     std::map<int64_t, std::set<TabletInfo>> _partition_tablet_map;
     std::map<int64_t, DroppedTabletInfo> _shutdown_tablets;
+    std::map<TabletUid, DroppedTabletInfo> _shutdown_tablets_redundant_map;
 
     std::mutex _tablet_stat_mutex;
     // cache to save tablets' statistics, such as data-size and row-count
     // TODO(cmy): for now, this is a naive implementation
     std::map<int64_t, TTabletStat> _tablet_stat_cache;
     // last update time of tablet stat cache
-    int64_t _last_update_stat_ms;
+    int64_t _last_update_stat_ms{0};
 
     // context for compaction checker
     size_t _cur_shard = 0;
@@ -312,3 +335,8 @@ inline bool TabletManager::LockTable::unlock(int64_t tablet_id) {
 }
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::TabletDropFlag> : formatter<std::underlying_type_t<starrocks::TabletDropFlag>> {
+    auto format(starrocks::TabletDropFlag value, format_context& ctx) const -> format_context::iterator;
+};

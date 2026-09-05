@@ -14,14 +14,17 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
+#include "base/testutil/assert.h"
+#include "column/column_helper.h"
+#include "column/sorting/sorting.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/sort_exec_exprs.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/merge.h"
+#include "exprs/sort_exec_exprs.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 #include "testutil/exprs_test_helper.h"
 
 namespace starrocks {
@@ -37,7 +40,7 @@ TEST(MergeCascadeTest, merge_cursor_test) {
     auto order_bys = order_by_slots_builder.get_res();
 
     ASSERT_OK(sort_exprs.init(order_bys, nullptr, &pool, &dummy_rt_st));
-    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st, {}, {}));
+    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st));
     ASSERT_OK(sort_exprs.open(&dummy_rt_st));
 
     struct ChannelChunkProvider {
@@ -81,12 +84,14 @@ TEST(MergeCascadeTest, merge_cursor_test) {
 
         size_t chunk_size = 4096;
         auto l = chunk->clone_unique();
-        l->columns()[0]->append_datum(Datum(1));
-        l->columns()[0]->assign(chunk_size, 0);
+        auto* l_col = l->get_column_by_index(0)->as_mutable_raw_ptr();
+        l_col->append_datum(Datum(1));
+        l_col->assign(chunk_size, 0);
 
         auto r = chunk->clone_unique();
-        r->columns()[0]->append_datum(Datum(9999));
-        r->columns()[0]->assign(chunk_size, 0);
+        auto* r_col = r->get_column_by_index(0)->as_mutable_raw_ptr();
+        r_col->append_datum(Datum(9999));
+        r_col->assign(chunk_size, 0);
 
         l_chunk_channel.emplace(l->clone_unique());
         r_chunk_channel.emplace(r->clone_unique());
@@ -129,12 +134,14 @@ TEST(MergeCascadeTest, merge_cursor_test) {
 
         size_t chunk_size = 4096;
         auto l = chunk->clone_unique();
-        l->columns()[0]->append_datum(Datum(1));
-        l->columns()[0]->assign(chunk_size, 0);
+        auto* l_col = l->get_column_by_index(0)->as_mutable_raw_ptr();
+        l_col->append_datum(Datum(1));
+        l_col->assign(chunk_size, 0);
 
         auto r = chunk->clone_unique();
-        r->columns()[0]->append_datum(Datum(1));
-        r->columns()[0]->assign(chunk_size, 0);
+        auto* r_col = r->get_column_by_index(0)->as_mutable_raw_ptr();
+        r_col->append_datum(Datum(1));
+        r_col->assign(chunk_size, 0);
 
         l_chunk_channel.emplace(l->clone_unique());
         r_chunk_channel.emplace(r->clone_unique());
@@ -161,6 +168,73 @@ TEST(MergeCascadeTest, merge_cursor_test) {
         l_chunk_channel.emplace(l->clone_unique());
         merge_res = out_cursor->try_get_next();
         ASSERT_TRUE(merge_res.first != nullptr);
+    }
+}
+
+TEST(MergeCascadeTest, merge_sorted_chunks) {
+    RuntimeState dummy_rt_st;
+    auto chunk = std::make_unique<Chunk>();
+    chunk->append_column(Int32Column::create(), 0);
+
+    ObjectPool pool;
+    SortExecExprs sort_exprs;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_bys = order_by_slots_builder.get_res();
+
+    ASSERT_OK(sort_exprs.init(order_bys, nullptr, &pool, &dummy_rt_st));
+    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st));
+    ASSERT_OK(sort_exprs.open(&dummy_rt_st));
+    auto desc = SortDescs::asc_null_first(1);
+    {
+        // all of left and right is empty
+        MergedRuns left;
+        ChunkUniquePtr right;
+        MergedRuns output;
+        ASSERT_OK(
+                merge_sorted_chunks(desc, &sort_exprs.lhs_ordering_expr_ctxs(), left, std::move(right), 100, &output));
+    }
+    {
+        auto& sort_expr = sort_exprs.lhs_ordering_expr_ctxs();
+        size_t chunk_size = 4096;
+        MergedRuns left;
+
+        {
+            auto l0 = chunk->clone_unique();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                l0->columns()[0]->as_mutable_ptr()->append_datum(Datum((int)(i * 2)));
+            }
+            MergedRun lrun0;
+            ASSIGN_OR_ASSERT_FAIL(lrun0, MergedRun::build(std::move(l0), sort_expr));
+
+            auto l1 = chunk->clone_unique();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                l1->columns()[0]->as_mutable_ptr()->append_datum(Datum((int)(i * 2 + 4096)));
+            }
+            MergedRun lrun1;
+            ASSIGN_OR_ASSERT_FAIL(lrun1, MergedRun::build(std::move(l1), sort_expr));
+
+            left.push_back(std::move(lrun0));
+            left.push_back(std::move(lrun1));
+        }
+
+        ChunkUniquePtr right;
+        {
+            right = chunk->clone_unique();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                right->columns()[0]->as_mutable_ptr()->append_datum(Datum((int)(i * 2 + 1)));
+            }
+        }
+
+        MergedRuns output;
+        ASSERT_OK(
+                merge_sorted_chunks(desc, &sort_exprs.lhs_ordering_expr_ctxs(), left, std::move(right), 100, &output));
+        ASSERT_EQ(output.num_rows(), 100);
+        auto& front = output.front();
+        ColumnPtr column = front.chunk->get_column_by_index(0);
+        auto int_col = ColumnHelper::cast_to<TYPE_INT>(column);
+        const auto& data = int_col->get_data();
+        ASSERT_TRUE(std::is_sorted(data.begin(), data.end()));
     }
 }
 } // namespace starrocks

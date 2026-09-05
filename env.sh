@@ -31,26 +31,18 @@ if [[ -z ${STARROCKS_THIRDPARTY} ]]; then
     export STARROCKS_THIRDPARTY=${STARROCKS_HOME}/thirdparty
 fi
 
-# set cachelib dir
-if [[ -z ${CACHELIB_DIR} ]]; then
-    export CACHELIB_DIR=${STARROCKS_THIRDPARTY}/installed/cachelib
-fi
-
 # check python
 if [[ -z ${PYTHON} ]]; then
-    export PYTHON=python
+    export PYTHON=python3
 fi
 
-if ! ${PYTHON} --version; then
-    export PYTHON=python2.7
-    if ! ${PYTHON} --version; then
-        export PYTHON=python3
-        if ! ${PYTHON} --version; then
-            echo "Error: python is not found"
-            exit 1
-        fi
-    fi
+if ${PYTHON} --version | grep -q '^Python 3\.'; then
+    echo "Found python3, version: `\${PYTHON} --version`"
+else
+    echo "Error: python3 is needed"
+    exit 1
 fi
+
 
 # set GCC HOME
 if [[ -z ${STARROCKS_GCC_HOME} ]]; then
@@ -58,8 +50,8 @@ if [[ -z ${STARROCKS_GCC_HOME} ]]; then
 fi
 
 gcc_ver=`${STARROCKS_GCC_HOME}/bin/gcc -dumpfullversion -dumpversion`
-required_ver="5.3.1"
-if [[ ! "$(printf '%s\n' "$required_ver" "$gcc_ver" | sort -V | head -n1)" = "$required_ver" ]]; then 
+required_ver="12.1.0"
+if [[ ! "$(printf '%s\n' "$required_ver" "$gcc_ver" | sort -V | head -n1)" = "$required_ver" ]]; then
     echo "Error: GCC version (${gcc_ver}) must be greater than or equal to ${required_ver}"
     exit 1
 fi
@@ -85,14 +77,12 @@ fi
 
 # check java version
 export JAVA=${JAVA_HOME}/bin/java
-JAVA_VER=$(${JAVA} -version 2>&1 | grep -oP 'version "\K[^"]+')
-
-# split version
-IFS='.' read -ra ADDR <<< "$JAVA_VER"
-major_version=${ADDR[0]}
-
-# compare version
-if [[ $major_version -lt 11 ]]; then
+# Some examples of different variant of jdk output for `java -version`
+# - Oracle JDK: java version "1.8.0_202"
+# - OpenJDK: openjdk version "1.8.0_362"
+# - OpenJDK: openjdk version "11.0.20.1" 2023-08-24
+JAVA_VER=$(${JAVA} -version 2>&1 | awk -F'"' '{print $2}' | awk -F. '{if ($1 == 1) {print $2;} else {print $1;}}')
+if [[ $JAVA_VER -lt 11 ]]; then
     echo "Error: require JAVA with JDK version at least 11, but got $JAVA_VER"
     exit 1
 fi

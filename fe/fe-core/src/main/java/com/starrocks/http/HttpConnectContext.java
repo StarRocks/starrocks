@@ -35,7 +35,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TResultSinkFormatType;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import org.apache.logging.log4j.LogManager;
@@ -51,20 +50,20 @@ public class HttpConnectContext extends ConnectContext {
 
     private boolean forwardToLeader;
 
-    // we parse the sql at the begining for validating, so keep it in context for handle_query
+    // we parse the sql at the beginning for validating, so keep it in context for handle_query
     private StatementBase statement;
 
-    // for http sql, we need register connectContext to connectScheduler
-    // when connection is established
-    private boolean initialized;
+    // After the TCP connection is established, the first time `ExecuteSqlAction` runs it registers the `ConnectContext` to the
+    // `ConnectScheduler`.
+    private boolean registered;
 
-    // used for test. only output reuslt raws
+    // used for test. only output result raws
     private boolean onlyOutputResultRaw;
 
     private volatile ChannelHandlerContext nettyChannel;
 
     // ip + port
-    private String remoteAddres;
+    private String remoteAddress;
 
     private boolean isKeepAlive;
 
@@ -74,7 +73,7 @@ public class HttpConnectContext extends ConnectContext {
     public HttpConnectContext() {
         super();
         sendDate = false;
-        initialized = false;
+        registered = false;
         onlyOutputResultRaw = false;
     }
 
@@ -94,12 +93,12 @@ public class HttpConnectContext extends ConnectContext {
         this.forwardToLeader = forwardToLeader;
     }
 
-    public boolean isInitialized() {
-        return initialized;
+    public boolean isRegistered() {
+        return registered;
     }
 
-    public void setInitialized(boolean initialized) {
-        this.initialized = initialized;
+    public void setRegistered(boolean registered) {
+        this.registered = registered;
     }
 
     public boolean getSendDate() {
@@ -116,7 +115,7 @@ public class HttpConnectContext extends ConnectContext {
 
     public void setNettyChannel(ChannelHandlerContext nettyChannel) {
         this.nettyChannel = nettyChannel;
-        remoteAddres = nettyChannel.channel().remoteAddress().toString().substring(1);
+        remoteAddress = nettyChannel.channel().remoteAddress().toString().substring(1);
     }
 
     public StatementBase getStatement() {
@@ -127,8 +126,8 @@ public class HttpConnectContext extends ConnectContext {
         this.statement = statement;
     }
 
-    public String getRemoteAddres() {
-        return remoteAddres;
+    public String getRemoteAddress() {
+        return remoteAddress;
     }
 
     public boolean isKeepAlive() {
@@ -149,7 +148,7 @@ public class HttpConnectContext extends ConnectContext {
 
     @Override
     public void kill(boolean killConnection, String cancelledMessage) {
-        LOG.warn("kill query, {}, kill connection: {}", remoteAddres, killConnection);
+        LOG.warn("kill query, {}, kill connection: {}", remoteAddress, killConnection);
         // Now, cancel running process.
         StmtExecutor executorRef = executor;
         if (killConnection) {
@@ -160,19 +159,20 @@ public class HttpConnectContext extends ConnectContext {
         }
 
         if (killConnection) {
-            nettyChannel.close().addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture channelFuture) throws Exception {
-                    if (channelFuture.isSuccess()) {
-                        LOG.info("close the connection because someone kill the query");
-                    } else {
-                        // close failed, something went wrong?
-                        Throwable cause = channelFuture.cause();
-                        LOG.error("close failed，exception:  " + cause.toString());
-                    }
+            nettyChannel.close().addListener((ChannelFutureListener) channelFuture -> {
+                if (channelFuture.isSuccess()) {
+                    LOG.info("close the connection because someone kill the query");
+                } else {
+                    // close failed, something went wrong?
+                    Throwable cause = channelFuture.cause();
+                    LOG.error("close failed，exception:  " + cause.toString());
                 }
-
             });
         }
+    }
+
+    @Override
+    public String getCommandStr() {
+        return "HTTP.Query";
     }
 }

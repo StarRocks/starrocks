@@ -14,14 +14,19 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.connector.benchmark.BenchmarkConfig;
+import com.starrocks.connector.benchmark.BenchmarkConnector;
 import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.elasticsearch.ElasticsearchConnector;
 import com.starrocks.connector.elasticsearch.EsConfig;
+import com.starrocks.connector.fluss.FlussConnector;
 import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
+import com.starrocks.connector.kudu.KuduConnector;
+import com.starrocks.connector.odps.OdpsConnector;
 import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.connector.unified.UnifiedConnector;
 import org.apache.commons.lang3.EnumUtils;
@@ -38,9 +43,14 @@ public enum ConnectorType {
     HUDI("hudi", HudiConnector.class, null),
     DELTALAKE("deltalake", DeltaLakeConnector.class, null),
     PAIMON("paimon", PaimonConnector.class, null),
-    UNIFIED("unified", UnifiedConnector.class, null);
+    ODPS("odps", OdpsConnector.class, null),
+    KUDU("kudu", KuduConnector.class, null),
+    FLUSS("fluss", FlussConnector.class, null),
+    UNIFIED("unified", UnifiedConnector.class, null),
+    BENCHMARK("benchmark", BenchmarkConnector.class, BenchmarkConfig.class),
+    LANCE("lance", com.starrocks.connector.lance.LanceConnector.class, null);
 
-    public static Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
+    public static final Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
             ES,
             HIVE,
             ICEBERG,
@@ -48,7 +58,12 @@ public enum ConnectorType {
             HUDI,
             DELTALAKE,
             PAIMON,
-            UNIFIED
+            ODPS,
+            KUDU,
+            FLUSS,
+            UNIFIED,
+            BENCHMARK,
+            LANCE
     );
 
     ConnectorType(String name, Class connectorClass, Class configClass) {
@@ -57,9 +72,9 @@ public enum ConnectorType {
         this.configClass = configClass;
     }
 
-    private String name;
-    private Class<Connector> connectorClass;
-    private Class<ConnectorConfig> configClass;
+    private final String name;
+    private final Class<Connector> connectorClass;
+    private final Class<ConnectorConfig> configClass;
 
     public String getName() {
         return name;

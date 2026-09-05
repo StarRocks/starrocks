@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 40
+displayed_sidebar: docs
+description: "Querybook supports querying and visualizing both internal data and external data in StarRocks."
 ---
 
 # Querybook
@@ -37,9 +39,13 @@ Make sure that you have finished the following preparations:
 
 ## Integration
 
-Visit [https:///admin/query_engine/](https://localhost:10001/admin/query_engine/) and add a new query engine:
+Visit the following URL and add a new query engine:
 
-![Querybook](../../assets/BI_querybook_1.png)
+```Plain
+https://localhost:10001/admin/query_engine/
+```
+
+![Querybook](../../_assets/BI_querybook_1.png)
 
 Take note of the following points:
 

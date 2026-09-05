@@ -19,8 +19,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "exprs/runtime_filter.h"
+#include "base/uid_util.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
+#include "runtime/runtime_filter.h"
 
 namespace starrocks {
 
@@ -54,11 +55,12 @@ public:
     explicit RuntimeFilterCache(size_t log2_num_slots);
     ~RuntimeFilterCache();
     Status init();
-    void put_if_absent(const TUniqueId& query_id, int filter_id, const JoinRuntimeFilterPtr& filter);
-    JoinRuntimeFilterPtr get(const TUniqueId& query_id, int filter_id);
+    void put_if_absent(const TUniqueId& query_id, int filter_id, const RuntimeFilterPtr& filter);
+    RuntimeFilterPtr get(const TUniqueId& query_id, int filter_id);
     void remove(const TUniqueId& query_id);
     size_t cache_times() const { return _cache_times; }
     size_t use_times() const { return _use_times; }
+    void add_rf_event(const RfTracePoint& pt);
     void add_rf_event(const TUniqueId& query_id, int filter_id, std::string&& msg);
     std::unordered_map<std::string, std::list<std::string>> get_events();
     void set_enable_trace(bool enable) {

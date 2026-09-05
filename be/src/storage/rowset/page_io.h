@@ -36,14 +36,18 @@
 
 #include <vector>
 
+#include "base/string/slice.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/rowset/page_handle.h"
+#include "io/seekable_input_stream.h"
 #include "storage/rowset/page_pointer.h"
-#include "util/slice.h"
-
 namespace starrocks {
+
+namespace compression {
+class ZstdDDict;
+} // namespace compression
 
 class BlockCompressionCodec;
 class RandomAccessFile;
@@ -52,7 +56,8 @@ struct OlapReaderStatistics;
 
 struct PageReadOptions {
     // block to read page
-    RandomAccessFile* read_file = nullptr;
+    //RandomAccessFile* read_file = nullptr;
+    io::SeekableInputStream* read_file = nullptr;
     // location of the page
     PagePointer page_pointer;
     // decompressor for page body (null means page body is not compressed)
@@ -63,11 +68,13 @@ struct PageReadOptions {
     bool verify_checksum = true;
     // whether to use page cache in read path
     bool use_page_cache = true;
-    // if true, use DURABLE CachePriority in page cache
-    // currently used for in memory olap table
-    bool kept_in_memory = false;
     // page encoding type
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
+    // Per-column ZSTD dictionary this page may reference, or null. Read side only:
+    // a page whose frame does not reference a dictionary decodes identically whether
+    // or not this is set, which is what makes a column with a mix of dictionary and
+    // plain pages safe to read.
+    const compression::ZstdDDict* dict = nullptr;
 
     void sanity_check() const {
         CHECK_NOTNULL(read_file);
@@ -118,5 +125,9 @@ public:
     static Status read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                            PageFooterPB* footer);
 };
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+Status drop_local_cache_data(const std::string& fname);
+#endif
 
 } // namespace starrocks

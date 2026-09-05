@@ -14,14 +14,18 @@
 
 #include "storage/lake/update_compaction_state.h"
 
+#include "base/debug/trace.h"
+#include "column/chunk_factory.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/tablet_manager.h"
-#include "util/trace.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -33,7 +37,9 @@ CompactionState::~CompactionState() {
 
 Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
                                       const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+    CHECK_MEM_LIMIT("CompactionState::load_segments");
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
+    std::lock_guard<std::mutex> lg(_state_lock);
     if (pk_cols.empty() && rowset->num_segments() > 0) {
         pk_cols.resize(rowset->num_segments());
     } else {
@@ -52,33 +58,29 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
     return _load_segments(rowset, tablet_schema, segment_id);
 }
 
-static const size_t large_compaction_memory_threshold = 1000000000;
-
 Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
-    std::unique_ptr<Column> pk_column;
-    CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok());
+    MutableColumnPtr pk_column;
+    ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type, true));
 
-    OlapReaderStatistics stats;
     if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &stats));
+        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
-    CHECK_EQ(_segment_iters.size(), rowset->num_segments());
+    RETURN_ERROR_IF_FALSE(_segment_iters.size() == rowset->num_segments());
 
     // only hold pkey, so can use larger chunk size
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = _segment_iters[segment_id].get();
-    if (itr == nullptr) {
-        return Status::OK();
-    }
     auto& dest = pk_cols[segment_id];
     auto col = pk_column->clone();
     if (itr != nullptr) {
@@ -90,10 +92,21 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
             } else if (!st.ok()) {
                 return st;
             } else {
-                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                              pk_encoding_type));
             }
         }
         itr->close();
+    } else {
+        // A null iterator only appears for a physically-lost segment that get_each_segment_iterator
+        // dropped under experimental_lake_ignore_lost_segment; with the flag off it is an unexpected bug,
+        // so fail loudly. When tolerated, leave the encoded PK column empty (it contributes no rows to the
+        // index) instead of leaving pk_cols[segment_id] null, which the compaction-publish caller
+        // dereferences (pk_col->size() / index.try_replace(*pk_col, ...)).
+        RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                              strings::Substitute("unexpected null segment iterator at position $0 during "
+                                                  "compaction state collection",
+                                                  segment_id));
     }
     dest = std::move(col);
     _memory_usage += dest->memory_usage();
@@ -102,12 +115,14 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
 }
 
 void CompactionState::release_segments(uint32_t segment_id) {
+    std::lock_guard<std::mutex> lg(_state_lock);
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }
     _memory_usage -= pk_cols[segment_id]->memory_usage();
     _update_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
-    pk_cols[segment_id]->reset_column();
+    // reset ptr to release memory immediately
+    pk_cols[segment_id].reset();
 }
 
 std::string CompactionState::to_string() const {

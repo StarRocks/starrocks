@@ -1,0 +1,1161 @@
+-- name: test_always_null_statistic_funcs
+CREATE TABLE t1 (
+    idx BIGINT, 
+    k BIGINT NULL, 
+    val1 BIGINT NULL,
+    val2 BIGINT NULL
+) PRIMARY KEY(idx) 
+DISTRIBUTED BY HASH (idx) BUCKETS 32
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t1_nonnull (
+    idx BIGINT, 
+    k BIGINT NOT NULL, 
+    val1 BIGINT NOT NULL,
+    val2 BIGINT NOT NULL
+) PRIMARY KEY(idx) 
+DISTRIBUTED BY HASH (idx) BUCKETS 32
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 (val2, val1, k, idx) values
+    (10, 1,1,2),
+    (20, 2,2,4),
+    (30, 3,3,6),
+    (NULL, 4,4,8),
+    (50, NULL,5,10),
+    (NULL, NULL,6,12),
+    (70, NULL,7,14),
+    (80, 8,8,16),
+    (90, 9,9,18),
+    (100, 10,10,20);
+-- result:
+-- !result
+INSERT INTO t1_nonnull (val2, val1, k, idx) values
+    (10, 1,1,2),
+    (20, 2,2,4),
+    (30, 3,3,6),
+    (40, 4,4,8),
+    (50, 5,5,10),
+    (60, 6,6,12),
+    (70, 7,7,14),
+    (80, 8,8,16),
+    (90, 9,9,18),
+    (100, 10,10,20);
+-- result:
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(var_samp(c1), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(VAR_SAMP(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS var_samp_val1
+FROM t1
+order by k;
+-- result:
+1	1	None
+2	2	0.5
+3	3	1.0
+4	4	1.0
+5	None	0.5
+6	None	None
+7	None	None
+8	8	None
+9	9	0.5
+10	10	1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(VAR_SAMP(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS var_samp_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	None
+2	2	0.5
+3	3	1.0
+4	4	1.0
+5	5	1.0
+6	6	1.0
+7	7	1.0
+8	8	1.0
+9	9	1.0
+10	10	1.0
+-- !result
+select round(var_samp(val1), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1_nonnull;
+-- result:
+9.167
+-- !result
+select round(var_samp(val1), 3) from t1;
+-- result:
+13.238
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(variance_samp(c1), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(variance_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS variance_samp_val1
+FROM t1
+order by k;
+-- result:
+1	1	None
+2	2	0.5
+3	3	1.0
+4	4	1.0
+5	None	0.5
+6	None	None
+7	None	None
+8	8	None
+9	9	0.5
+10	10	1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(variance_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS variance_samp_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	None
+2	2	0.5
+3	3	1.0
+4	4	1.0
+5	5	1.0
+6	6	1.0
+7	7	1.0
+8	8	1.0
+9	9	1.0
+10	10	1.0
+-- !result
+select round(variance_samp(val1), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1_nonnull;
+-- result:
+9.167
+-- !result
+select round(variance_samp(val1), 3) from t1;
+-- result:
+13.238
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(stddev_samp(c1), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(stddev_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS stddev_samp_val1
+FROM t1
+order by k;
+-- result:
+1	1	None
+2	2	0.707
+3	3	1.0
+4	4	1.0
+5	None	0.707
+6	None	None
+7	None	None
+8	8	None
+9	9	0.707
+10	10	1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(stddev_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS stddev_samp_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	None
+2	2	0.707
+3	3	1.0
+4	4	1.0
+5	5	1.0
+6	6	1.0
+7	7	1.0
+8	8	1.0
+9	9	1.0
+10	10	1.0
+-- !result
+select round(stddev_samp(val1), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1_nonnull;
+-- result:
+3.028
+-- !result
+select round(stddev_samp(val1), 3) from t1;
+-- result:
+3.638
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, null), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (3, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (null, null), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+10.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (null, null), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+10.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (4, null), (3, 30), (null, 50) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+10.0
+-- !result
+SELECT
+    k,
+    val1,
+    val2,
+    round(covar_samp(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS covar_samp_val1
+FROM t1
+order by k;
+-- result:
+1	1	10	None
+2	2	20	5.0
+3	3	30	10.0
+4	4	None	5.0
+5	None	50	None
+6	None	None	None
+7	None	70	None
+8	8	80	None
+9	9	90	5.0
+10	10	100	10.0
+-- !result
+SELECT
+    k,
+    val1,
+    val2,
+    round(covar_samp(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS covar_samp_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	10	None
+2	2	20	5.0
+3	3	30	10.0
+4	4	40	10.0
+5	5	50	10.0
+6	6	60	10.0
+7	7	70	10.0
+8	8	80	10.0
+9	9	90	10.0
+10	10	100	10.0
+-- !result
+select round(covar_samp(val1, val2), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1_nonnull;
+-- result:
+91.667
+-- !result
+select round(covar_samp(val1, val2), 3) from t1;
+-- result:
+155.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, null), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (3, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (null, null), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (null, null), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (4, null), (3, 30), (null, 50) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+1.0
+-- !result
+SELECT
+    k,
+    val1,
+    val2,
+    round(corr(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS corr_val1
+FROM t1
+order by k;
+-- result:
+1	1	10	None
+2	2	20	1.0
+3	3	30	1.0
+4	4	None	1.0
+5	None	50	None
+6	None	None	None
+7	None	70	None
+8	8	80	None
+9	9	90	1.0
+10	10	100	1.0
+-- !result
+SELECT
+    k,
+    val1,
+    val2,
+    round(corr(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS corr_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	10	None
+2	2	20	1.0
+3	3	30	1.0
+4	4	40	1.0
+5	5	50	1.0
+6	6	60	1.0
+7	7	70	1.0
+8	8	80	1.0
+9	9	90	1.0
+10	10	100	1.0
+-- !result
+select round(corr(val1, val2), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1_nonnull;
+-- result:
+1.0
+-- !result
+select round(corr(val1, val2), 3) from t1;
+-- result:
+1.0
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(var_samp(c1), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(var_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(VAR_SAMP(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS var_samp_val1
+FROM t1
+order by k;
+-- result:
+1	1	None
+2	2	0.5
+3	3	1.0
+4	4	1.0
+5	None	0.5
+6	None	None
+7	None	None
+8	8	None
+9	9	0.5
+10	10	1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(VAR_SAMP(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS var_samp_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	None
+2	2	0.5
+3	3	1.0
+4	4	1.0
+5	5	1.0
+6	6	1.0
+7	7	1.0
+8	8	1.0
+9	9	1.0
+10	10	1.0
+-- !result
+select round(var_samp(val1), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(var_samp(val1), 3) from t1_nonnull;
+-- result:
+9.167
+-- !result
+select round(var_samp(val1), 3) from t1;
+-- result:
+13.238
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(variance_samp(c1), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(variance_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(variance_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS variance_samp_val1
+FROM t1
+order by k;
+-- result:
+1	1	None
+2	2	0.5
+3	3	1.0
+4	4	1.0
+5	None	0.5
+6	None	None
+7	None	None
+8	8	None
+9	9	0.5
+10	10	1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(variance_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS variance_samp_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	None
+2	2	0.5
+3	3	1.0
+4	4	1.0
+5	5	1.0
+6	6	1.0
+7	7	1.0
+8	8	1.0
+9	9	1.0
+10	10	1.0
+-- !result
+select round(variance_samp(val1), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(variance_samp(val1), 3) from t1_nonnull;
+-- result:
+9.167
+-- !result
+select round(variance_samp(val1), 3) from t1;
+-- result:
+13.238
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(stddev_samp(c1), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- result:
+1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(stddev_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS stddev_samp_val1
+FROM t1
+order by k;
+-- result:
+1	1	None
+2	2	0.707
+3	3	1.0
+4	4	1.0
+5	None	0.707
+6	None	None
+7	None	None
+8	8	None
+9	9	0.707
+10	10	1.0
+-- !result
+SELECT
+    k,
+    val1,
+    round(stddev_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS stddev_samp_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	None
+2	2	0.707
+3	3	1.0
+4	4	1.0
+5	5	1.0
+6	6	1.0
+7	7	1.0
+8	8	1.0
+9	9	1.0
+10	10	1.0
+-- !result
+select round(stddev_samp(val1), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(stddev_samp(val1), 3) from t1_nonnull;
+-- result:
+3.028
+-- !result
+select round(stddev_samp(val1), 3) from t1;
+-- result:
+3.638
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, null), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (3, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (null, null), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+10.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (null, null), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+10.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (4, null), (3, 30), (null, 50) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- result:
+10.0
+-- !result
+SELECT
+    k,
+    val1,
+    val2,
+    round(covar_samp(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS covar_samp_val1
+FROM t1
+order by k;
+-- result:
+1	1	10	None
+2	2	20	5.0
+3	3	30	10.0
+4	4	None	5.0
+5	None	50	None
+6	None	None	None
+7	None	70	None
+8	8	80	None
+9	9	90	5.0
+10	10	100	10.0
+-- !result
+SELECT
+    k,
+    val1,
+    val2,
+    round(covar_samp(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS covar_samp_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	10	None
+2	2	20	5.0
+3	3	30	10.0
+4	4	40	10.0
+5	5	50	10.0
+6	6	60	10.0
+7	7	70	10.0
+8	8	80	10.0
+9	9	90	10.0
+10	10	100	10.0
+-- !result
+select round(covar_samp(val1, val2), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(covar_samp(val1, val2), 3) from t1_nonnull;
+-- result:
+91.667
+-- !result
+select round(covar_samp(val1, val2), 3) from t1;
+-- result:
+155.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1 where c1 > 10;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, null), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (3, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (null, null), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+None
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (null, null), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+1.0
+-- !result
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (4, null), (3, 30), (null, 50) )t)
+select round(corr(c1, c2), 3) from w1;
+-- result:
+1.0
+-- !result
+SELECT
+    k,
+    val1,
+    val2,
+    round(corr(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS corr_val1
+FROM t1
+order by k;
+-- result:
+1	1	10	None
+2	2	20	1.0
+3	3	30	1.0
+4	4	None	1.0
+5	None	50	None
+6	None	None	None
+7	None	70	None
+8	8	80	None
+9	9	90	1.0
+10	10	100	1.0
+-- !result
+SELECT
+    k,
+    val1,
+    val2,
+    round(corr(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS corr_val1
+FROM t1_nonnull
+order by k;
+-- result:
+1	1	10	None
+2	2	20	1.0
+3	3	30	1.0
+4	4	40	1.0
+5	5	50	1.0
+6	6	60	1.0
+7	7	70	1.0
+8	8	80	1.0
+9	9	90	1.0
+10	10	100	1.0
+-- !result
+select round(corr(val1, val2), 3) from t1 where k > 100;
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1_nonnull where k > 100;
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1 where k = 2;
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1_nonnull where k = 2;
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1 where k in (2, 5, 6);
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1 where k in (5, 6);
+-- result:
+None
+-- !result
+select round(corr(val1, val2), 3) from t1_nonnull;
+-- result:
+1.0
+-- !result
+select round(corr(val1, val2), 3) from t1;
+-- result:
+1.0
+-- !result

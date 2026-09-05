@@ -1,74 +1,3 @@
--- name: test_create_table_abnormal
-CREATE DATABASE test_create_table_abnormal_auto_increment;
--- result:
--- !result
-USE test_create_table_abnormal_auto_increment;
--- result:
--- !result
-CREATE TABLE t ( id BIGINT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
-E: (1064, 'Getting syntax error at line 1, column 17. Detail message: AUTO_INCREMENT column id must be NOT NULL.')
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT DEFAULT "100",  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
-E: (1064, "Getting syntax error at line 1, column 51. Detail message: Unexpected input 'DEFAULT', the most similar input is {',', ')'}.")
--- !result
-CREATE TABLE t ( id INT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 17 to line 1, column 33. Detail message: The AUTO_INCREMENT column must be BIGINT.')
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 53 to line 1, column 74. Detail message: More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.')
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 53 to line 1, column 74. Detail message: More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.')
--- !result
-DROP DATABASE test_create_table_abnormal;
--- result:
-E: (1064, "Unexpected exception: Can't drop database 'test_create_table_abnormal'; database doesn't exist")
--- !result
--- name: test_create_table_normal
-CREATE DATABASE test_create_table_normal_auto_increment;
--- result:
--- !result
-USE test_create_table_normal_auto_increment;
--- result:
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL ,  name BIGINT NOT NULL, job1 BIGINT AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
--- !result
-DROP TABLE t;
--- result:
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL ,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
--- !result
-DROP TABLE t;
--- result:
--- !result
-CREATE TABLE t ( id BIGINT AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
--- !result
-DROP TABLE t;
--- result:
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
--- !result
-DROP TABLE t;
--- result:
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
--- result:
--- !result
-DROP TABLE t;
--- result:
--- !result
-DROP DATABASE test_create_table_normal_auto_increment;
--- result:
--- !result
 -- name: test_table_with_null @sequential
 CREATE DATABASE test_table_with_null;
 -- result:
@@ -76,7 +5,7 @@ CREATE DATABASE test_table_with_null;
 USE test_table_with_null;
 -- result:
 -- !result
-SET enable_insert_strict = false;
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
 -- result:
 -- !result
 ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
@@ -122,16 +51,16 @@ Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" 
 INSERT INTO t2 VALUES (1, NULL), (2, NULL);
 -- result:
 -- !result
-INSERT INTO t1 SELECT * FROM t2;
+INSERT INTO t1 properties ("max_filter_ratio" = "1") SELECT * FROM t2;
 -- result:
 -- !result
-INSERT INTO t1 (id, idx) SELECT * FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
 -- result:
 -- !result
-INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
 -- result:
 -- !result
-INSERT INTO t1 SELECT 1, NULL;
+INSERT INTO t1 properties ("max_filter_ratio" = "1") SELECT 1, NULL;
 -- result:
 -- !result
 SELECT * FROM t1;
@@ -147,21 +76,44 @@ CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
 Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
 -- result:
 -- !result
-INSERT INTO t1 (id, idx) SELECT * FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
 -- result:
 -- !result
-INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
 -- result:
 -- !result
 INSERT INTO t1 (id) SELECT id FROM t2;
 -- result:
 -- !result
-SELECT * FROM t1;
+SELECT * FROM t1 ORDER BY id;
 -- result:
 1	5
 2	6
-10	7
-20	8
+10	1
+20	2
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id) SELECT id FROM t2;
+-- result:
+-- !result
+SELECT * FROM t1 ORDER BY id;
+-- result:
+1	5
+2	6
+10	1
+20	2
 -- !result
 DROP TABLE t1;
 -- result:
@@ -169,108 +121,10 @@ DROP TABLE t1;
 DROP TABLE t2;
 -- result:
 -- !result
-SET enable_insert_strict = true;
--- result:
--- !result
 ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "true");
 -- result:
 -- !result
 DROP DATABASE test_table_with_null;
--- result:
--- !result
--- name: test_update_auto_increment @sequential
-CREATE DATABASE test_update_auto_increment;
--- result:
--- !result
-USE test_update_auto_increment;
--- result:
--- !result
-ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
--- result:
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
--- result:
--- !result
-INSERT INTO t (id,name,job1,job2) values (DEFAULT,0,0,0);
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-1	0	0	0
--- !result
-UPDATE t SET job2 = 1 WHERE id = 1 AND name = 0;
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-1	0	0	1
--- !result
-INSERT INTO t (id,name,job1,job2) values (DEFAULT,1,1,1);
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-1	0	0	1
-2	1	1	1
--- !result
-DROP TABLE t;
--- result:
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
--- result:
--- !result
-INSERT INTO t (id,name,job1,job2) values (0,0,DEFAULT,0);
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-0	0	1	0
--- !result
-UPDATE t SET job2 = 1 WHERE id = 0 AND name = 0;
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-0	0	1	1
--- !result
-INSERT INTO t (id,name,job1,job2) values (1,1,DEFAULT,1);
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-0	0	1	1
-1	1	2	1
--- !result
-UPDATE t SET job1 = 0 WHERE id = 1 AND name = 1;
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-0	0	1	1
-1	1	0	1
--- !result
-INSERT INTO t (id,name,job1,job2) values (2,2,DEFAULT,2);
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-0	0	1	1
-1	1	0	1
-2	2	3	2
--- !result
-UPDATE t SET job1 = DEFAULT WHERE id = 0 AND name = 0;
--- result:
--- !result
-SELECT * FROM t ORDER BY name;
--- result:
-0	0	4	1
-1	1	0	1
-2	2	3	2
--- !result
-DROP TABLE t;
--- result:
--- !result
-DROP DATABASE test_update_auto_increment;
 -- result:
 -- !result
 -- name: test_auto_increment_insert @sequential
@@ -286,7 +140,7 @@ ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
 CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
 -- result:
 -- !result
-INSERT INTO t (name,job1,job2) VALUES (1,1,1),(2,2,2);
+INSERT INTO t (id, name,job1,job2) VALUES (DEFAULT, 1,1,1),(DEFAULT, 2,2,2);
 -- result:
 -- !result
 SELECT * FROM t ORDER BY name;
@@ -342,7 +196,7 @@ SELECT * FROM t ORDER BY job1;
 1	1	1	1
 100000	1	2	2
 -- !result
-INSERT INTO t (name,job1,job2) VALUES (1,100,100);
+INSERT INTO t (id, name,job1,job2) VALUES (DEFAULT, 1,100,100);
 -- result:
 -- !result
 SELECT * FROM t ORDER BY job1;
@@ -452,18 +306,6 @@ INSERT INTO t3 (id,name,job1,job2) VALUES (1,1,DEFAULT,1);
 INSERT INTO t4 (id,name,job1,job2) VALUES (1,1,1,DEFAULT);
 -- result:
 -- !result
-INSERT INTO t1 (name,job1,job2) VALUES (1,1,1);
--- result:
--- !result
-INSERT INTO t2 (id,job1,job2) VALUES (1,1,1);
--- result:
--- !result
-INSERT INTO t3 (id,name,job2) VALUES (1,1,1);
--- result:
--- !result
-INSERT INTO t4 (id,name,job1) VALUES (1,1,1);
--- result:
--- !result
 DROP TABLE t1;
 -- result:
 -- !result
@@ -495,7 +337,7 @@ E: (1064, "Getting syntax error from line 1, column 25 to line 1, column 39. Det
 -- !result
 ALTER TABLE t MODIFY COLUMN job2 BIGINT;
 -- result:
-E: (1064, "Unexpected exception: Can't not modify a AUTO_INCREMENT column")
+E: (1064, "Can't not modify a AUTO_INCREMENT column")
 -- !result
 ALTER TABLE t MODIFY COLUMN job2 BIGINT AUTO_INCREMENT;
 -- result:
@@ -512,5 +354,380 @@ DROP TABLE t;
 -- result:
 -- !result
 DROP DATABASE test_schema_change_auto_increment;
+-- result:
+-- !result
+-- name: test_auto_increment_incorrect_col_id
+CREATE DATABASE test_auto_increment_incorrect_col_id;
+-- result:
+-- !result
+USE test_auto_increment_incorrect_col_id;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+-- result:
+-- !result
+CREATE TABLE `t_auto_increment_incorrect_col_id` (
+  `k1` BIGINT NOT NULL COMMENT "",
+  `k2` string default "abc" COMMENT "",
+  `k3` BIGINT AUTO_INCREMENT COMMENT "",
+  `k4` string default "bcd"COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_auto_increment_incorrect_col_id VALUES (1, DEFAULT, DEFAULT, DEFAULT);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_incorrect_col_id;
+-- result:
+1	abc	1	bcd
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_incorrect_col_id.csv -XPUT -H partial_update:true -H label:test_auto_increment_incorrect_col_id_1 -H column_separator:, -H columns:"k1, k4" ${url}/api/test_auto_increment_incorrect_col_id/t_auto_increment_incorrect_col_id/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_incorrect_col_id;
+-- result:
+1	abc	1	bcd
+2	abc	2	ddd
+-- !result
+DROP TABLE t_auto_increment_incorrect_col_id;
+-- result:
+-- !result
+DROP DATABASE test_auto_increment_incorrect_col_id;
+-- result:
+-- !result
+-- name: test_auto_increment_partial_update_only
+CREATE DATABASE test_auto_increment_partial_update_only;
+-- result:
+-- !result
+USE test_auto_increment_partial_update_only;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+-- result:
+-- !result
+CREATE TABLE `t_auto_increment_partial_update_only` (
+  `k1` BIGINT NOT NULL COMMENT "",
+  `k2` BIGINT NOT NULL COMMENT "",
+  `k3` BIGINT NOT NULL COMMENT "",
+  `k4` BIGINT AUTO_INCREMENT COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_auto_increment_partial_update_only VALUES (1, 2, 3, DEFAULT);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_only;
+-- result:
+1	2	3	1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true -H label:test_auto_increment_partial_update_only_1 -H column_separator:, -H columns:"k1,k2,k3" ${url}/api/test_auto_increment_partial_update_only/t_auto_increment_partial_update_only/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_only;
+-- result:
+1	20	30	1
+2	40	50	2
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true -H label:test_auto_increment_partial_update_only_2 -H column_separator:, -H columns:"k1,k2,k3" ${url}/api/test_auto_increment_partial_update_only/t_auto_increment_partial_update_only/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_only;
+-- result:
+1	20	30	1
+2	40	50	2
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true -H label:test_auto_increment_partial_update_only_3 -H column_separator:, -H columns:"k1,k2,k3" ${url}/api/test_auto_increment_partial_update_only/t_auto_increment_partial_update_only/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_only;
+-- result:
+1	20	30	1
+2	40	50	2
+-- !result
+DROP TABLE t_auto_increment_partial_update_only;
+-- result:
+-- !result
+DROP DATABASE test_auto_increment_partial_update_only;
+-- result:
+-- !result
+-- name: test_auto_increment_insert_partial_update @sequential
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+CREATE TABLE `t_auto_increment_insert_partial_update` (
+  `k` STRING NOT NULL COMMENT "",
+  `v1` BIGINT AUTO_INCREMENT,
+  `created` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true"
+);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(5);
+-- result:
+-- !result
+SELECT k, v1 from t_auto_increment_insert_partial_update ORDER BY k;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+-- !result
+DROP TABLE t_auto_increment_insert_partial_update force;
+CREATE TABLE `t_auto_increment_insert_partial_update` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT "",
+  `ts` bigint(20) NOT NULL COMMENT "",
+  `testString` String NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `ts`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_insert_partial_update order by id;
+-- result:
+1	100	abc
+2	100	abc
+3	100	abc
+-- !result
+DROP TABLE t_auto_increment_insert_partial_update force;
+-- result:
+-- !result
+-- name: test_auto_increment_partial_update_column_upsert @sequential
+CREATE DATABASE test_auto_increment_partial_update_column_upsert;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+USE test_auto_increment_partial_update_column_upsert;
+-- result:
+-- !result
+CREATE TABLE `t_auto_increment_partial_update_column_upsert` (
+  `k`  BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT AUTO_INCREMENT,
+  `v2` BIGINT,
+  `v3` BIGINT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_auto_increment_partial_update_column_upsert VALUES (1, DEFAULT, 3, 4);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert;
+-- result:
+1	1	3	4
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true  -H partial_update_mode:column -H label:test_auto_increment_partial_update_column_upsert_12345 -H column_separator:, -H columns:k,v2,xx ${url}/api/test_auto_increment_partial_update_column_upsert/t_auto_increment_partial_update_column_upsert/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert;
+-- result:
+1	1	20	4
+2	2	40	None
+-- !result
+INSERT INTO t_auto_increment_partial_update_column_upsert VALUES (1, 300, 20, 30), (2, 301, 40 ,50);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert;
+-- result:
+1	300	20	30
+2	301	40	50
+-- !result
+DROP TABLE t_auto_increment_partial_update_column_upsert;
+-- result:
+-- !result
+DROP DATABASE test_auto_increment_partial_update_column_upsert;
+-- result:
+-- !result
+-- name: test_alter_auto_increment_counter @sequential
+CREATE TABLE `t_alter_auto_increment_counter` (
+  `k`  BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT AUTO_INCREMENT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (1, 1);
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (2, 2);
+-- result:
+-- !result
+ALTER TABLE t_alter_auto_increment_counter AUTO_INCREMENT = 300;
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (3, DEFAULT);
+-- result:
+-- !result
+SELECT * FROM t_alter_auto_increment_counter ORDER BY k;
+-- result:
+1	1
+2	2
+3	300
+-- !result
+DROP TABLE t_alter_auto_increment_counter;
+-- result:
+-- !result
+-- name: test_auto_increment_partial_update_column_upsert_2 @sequential
+CREATE DATABASE test_auto_increment_partial_update_column_upsert_2;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+USE test_auto_increment_partial_update_column_upsert_2;
+-- result:
+-- !result
+CREATE TABLE `t_auto_increment_partial_update_column_upsert_2` (
+  `k`  BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT,
+  `v2` BIGINT,
+  `v3` BIGINT AUTO_INCREMENT,
+  `v4` BIGINT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_auto_increment_partial_update_column_upsert_2 VALUES (1, 2, 3, DEFAULT, 4);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
+-- result:
+1	2	3	1	4
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true  -H partial_update_mode:column -H label:test_auto_increment_partial_update_column_upsert_12345 -H column_separator:, -H columns:k,v2,xx ${url}/api/test_auto_increment_partial_update_column_upsert_2/t_auto_increment_partial_update_column_upsert_2/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
+-- result:
+1	2	20	1	4
+2	None	40	2	None
+-- !result
+INSERT INTO t_auto_increment_partial_update_column_upsert_2 VALUES (1, 300, 20, DEFAULT, 30), (2, 301, 40, DEFAULT, 50);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
+-- result:
+1	300	20	3	30
+2	301	40	4	50
+-- !result
+DROP TABLE t_auto_increment_partial_update_column_upsert_2;
+-- result:
+-- !result
+DROP DATABASE test_auto_increment_partial_update_column_upsert_2;
 -- result:
 -- !result

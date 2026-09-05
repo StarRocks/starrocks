@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回参数x的符号（负数-1、零0、正数1）。"
 ---
 
 # sign
 
-## 功能
+
 
 返回参数 `x` 的符号。
 

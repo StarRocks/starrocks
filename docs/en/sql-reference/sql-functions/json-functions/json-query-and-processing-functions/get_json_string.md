@@ -1,22 +1,19 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Analyzes and gets strings from the specified path (json_path) in a JSON string."
 ---
 
-# get_json_string
+# get_json_string,get_json_object
 
-## Description
+Analyzes and gets strings from the specified path (`json_path`) in a JSON string. If the format of `json_string` or `json_path` is wrong or if no matching value is found, this function will return NULL.
 
-This function analyzes and gets the strings from a specified path in json string.
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
 
-json_path must start with `$` and use `.` as the path separator.
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
-If the path includes `.`, it could be circled by `"` and `"`.
-
-`[ ]` is used as the array subscripts which start from 0.
-
-Content in the path should not contain `"` , `[` and `]`.
-
-If the format of json_string or json_path is wrong, this function will return NULL.
+The alias is get_json_object.
 
 ## Syntax
 
@@ -24,51 +21,87 @@ If the format of json_string or json_path is wrong, this function will return NU
 VARCHAR get_json_string(VARCHAR json_str, VARCHAR json_path)
 ```
 
+## Parameters
+
+- `json_str`: the JSON string. Supported data type is VARCHAR.
+- `json_path`: the JSON path. Supported data type is VARCHAR. `json_path` starts with `$` and uses `.` as the path separator. `[ ]` is used as the array subscripts which starts from 0. For example, `$."my.key"[1]` indicates to obtain the second value form element `my.key`.
+
+## Return value
+
+Returns a value of the VARCHAR type. If no matching object is found, NULL is returned.
+
 ## Examples
 
-1. Get the value whose key is "k1"
+### Example 1: Get the value whose key is `k1`
 
-    ```Plain Text
-    MySQL > SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1");
-    +---------------------------------------------------+
-    | get_json_string('{"k1":"v1", "k2":"v2"}', '$.k1') |
-    +---------------------------------------------------+
-    | v1                                                |
-    +---------------------------------------------------+
-    ```
+```sql
+SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1");
+```
 
-2. Get the second element in the array whose key is "my.key"
+```sql
++---------------------------------------------------+
+| get_json_string('{"k1":"v1", "k2":"v2"}', '$.k1') |
++---------------------------------------------------+
+| v1                                                |
++---------------------------------------------------+
+```
 
-    ```Plain Text
-    MySQL > SELECT get_json_string('{"k1":"v1", "my.key":["e1", "e2", "e3"]}', '$."my.key"[1]');
-    +------------------------------------------------------------------------------+
-    | get_json_string('{"k1":"v1", "my.key":["e1", "e2", "e3"]}', '$."my.key"[1]') |
-    +------------------------------------------------------------------------------+
-    | e2                                                                           |
-    +------------------------------------------------------------------------------+
-    ```
+### Example 2: Get the value whose key is `a` from the first element
 
-3. Get the first element in the array whose path is k1.key -> k2.
+```sql
+SELECT get_json_object('[{"a":"123", "b": "456"},{"a":"23", "b": "56"}]', '$[0].a');
+```
 
-    ```Plain Text
-    MySQL > SELECT get_json_string('{"k1.key":{"k2":["v1", "v2"]}}', '$."k1.key".k2[0]');
-    +-----------------------------------------------------------------------+
-    | get_json_string('{"k1.key":{"k2":["v1", "v2"]}}', '$."k1.key".k2[0]') |
-    +-----------------------------------------------------------------------+
-    | v1                                                                    |
-    +-----------------------------------------------------------------------+
-    ```
+```sql
++------------------------------------------------------------------------------+
+| get_json_object('[{"a":"123", "b": "456"},{"a":"23", "b": "56"}]', '$[0].a') |
++------------------------------------------------------------------------------+
+| 123                                                                          |
++------------------------------------------------------------------------------+
+```
 
-4. Get all values whose key is "k1" from the array.
+### Example 3: Get the second element in the array whose key is `my.key`
 
-    ```Plain Text
-    MySQL > SELECT get_json_string('[{"k1":"v1"}, {"k2":"v2"}, {"k1":"v3"}, {"k1":"v4"}]', '$.k1');
-    +---------------------------------------------------------------------------------+
-    | get_json_string('[{"k1":"v1"}, {"k2":"v2"}, {"k1":"v3"}, {"k1":"v4"}]', '$.k1') |
-    +---------------------------------------------------------------------------------+
-    | ["v1","v3","v4"]                                                                |
-    +---------------------------------------------------------------------------------+
-    ```
+```sql
+SELECT get_json_string('{"k1":"v1", "my.key":["e1", "e2", "e3"]}', '$."my.key"[1]');
+```
+
+```sql
++------------------------------------------------------------------------------+
+| get_json_string('{"k1":"v1", "my.key":["e1", "e2", "e3"]}', '$."my.key"[1]') |
++------------------------------------------------------------------------------+
+| e2                                                                           |
++------------------------------------------------------------------------------+
+```
+
+### Example 4: Get the first element in the array whose path is `k1.key -> k2`
+
+```sql
+SELECT get_json_string('{"k1.key":{"k2":["v1", "v2"]}}', '$."k1.key".k2[0]');
+```
+
+```sql
++-----------------------------------------------------------------------+
+| get_json_string('{"k1.key":{"k2":["v1", "v2"]}}', '$."k1.key".k2[0]') |
++-----------------------------------------------------------------------+
+| v1                                                                    |
++-----------------------------------------------------------------------+
+```
+
+### Example 5: Get all values whose key is `k1` from the array
+
+```sql
+SELECT get_json_string('[{"k1":"v1"}, {"k2":"v2"}, {"k1":"v3"}, {"k1":"v4"}]', '$.[*].k1');
+```
+
+```sql
++-------------------------------------------------------------------------------------+
+| get_json_string('[{"k1":"v1"}, {"k2":"v2"}, {"k1":"v3"}, {"k1":"v4"}]', '$.[*].k1') |
++-------------------------------------------------------------------------------------+
+| ["v1", "v3", "v4"]                                                                  |
++-------------------------------------------------------------------------------------+
+1 row in set (0.01 sec)
+```
 
 ## keyword
 

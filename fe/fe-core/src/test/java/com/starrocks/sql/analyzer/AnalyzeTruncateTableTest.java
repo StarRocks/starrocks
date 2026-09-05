@@ -12,36 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeTruncateTableTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 
     @Test
-    public void normalTest() {
+    public void normalTest(@Mocked Table mockTable) {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+                return mockTable;
+            }
+        };
+
         TruncateTableStmt stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE example_db.tbl;");
-        Assert.assertEquals("tbl", stmt.getTblName());
-        Assert.assertEquals("example_db", stmt.getDbName());
+        Assertions.assertEquals("tbl", stmt.getTblName());
+        Assertions.assertEquals("example_db", stmt.getDbName());
 
         stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
-        Assert.assertEquals("tbl", stmt.getTblName());
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals(stmt.getTblRef().getPartitionNames().getPartitionNames().toString(), "[p1, p2]");
+        Assertions.assertEquals("tbl", stmt.getTblName());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("[p1, p2]", stmt.getTblRef().getPartitionDef().getPartitionNames().toString());
     }
 
     @Test

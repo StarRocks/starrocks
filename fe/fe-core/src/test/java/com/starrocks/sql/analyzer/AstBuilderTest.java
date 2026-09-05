@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
-
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncatePartitionClause;
@@ -32,19 +31,19 @@ import com.starrocks.sql.parser.StarRocksParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.util.IdentityHashMap;
 import java.util.List;
 
 public class AstBuilderTest {
 
     private static ConnectContext connectContext;
 
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -61,11 +60,14 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
+
+        AstBuilder astBuilder =
+                AstBuilder.getInstance().create(32, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>());
+        StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
-        ModifyBackendAddressClause clause = (ModifyBackendAddressClause) field.get(statement);
-        Assert.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
+        ModifyBackendClause clause = (ModifyBackendClause) field.get(statement);
+        Assertions.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
     }
 
     @Test
@@ -76,11 +78,13 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
+        AstBuilder astBuilder =
+                AstBuilder.getInstance().create(32, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>());
+        StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
         ModifyFrontendAddressClause clause = (ModifyFrontendAddressClause) field.get(statement);
-        Assert.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
+        Assertions.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
     }
 
     @Test
@@ -88,8 +92,8 @@ public class AstBuilderTest {
         String sql = "alter table db.test truncate partition p1";
         StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         AlterTableStmt aStmt = (AlterTableStmt) statement;
-        List<AlterClause> alterClauses = aStmt.getOps();
+        List<AlterClause> alterClauses = aStmt.getAlterClauseList();
         TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
-        Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
+        Assertions.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
     }
 }

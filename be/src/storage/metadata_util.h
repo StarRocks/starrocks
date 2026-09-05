@@ -22,9 +22,14 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "olap_common.h"
-#include "types/logical_type.h"
+#include "storage_primitive/tablet_column_util.h"
 
 namespace starrocks {
+
+#define COMMON_PROPERTIES "common_properties"
+#define INDEX_PROPERTIES "index_properties"
+#define SEARCH_PROPERTIES "search_properties"
+#define EXTRA_PROPERTIES "extra_properties"
 
 class TTabletSchema;
 class TabletSchemaPB;
@@ -35,12 +40,18 @@ enum class FieldTypeVersion {
     kV2,
 };
 
-Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_t next_unique_id,
+Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TabletSchemaPB* out_schema);
+
+// If the columns in |t_schema| do not have a unique id, then the columns in |out_schema| will use the
+// column's position in the schema (starting from 0) as their unique id.
+Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TCompressionType::type compression_type,
+                                     TabletSchemaPB* out_schema);
+
+// If the columns in |t_schema| do not have a unique id, then the columns in |out_schema| will use the
+// column's position in the schema (starting at 0) as the key to look up the value in
+// |col_ordinal_to_unique_id| for their unique ids.
+Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, uint32_t next_unique_id,
                                      const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                                     TabletSchemaPB* schema, TCompressionType::type compression_type);
-
-void convert_to_new_version(TColumn* tcolumn);
-
-Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb);
+                                     TabletSchemaPB* out_schema, TCompressionType::type compression_type);
 
 } // namespace starrocks

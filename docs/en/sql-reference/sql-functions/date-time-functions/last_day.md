@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the last day of an input DATE or DATETIME expression based on the specified date part."
 ---
 
 # last_day
 
-## Description
+
 
 Returns the last day of an input DATE or DATETIME expression based on the specified date part. For example, `last_day('2023-05-10', 'month')` returns the last day of the month in which '2023-05-10' falls.
 

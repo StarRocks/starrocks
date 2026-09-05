@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将十六进制字符串转换为其对应的二进制字符串；hex 函数的反向函数。"
 ---
 
 # unhex
 
-## 功能
+
 
 将输入的参数 `str` 中的两个字符为一组转化为16进制后的字符，然后拼接成字符串输出。
 

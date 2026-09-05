@@ -34,19 +34,15 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.memory.estimate.ShallowMemory;
 import com.starrocks.thrift.TStorageMedium;
 
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
+@ShallowMemory
 public class TabletMeta {
     private final long dbId;
     private final long tableId;
-    private final long partitionId;
     private final long physicalPartitionId;
     private final long indexId;
-
-    private final int oldSchemaHash;
-    private final int newSchemaHash;
 
     private TStorageMedium storageMedium;
 
@@ -57,33 +53,20 @@ public class TabletMeta {
      */
     private Long toBeCleanedTimeMs = null;
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    public TabletMeta(long dbId, long tableId, long partitionId, long physicalPartitionId, long indexId, int schemaHash,
-                      TStorageMedium storageMedium, boolean isLakeTablet) {
+    public TabletMeta(long dbId, long tableId, long physicalPartitionId, long indexId,
+                      TStorageMedium storageMedium,
+                      boolean isLakeTablet) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.partitionId = partitionId;
         this.physicalPartitionId = physicalPartitionId;
         this.indexId = indexId;
-
-        this.oldSchemaHash = schemaHash;
-        this.newSchemaHash = -1;
-
         this.storageMedium = storageMedium;
-
         this.isLakeTablet = isLakeTablet;
     }
 
-    // for single physical partition, the physicalPartitionId is same as partitionId
-    public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
-                      TStorageMedium storageMedium, boolean isLakeTablet) {
-        this(dbId, tableId, partitionId, partitionId, indexId, schemaHash, storageMedium, isLakeTablet);
-    }
-
-    public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
+    public TabletMeta(long dbId, long tableId, long physicalPartitionId, long indexId,
                       TStorageMedium storageMedium) {
-        this(dbId, tableId, partitionId, indexId, schemaHash, storageMedium, false);
+        this(dbId, tableId, physicalPartitionId, indexId, storageMedium, false);
     }
 
     public long getDbId() {
@@ -92,10 +75,6 @@ public class TabletMeta {
 
     public long getTableId() {
         return tableId;
-    }
-
-    public long getPartitionId() {
-        return partitionId;
     }
 
     public long getPhysicalPartitionId() {
@@ -114,24 +93,6 @@ public class TabletMeta {
         this.storageMedium = storageMedium;
     }
 
-    public int getNewSchemaHash() {
-        lock.readLock().lock();
-        try {
-            return this.newSchemaHash;
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
-    public int getOldSchemaHash() {
-        lock.readLock().lock();
-        try {
-            return this.oldSchemaHash;
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
     public Long getToBeCleanedTime() {
         return toBeCleanedTimeMs;
     }
@@ -144,35 +105,15 @@ public class TabletMeta {
         toBeCleanedTimeMs = null;
     }
 
-    public boolean containsSchemaHash(int schemaHash) {
-        lock.readLock().lock();
-        try {
-            return this.oldSchemaHash == schemaHash || this.newSchemaHash == schemaHash;
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
     public boolean isLakeTablet() {
         return isLakeTablet;
     }
 
     @Override
     public String toString() {
-        lock.readLock().lock();
-        try {
-            StringBuilder sb = new StringBuilder();
-            sb.append("dbId=").append(dbId);
-            sb.append(" tableId=").append(tableId);
-            sb.append(" partitionId=").append(partitionId);
-            sb.append(" physicalPartitionId=").append(physicalPartitionId);
-            sb.append(" indexId=").append(indexId);
-            sb.append(" oldSchemaHash=").append(oldSchemaHash);
-            sb.append(" newSchemaHash=").append(newSchemaHash);
-
-            return sb.toString();
-        } finally {
-            lock.readLock().unlock();
-        }
+        return "dbId=" + dbId +
+                " tableId=" + tableId +
+                " physicalPartitionId=" + physicalPartitionId +
+                " indexId=" + indexId;
     }
 }

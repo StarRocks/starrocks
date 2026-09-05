@@ -14,8 +14,8 @@
 package com.starrocks.common.util;
 
 import com.starrocks.thrift.TUnit;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.sparkproject.guava.collect.Maps;
 
 import java.io.BufferedReader;
@@ -58,12 +58,12 @@ public class RuntimeProfileParserTest {
     private static void checkParser(RuntimeProfile profile) {
         final String originalContent = getContent(profile);
         RuntimeProfile rebuildProfile = RuntimeProfileParser.parseFrom(originalContent);
-        Assert.assertNotNull(rebuildProfile);
+        Assertions.assertNotNull(rebuildProfile);
         final String rebuildContent = getContent(rebuildProfile);
 
         Map<String, Integer> originalLineCounter = getLineCounter(originalContent);
         Map<String, Integer> rebuildLineCounter = getLineCounter(rebuildContent);
-        Assert.assertEquals(originalLineCounter, rebuildLineCounter);
+        Assertions.assertEquals(originalLineCounter, rebuildLineCounter);
     }
 
     @Test
@@ -284,5 +284,37 @@ public class RuntimeProfileParserTest {
         execution.addChild(pipeline);
 
         checkParser(query);
+    }
+
+    @Test
+    public void testUnitCounterAcceptsDecimalValue() {
+        String content = String.join("\n",
+                "profile:",
+                "   - smallDecimal: 5.50",
+                "   - largeDecimal: 3074457345618258400.000",
+                "");
+        RuntimeProfile profile = RuntimeProfileParser.parseFrom(content);
+        Assertions.assertNotNull(profile);
+        Counter small = profile.getCounter("smallDecimal");
+        Assertions.assertNotNull(small);
+        Assertions.assertEquals(TUnit.UNIT, small.getType());
+        Assertions.assertEquals(5, small.getValue());
+        // Above-limit values fall back to the InfoString path so the line stays parseable.
+        Assertions.assertNull(profile.getCounter("largeDecimal"));
+        Assertions.assertEquals("3074457345618258400.000", profile.getInfoString("largeDecimal"));
+    }
+
+    @Test
+    public void testUnitPerSecCounterAcceptsDecimalValue() {
+        String content = String.join("\n",
+                "profile:",
+                "   - rate: 7.25 /sec",
+                "");
+        RuntimeProfile profile = RuntimeProfileParser.parseFrom(content);
+        Assertions.assertNotNull(profile);
+        Counter counter = profile.getCounter("rate");
+        Assertions.assertNotNull(counter);
+        Assertions.assertEquals(TUnit.UNIT_PER_SECOND, counter.getType());
+        Assertions.assertEquals(7, counter.getValue());
     }
 }

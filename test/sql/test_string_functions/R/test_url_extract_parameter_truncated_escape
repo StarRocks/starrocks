@@ -1,0 +1,43 @@
+-- name: test_url_extract_parameter_truncated_escape
+CREATE DATABASE IF NOT EXISTS test_url_extract_parameter_truncated_escape_db;
+-- result:
+-- !result
+USE test_url_extract_parameter_truncated_escape_db;
+-- result:
+-- !result
+CREATE TABLE ta (id INT, u VARCHAR(100)) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE tb (id INT, u VARCHAR(100)) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO ta VALUES (1, 'http://x/p?k1=ab%'), (2, 'ABABABAB');
+-- result:
+-- !result
+INSERT INTO tb VALUES (1, 'http://x/p?k1=ab%'), (2, 'ZZZZZZZZ');
+-- result:
+-- !result
+SELECT id, hex(url_extract_parameter(u, 'k1')) AS vhex FROM ta WHERE id = 1;
+-- result:
+1	None
+-- !result
+SELECT id, hex(url_extract_parameter(u, 'k1')) AS vhex FROM tb WHERE id = 1;
+-- result:
+1	None
+-- !result
+INSERT INTO ta VALUES (3, 'http://x/p?k1=cd%4');
+-- result:
+-- !result
+SELECT id, url_extract_parameter(u, 'k1') FROM ta WHERE id = 3;
+-- result:
+3	None
+-- !result
+INSERT INTO ta VALUES (4, 'http://x/p?k1=z%41');
+-- result:
+-- !result
+SELECT id, url_extract_parameter(u, 'k1') FROM ta WHERE id = 4;
+-- result:
+4	zA
+-- !result

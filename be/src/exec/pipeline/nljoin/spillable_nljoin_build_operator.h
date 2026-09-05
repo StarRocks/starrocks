@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/options.h"
-#include "exec/spill/spiller_factory.h"
 
 namespace starrocks::pipeline {
 
@@ -56,6 +56,8 @@ public:
     Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     std::shared_ptr<spill::SpilledOptions> _spill_options;

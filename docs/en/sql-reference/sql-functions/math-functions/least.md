@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the smallest value from a list of one or more parameters."
 ---
 
 # least
 
-## Description
+
 
 Returns the smallest value from a list of one or more parameters.
 

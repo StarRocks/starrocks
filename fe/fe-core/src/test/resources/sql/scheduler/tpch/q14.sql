@@ -1,17 +1,3 @@
-[sql]
-select
-            100.00 * sum(case
-                             when p_type like 'PROMO%'
-                                 then l_extendedprice * (1 - l_discount)
-                             else 0
-            end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
-from
-    lineitem,
-    part
-where
-        l_partkey = p_partkey
-  and l_shipdate >= date '1997-02-01'
-  and l_shipdate < date '1997-03-01';
 [scheduler]
 PLAN FRAGMENT 0(F03)
   DOP: 16
@@ -128,8 +114,8 @@ PLAN FRAGMENT 1
   |  
   5:Project
   |  <slot 22> : 22: p_type
-  |  <slot 28> : 33: multiply
-  |  <slot 33> : clone(33: multiply)
+  |  <slot 28> : clone(33: multiply)
+  |  <slot 33> : 33: multiply
   |  common expressions:
   |  <slot 32> : 1.0 - 7: L_DISCOUNT
   |  <slot 33> : 6: L_EXTENDEDPRICE * 32: subtract

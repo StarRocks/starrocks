@@ -16,11 +16,14 @@ package com.starrocks.connector.hive;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -32,15 +35,15 @@ public class HiveMetadataFactory {
     private final IHiveMetastore metastore;
     private final RemoteFileIO remoteFileIO;
     private final long perQueryMetastoreMaxNum;
-    private final long perQueryCacheRemotePathMaxNum;
+    private final double perQueryCacheRemotePathMaxMemoryRatio;
     private final ExecutorService pullRemoteFileExecutor;
     private final Executor updateRemoteFilesExecutor;
     private final Executor updateStatisticsExecutor;
-    private final Executor refreshOthersFeExecutor;
     private final boolean isRecursive;
     private final boolean enableHmsEventsIncrementalSync;
     private final HdfsEnvironment hdfsEnvironment;
     private final MetastoreType metastoreType;
+    private final ConnectorProperties connectorProperties;
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -50,33 +53,34 @@ public class HiveMetadataFactory {
                                ExecutorService pullRemoteFileExecutor,
                                Executor updateRemoteFilesExecutor,
                                Executor updateStatisticsExecutor,
-                               Executor refreshOthersFeExecutor,
                                boolean isRecursive,
                                boolean enableHmsEventsIncrementalSync,
                                HdfsEnvironment hdfsEnvironment,
-                               MetastoreType metastoreType) {
+                               MetastoreType metastoreType,
+                               Map<String, String> properties) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
-        this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
+        this.perQueryCacheRemotePathMaxMemoryRatio = 0.0; //It is duplicated with Catalog level CachingRemoteFileIO, set as 0.
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.updateRemoteFilesExecutor = updateRemoteFilesExecutor;
         this.updateStatisticsExecutor = updateStatisticsExecutor;
-        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
         this.isRecursive = isRecursive;
         this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
         this.hdfsEnvironment = hdfsEnvironment;
         this.metastoreType = metastoreType;
+        this.connectorProperties = new ConnectorProperties(ConnectorType.HIVE, properties);
     }
 
     public HiveMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
-                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
-                metastore instanceof CachingHiveMetastore,
-                hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
+                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum,
+                        Optional.of(new AvroSchemaResolver(hdfsEnvironment.getConfiguration()))),
+                metastore instanceof CachingHiveMetastore, hdfsEnvironment.getConfiguration(), metastoreType,
+                catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
-                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
+                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxMemoryRatio),
                 pullRemoteFileExecutor,
                 updateRemoteFilesExecutor,
                 isRecursive,
@@ -84,15 +88,16 @@ public class HiveMetadataFactory {
                 hdfsEnvironment.getConfiguration());
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
 
-        Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new HiveMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations, remoteFileOperations,
-                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor);
+                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor,
+                connectorProperties);
     }
 
-    public synchronized Optional<CacheUpdateProcessor> getCacheUpdateProcessor() {
-        Optional<CacheUpdateProcessor> cacheUpdateProcessor;
+    public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
-            cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(
+            cacheUpdateProcessor = Optional.of(new HiveCacheUpdateProcessor(
                     catalogName, metastore, remoteFileIO, pullRemoteFileExecutor,
                     isRecursive, enableHmsEventsIncrementalSync));
         } else {

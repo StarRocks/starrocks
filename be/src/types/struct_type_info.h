@@ -10,14 +10,16 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License
+// limitations under the License.
 
 #pragma once
 
-#include "storage/types.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
 TypeInfoPtr get_struct_type_info(std::vector<TypeInfoPtr> field_types);
+
+const std::vector<TypeInfoPtr>& get_struct_field_types(const TypeInfo* type_info);
 
 } // namespace starrocks

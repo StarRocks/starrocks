@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将字符串中所有字符转换为小写。"
 ---
 
 # lower
 
-## 功能
+
 
 将参数中所有的字符串转换成小写。
 

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the first non-NULL expression among the input parameters."
 ---
 
 # coalesce
 
-## Description
+
 
 Returns the first non-NULL expression among the input parameters. Returns NULL if non-NULL expressions cannot be found.
 

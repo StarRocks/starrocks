@@ -14,22 +14,25 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,9 +43,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class CatalogUtils {
 
@@ -54,7 +58,7 @@ public class CatalogUtils {
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
@@ -69,9 +73,39 @@ public class CatalogUtils {
 
     // check table state
     public static void checkTableState(OlapTable olapTable, String tableName) throws DdlException {
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), tableName);
         }
+    }
+
+    /**
+     * Format partition values from an existing partition for log comparison.
+     */
+    private static String formatExistedPartitionValues(OlapTable olapTable, Partition partition) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        long partitionId = partition.getId();
+        if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
+            List<String> values = listInfo.getIdToValues().get(partitionId);
+            List<List<String>> multiValues = listInfo.getIdToMultiValues().get(partitionId);
+            if (values != null && !values.isEmpty()) {
+                return "VALUES IN (" + values.stream().map(v -> "'" + v + "'")
+                        .collect(Collectors.joining(",")) + ")";
+            }
+            if (multiValues != null && !multiValues.isEmpty()) {
+                return "VALUES IN (" + multiValues.stream()
+                        .map(row -> "(" + row.stream().map(v -> "'" + v + "'")
+                                .collect(Collectors.joining(",")) + ")")
+                        .collect(Collectors.joining(",")) + ")";
+            }
+        } else if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
+            Range<PartitionKey> range = rangeInfo.getRange(partitionId);
+            return range != null ? range.toString() : "null";
+        }
+        return "unknown";
     }
 
     public static Set<String> checkPartitionNameExistForAddPartitions(OlapTable olapTable,
@@ -84,6 +118,17 @@ public class CatalogUtils {
                 if (partitionDesc.isSetIfNotExists()) {
                     existPartitionNameSet.add(partitionName);
                 } else {
+                    // add more information for user
+                    // checkPartitionNameExist checks both normal and temp partitions, so fall back to temp lookup
+                    Partition existedPartition = olapTable.getPartition(partitionName);
+                    if (existedPartition == null) {
+                        existedPartition = olapTable.getPartition(partitionName, true);
+                    }
+                    String existedValues = existedPartition != null
+                            ? formatExistedPartitionValues(olapTable, existedPartition) : "unknown";
+                    String currentValues = partitionDesc.toString();
+                    LOG.warn("Duplicate partition name {}, existed values: {}, current values: {}", partitionName,
+                            existedValues, currentValues);
                     ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);
                 }
             }
@@ -91,25 +136,47 @@ public class CatalogUtils {
         return existPartitionNameSet;
     }
 
+    public static boolean checkIfNewPartitionExists(OlapTable olapTable, Set<String> creatingPartitionNames) {
+        for (String creatingPartitionName : creatingPartitionNames) {
+            if (!olapTable.checkPartitionNameExist(creatingPartitionName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static Set<String> getPartitionNamesFromAddPartitionClause(AddPartitionClause addPartitionClause) {
+        Set<String> partitionNames = new TreeSet<>();
+        PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
+        if (partitionDesc instanceof SingleItemListPartitionDesc
+                || partitionDesc instanceof MultiItemListPartitionDesc
+                || partitionDesc instanceof SingleRangePartitionDesc) {
+            partitionNames.add(partitionDesc.getPartitionName());
+        } else if (partitionDesc instanceof RangePartitionDesc) {
+            for (PartitionDesc desc : ((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()) {
+                partitionNames.add(desc.getPartitionName());
+            }
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            for (PartitionDesc desc : (((ListPartitionDesc) partitionDesc).getPartitionDescs())) {
+                partitionNames.add(desc.getPartitionName());
+            }
+        }
+        return partitionNames;
+    }
+
     // Used to temporarily disable some command on lake table and remove later.
-    public static void checkIsLakeTable(String dbName, String tableName) throws AnalysisException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+    public static void checkIsLakeTable(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             return;
         }
 
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                return;
-            }
-            if (table.isCloudNativeTable()) {
-                throw new AnalysisException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        if (table == null) {
+            return;
+        }
+        if (table.isCloudNativeTable()) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
         }
     }
 
@@ -180,8 +247,8 @@ public class CatalogUtils {
     }
 
     public static void checkTempPartitionConflict(List<Partition> partitionList,
-                                               List<Partition> tempPartitionList,
-                                               ListPartitionInfo listPartitionInfo) throws DdlException {
+                                                  List<Partition> tempPartitionList,
+                                                  ListPartitionInfo listPartitionInfo) throws DdlException {
         Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
         Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
         Map<Long, List<LiteralExpr>> newListMap = new HashMap<>(listMap);
@@ -197,21 +264,21 @@ public class CatalogUtils {
         Set<Object> tempSet = new HashSet<>();
         Set<List<Object>> tempMultiSet = new HashSet<>();
         for (Partition partition : tempPartitionList) {
-            if (!listMap.isEmpty()) {
-                listMap.get(partition.getId()).forEach(item -> {
-                    tempSet.add(item.getRealObjectValue());
-                });
-                newListMap.remove(partition.getId());
-            }
-            if (!multiListMap.isEmpty()) {
-                multiListMap.get(partition.getId()).forEach(itemList -> {
-                    List<Object> cur = new ArrayList<>();
-                    itemList.forEach(item -> {
-                        cur.add(item.getRealObjectValue());
-                    });
-                    tempMultiSet.add(cur);
-                });
+            if (listPartitionInfo.isMultiColumnPartition()) {
+                tempMultiSet = multiListMap.get(partition.getId())
+                        .stream()
+                        .map(literalExprs -> literalExprs
+                                .stream()
+                                .map(LiteralExpr::getRealObjectValue)
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toSet());
                 newMultiListMap.remove(partition.getId());
+            } else {
+                tempSet = listMap.get(partition.getId())
+                        .stream()
+                        .map(LiteralExpr::getRealObjectValue)
+                        .collect(Collectors.toSet());
+                newListMap.remove(partition.getId());
             }
         }
 
@@ -249,81 +316,202 @@ public class CatalogUtils {
         }
     }
 
-    public static void checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc,
-                                                                    boolean isTemp)
+    /**
+     * Check if partition values already exist in the table for list partition.
+     * @return true if partition values already exist (duplicate), false otherwise
+     */
+    public static boolean checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc,
+                                                                       boolean isTemp)
             throws DdlException {
         try {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
-            List<Long> partitionIds = listPartitionInfo.getPartitionIds(isTemp);
+            Set<Long> partitionIds = Sets.newHashSet();
+
+            if (isTemp) {
+                // Temp partitions don't need to check against formal partitions.
+                // Temp partitions from different transactions should be isolated until commit.
+                // This fixes the issue where concurrent transactions cannot create temp partitions with same values.
+                String partitionName = partitionDesc.getPartitionName();
+                String txnPrefix = extractTxnPrefix(partitionName);
+                if (txnPrefix != null) {
+                    // This is an insert overwrite temp partition, only check temp partitions from the same txn
+                    for (Partition tempPartition : olapTable.getTempPartitions()) {
+                        if (tempPartition.getName().startsWith(txnPrefix)) {
+                            partitionIds.add(tempPartition.getId());
+                        }
+                    }
+                } else {
+                    // This is a non-insert-overwrite temp partition, check all non-txn temp partitions
+                    for (Partition tempPartition : olapTable.getTempPartitions()) {
+                        String tempTxnPrefix = extractTxnPrefix(tempPartition.getName());
+                        if (tempTxnPrefix == null) {
+                            // Add non-txn temp partitions to the check list
+                            partitionIds.add(tempPartition.getId());
+                        }
+                    }
+                }
+            } else {
+                // For formal partitions, check against all formal partitions
+                partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(false));
+            }
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
-                List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
-                listPartitionInfo.getLiteralExprValues().forEach((k, v) -> {
-                    if (partitionIds.contains(k)) {
-                        allLiteralExprValues.addAll(v);
-                    }
-                });
-
+                Set<LiteralExpr> existingValues = listPartitionInfo.getValuesSet(partitionIds);
                 SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
-                    for (LiteralExpr value : allLiteralExprValues) {
-                        if (item.getStringValue().equals(value.getStringValue())) {
-                            throw new DdlException("Duplicate partition value " + item.getStringValue());
-                        }
+                    if (existingValues.contains(item)) {
+                        return true;
                     }
                 }
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
-                listPartitionInfo.setBatchMultiLiteralExprValues(listPartitionInfo.getIdToMultiValues());
-                List<List<LiteralExpr>> allMultiLiteralExprValues = Lists.newArrayList();
-                listPartitionInfo.getMultiLiteralExprValues().forEach((k, v) -> {
-                    if (partitionIds.contains(k)) {
-                        allMultiLiteralExprValues.addAll(v);
-                    }
-                });
-
-                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
+                int partitionColSize = listPartitionInfo.getPartitionColumnsSize();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
-                for (List<LiteralExpr> itemExpr : multiItemListPartitionDesc.getMultiLiteralExprValues()) {
-                    for (List<LiteralExpr> valueExpr : allMultiLiteralExprValues) {
-                        int duplicatedSize = 0;
-                        for (int i = 0; i < itemExpr.size(); i++) {
-                            String itemValue = itemExpr.get(i).getStringValue();
-                            String value = valueExpr.get(i).getStringValue();
-                            if (value.equals(itemValue)) {
-                                duplicatedSize++;
-                            }
-                        }
-                        if (duplicatedSize == partitionColSize) {
-                            List<String> msg = itemExpr.stream()
-                                    .map(value -> ("\"" + value.getStringValue() + "\""))
-                                    .collect(Collectors.toList());
-                            throw new DdlException("Duplicate values " +
-                                    "(" + String.join(",", msg) + ") ");
-                        }
-                    }
-                }
+                return isItemValuesExist(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
+                        multiItemListPartitionDesc);
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
+        return false;
     }
 
-    public static int calPhysicalPartitionBucketNum() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+    /**
+     * Extract the txn prefix from partition name if it's created by insert overwrite.
+     * Insert overwrite creates temp partitions with name format: "txn<txn_id>_<original_name>"
+     * @param partitionName the partition name to check
+     * @return the txn prefix (e.g., "txn12345_") if the partition is created by insert overwrite, null otherwise
+     */
+    static String extractTxnPrefix(String partitionName) {
+        if (partitionName == null || !partitionName.startsWith("txn")) {
+            return null;
+        }
+        int underscoreIndex = partitionName.indexOf('_');
+        if (underscoreIndex <= 3) {
+            // "txn" is 3 characters, there should be at least one digit before underscore
+            return null;
+        }
+        // Verify that characters between "txn" and "_" are all digits (txn id)
+        String txnIdPart = partitionName.substring(3, underscoreIndex);
+        for (char c : txnIdPart.toCharArray()) {
+            if (!Character.isDigit(c)) {
+                return null;
+            }
+        }
+        // Return prefix including the underscore, e.g., "txn12345_"
+        return partitionName.substring(0, underscoreIndex + 1);
+    }
 
-        if (RunMode.isSharedDataMode()) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+    /**
+     * Check if multi-item partition values already exist.
+     * @return true if values already exist (duplicate), false otherwise
+     */
+    private static boolean isItemValuesExist(int partitionColSize, Set<Long> partitionIds,
+                                             Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues,
+                                             MultiItemListPartitionDesc multiItemListPartitionDesc)
+            throws AnalysisException {
+        List<Map<LiteralExpr, Set<Long>>> valueToIdIndexList = new ArrayList<>();
+        for (int i = 0; i < partitionColSize; ++i) {
+            valueToIdIndexList.add(new HashMap<>());
         }
 
-        return Math.min(backendNum, 16);
+        for (Long partitionId : partitionIds) {
+            List<List<LiteralExpr>> multiValues = idToMultiLiteralExprValues.get(partitionId);
+            if (multiValues == null) {
+                // Because of the shadow partition, there may be a situation where multiValues==null
+                continue;
+            }
+
+            for (int columnIdx = 0; columnIdx < partitionColSize; ++columnIdx) {
+                List<LiteralExpr> col = new ArrayList<>();
+                for (List<LiteralExpr> multiValue : multiValues) {
+                    LiteralExpr v = multiValue.get(columnIdx);
+                    col.add(v);
+                }
+
+                Map<LiteralExpr, Set<Long>> v2i = valueToIdIndexList.get(columnIdx);
+                for (LiteralExpr value : col) {
+                    if (v2i.containsKey(value)) {
+                        v2i.get(value).add(partitionId);
+                    } else {
+                        Set<Long> s = new HashSet<>();
+                        s.add(partitionId);
+                        v2i.put(value, s);
+                    }
+                }
+            }
+        }
+
+        for (List<LiteralExpr> values : multiItemListPartitionDesc.getMultiLiteralExprValues()) {
+            boolean isValid = false;
+            Set<Long> pSet = null;
+            for (int i = 0; i < values.size(); ++i) {
+                Map<LiteralExpr, Set<Long>> valueToPartitionIdIndex = valueToIdIndexList.get(i);
+                if (!valueToPartitionIdIndex.containsKey(values.get(i))) {
+                    isValid = true;
+                    break;
+                } else {
+                    if (pSet == null) {
+                        pSet = new HashSet<>(valueToPartitionIdIndex.get(values.get(i)));
+                    } else {
+                        pSet.retainAll(valueToPartitionIdIndex.get(values.get(i)));
+                    }
+                }
+                if (pSet.isEmpty()) {
+                    isValid = true;
+                    break;
+                }
+            }
+            if (!isValid) {
+                // Values already exist (duplicate)
+                return true;
+            }
+        }
+        return false;
     }
 
-    public static int calBucketNumAccordingToBackends() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+    public static int divisibleBucketNum(int backendNum) {
+        while (backendNum > 7) {
+            if (backendNum % 2 == 0) {
+                backendNum = backendNum / 2;
+            } else if (backendNum % 3 == 0) {
+                backendNum = backendNum / 3;
+            } else if (backendNum % 5 == 0) {
+                backendNum = backendNum / 5;
+            } else if (backendNum % 7 == 0) {
+                backendNum = backendNum / 7;
+            } else {
+                backendNum = backendNum / 2;
+            }
+        }
+
+        return backendNum;
+    }
+
+    // Count compute nodes for bucket sizing. Light-weight tablet creation can succeed
+    // without any alive CN, so when invoked from that path (useTotalNodes = true) we
+    // include configured-but-offline CNs so auto-bucket still produces a sensible value.
+    // Regular CREATE TABLE keeps the original "only count alive CNs" behavior.
+    private static int computeNodeCountForBucketSizing(boolean useTotalNodes) {
+        return useTotalNodes
+                ? GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber()
+                : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+    }
+
+    public static int calPhysicalPartitionBucketNum(boolean lightWeight) {
+        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
 
         if (RunMode.isSharedDataMode()) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+            backendNum = backendNum + computeNodeCountForBucketSizing(lightWeight);
+        }
+
+        return divisibleBucketNum(backendNum);
+    }
+
+    public static int calBucketNumAccordingToBackends(boolean lightWeight) {
+        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
+
+        if (RunMode.isSharedDataMode()) {
+            backendNum = backendNum + computeNodeCountForBucketSizing(lightWeight);
         }
 
         // When POC, the backends is not greater than three most of the time.
@@ -347,7 +535,12 @@ public class CatalogUtils {
         //    Or the Config.enable_auto_tablet_distribution is disabled
         int bucketNum = 0;
         if (olapTable.getPartitions().size() < recentPartitionNum || !enableAutoTabletDistribution) {
-            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            bucketNum = CatalogUtils.calBucketNumAccordingToBackends(olapTable.isLightWeightTabletCreation());
+            // If table is not partitioned, the bucketNum should be at least DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM
+            if (!olapTable.getPartitionInfo().isPartitioned()) {
+                bucketNum = bucketNum > FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM ?
+                        bucketNum : FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM;
+            }
             return bucketNum;
         }
 
@@ -355,13 +548,13 @@ public class CatalogUtils {
         List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
         boolean dataImported = true;
         for (Partition partition : partitions) {
-            if (partition.getVisibleVersion() == 1) {
+            if (partition.getDefaultPhysicalPartition().getVisibleVersion() == 1) {
                 dataImported = false;
                 break;
             }
         }
 
-        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+        bucketNum = CatalogUtils.calBucketNumAccordingToBackends(olapTable.isLightWeightTabletCreation());
         if (!dataImported) {
             return bucketNum;
         }
@@ -374,7 +567,8 @@ public class CatalogUtils {
         // A tablet will be regarded using the 1GB size
         // And also the number will not be larger than the calBucketNumAccordingToBackends()
         long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
-        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
+        // speculateTabletNum may be not accurate, so we need to take the max value of bucketNum and speculateTabletNum
+        bucketNum = (int) Math.max(bucketNum, speculateTabletNum);
         if (bucketNum == 0) {
             bucketNum = 1;
         }

@@ -18,10 +18,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 // Mysql schema used for MySQL compatible.
 public class SysDb extends Database {
     public static final String DATABASE_NAME = "sys";
@@ -32,26 +28,20 @@ public class SysDb extends Database {
         super.registerTableUnlocked(GrantsTo.createGrantsToRoles());
         super.registerTableUnlocked(GrantsTo.createGrantsToUsers());
         super.registerTableUnlocked(SysObjectDependencies.create());
+        super.registerTableUnlocked(SysFeLocks.create());
+        super.registerTableUnlocked(SysFeMemoryUsage.create());
     }
 
     @Override
-    public void dropTableWithLock(String name) {
+    public Table dropTable(String name) {
         // Do nothing.
+        return null;
     }
 
-    @Override
-    public void dropTable(String name) {
-        // Do nothing.
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // Do nothing
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new IOException("Not support.");
-    }
+
+
 
     @Override
     public Table getTable(String name) {

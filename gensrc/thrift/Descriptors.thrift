@@ -38,20 +38,41 @@ namespace java com.starrocks.thrift
 include "Types.thrift"
 include "Exprs.thrift"
 
+enum TRowPositionType {
+    ICEBERG_V3_ROW_POSITION,
+    OLAP_ROW_POSITION,
+    LAKE_ROW_POSITION,
+}
+
+// used to describe row position for different tables
+struct TRowPositionDescriptor {
+    1: optional TRowPositionType row_position_type;
+    // which node used to do fetch operation
+    2: optional Types.TSlotId row_source_slot;
+    3: optional list<Types.TSlotId> fetch_ref_slots;
+    4: optional list<Types.TSlotId> lookup_ref_slots;
+    5: optional i32 scan_node_id;
+}
+
 struct TSlotDescriptor {
   1: optional Types.TSlotId id
   2: optional Types.TTupleId parent
   3: optional Types.TTypeDesc slotType
   4: optional i32 columnPos   // Deprecated
   5: optional i32 byteOffset  // Deprecated
-  6: optional i32 nullIndicatorByte // Deprecated
-  7: optional i32 nullIndicatorBit // Deprecated
+  6: optional i32 nullIndicatorByte = 0 // Deprecated
+  7: optional i32 nullIndicatorBit = -1 // Deprecated
   8: optional string colName;
   9: optional i32 slotIdx // Deprecated
   10: optional bool isMaterialized // Deprecated
   11: optional bool isOutputColumn // Deprecated
   12: optional bool isNullable // replace nullIndicatorBit & nullIndicatorByte
   13: optional i32 col_unique_id = -1
+  // col_physical_name is used to store the physical name of the column in the storage layer.
+  // for example, the physical name of a column in a parquet file.
+  // used in delta lake column mapping name mode
+  14: optional string col_physical_name
+  15: optional bool is_virtual_column = false
 }
 
 struct TTupleDescriptor {
@@ -64,13 +85,16 @@ struct TTupleDescriptor {
 
 enum THdfsFileFormat {
   TEXT = 0,
-  LZO_TEXT = 1,
-  RC_BINARY = 2,
-  RC_TEXT = 3,
+  LZO_TEXT = 1, // Deprecated
+  RC_FILE = 2,
+  // THdfsFileFormat is only used to represent FileFormat, not SerializeFormat,
+  // so there is no need to split it into RC_BINARY and RC_TEXT.
+  RC_TEXT = 3, // Deprecated
   AVRO = 4,
   PARQUET = 5,
   ORC = 6,
   SEQUENCE_FILE = 7,
+  LANCE = 8,
 
   UNKNOWN = 100
 }
@@ -100,69 +124,106 @@ struct TTextFileDesc {
     
     // escape character
     8: optional i8 escape
+
+    9: optional i32 skip_header_line_count
 }
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TSchemaTableType {
     SCH_AUTHORS= 0,
-    SCH_CHARSETS,
-    SCH_COLLATIONS,
-    SCH_COLLATION_CHARACTER_SET_APPLICABILITY,
-    SCH_COLUMNS,
-    SCH_COLUMN_PRIVILEGES,
-    SCH_CREATE_TABLE,
-    SCH_ENGINES,
-    SCH_EVENTS,
-    SCH_FILES,
-    SCH_GLOBAL_STATUS,
-    SCH_GLOBAL_VARIABLES,
-    SCH_KEY_COLUMN_USAGE,
-    SCH_MATERIALIZED_VIEWS,
-    SCH_OPEN_TABLES,
-    SCH_PARTITIONS,
-    SCH_PLUGINS,
-    SCH_PROCESSLIST,
-    SCH_PROFILES,
-    SCH_REFERENTIAL_CONSTRAINTS,
-    SCH_PROCEDURES,
-    SCH_SCHEMATA,
-    SCH_SCHEMA_PRIVILEGES,
-    SCH_SESSION_STATUS,
-    SCH_SESSION_VARIABLES,
-    SCH_STATISTICS,
-    SCH_STATUS,
-    SCH_TABLES,
-    SCH_TABLES_CONFIG,
-    SCH_TABLE_CONSTRAINTS,
-    SCH_TABLE_NAMES,
-    SCH_TABLE_PRIVILEGES,
-    SCH_TRIGGERS,
-    SCH_USER_PRIVILEGES,
-    SCH_VARIABLES,
-    SCH_VIEWS,
-    SCH_TASKS,
-    SCH_TASK_RUNS,
-    SCH_VERBOSE_SESSION_VARIABLES,
-    SCH_BE_TABLETS,
-    SCH_BE_METRICS,
-    SCH_BE_TXNS,
-    SCH_BE_CONFIGS,
-    SCH_LOADS,
-    SCH_LOAD_TRACKING_LOGS,
-    SCH_FE_TABLET_SCHEDULES,
-    SCH_BE_COMPACTIONS,
-    SCH_BE_THREADS,
-    SCH_BE_LOGS,
-    SCH_BE_BVARS,
-    SCH_BE_CLOUD_NATIVE_COMPACTIONS,
-    STARROCKS_ROLE_EDGES,
-    STARROCKS_GRANT_TO_ROLES,
-    STARROCKS_GRANT_TO_USERS,
-    STARROCKS_OBJECT_DEPENDENCIES,
-    SCH_ROUTINE_LOAD_JOBS,
-    SCH_STREAM_LOADS,
-    SCH_PIPE_FILES,
-    SCH_PIPES,
-    SCH_FE_METRICS
+    SCH_CHARSETS = 1,
+    SCH_COLLATIONS = 2,
+    SCH_COLLATION_CHARACTER_SET_APPLICABILITY = 3,
+    SCH_COLUMNS = 4,
+    SCH_COLUMN_PRIVILEGES = 5,
+    SCH_CREATE_TABLE = 6,
+    SCH_ENGINES = 7,
+    SCH_EVENTS = 8,
+    SCH_FILES = 9,
+    SCH_GLOBAL_STATUS = 10,
+    SCH_GLOBAL_VARIABLES = 11,
+    SCH_KEY_COLUMN_USAGE = 12,
+    SCH_MATERIALIZED_VIEWS = 13,
+    SCH_OPEN_TABLES = 14,
+    SCH_PARTITIONS = 15,
+    SCH_PLUGINS = 16,
+    SCH_PROCESSLIST = 17,
+    SCH_PROFILES = 18,
+    SCH_REFERENTIAL_CONSTRAINTS = 19,
+    SCH_PROCEDURES = 20,
+    SCH_SCHEMATA = 21,
+    SCH_SCHEMA_PRIVILEGES = 22,
+    SCH_SESSION_STATUS = 23,
+    SCH_SESSION_VARIABLES = 24,
+    SCH_STATISTICS = 25,
+    SCH_STATUS = 26,
+    SCH_TABLES = 27,
+    SCH_TABLES_CONFIG = 28,
+    SCH_TABLE_CONSTRAINTS = 29,
+    SCH_TABLE_NAMES = 30,
+    SCH_TABLE_PRIVILEGES = 31,
+    SCH_TRIGGERS = 32,
+    SCH_USER_PRIVILEGES = 33,
+    SCH_VARIABLES = 34,
+    SCH_VIEWS = 35,
+    SCH_TASKS = 36,
+    SCH_TASK_RUNS = 37,
+    SCH_VERBOSE_SESSION_VARIABLES = 38,
+    SCH_BE_TABLETS = 39,
+    SCH_BE_METRICS = 40,
+    SCH_BE_TXNS = 41,
+    SCH_BE_CONFIGS = 42,
+    SCH_LOADS = 43,
+    SCH_LOAD_TRACKING_LOGS = 44,
+    SCH_FE_TABLET_SCHEDULES = 45,
+    SCH_BE_COMPACTIONS = 46,
+    SCH_BE_THREADS = 47,
+    SCH_BE_LOGS = 48,
+    SCH_BE_BVARS = 49,
+    SCH_BE_CLOUD_NATIVE_COMPACTIONS = 50,
+
+    STARROCKS_ROLE_EDGES = 51,
+    STARROCKS_GRANT_TO_ROLES = 52,
+    STARROCKS_GRANT_TO_USERS = 53,
+    SCH_ROUTINE_LOAD_JOBS = 54,
+    SCH_STREAM_LOADS = 55,
+    SCH_PIPE_FILES = 56,
+    SCH_PIPES = 57,
+    SCH_FE_METRICS = 58,
+    STARROCKS_OBJECT_DEPENDENCIES = 59,
+    SYS_FE_LOCKS = 60,
+    SYS_FE_MEMORY_USAGE = 61,
+    SCH_PARTITIONS_META = 62,
+    SCH_BE_DATACACHE_METRICS = 63,
+    SCH_TEMP_TABLES = 64,
+    
+    SCH_COLUMN_STATS_USAGE = 65,
+    SCH_ANALYZE_STATUS = 66,
+
+    SCH_CLUSTER_SNAPSHOTS = 67,
+    SCH_CLUSTER_SNAPSHOT_JOBS = 68,
+
+    SCH_KEYWORDS = 69,
+    SCH_APPLICABLE_ROLES = 70,
+
+    SCH_WAREHOUSE_METRICS = 71,
+    SCH_WAREHOUSE_QUERIES = 72,
+
+    SCH_TABLET_RESHARD_JOBS = 73,
+    SCH_RECYCLEBIN_CATALOGS = 74,
+
+    SCH_FE_THREADS = 75,
+
+    SCH_BE_TABLET_WRITE_LOG = 76,
+
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS = 77
 }
 
 enum THdfsCompression {
@@ -176,7 +237,24 @@ enum THdfsCompression {
 }
 
 enum TIndexType {
-  BITMAP
+  BITMAP,
+  GIN,
+  NGRAMBF,
+  VECTOR,
+  // Plain (non-ngram) bloom filter. Used as a fast-path thrift tag for the
+  // lake ADD INDEX IDG flow to carry plain-BF build requests; no TabletIndex
+  // object is created on the FE side for plain BF (source of truth is the
+  // column-level is_bf_column flag driven by the `bloom_filter_columns`
+  // table property).
+  BLOOM_FILTER,
+}
+
+// Not define UNKNOWN type for better compatibility with
+// DistributionInfo.DistributionInfoType definition
+enum TOlapTableDistributionType {
+    HASH,
+    RANDOM,
+    RANGE,
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -204,17 +282,37 @@ struct TColumn {
     9: optional bool is_auto_increment
     10: optional i32 col_unique_id  = -1
     11: optional bool has_bitmap_index = false
+    12: optional Types.TAggStateDesc agg_state_desc
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
     20: optional i32 index_len                 
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
+    // Default value expression for complex types (array/map/struct).
+    // If set, BE will evaluate this expression and convert to JSON string for storage.
+    // For simple types, use |default_value| (field 6) instead.
+    22: optional Exprs.TExpr default_expr
+}
+
+// Key information for locating a specific table schema version.
+struct TTableSchemaKey {
+  1: optional i64 db_id
+  2: optional i64 table_id
+  3: optional i64 schema_id
+}
+
+struct TOlapTableTablet {
+    1: optional i64 id // tablet id
+    2: optional Types.TTabletRange range
 }
 
 struct TOlapTableIndexTablets {
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `index id` is set to the `index meta id`.
     1: required i64 index_id
-    2: required list<i64> tablets
+    2: required list<i64> tablet_ids
+    3: optional list<TOlapTableTablet> tablets
 }
 
 // its a closed-open range
@@ -224,8 +322,8 @@ struct TOlapTablePartition {
     2: optional Exprs.TExprNode start_key
     3: optional Exprs.TExprNode end_key
 
-    // how many tablets in one partition
-    4: required i32 num_buckets
+    // Deprecated, different indexes could have different buckets
+    4: optional i32 deprecated_num_buckets = 0
 
     5: required list<TOlapTableIndexTablets> indexes
 
@@ -256,6 +354,8 @@ struct TOlapTablePartitionParam {
     8: optional list<Exprs.TExpr> partition_exprs
 
     9: optional bool enable_automatic_partition
+
+    10: optional TOlapTableDistributionType distribution_type
 }
 
 struct TOlapTableColumnParam {
@@ -265,11 +365,22 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `id` is set to the `index meta id`.
     1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
+    6: optional i64 schema_id // schema id
+    7: optional map<string, string> column_to_expr_value
+    8: optional bool is_shadow
+    // Per-index distribution routing expressions (slot/cast/literal trees), evaluated
+    // at the sink SENDER to pick the destination tablet for this index. Mirrors
+    // TOlapTablePartitionParam.partition_exprs. When unset, the sink falls back to the
+    // partition-level `distributed_columns` routing (default for all existing loads).
+    // An explicitly EMPTY list means "single tablet, do not route" (degenerate K=1).
+    9: optional list<Exprs.TExpr> distributed_exprs
 }
 
 struct TOlapTableSchemaParam {
@@ -288,6 +399,20 @@ struct TOlapTableIndex {
   2: optional list<string> columns
   3: optional TIndexType index_type
   4: optional string comment
+  5: optional i64 index_id
+
+  // for standalone index
+  // critical common properties
+  6: optional map<string, string> common_properties
+
+  // properties to affect index building
+  7: optional map<string, string> index_properties
+
+  // default properties to affect index searching, can rewrite them through hint
+  8: optional map<string, string> search_properties
+
+  // properties that are different from the above three
+  9: optional map<string, string> extra_properties
 }
 
 struct TTabletLocation {
@@ -386,6 +511,15 @@ struct THdfsTable {
 
     // hive table serde_lib
     9: optional string serde_lib
+
+    // hive table serde properties
+    10: optional map<string, string> serde_properties
+
+    // timezone
+    11: optional string time_zone
+
+    // resolved Avro reader schema json from avro.schema.literal/url
+    12: optional string avro_schema_json
 }
 
 struct TFileTable {
@@ -402,6 +536,9 @@ struct TFileTable {
     5: optional string input_format
 
     6: optional string serde_lib
+
+    // timezone
+    7: optional string time_zone
 }
 
 struct TTableFunctionTable {
@@ -422,10 +559,25 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
-}
 
-struct TIcebergSchema {
-    1: optional list<TIcebergSchemaField> fields
+    7: optional i64 target_max_file_size
+
+    8: optional string csv_row_delimiter
+
+    9: optional string csv_column_seperator
+
+    10: optional bool parquet_use_legacy_encoding
+    11: optional Types.TParquetOptions parquet_options
+
+    12: optional bool csv_include_header
+
+    // enclose character for CSV unload. When set, all non-NULL field values are
+    // wrapped with this character; occurrences of the enclose character (and the
+    // escape character itself) within field content are escaped using csv_escape.
+    13: optional i8 csv_enclose
+
+    // escape character for CSV unload. Used together with csv_enclose.
+    14: optional i8 csv_escape
 }
 
 struct TIcebergSchemaField {
@@ -435,11 +587,19 @@ struct TIcebergSchemaField {
     // Refer to field name
     2: optional string name
 
+    // Mirrors Types.NestedField#isOptional(). Unset means optional: never enforce
+    // NOT NULL without an explicit signal from the Iceberg schema.
+    3: optional bool is_optional
+
     // You can fill other field properties here if you needed
     // .......
 
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
+}
+
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
 }
 
 struct TPartitionMap {
@@ -450,6 +610,19 @@ struct TCompressedPartitionMap {
     1: optional i32 original_len
     2: optional i32 compressed_len
     3: optional string compressed_serialized_partitions
+}
+
+struct TIcebergPartitionInfo {
+    1: optional string source_column_name
+    2: optional string partition_column_name
+    3: optional string transform_expr
+    4: optional Exprs.TExpr partition_expr
+}
+
+struct TSortOrder {
+    1: optional list<i32> sort_key_idxes
+    2: optional list<bool> is_ascs;
+    3: optional list<bool> is_null_firsts;
 }
 
 struct TIcebergTable {
@@ -463,13 +636,21 @@ struct TIcebergTable {
     3: optional TIcebergSchema iceberg_schema
 
     // partition column names
-    4: optional list<string> partition_column_names
+    4: optional list<string> partition_column_names //Deprecated, move to TIcebergPartitionInfo
 
     // partition map may be very big, serialize costs too much, just use serialized byte[]
     5: optional TCompressedPartitionMap compressed_partitions
 
     // if serialize partition info throws exception, then use unserialized partitions
     6: optional map<i64, THdfsPartition> partitions
+
+    // Iceberg equality delete schema, used to support schema evolution
+    7: optional TIcebergSchema iceberg_equal_delete_schema
+
+    8: optional list<TIcebergPartitionInfo> partition_info
+
+    // Iceberg sort order, used to sort data before writing to Iceberg
+    9: optional TSortOrder sort_order
 }
 
 struct THudiTable {
@@ -502,11 +683,40 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+
+    // timezone
+    11: optional string time_zone
 }
 
 struct TPaimonTable {
     // paimon table options
     1: optional string paimon_options
+    // paimon table
+    2: optional string paimon_native_table
+
+    // timezone
+    3: optional string time_zone
+
+    // reuse iceberg schema here, used to support schema evolution
+    4: optional TIcebergSchema paimon_schema
+
+    // Paimon table base path used by the C++ native reader
+    5: optional string paimon_table_path
+
+    // Paimon TableSchema serialized as JSON at planning time
+    6: optional string paimon_table_schema_json
+}
+
+struct TFlussTable {
+    // Encoded scan-time configuration. FE merges catalog-level options and table properties;
+    // BE forwards this to the Java reader for Fluss connection and lake-source setup.
+    1: optional string runtime_conf
+
+    // timezone
+    2: optional string time_zone
+
+    // StarRocks catalog name, used by BE Java reader to reuse Fluss connections.
+    3: optional string catalog_name
 }
 
 struct TDeltaLakeTable {
@@ -535,6 +745,10 @@ struct TJDBCTable {
     6: optional string jdbc_table
     7: optional string jdbc_user
     8: optional string jdbc_passwd
+}
+
+struct TLanceTable {
+  1: optional string lance_dataset_uri
 }
 
 // "Union" of all table types.
@@ -576,6 +790,12 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Lance Table
+  37: optional TLanceTable lanceTable
+
+  // Fluss Table schema
+  38: optional TFlussTable flussTable
 }
 
 struct TDescriptorTable {

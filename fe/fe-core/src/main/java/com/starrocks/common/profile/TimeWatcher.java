@@ -15,51 +15,104 @@
 package com.starrocks.common.profile;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Table;
 import com.starrocks.common.util.DebugUtil;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class TimeWatcher {
-    private int levels = 0;
+    private final List<String> levels = Lists.newArrayList();
+    private final Table<String, String, ScopedTimer> scopedTimers = HashBasedTable.create();
 
-    private final Map<String, ScopedTimer> timers = new LinkedHashMap<>();
-
-    public Timer scope(long time, String name) {
+    public synchronized Timer scope(long time, String name) {
         ScopedTimer t;
-        if (timers.containsKey(name)) {
-            t = timers.get(name);
+        String prefix = String.join("/", levels);
+        if (scopedTimers.row(name).containsKey(prefix)) {
+            t = scopedTimers.row(name).get(prefix);
         } else {
             t = new ScopedTimer(time, name);
-            timers.put(name, t);
+            scopedTimers.put(name, prefix, t);
         }
         t.start();
         return t;
     }
 
+    public Optional<Timer> getTimer(String name) {
+        if (!scopedTimers.containsRow(name)) {
+            return Optional.empty();
+        }
+        Map<String, ScopedTimer> timers = scopedTimers.row(name);
+        if (timers.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(timers.entrySet().stream()
+                .min(Comparator.comparingInt(e -> e.getKey().length()))
+                .map(Map.Entry::getValue)
+                .orElse(null));
+    }
+
     public List<Timer> getAllTimerWithOrder() {
-        return timers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePoints))
+        return scopedTimers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePointNanoSecond))
                 .collect(Collectors.toList());
+    }
+
+    public TimeWatcher fork(boolean retainScope) {
+        TimeWatcher f = new TimeWatcher();
+        if (retainScope) {
+            f.levels.addAll(this.levels);
+        }
+        return f;
+    }
+
+    public synchronized void mergeFrom(TimeWatcher other) {
+        for (Table.Cell<String, String, ScopedTimer> cell : other.scopedTimers.cellSet()) {
+            String name = cell.getRowKey();
+            String prefix = cell.getColumnKey();
+            ScopedTimer otherTimer = cell.getValue();
+
+            ScopedTimer mine = this.scopedTimers.get(name, prefix);
+            if (mine == null) {
+                mine = new ScopedTimer(otherTimer.firstTimePointNanoSecond, name);
+                // scopeLevel from levels.size() is wrong at merge time.
+                // Prefix "A/B" has 1 '/' → scopeLevel 2 (= levels.size() when prefix was built).
+                mine.scopeLevel = prefix.isEmpty()
+                        ? 0
+                        : (int) prefix.chars().filter(c -> c == '/').count() + 1;
+                this.scopedTimers.put(name, prefix, mine);
+            }
+            mine.accumulateFrom(otherTimer);
+        }
     }
 
     private class ScopedTimer extends Timer {
         private final String name;
-        private final int scopeLevel;
-        private final long firstTimePoints;
+        private int scopeLevel;
+        private final long firstTimePointNanoSecond;
         private final Stopwatch stopWatch = Stopwatch.createUnstarted();
 
         private int count = 0;
         private int reentrantCount = 0;
 
+        // Accumulated from detached forks merged into this timer
+        private final AtomicLong accumulatedNanos = new AtomicLong(0);
+        private final AtomicInteger accumulatedCount = new AtomicInteger(0);
+
         public ScopedTimer(long time, String name) {
-            this.firstTimePoints = time;
+            // The reason why here we want nanosecond is to make sure
+            // `getAllTimerWithOrder` can sort times in correct order.
+            this.firstTimePointNanoSecond = time;
             this.name = name;
-            this.scopeLevel = levels;
+            this.scopeLevel = levels.size();
         }
 
         @Override
@@ -72,32 +125,41 @@ public class TimeWatcher {
                 stopWatch.start();
             }
             reentrantCount++;
-            levels++;
             count++;
+            levels.add(name);
         }
 
         public void close() {
             reentrantCount--;
+            levels.remove(levels.size() - 1);
             if (reentrantCount == 0) {
-                levels--;
                 stopWatch.stop();
             }
         }
 
+        void accumulateFrom(ScopedTimer other) {
+            long otherNanos = other.stopWatch.elapsed(TimeUnit.NANOSECONDS) + other.accumulatedNanos.get();
+            int otherCount = other.count + other.accumulatedCount.get();
+            this.accumulatedNanos.addAndGet(otherNanos);
+            this.accumulatedCount.addAndGet(otherCount);
+        }
+
         @Override
         public long getFirstTimePoint() {
-            return firstTimePoints;
+            return firstTimePointNanoSecond / 1000000;
         }
 
         @Override
         public String toString() {
-            return StringUtils.repeat("    ", scopeLevel) + "-- " + name + "[" + count + "] " +
+            int totalCount = count + accumulatedCount.get();
+            return StringUtils.repeat("    ", scopeLevel) + "-- " + name + "[" + totalCount + "] " +
                     DebugUtil.getPrettyStringMs(getTotalTime());
         }
 
         @Override
         public long getTotalTime() {
-            return stopWatch.elapsed(TimeUnit.MILLISECONDS);
+            return stopWatch.elapsed(TimeUnit.MILLISECONDS)
+                    + TimeUnit.NANOSECONDS.toMillis(accumulatedNanos.get());
         }
     }
 }

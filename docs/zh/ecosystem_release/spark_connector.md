@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "StarRocks Connector for Apache Spark 的发布说明和更新日志。"
 ---
 
 # Spark connector 版本发布
@@ -8,8 +9,8 @@ displayed_sidebar: "Chinese"
 
 **使用文档：**
 
-- [使用 Spark connector 导入数据至 StarRocks](../loading/Spark-connector-starrocks.md)
-- [使用 Spark connector 从 StarRocks 读取数据](../unloading/Spark_connector.md)
+- [使用 Spark connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)
+- [使用 Spark connector 从 StarRocks 读取数据](https://docs.starrocks.io/zh/docs/unloading/Spark_connector/)
 
 **源码下载地址：**[starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
@@ -20,27 +21,84 @@ displayed_sidebar: "Chinese"
 您可以通过以下方式获取 Spark connector 的 JAR 包：
 
 - 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
-- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](../loading/Spark-connector-starrocks.md)。
-- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](../loading/Spark-connector-starrocks.md)。
+- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)。
+- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)。
 
 **版本要求：**
 
-| Connector | Spark         | StarRocks  | Java | Scala |
-| --------- | ------------- | ---------- | ---- | ----- |
-| 1.1.1     | 3.2, 3.3, 3.4 | 2.5 及以上 | 8    | 2.12  |
-| 1.1.0     | 3.2, 3.3, 3.4 | 2.5 及以上 | 8    | 2.12  |
+| Spark connector | Spark              | StarRocks     | Java | Scala |
+| --------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
 
 ## 发布记录
 
 ### 1.1
 
-**1.1.1**
+#### 1.1.4
+
+该版本主要包含一些新特性和改进。
+
+**新增特性**
+
+- 新增对 StarRocks catalog 的支持。[#109](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/109)
+- 新增对 `bitmap_hash64` 的支持。[#130](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/130)
+- 支持嵌套字段（Struct、Array 和 Map）。[#152](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/152)
+- 支持通过 Spark catalog 进行数据读写。[#140](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/140)
+- 支持 Spark 4.0 和 Scala 2.13。[#154](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/154)
+
+**功能优化**
+
+- 新增安全策略。[#139](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/139)
+
+**问题修复**
+
+- 修复 DataSource V2 中的过滤器下推错误。[#141](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/141)
+
+#### 1.1.3
+
+该版本主要包含一些新特性和改进。
+
+**新增特性**
+
+- Sink 支持 LZ4 压缩算法。[#110](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/110)
+
+**功能优化**
+
+- 支持读取和写入带有微秒的 StarRocks DATETIME 数据类型。[#123](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/123)
+- 支持配置写入操作的 Socket 超时时间。[#122](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/122)
+- 增大了 `jackson-core` 的最大字符串长度。[#129](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/129)
+
+**问题修复**
+
+- 修复了由于列名使用关键字导致的解析错误。（修复后，BuildScan 中会为列名添加引号。）[#103](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/103)
+- 修复了由于 `java.lang.String` 不是 DATE/TIMESTAMP 类型的有效外部类型而引发的异常。[#111](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/111)
+- 修复了 JSON 类型写入错误的问题。[#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
+
+#### 1.1.2
+
+**新增特性**
+
+- 支持 Spark 的版本为 3.5。[#89](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/89)
+- 通过 Spark SQL 读取 StarRocks 时支持 `starrocks.filter.query` 参数。[#92](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/92)
+- 支持读取 StarRocks 中 JSON 类型的列。[#100](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/100)
+
+**功能优化**
+
+- 优化报错信息。读取 StarRocks 时如果在 `starrocks.columns` 指定 StarRocks 表中不存在的列，则报错信息会明确提示不存在的列名。[#97](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/97)
+- Spark connector 通过 HTTP 向 StarRocks 的 FE 请求查询计划时出现异常的时候，FE 会把异常信息通过 HTTP 本身的 status 和 entity 返回给 Spark connector。[#98](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/98)
+
+#### 1.1.1
 
 本版本发布主要包括如下新增特性和功能优化，涉及导入数据到 StarRocks。
 
 > **注意**
 >
-> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](../loading/Spark-connector-starrocks.md#升级-spark-connector)。
+> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/#升级-spark-connector)。
 
 **新增特性**
 
@@ -63,7 +121,7 @@ displayed_sidebar: "Chinese"
 
 **问题修复**
 
-- 解析 CSV 相关参数 `column_seperator` 和`row_delimiter` 中的转义字符。[#85](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/85)
+- 解析 CSV 相关参数 `column_separator` 和`row_delimiter` 中的转义字符。[#85](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/85)
 
 **文档**
 
@@ -71,9 +129,9 @@ displayed_sidebar: "Chinese"
 - 新增示例说明如何导入至 BITMAP 和 HLL 类型的列。[#70](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/70)
 - 新增 Python 编写的 Spark 应用程序示例。[#72](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/72)
 - 新增导入 ARRAY 类型数据的示例。[#75](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/75)
-- 新增示例说明如何实现主键模型表的部分更新和条件更新。[#80](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/80)
+- 新增示例说明如何实现主键表的部分更新和条件更新。[#80](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/80)
 
-**1.1.0**
+#### 1.1.0
 
 **新增特性**
 
@@ -81,7 +139,7 @@ displayed_sidebar: "Chinese"
 
 ### 1.0
 
-**1.0.0**
+#### 1.0.0
 
 **新增特性**
 

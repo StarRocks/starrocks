@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "使用指定分隔符将多个字符串连接成一个新字符串。"
 ---
 
 # concat_ws
 
-## 功能
+
 
 使用分隔符将两个或以上的字符串拼接成一个新的字符串。新字符串使用分隔符进行连接。
 

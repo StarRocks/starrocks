@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "在字符串左侧填充指定字符使其达到指定长度。"
 ---
 
 # lpad
 
-## 功能
+
 
 根据指定的长度在字符串前面（左侧）追加字符。
 

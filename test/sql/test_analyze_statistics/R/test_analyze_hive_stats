@@ -1,0 +1,65 @@
+-- name: test_analyze_hive_stats
+create external catalog analyze_hive_stats PROPERTIES (
+     "type"="hive",
+     "hive.metastore.uris"="${hive_metastore_uris}",
+     "aws.s3.access_key"="${oss_ak}",
+     "aws.s3.secret_key"="${oss_sk}",
+     "aws.s3.endpoint"="${oss_endpoint}"
+ );
+-- result:
+-- !result
+analyze table analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy;
+-- result:
+[REGEX]OK
+-- !result
+select count(1) from default_catalog._statistics_.external_column_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name='hive_oss_par_parquet_snappy';
+-- result:
+8
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 5, "desc": "wait fe cache stats finished"}
+  result=explain costs select * from analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy;
+  CHECK: re.search("col_int.*ESTIMATE", ${result}) != None
+} END LOOP
+
+analyze table analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy update histogram on col_int,col_string,col_date;
+-- result:
+[REGEX]OK
+-- !result
+show histogram meta where `table` = 'hive_oss_par_parquet_snappy';
+-- result:
+[REGEX].*HISTOGRAM.*\n.*HISTOGRAM.*\n.*HISTOGRAM.*
+-- !result
+select count(1) from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy';
+-- result:
+3
+-- !result
+select mcv from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy' and column_name = 'col_int';
+-- result:
+[["1","2"],["2","2"]]
+-- !result
+select mcv from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy' and column_name = 'col_string';
+-- result:
+[["hello world","2"],["hello wrold","2"]]
+-- !result
+select mcv from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy' and column_name = 'col_date';
+-- result:
+[["2021-01-01","2"],["2022-01-01","2"]]
+-- !result
+analyze table analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy drop histogram on col_int,col_string;
+-- result:
+-- !result
+show histogram meta where `table` = 'hive_oss_par_parquet_snappy';
+-- result:
+[REGEX].*HISTOGRAM.*
+-- !result
+select (1) from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy';
+-- result:
+1
+-- !result
+analyze table analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy drop histogram on col_date;
+-- result:
+-- !result
+drop catalog analyze_hive_stats
+-- result:
+-- !result

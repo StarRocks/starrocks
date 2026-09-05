@@ -1,0 +1,696 @@
+-- name: test_runtime_filter_push_down_on_local_right_offsprings_of_broadcast_join_with_grf
+    DROP TABLE if exists t0;
+-- result:
+-- !result
+    CREATE TABLE if not exists t0
+    (
+        c0 INT NOT NULL,
+        c1 VARCHAR(32) NOT NULL,
+        c2 VARCHAR(32) NOT NULL
+        
+    ) ENGINE=OLAP
+    DUPLICATE KEY(`c0`
+    )
+    COMMENT "OLAP"
+    DISTRIBUTED BY HASH(`c0`, `c1`
+    ) BUCKETS 64
+    PROPERTIES(
+        "replication_num" = "1",
+        "in_memory" = "false",
+        "storage_format" = "default"
+        
+    );
+-- result:
+-- !result
+    DROP TABLE if exists t1;
+-- result:
+-- !result
+    CREATE TABLE if not exists t1
+    (
+        c0 INT NOT NULL,
+        c1 VARCHAR(32) NOT NULL,
+        c2 VARCHAR(32) NOT NULL
+        
+    ) ENGINE=OLAP
+    DUPLICATE KEY(`c0`
+    )
+    COMMENT "OLAP"
+    DISTRIBUTED BY HASH(`c0`, `c1`
+    ) BUCKETS 64
+    PROPERTIES(
+        "replication_num" = "1",
+        "in_memory" = "false",
+        "storage_format" = "default"
+        
+    );
+-- result:
+-- !result
+    DROP TABLE if exists t2;
+-- result:
+-- !result
+    CREATE TABLE if not exists t2
+    (
+        c0 INT NOT NULL,
+        c1 VARCHAR(32) NOT NULL,
+        c2 VARCHAR(32) NOT NULL
+        
+    ) ENGINE=OLAP
+    DUPLICATE KEY(`c0`
+    )
+    COMMENT "OLAP"
+    DISTRIBUTED BY HASH(`c0`, `c1`
+    ) BUCKETS 64
+    PROPERTIES(
+        "replication_num" = "1",
+        "in_memory" = "false",
+        "storage_format" = "default"
+        
+    );
+-- result:
+-- !result
+    INSERT INTO t0
+    (c0, c1, c2
+    )
+    VALUES
+        ('4', 'DvvRNNLAAKj5mc3e', 'oHHGEp'
+            ),
+        ('8', 'YMV5W6K3Jcv5kp', 'dm9h5J8cHtX6GfDZ8J7odAIJxyZdJSa'
+            ),
+        ('4', 'nqrRk', 'D1ephlGonrHHWnY4ThjhO11'
+            ),
+        ('6', 'A9fWZWnk1WWTJ37', 'V'
+            ),
+        ('9', 'A6f2iV', 'kd2S'
+            ),
+        ('2', 'KxNCswN6q1xZgBmvGxjr24Y', '6SqBgNekQtxOWiZXBrZuaAI1r'
+            ),
+        ('2', 'Sl4ZtHpUMR6JKt0uYkcHvjsNs', 'TmysYNLEyxNGnkgk4NlbSAkS'
+            ),
+        ('8', '985m0SmtQLKH4zZHS', '9BRWRd8pAbBjtqFYfdaeu'
+            ),
+        ('7', 'TRXAIbYTmrTPV1F0', 'KJHp'
+            ),
+        ('3', 'GLRmc1tmqiHpyi4dMaAb0F', 'Q3OkhuxxGMDwTfo273'
+            );
+-- result:
+-- !result
+    INSERT INTO t1
+    (c0, c1, c2
+    )
+    VALUES
+        ('7', '5WUQFPf', '9GszO3v'
+            ),
+        ('4', 'uGywLy7', 'XdPwCy8Kb9wgLzco'
+            ),
+        ('6', '', 'QiWAR1yoW2TsD4hrC16saOw'
+            ),
+        ('8', 'a1HBEfnDhbed4gLtlq', '7QgGrBQDn14bTfdOLSKF'
+            ),
+        ('4', 'r2Igrl0jHPT', 'BPhnKYMqDSTQtXKUEKpjyKodTeLFI9'
+            ),
+        ('4', 'SAztGc55aDcK9jeAnq57eMsXEfYdHA', 'NEfQ'
+            ),
+        ('11', 'mtXUECE2TG23OLToBhvxpPaO', 'zxX'
+            ),
+        ('6', '', 'tji7m72J'
+            ),
+        ('6', '00RSjBQ71AuYlAZg', 'yGGjrU3Y'
+            ),
+        ('9', 'w', 'f9VzBNpbKLt5'
+            );
+-- result:
+-- !result
+    INSERT INTO t2
+    (c0, c1, c2
+    )
+    VALUES
+        ('10', 'hHG9GCIJaE0R1LGw1YOON14EP', 'TSIquQ1H9SuiyrkWXHsPAb'
+            ),
+        ('12', 'GZjvI0nqA29SNPeJu', 'Jv8hlqasc4X'
+            ),
+        ('13', 'yZRjWXPvJ5K7', 'Yy8BcdS'
+            ),
+        ('13', 'Eq3zv98', 'enUAyzJ'
+            ),
+        ('11', 'KfXyxjNoR1UMJLQVov9gqvqW', 'D8tVXXUt'
+            ),
+        ('13', '0EMj6DoEnTBfu', '46aDAUNOiCYdlhFt7N1AUtkQduVmr0'
+            ),
+        ('7', 'sMPdn6duIpSPEakZvgWTHaqGmVCx', 'EXN0OJXKgpJ5GXS5M527hGCutewN2Y'
+            ),
+        ('8', 'GwtKaeSezvRskPeKQA', '2Q3oSkQI4FjMyNKgBA3qZZwPfAL'
+            ),
+        ('6', 'RlUBfggH9iqhgxsUcU4e', 'x8xTgfsJX5ymxNUr'
+            ),
+        ('13', 'RrpepqVmxIYhRv', 'JkLAXbF3n0qFrhKJBFiektS3K1vajU'
+            );
+-- result:
+-- !result
+[UC]ANALYZE FULL TABLE t0;
+-- result:
+test_db_103b1ccefb2911eeafc03f39e8ea0927.t0	analyze	status	OK
+-- !result
+[UC]ANALYZE FULL TABLE t1;
+-- result:
+test_db_103b1ccefb2911eeafc03f39e8ea0927.t1	analyze	status	OK
+-- !result
+[UC]ANALYZE FULL TABLE t2;
+-- result:
+test_db_103b1ccefb2911eeafc03f39e8ea0927.t2	analyze	status	OK
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) as c0, sum(cte0.c1) c1, sum(cte0.c2) c2, sum(murmur_hash3_32(t0.c0)) as d0, sum(murmur_hash3_32(t0.c1)) as d1, sum(murmur_hash3_32 (t0.c2)) as d2
+from cte0 INNER JOIN[broadcast]  t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, cte1.d0, cte1.d1, cte1.d2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+d0+d1+d2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-9052740415
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) as c0, sum(cte0.c1) c1, sum(cte0.c2) c2, sum(murmur_hash3_32(t0.c0)) as d0, sum(murmur_hash3_32(t0.c1)) as d1, sum(murmur_hash3_32 (t0.c2)) as d2
+from cte0 INNER JOIN[broadcast]  t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, cte1.d0, cte1.d1, cte1.d2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+d0+d1+d2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-9052740415
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) as c0, sum(cte0.c1) c1, sum(cte0.c2) c2, sum(murmur_hash3_32(t0.c0)) as d0, sum(murmur_hash3_32(t0.c1)) as d1, sum(murmur_hash3_32 (t0.c2)) as d2
+from cte0 LEFT JOIN[broadcast]  t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, cte1.d0, cte1.d1, cte1.d2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+d0+d1+d2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-9052740415
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) as c0, sum(cte0.c1) c1, sum(cte0.c2) c2, sum(murmur_hash3_32(t0.c0)) as d0, sum(murmur_hash3_32(t0.c1)) as d1, sum(murmur_hash3_32 (t0.c2)) as d2
+from cte0 LEFT JOIN[broadcast]  t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, cte1.d0, cte1.d1, cte1.d2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+d0+d1+d2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-9052740415
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) as c0, sum(cte0.c1) c1, sum(cte0.c2) c2, sum(murmur_hash3_32(t0.c0)) as d0, sum(murmur_hash3_32(t0.c1)) as d1, sum(murmur_hash3_32 (t0.c2)) as d2
+from cte0 FULL JOIN[shuffle]  t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, cte1.d0, cte1.d1, cte1.d2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+d0+d1+d2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-9052740415
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) as c0, sum(cte0.c1) c1, sum(cte0.c2) c2, sum(murmur_hash3_32(t0.c0)) as d0, sum(murmur_hash3_32(t0.c1)) as d1, sum(murmur_hash3_32 (t0.c2)) as d2
+from cte0 FULL JOIN[shuffle]  t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, cte1.d0, cte1.d1, cte1.d2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+d0+d1+d2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-9052740415
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) as c0, sum(cte0.c1) c1, sum(cte0.c2) c2, sum(murmur_hash3_32(t0.c0)) as d0, sum(murmur_hash3_32(t0.c1)) as d1, sum(murmur_hash3_32 (t0.c2)) as d2
+from cte0 CROSS JOIN  t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, cte1.d0, cte1.d1, cte1.d2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+d0+d1+d2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-9052740415
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) as c0, sum(cte0.c1) c1, sum(cte0.c2) c2, sum(murmur_hash3_32(t0.c0)) as d0, sum(murmur_hash3_32(t0.c1)) as d1, sum(murmur_hash3_32 (t0.c2)) as d2
+from cte0 CROSS JOIN  t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, cte1.d0, cte1.d1, cte1.d2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+d0+d1+d2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-9052740415
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0 LEFT SEMI JOIN[broadcast] t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-3160320253
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0 LEFT SEMI JOIN[broadcast] t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-3160320253
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0 LEFT ANTI JOIN[broadcast] t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+20195801
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0 LEFT ANTI JOIN[broadcast] t0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+20195801
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from t0 RIGHT SEMI JOIN[shuffle] cte0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-3160320253
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from t0 RIGHT SEMI JOIN[shuffle] cte0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-3160320253
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from t0 RIGHT ANTI JOIN[shuffle] cte0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+20195801
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  coalesce(cte0.c0, -1) c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from t0 RIGHT ANTI JOIN[shuffle] cte0 on t0.c0 = cte0.c0
+group by 1
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+20195801
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0
+where cte0.c0 not in (select t0.c0 from t0) 
+group by cte0.c0
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+20195801
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0
+where cte0.c0 not in (select t0.c0 from t0) 
+group by cte0.c0
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+20195801
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0
+where cte0.c0 in (select t0.c0 from t0) 
+group by cte0.c0
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-3160320253
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0
+where cte0.c0 in (select t0.c0 from t0) 
+group by cte0.c0
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-3160320253
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0
+where exists (select t0.c0 from t0 where t0.c0 = cte0.c0) 
+group by cte0.c0
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-3160320253
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0
+where exists (select t0.c0 from t0 where t0.c0 = cte0.c0) 
+group by cte0.c0
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+-3160320253
+-- !result
+set enable_global_runtime_filter='false';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0
+where not exists (select t0.c0 from t0 where t0.c0 = cte0.c0) 
+group by cte0.c0
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+20195801
+-- !result
+set enable_global_runtime_filter='true';
+-- result:
+-- !result
+with cte0 as (
+select t1.c0, sum(murmur_hash3_32(t1.c1)) as c1, sum(murmur_hash3_32(t1.c2)) as c2
+from t1
+group by t1.c0
+), 
+cte1 as(
+select  cte0.c0, sum(cte0.c1) c1, sum(cte0.c2) c2
+from cte0
+where not exists (select t0.c0 from t0 where t0.c0 = cte0.c0) 
+group by cte0.c0
+),
+cte2 as( 
+select cte1.c0, cte1.c1, cte1.c2, murmur_hash3_32(t2.c0) as e0, murmur_hash3_32(t2.c1) as e1, murmur_hash3_32(t2.c2) as e2
+from cte1 inner join[shuffle] t2 on cte1.c0 = t2.c0
+)
+select coalesce(sum(murmur_hash3_32(c0)+c1+c2+e0+e1+e2), 0)  as fingerprint
+from cte2;
+-- result:
+20195801
+-- !result

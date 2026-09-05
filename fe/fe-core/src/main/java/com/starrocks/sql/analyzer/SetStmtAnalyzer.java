@@ -14,29 +14,30 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Enums;
+import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.catalog.IndexParams;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.connector.PlanMode;
+import com.starrocks.datacache.DataCachePopulateMode;
+import com.starrocks.monitor.unit.TimeValue;
+import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -48,18 +49,32 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class SetStmtAnalyzer {
     public static void analyze(SetStmt setStmt, ConnectContext session) {
@@ -85,16 +100,23 @@ public class SetStmtAnalyzer {
             throw new SemanticException("No variable name in set statement.");
         }
 
+        // Validate that the variable exists
+        if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(variable)) {
+            String similarVars = GlobalStateMgr.getCurrentState().getVariableMgr().findSimilarVarNames(variable);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable, similarVars);
+        }
+
         Expr unResolvedExpression = var.getUnResolvedExpression();
         LiteralExpr resolvedExpression;
 
         if (unResolvedExpression == null) {
             // SET var = DEFAULT
-            resolvedExpression = new StringLiteral(VariableMgr.getDefaultValue(var.getVariable()));
+            resolvedExpression = new StringLiteral(GlobalStateMgr.getCurrentState().getVariableMgr().
+                    getDefaultValue(var.getVariable()));
         } else if (unResolvedExpression instanceof SlotRef) {
             resolvedExpression = new StringLiteral(((SlotRef) unResolvedExpression).getColumnName());
         } else {
-            Expr e = Expr.analyzeAndCastFold(unResolvedExpression);
+            Expr e = ExprUtils.analyzeAndCastFold(unResolvedExpression);
             if (!e.isConstant()) {
                 throw new SemanticException("Set statement only support constant expr.");
             }
@@ -112,6 +134,21 @@ public class SetStmtAnalyzer {
             if (!value.equalsIgnoreCase("broadcast") && !value.equalsIgnoreCase("shuffle")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, "prefer_join_method", value);
             }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_DISABLED_RULES)) {
+            String value = resolvedExpression.getStringValue();
+            if (!Strings.isNullOrEmpty(value)) {
+                String errorMsg = validateCboDisabledRules(value);
+                if (errorMsg != null) {
+                    throw new SemanticException(errorMsg);
+                }
+            }
+        }
+
+        // Check variable chunk_size value if valid
+        if (variable.equalsIgnoreCase(SessionVariable.CHUNK_SIZE)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.CHUNK_SIZE, 1L, 65535L);
         }
 
         // Check variable load_mem_limit value is valid
@@ -136,7 +173,7 @@ public class SetStmtAnalyzer {
                 checkRangeLongVariable(resolvedExpression, SessionVariable.EXEC_MEM_LIMIT,
                         SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new SemanticException(e.getMessage());
         }
 
@@ -149,6 +186,11 @@ public class SetStmtAnalyzer {
                     1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.INSERT_TIMEOUT,
+                    1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
+        }
+
         if (variable.equalsIgnoreCase(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT, 1L, null);
         }
@@ -157,7 +199,7 @@ public class SetStmtAnalyzer {
             String rgName = resolvedExpression.getStringValue();
             if (!StringUtils.isEmpty(rgName)) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(null, rgName);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgName);
                 }
@@ -167,7 +209,7 @@ public class SetStmtAnalyzer {
             long rgID = resolvedExpression.getLongValue();
             if (rgID > 0) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(rgID);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(null, rgID);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgID);
                 }
@@ -176,6 +218,22 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.TABLET_INTERNAL_PARALLEL_MODE)) {
             validateTabletInternalParallelModeValue(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_FORMAT)) {
+            try {
+                SessionVariable.BinaryEncodingFormat.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_LEVEL)) {
+            try {
+                SessionVariable.BinaryEncodingLevel.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.DEFAULT_TABLE_COMPRESSION)) {
@@ -188,7 +246,30 @@ public class SetStmtAnalyzer {
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
-            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L,
+                    null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CHOOSE_EXECUTE_INSTANCES_MODE)) {
+            SessionVariableConstants.ChooseInstancesMode mode =
+                    Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
+                            StringUtils.upperCase(resolvedExpression.getStringValue())).orNull();
+            if (mode == null) {
+                String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ChooseInstancesMode.values());
+                throw new IllegalArgumentException("Legal values of choose_execute_instances_mode are " + legalValues);
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.COMPUTATION_FRAGMENT_SCHEDULING_POLICY)) {
+            String policy = resolvedExpression.getStringValue();
+            SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy =
+                    Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                            StringUtils.upperCase(policy)).orNull();
+            if (computationFragmentSchedulingPolicy == null) {
+                String supportedList = Joiner.on(",").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+                throw new SemanticException(String.format("Unsupported computation_fragment_scheduling_policy: %s, " +
+                        "supported list is %s", policy, supportedList));
+            }
         }
 
         // materialized_view_rewrite_mode
@@ -198,23 +279,25 @@ public class SetStmtAnalyzer {
                 String supportedList = StringUtils.join(
                         EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
                 throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
-                                "supported list is %s", rewriteModeName, supportedList));
+                        "supported list is %s", rewriteModeName, supportedList));
             }
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
             String baseType = resolvedExpression.getStringValue();
             if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
-                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DOUBLE)) {
                 throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
-                        "supported list is {varchar, decimal}", baseType));
+                        "supported list is {varchar, decimal, double}", baseType));
             }
         }
 
         // follower_query_forward_mode
         if (variable.equalsIgnoreCase(SessionVariable.FOLLOWER_QUERY_FORWARD_MODE)) {
             String queryFollowerForwardMode = resolvedExpression.getStringValue();
-            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class, queryFollowerForwardMode)) {
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class,
+                    queryFollowerForwardMode)) {
                 String supportedList = StringUtils.join(
                         EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
                 throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
@@ -222,13 +305,194 @@ public class SetStmtAnalyzer {
             }
         }
 
+        // query_debug_options
+        if (variable.equalsIgnoreCase(SessionVariable.QUERY_DEBUG_OPTIONS)) {
+            String queryDebugOptions = resolvedExpression.getStringValue();
+            try {
+                QueryDebugOptions.read(queryDebugOptions);
+            } catch (Exception e) {
+                throw new SemanticException(String.format("Unsupported query_debug_options: %s, " +
+                        "it should be the `QueryDebugOptions` class's json deserialized string", queryDebugOptions));
+            }
+        }
+
+        // cbo_materialized_view_rewrite_candidate_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT,
+                    1, null);
+        }
+        // cbo_materialized_view_rewrite_rule_output_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT,
+                    1, null);
+        }
+        // cbo_materialized_view_rewrite_related_mvs_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT,
+                    1, null);
+        }
+        // big_query_profile_threshold
+        if (variable.equalsIgnoreCase(SessionVariable.BIG_QUERY_PROFILE_THRESHOLD)) {
+            String timeStr = resolvedExpression.getStringValue();
+            TimeValue timeValue = TimeValue.parseTimeValue(timeStr, null);
+            if (timeValue == null) {
+                throw new SemanticException(String.format("failed to parse time value %s", timeStr));
+            }
+        }
+        // catalog
+        if (variable.equalsIgnoreCase(SessionVariable.CATALOG)) {
+            String catalog = resolvedExpression.getStringValue();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
+                throw new SemanticException(String.format("Unknown catalog %s", catalog));
+            }
+        }
+        // connector sink compression codec
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_COMPRESSION_CODEC)) {
+            String codec = resolvedExpression.getStringValue();
+            if (CompressionUtils.getConnectorSinkCompressionType(codec).isEmpty()) {
+                throw new SemanticException(String.format("Unsupported compression codec %s." +
+                        " Use any of (uncompressed, snappy, lz4, zstd, gzip)", codec));
+            }
+        }
+        // check plan mode
+        if (variable.equalsIgnoreCase(SessionVariable.PLAN_MODE)) {
+            PlanMode.fromName(resolvedExpression.getStringValue());
+        }
+
+
+        // check connector_sink_sort_scope
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SORT_SCOPE)) {
+            try {
+                com.starrocks.connector.ConnectorSinkSortScope.fromName(resolvedExpression.getStringValue());
+            } catch (Exception e) {
+                throw new SemanticException(String.format("Unsupported connector_sink_sort_scope: %s, " +
+                        "valid values are: none, file, host", resolvedExpression.getStringValue()));
+            }
+        }
+
+        // check populate datacache mode
+        if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
+            DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // check connector sink shuffle mode
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_MODE)) {
+            ConnectorSinkShuffleMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD, 1L, null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO)) {
+            String val = resolvedExpression.getStringValue();
+            double ratio;
+            try {
+                ratio = Double.parseDouble(val);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("failed to parse %s value %s",
+                        SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO, val));
+            }
+            if (Double.isNaN(ratio) || Double.isInfinite(ratio) || ratio <= 0) {
+                throw new SemanticException(String.format("%s should be a positive finite number, got %s",
+                        SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO, val));
+            }
+        }
+
+        // count_distinct_implementation
+        if (variable.equalsIgnoreCase(SessionVariable.COUNT_DISTINCT_IMPLEMENTATION)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariableConstants.CountDistinctImplMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariableConstants.CountDistinctImplMode.class), ",");
+                throw new SemanticException(String.format("Unsupported count distinct implementation mode: %s, " +
+                        "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.ANN_PARAMS)) {
+            String annParams = resolvedExpression.getStringValue();
+            if (!Strings.isNullOrEmpty(annParams)) {
+                Map<String, String> annParamMap = null;
+                try {
+                    java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {
+                    }.getType();
+                    annParamMap = GsonUtils.GSON.fromJson(annParams, type);
+                } catch (Exception e) {
+                    throw new SemanticException(String.format("Unsupported ann_params: %s, " +
+                            "It should be a Dict JSON string, each key and value of which is string", annParams));
+                }
+
+                for (Map.Entry<String, String> entry : annParamMap.entrySet()) {
+                    IndexParams.getInstance().checkParams(entry.getKey().toUpperCase(), entry.getValue());
+                }
+            }
+        }
+
         var.setResolvedExpression(resolvedExpression);
+    }
+
+    /**
+     * Validate cbo_disabled_rules value - ensures all rule names are valid TF_/GP_ rules
+     * 
+     * @param value comma-separated rule names
+     * @return error message if validation fails, null if valid
+     */
+    private static String validateCboDisabledRules(String value) {
+        try {
+            Splitter splitter = Splitter.on(',').trimResults().omitEmptyStrings();
+            List<String> ruleNames = splitter.splitToList(value);
+            
+            List<String> invalidRules = new ArrayList<>();
+            List<String> nonTfGpRules = new ArrayList<>();
+            
+            for (String ruleName : ruleNames) {
+                try {
+                    RuleType ruleType = RuleType.valueOf(ruleName);
+                    // Only TF_ (Transformation) and GP_ (Group combination) rules can be disabled
+                    if (!ruleType.name().startsWith("TF_") && !ruleType.name().startsWith("GP_")) {
+                        nonTfGpRules.add(ruleName);
+                    }
+                } catch (IllegalArgumentException e) {
+                    invalidRules.add(ruleName);
+                }
+            }
+            
+            // Report all invalid rules at once for better user experience
+            if (!invalidRules.isEmpty()) {
+                return "Unknown rule name(s): " + String.join(", ", invalidRules);
+            }
+            
+            if (!nonTfGpRules.isEmpty()) {
+                return "Only TF_ (Transformation) and GP_ (Group combination) rules can be disabled, invalid: " + 
+                       String.join(", ", nonTfGpRules);
+            }
+            
+            return null;
+        } catch (Exception e) {
+            return "Failed to parse rule names: " + e.getMessage();
+        }
     }
 
     private static void checkRangeLongVariable(LiteralExpr resolvedExpression, String field, Long min, Long max) {
         String value = resolvedExpression.getStringValue();
         try {
             long num = Long.parseLong(value);
+            if (min != null && num < min) {
+                throw new SemanticException(String.format("%s must be equal or greater than %d", field, min));
+            }
+            if (max != null && num > max) {
+                throw new SemanticException(String.format("%s must be equal or smaller than %d", field, max));
+            }
+        } catch (NumberFormatException ex) {
+            throw new SemanticException(field + " is not a number");
+        }
+    }
+
+    private static void checkRangeIntVariable(LiteralExpr resolvedExpression, String field, Integer min, Integer max) {
+        String value = resolvedExpression.getStringValue();
+        try {
+            int num = Integer.parseInt(value);
             if (min != null && num < min) {
                 throw new SemanticException(String.format("%s must be equal or greater than %d", field, min));
             }
@@ -248,47 +512,9 @@ public class SetStmtAnalyzer {
         }
     }
 
-    private static void analyzeUserVariable(UserVariable var) {
+    public static void analyzeUserVariable(UserVariable var) {
         if (var.getVariable().length() > 64) {
             throw new SemanticException("User variable name '" + var.getVariable() + "' is illegal");
-        }
-
-        Expr expression = var.getUnevaluatedExpression();
-        if (expression instanceof NullLiteral) {
-            var.setEvaluatedExpression(NullLiteral.create(Type.STRING));
-        } else {
-            Expr foldedExpression = Expr.analyzeAndCastFold(expression);
-            if (foldedExpression instanceof LiteralExpr) {
-                var.setEvaluatedExpression((LiteralExpr) foldedExpression);
-            } else {
-                SelectList selectList = new SelectList(Lists.newArrayList(
-                        new SelectListItem(var.getUnevaluatedExpression(), null)), false);
-
-                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.NULL));
-                List<List<Expr>> rows = new ArrayList<>();
-                rows.add(row);
-                ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
-                valuesRelation.setNullValues(true);
-
-                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
-                QueryStatement queryStatement = new QueryStatement(selectRelation);
-                Analyzer.analyze(queryStatement, ConnectContext.get());
-
-                Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
-
-                //can not apply to numeric types or complex type are not supported
-                if (variableResult.getType().isOnlyMetricType() || variableResult.getType().isFunctionType()
-                        || variableResult.getType().isComplexType()) {
-                    throw new SemanticException("Can't set variable with type " + variableResult.getType());
-                }
-
-                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems().set(0,
-                        new SelectListItem(new CastExpr(Type.VARCHAR, variableResult), null));
-
-                Subquery subquery = new Subquery(queryStatement);
-                subquery.setType(variableResult.getType());
-                var.setUnevaluatedExpression(subquery);
-            }
         }
     }
 
@@ -331,17 +557,90 @@ public class SetStmtAnalyzer {
     }
 
     private static void analyzeSetPassVar(SetPassVar var, ConnectContext session) {
-        try {
-            UserIdentity userIdentity = var.getUserIdent();
-            if (userIdentity == null) {
-                userIdentity = session.getCurrentUserIdentity();
-            }
-            userIdentity.analyze();
-            var.setUserIdent(userIdentity);
-            var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
+        UserRef user = var.getUser();
+        UserIdentity userIdentity;
+        if (user == null) {
+            userIdentity = session.getCurrentUserIdentity();
+            var.setUser(new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain()));
+        } else {
+            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+            AuthenticationAnalyzer.analyzeUser(user);
+        }
 
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
+        UserAuthenticationInfo userAuthenticationInfo =
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserAuthenticationInfoByUserIdentity(userIdentity);
+
+        if (null == userAuthenticationInfo) {
+            throw new SemanticException("authentication info for user " + userIdentity + " not found");
+        }
+
+        if (!userAuthenticationInfo.getAuthPlugin().equals(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name())) {
+            throw new SemanticException("only allow set password for native user, current user: " +
+                    userIdentity + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
+        }
+
+        UserAuthOptionAnalyzer.analyzeAuthOption(var.getUser(), var.getAuthOption());
+    }
+
+    private static boolean checkUserVariableType(Type type) {
+        if (type.isArrayType()) {
+            ArrayType arrayType = (ArrayType) type;
+            PrimitiveType itemPrimitiveType = arrayType.getItemType().getPrimitiveType();
+            if (itemPrimitiveType == PrimitiveType.BOOLEAN ||
+                    itemPrimitiveType.isDateType() || itemPrimitiveType.isNumericType() ||
+                    itemPrimitiveType.isCharFamily()) {
+                return true;
+            }
+        } else if (type.isScalarType()) {
+            PrimitiveType primitiveType = type.getPrimitiveType();
+            if (primitiveType == PrimitiveType.BOOLEAN ||
+                    primitiveType.isDateType() || primitiveType.isNumericType() ||
+                    primitiveType.isCharFamily() || primitiveType.isJsonType()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static void calcuteUserVariable(UserVariable userVariable) {
+        Expr expression = userVariable.getUnevaluatedExpression();
+        if (expression instanceof NullLiteral) {
+            userVariable.setEvaluatedExpression(NullLiteral.create(StringType.STRING));
+        } else {
+            Expr foldedExpression;
+            foldedExpression = ExprUtils.analyzeAndCastFold(expression);
+
+            if (ExprUtils.isLiteral(foldedExpression)) {
+                userVariable.setEvaluatedExpression(foldedExpression);
+            } else {
+                SelectList selectList = new SelectList(Lists.newArrayList(
+                        new SelectListItem(userVariable.getUnevaluatedExpression(), null)), false);
+
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(StringType.STRING));
+                List<List<Expr>> rows = new ArrayList<>();
+                rows.add(row);
+                ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
+                valuesRelation.setNullValues(true);
+
+                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
+                QueryStatement queryStatement = new QueryStatement(selectRelation);
+                Analyzer.analyze(queryStatement, ConnectContext.get());
+
+                Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
+
+                Type type = variableResult.getType();
+                // can not apply to metric types or complex type except array type
+                if (!checkUserVariableType(type)) {
+                    throw new SemanticException("Can't set variable with type " + variableResult.getType());
+                }
+
+                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems()
+                        .set(0, new SelectListItem(variableResult, null));
+                Subquery subquery = new Subquery(queryStatement);
+                subquery.setType(variableResult.getType());
+                userVariable.setUnevaluatedExpression(subquery);
+            }
         }
     }
 }

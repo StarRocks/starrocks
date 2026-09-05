@@ -1,0 +1,84 @@
+-- name: test_iceberg_string_date_partition_delete
+create external catalog ice_cat_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
+create database ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+set catalog ice_cat_${uuid0};
+-- result:
+-- !result
+use ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+create table t_del_eq (
+    c1 int,
+    c2 string
+) partition by (c2)
+PROPERTIES ("format-version" = "2");
+-- result:
+-- !result
+insert into t_del_eq values (1, '2020-06-08'), (2, '2020-06-14'), (3, '2020-06-14'), (4, '2020-06-15'), (5, '2020-06-22');
+-- result:
+-- !result
+select c2, count(*) from t_del_eq group by c2 order by c2;
+-- result:
+2020-06-08	1
+2020-06-14	2
+2020-06-15	1
+2020-06-22	1
+-- !result
+delete from t_del_eq where c2 = cast('2020-06-15' as date) - interval 1 day;
+-- result:
+-- !result
+select c2, count(*) from t_del_eq group by c2 order by c2;
+-- result:
+2020-06-08	1
+2020-06-15	1
+2020-06-22	1
+-- !result
+delete from t_del_eq where c2 = date_sub(cast('2020-06-23' as date), interval 1 day);
+-- result:
+-- !result
+select c2, count(*) from t_del_eq group by c2 order by c2;
+-- result:
+2020-06-08	1
+2020-06-15	1
+-- !result
+delete from t_del_eq where c2 = '2020-06-15';
+-- result:
+-- !result
+select c2, count(*) from t_del_eq group by c2 order by c2;
+-- result:
+2020-06-08	1
+-- !result
+drop table t_del_eq force;
+-- result:
+-- !result
+create table t_del_rg (
+    c1 int,
+    c2 string
+) partition by (c2)
+PROPERTIES ("format-version" = "2");
+-- result:
+-- !result
+insert into t_del_rg values (1, '2020-06-08'), (2, '2020-06-14'), (3, '2020-06-15'), (4, '2020-06-22');
+-- result:
+-- !result
+delete from t_del_rg where c2 < cast('2020-06-15' as date);
+-- result:
+-- !result
+select c2, count(*) from t_del_rg group by c2 order by c2;
+-- result:
+2020-06-15	1
+2020-06-22	1
+-- !result
+drop table t_del_rg force;
+-- result:
+-- !result
+drop database ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result

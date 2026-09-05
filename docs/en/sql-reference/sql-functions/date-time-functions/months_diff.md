@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns the month difference between two date expressions (expr1 − expr2), accurate to the month."
 ---
 
 # months_diff
 
-## Description
+
 
 Returns the month difference between two date expressions (`expr1` − `expr2`), accurate to the month.
 

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将字符串转换为小写形式，与lower函数一致。"
 ---
 
 # lcase
 
-## 功能
+
 
 该函数与 `lower` 一致，将字符串转换为小写形式。
 

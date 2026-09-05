@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "向日期添加指定的月数，精确到月。"
 ---
 
 # months_add
 
-## 功能
+
 
 给日期添加指定的月数，精确到月。
 

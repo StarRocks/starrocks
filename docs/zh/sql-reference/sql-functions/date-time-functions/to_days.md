@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回指定日期距离0000-01-01的天数。"
 ---
 
 # to_days
 
-## 功能
+
 
 返回指定日期距离 `0000-01-01` 的天数。
 

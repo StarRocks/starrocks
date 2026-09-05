@@ -18,21 +18,20 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public class SubfieldOperator extends ScalarOperator {
-
+public class SubfieldOperator extends ArgsScalarOperator {
     // Only one child
-    private List<ScalarOperator> children = new ArrayList<>();
     private final ImmutableList<String> fieldNames;
+    private boolean copyFlag = true;
 
     // Build based on SlotRef which contains struct subfield access information
     public static SubfieldOperator build(ScalarOperator child, Type type, List<Integer> usedSubfieldPos) {
@@ -50,35 +49,45 @@ public class SubfieldOperator extends ScalarOperator {
     }
 
     public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames) {
+        this(child, type, fieldNames, true);
+    }
+
+    public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames, boolean copyFlag) {
         super(OperatorType.SUBFIELD, type);
-        this.children.add(child);
-        this.fieldNames = ImmutableList.copyOf(fieldNames); 
+        this.arguments.add(child);
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
+        this.copyFlag = copyFlag;
+        incrDepth(arguments);
     }
 
     public List<String> getFieldNames() {
         return fieldNames;
     }
 
-    @Override
-    public boolean isNullable() {
-        return children.get(0).isNullable();
+    public boolean getCopyFlag() {
+        return copyFlag;
     }
 
+    public void setCopyFlag(boolean copyFlag) {
+        this.copyFlag = copyFlag;
+    }
+
+
     @Override
-    public List<ScalarOperator> getChildren() {
-        return children;
+    public boolean isNullable() {
+        return arguments.get(0).isNullable();
     }
 
     @Override
     public ScalarOperator getChild(int index) {
         Preconditions.checkArgument(index == 0);
-        return children.get(0);
+        return arguments.get(0);
     }
 
     @Override
     public void setChild(int index, ScalarOperator child) {
         Preconditions.checkArgument(index == 0);
-        children.set(0, child);
+        arguments.set(0, child);
     }
 
     @Override
@@ -86,8 +95,8 @@ public class SubfieldOperator extends ScalarOperator {
         SubfieldOperator subfieldOperator = (SubfieldOperator) super.clone();
         // Deep copy here
         List<ScalarOperator> newChildren = Lists.newArrayList();
-        this.children.forEach(p -> newChildren.add(p.clone()));
-        subfieldOperator.children = newChildren;
+        this.arguments.forEach(p -> newChildren.add(p.clone()));
+        subfieldOperator.arguments = newChildren;
         return subfieldOperator;
     }
 
@@ -97,30 +106,42 @@ public class SubfieldOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(getChild(0), fieldNames);
+    public int hashCodeSelf() {
+        return Objects.hash(opType, fieldNames, copyFlag);
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equalsSelf(Object other) {
         if (other == this) {
             return true;
         }
 
-        if (!(other instanceof SubfieldOperator)) {
+        if (!(other instanceof SubfieldOperator otherOp)) {
             return false;
         }
-        SubfieldOperator otherOp = (SubfieldOperator) other;
-        return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0));
+        return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0))
+                && copyFlag == otherOp.getCopyFlag();
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitSubfield(this, context);
+        return  visitor.visitSubfield(this, context);
     }
 
     @Override
     public ColumnRefSet getUsedColumns() {
         return getChild(0).getUsedColumns();
+    }
+
+    public String getPath() {
+        String childPath = getChildPath();
+        return childPath + "." + Joiner.on('.').join(fieldNames);
+    }
+
+    private String getChildPath() {
+        if (arguments.get(0) instanceof ColumnRefOperator) {
+            return ((ColumnRefOperator) arguments.get(0)).getName();
+        }
+        return arguments.get(0).toString();
     }
 }

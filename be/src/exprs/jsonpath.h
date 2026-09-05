@@ -14,9 +14,12 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <utility>
 
 #include "exprs/function_helper.h"
+#include "gutil/casts.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -46,12 +49,19 @@ struct ArraySelector {
     static bool match(const std::string& input) { return false; }
 
     virtual void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) = 0;
+
+    virtual bool match(const ArraySelector& other) const { return type == other.type; };
+
+    // Convert array selector to string representation
+    virtual std::string to_string() const = 0;
 };
 
 struct ArraySelectorNone final : public ArraySelector {
     ArraySelectorNone() { type = NONE; }
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override { return; }
+
+    std::string to_string() const override { return ""; }
 };
 
 struct ArraySelectorSingle final : public ArraySelector {
@@ -59,17 +69,30 @@ struct ArraySelectorSingle final : public ArraySelector {
 
     ArraySelectorSingle(int index) : index(index) { type = SINGLE; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
+
+    bool match(const ArraySelector& other) const override {
+        if (type != other.type) {
+            return false;
+        }
+        return index == down_cast<const ArraySelectorSingle*>(&other)->index;
+    };
+
+    std::string to_string() const override { return "[" + std::to_string(index) + "]"; }
 };
 
 struct ArraySelectorWildcard final : public ArraySelector {
     ArraySelectorWildcard() { type = WILDCARD; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
+
+    std::string to_string() const override { return "[*]"; }
 };
 
 struct ArraySelectorSlice final : public ArraySelector {
@@ -77,9 +100,20 @@ struct ArraySelectorSlice final : public ArraySelector {
 
     ArraySelectorSlice(int left, int right) : left(left), right(right) { type = SLICE; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
+
+    bool match(const ArraySelector& other) const override {
+        if (type != other.type) {
+            return false;
+        }
+        auto* ass = down_cast<const ArraySelectorSlice*>(&other);
+        return left == ass->left && right == ass->right;
+    };
+
+    std::string to_string() const override { return "[" + std::to_string(left) + ":" + std::to_string(right) + "]"; }
 };
 
 // JsonPath implement that support array building
@@ -88,7 +122,7 @@ struct JsonPathPiece {
     std::shared_ptr<ArraySelector> array_selector;
 
     JsonPathPiece(std::string key, std::shared_ptr<ArraySelector> selector)
-            : key(std::move(key)), array_selector(std::move(std::move(selector))) {}
+            : key(std::move(key)), array_selector(std::move(selector)) {}
 
     JsonPathPiece(std::string key, ArraySelector* selector) : key(std::move(key)), array_selector(selector) {}
 
@@ -111,8 +145,26 @@ struct JsonPath {
     void reset(const JsonPath& rhs);
     void reset(JsonPath&& rhs);
 
+    // Returns the end postition of input-puth in this path.
+    bool starts_with(const JsonPath* other) const;
+
+    // Constructs a relative path between this path and a given path.
+    // e.g: this: "$.a.b", other: "$.a", result: "$.b"
+    //      this: "$.a.b[1]", other: "$.a", result: "$.b[1]"
+    //      this: "$.a[*]", other: "$.a", result: "$.[*]"
+    StatusOr<JsonPath*> relativize(const JsonPath* other, JsonPath* output_root) const;
+
+    bool is_empty() const { return paths.empty(); }
+
+    std::string to_string() const;
+
     static StatusOr<JsonPath> parse(Slice path_string);
     static vpack::Slice extract(const JsonValue* json, const JsonPath& jsonpath, vpack::Builder* b);
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::ArraySelectorType> : formatter<std::underlying_type_t<starrocks::ArraySelectorType>> {
+    auto format(starrocks::ArraySelectorType value, format_context& ctx) const -> format_context::iterator;
+};

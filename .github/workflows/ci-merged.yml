@@ -4,13 +4,15 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch*'
+      - "branch-[0-9].[0-9]"
     types:
       - closed
 permissions:
   pull-requests: write
   issues: write
   actions: write
+env:
+  PR_NUMBER: ${{ github.event.number }}
 
 jobs:
   backport:
@@ -20,70 +22,107 @@ jobs:
       github.base_ref == 'main' && 
       github.repository == 'StarRocks/starrocks' &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport') && (
-      contains(github.event.pull_request.labels.*.name, '3.2') ||
-      contains(github.event.pull_request.labels.*.name, '3.1') ||
-      contains(github.event.pull_request.labels.*.name, '3.0') ||
-      contains(github.event.pull_request.labels.*.name, '2.5') )
+      !contains(github.event.pull_request.title, 'backport')
+
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["4.1", "4.0", "3.5", "3.4", "3.3"]
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
-      - name: backport branch-3.2
-        if: contains(github.event.pull_request.labels.*.name, '3.2')
-        uses: thollander/actions-comment-pull-request@v1
+      - name: backport branch-${{ matrix.version }}
+        if: contains(github.event.pull_request.labels.*.name, matrix.version)
+        uses: thollander/actions-comment-pull-request@v2
         with:
           message: |
-            @Mergifyio backport branch-3.2
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+            @Mergifyio backport branch-${{ matrix.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, '3.2')
+        if: contains(github.event.pull_request.labels.*.name, matrix.version)
         with:
-          labels: '3.2'
+          labels: ${{ matrix.version }}
 
-      - name: backport branch-3.1
-        if: contains(github.event.pull_request.labels.*.name, '3.1')
-        uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            @Mergifyio backport branch-3.1
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+  # Backport fan-out engine — DRY-RUN shadow. Runs alongside the static `backport`
+  # job above and only PRINTS the computed target set (never posts @Mergifyio), for
+  # reconciliation against the manual matrix before cutover. continue-on-error so it
+  # can never affect the merge. Depends on ci-tool #4910/#4911 being on the runner.
+  backport-fanout-shadow:
+    name: Backport Fan-out (dry-run shadow)
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks' &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    continue-on-error: true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: fan-out dry-run
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
 
-      - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, '3.1')
+  thirdparty-filter:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    outputs:
+      thirdparty: ${{ steps.filter-info.outputs.thirdparty }}
+      centos7: ${{ steps.distro.outputs.centos7 }}
+      rocky9: ${{ steps.distro.outputs.rocky9 }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: linux-thirdparty-filter
         with:
-          labels: '3.1'
+          predicate-quantifier: every
+          filters: |
+            thirdparty:
+              - 'thirdparty/**'
+              - '!thirdparty/build-thirdparty-darwin.sh'
+              - '!thirdparty/vars-darwin-aarch64.sh'
+            dev_env:
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
-      - name: backport branch-3.0
-        if: contains(github.event.pull_request.labels.*.name, '3.0')
-        uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            @Mergifyio backport branch-3.0
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+      - name: Prepare filter info
+        id: filter-info
+        run: |
+          thirdparty=false
+          if [[ "${{ steps.linux-thirdparty-filter.outputs.thirdparty }}" == 'true' || "${{ steps.linux-thirdparty-filter.outputs.dev_env }}" == 'true' ]]; then
+            thirdparty=true
+          fi
+          echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
 
-      - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, '3.0')
-        with:
-          labels: '3.0'
-
-      - name: backport branch-2.5
-        if: contains(github.event.pull_request.labels.*.name, '2.5')
-        uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            @Mergifyio backport branch-2.5
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-
-      - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, '2.5')
-        with:
-          labels: '2.5'
+      - name: Decide distros by version
+        id: distro
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # rocky9 replaces centos7 from 4.2 onward (CentOS 7 EOL):
+          #   < 4.2        -> ubuntu + centos7
+          #   >= 4.2, main -> ubuntu + rocky9
+          # Without this, a merge promotes a distro whose per-PR source image was
+          # never built (e.g. centos7 on main, or rocky9 on branch-4.1), and
+          # elastic-update-image.sh's `imagetools create` fails with "not found".
+          if [[ "${BASE_REF}" == "main" ]]; then
+            echo "centos7=false" >> $GITHUB_OUTPUT; echo "rocky9=true" >> $GITHUB_OUTPUT
+          else
+            ver=${BASE_REF#branch-}; major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
+            if (( major > 4 || (major == 4 && minor >= 2) )); then
+              echo "centos7=false" >> $GITHUB_OUTPUT; echo "rocky9=true"  >> $GITHUB_OUTPUT
+            else
+              echo "centos7=true"  >> $GITHUB_OUTPUT; echo "rocky9=false" >> $GITHUB_OUTPUT
+            fi
+          fi
 
   thirdparty-update-image:
+    needs: thirdparty-filter
     runs-on: [self-hosted, normal]
     name: Thirdparty Update Image
-    if: github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true && needs.thirdparty-filter.outputs.thirdparty == 'true'
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
@@ -94,19 +133,22 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - uses: dorny/paths-filter@v2
-        id: changes
-        with:
-          filters: |
-            thirdparty:
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-
-      - name: update image
-        if: steps.changes.outputs.thirdparty == 'true'
+      - name: update image - ubuntu
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER ubuntu
+
+      - name: update image - centos7
+        if: needs.thirdparty-filter.outputs.centos7 == 'true'
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER centos7
+
+      - name: update image - rocky9
+        if: needs.thirdparty-filter.outputs.rocky9 == 'true'
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER rocky9
 
       - name: Clean ENV
         if: always()
@@ -164,5 +206,125 @@ jobs:
           else
             yaml=ci-pipeline-branch.yml
           fi
-          
+
           gh run list --workflow ${yaml} -R ${REPO} -b ${GITHUB_HEAD_REF} --json databaseId -q '.[].databaseId' | xargs gh run cancel -R ${REPO} || true
+
+  update_backport_merged_msg:
+    runs-on: [self-hosted, quick]
+    if: >
+      github.base_ref != 'main' && github.event.pull_request.merged == true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+    steps:
+      - name: prepare merge label
+        if: >
+          !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          contains(github.event.pull_request.title, '(backport #')
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          LABEL="${GITHUB_BASE_REF##*-}-merged"
+          gh label create "${LABEL}" -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
+
+      - name: add merge label
+        if: >
+          always() && !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          contains(github.event.pull_request.title, '(backport #')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          LABEL="${GITHUB_BASE_REF##*-}-merged"
+          ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/issues/${ORI_PR}/labels" -f "labels[]=${LABEL}"
+
+      - name: prepare version label
+        id: prepare_version_label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          version=$(./scripts/get_next_release_tag.sh)
+          version_label="version:${version}"
+          echo "LABEL=${version_label}" >> $GITHUB_OUTPUT
+          gh label create "${version_label}" -R ${GITHUB_REPOSITORY} -c 1d76db -f
+
+      - name: add version label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+        run: |
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" -f "labels[]=${VERSION_LABEL}"
+
+  update_version_label_for_main_feature:
+    runs-on: [self-hosted, quick]
+    if: >
+      github.base_ref == 'main' && github.event.pull_request.merged == true &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      startsWith(github.event.pull_request.title, '[Feature]')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+    steps:
+      - name: prepare version label
+        id: prepare_version_label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          version=$(./scripts/get_next_release_tag.sh)
+          version_label="version:${version}"
+          echo "LABEL=${version_label}" >> $GITHUB_OUTPUT
+          gh label create "${version_label}" -R ${GITHUB_REPOSITORY} -c 1d76db -f
+
+      - name: add version label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+        run: |
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" -f "labels[]=${VERSION_LABEL}"
+
+  update_feature_issue:
+    runs-on: [self-hosted, quick]
+    needs:
+      - update_backport_merged_msg
+      - update_version_label_for_main_feature
+    if: >
+      always() && !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
+    env:
+      BRANCH_VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
+      MAIN_VERSION_LABEL: ${{ needs.update_version_label_for_main_feature.outputs.VERSION_LABEL }}
+
+    steps:
+      - name: Update Issue Body & Label(main)
+        if: github.base_ref == 'main' && env.MAIN_VERSION_LABEL != ''
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${MAIN_VERSION_LABEL}
+
+      - name: Update Issue Body & Label(branch)
+        if: always() && github.base_ref != 'main' && env.BRANCH_VERSION_LABEL != ''
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${BRANCH_VERSION_LABEL}
+
+  merge_testcase:
+    runs-on: [self-hosted, quick]
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+      BRANCH: ${{ github.base_ref }}
+    if: >
+      github.base_ref == 'main' && github.event.pull_request.merged == true && !contains(github.event.pull_request.labels.*.name, 'sync')
+    steps:
+      - name: merge testcase
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/merge-testcase.py --pr ${PR_NUMBER} --repo ${REPOSITORY} --branch ${BRANCH}

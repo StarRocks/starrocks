@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -30,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +54,22 @@ public class LogicalWindowOperator extends LogicalOperator {
      * we can perform hash-based partition according to hint.
      */
     private boolean useHashBasedPartition;
+    private boolean isSkewed;
+
+    /**
+     * Feed the AnalyticNode from a single globally-ordered stream (gather + merging exchange +
+     * ordered-partition local exchange) instead of hash-shuffling the partition keys. Set by the
+     * [merge_sort] hint.
+     */
+    private boolean forceMergeSort;
+
+    // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
+    private ScalarOperator skewColumn;
+    private ImmutableList<ScalarOperator> skewValues;
+
+    // only true when rank <=1 with preAgg optimization is triggered, imply this window should merge input instead of update
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private boolean inputIsBinary;
 
     private LogicalWindowOperator() {
         super(OperatorType.LOGICAL_WINDOW);
@@ -59,6 +77,10 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.orderByElements = ImmutableList.of();
         this.enforceSortColumns = ImmutableList.of();
         this.useHashBasedPartition = false;
+        this.isSkewed = false;
+        this.forceMergeSort = false;
+        this.skewColumn = null;
+        this.skewValues = ImmutableList.of();
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -83,6 +105,26 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public boolean isUseHashBasedPartition() {
         return useHashBasedPartition;
+    }
+
+    public boolean isSkewed() {
+        return isSkewed;
+    }
+
+    public boolean isForceMergeSort() {
+        return forceMergeSort;
+    }
+
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
+    }
+
+    public boolean isInputIsBinary() {
+        return inputIsBinary;
     }
 
     @Override
@@ -110,6 +152,14 @@ public class LogicalWindowOperator extends LogicalOperator {
     }
 
     @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalAnalytic(this, context);
     }
@@ -134,13 +184,18 @@ public class LogicalWindowOperator extends LogicalOperator {
                 && Objects.equals(partitionExpressions, that.partitionExpressions)
                 && Objects.equals(orderByElements, that.orderByElements)
                 && Objects.equals(analyticWindow, that.analyticWindow)
-                && Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
+                && Objects.equals(useHashBasedPartition, that.useHashBasedPartition)
+                && Objects.equals(isSkewed, that.isSkewed)
+                && Objects.equals(forceMergeSort, that.forceMergeSort)
+                && Objects.equals(skewColumn, that.skewColumn)
+                && Objects.equals(skewValues, that.skewValues)
+                && Objects.equals(inputIsBinary, that.inputIsBinary);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition);
+                useHashBasedPartition, isSkewed, forceMergeSort, skewColumn, skewValues, inputIsBinary);
     }
 
     public static Builder builder() {
@@ -163,6 +218,11 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.analyticWindow = windowOperator.analyticWindow;
             builder.enforceSortColumns = windowOperator.enforceSortColumns;
             builder.useHashBasedPartition = windowOperator.useHashBasedPartition;
+            builder.isSkewed = windowOperator.isSkewed;
+            builder.forceMergeSort = windowOperator.forceMergeSort;
+            builder.skewColumn = windowOperator.skewColumn;
+            builder.skewValues = windowOperator.skewValues;
+            builder.inputIsBinary = windowOperator.inputIsBinary;
             return this;
         }
 
@@ -193,6 +253,31 @@ public class LogicalWindowOperator extends LogicalOperator {
 
         public Builder setUseHashBasedPartition(boolean useHashBasedPartition) {
             builder.useHashBasedPartition = useHashBasedPartition;
+            return this;
+        }
+
+        public Builder setIsSkewed(boolean isSkewed) {
+            builder.isSkewed = isSkewed;
+            return this;
+        }
+
+        public Builder setForceMergeSort(boolean forceMergeSort) {
+            builder.forceMergeSort = forceMergeSort;
+            return this;
+        }
+
+        public Builder setSkewColumn(ScalarOperator skewColumn) {
+            builder.skewColumn = skewColumn;
+            return this;
+        }
+
+        public Builder setSkewValues(List<ScalarOperator> skewValues) {
+            builder.skewValues = ImmutableList.copyOf(skewValues);
+            return this;
+        }
+
+        public  Builder setInputIsBinary(boolean isBinary) {
+            builder.inputIsBinary = isBinary;
             return this;
         }
     }

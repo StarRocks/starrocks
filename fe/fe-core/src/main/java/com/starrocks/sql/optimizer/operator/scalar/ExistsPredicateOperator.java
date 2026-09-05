@@ -25,11 +25,13 @@ public class ExistsPredicateOperator extends PredicateOperator {
     public ExistsPredicateOperator(boolean isNotExists, ScalarOperator... arguments) {
         super(OperatorType.EXISTS, arguments);
         this.isNotExists = isNotExists;
+        incrDepth(arguments);
     }
 
     public ExistsPredicateOperator(boolean isNotExists, List<ScalarOperator> arguments) {
         super(OperatorType.EXISTS, arguments);
         this.isNotExists = isNotExists;
+        incrDepth(arguments);
     }
 
     public boolean isNotExists() {
@@ -38,7 +40,7 @@ public class ExistsPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitExistsPredicate(this, context);
+        return  visitor.visitExistsPredicate(this, context);
     }
 
     @Override
@@ -66,14 +68,8 @@ public class ExistsPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         ExistsPredicateOperator that = (ExistsPredicateOperator) o;
@@ -81,7 +77,16 @@ public class ExistsPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotExists);
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        ExistsPredicateOperator that = (ExistsPredicateOperator) obj;
+        return isNotExists == that.isNotExists;
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotExists);
     }
 }

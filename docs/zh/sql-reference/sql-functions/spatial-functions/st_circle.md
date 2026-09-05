@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将 WKT 转换为地球球面上的圆。"
 ---
 
 # ST_Circle
 
-## 功能
+
 
 将一个 WKT(Well Known Text)转化为地球球面上的一个圆。
 

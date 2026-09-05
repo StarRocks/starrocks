@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
+import com.starrocks.planner.IcebergDeleteSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -25,9 +26,11 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.ExplainBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TScanRange;
@@ -37,8 +40,11 @@ import com.starrocks.thrift.TUniqueId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -48,6 +54,40 @@ import java.util.stream.Collectors;
 public class FragmentInstance {
     private static final int ABSENT_PIPELINE_DOP = -1;
     public static final int ABSENT_DRIVER_SEQUENCE = -1;
+
+    public static final class DeployedScanRangeLayout {
+        private enum Mode {
+            NORMAL,
+            PER_DRIVER_SEQ
+        }
+
+        private final Mode mode;
+        private final int driverSeqCount;
+
+        private DeployedScanRangeLayout(Mode mode, int driverSeqCount) {
+            this.mode = mode;
+            this.driverSeqCount = driverSeqCount;
+        }
+
+        public static DeployedScanRangeLayout normal() {
+            return new DeployedScanRangeLayout(Mode.NORMAL, 0);
+        }
+
+        public static DeployedScanRangeLayout perDriverSeq(int driverSeqCount) {
+            if (driverSeqCount <= 0) {
+                throw new IllegalArgumentException("driverSeqCount must be positive");
+            }
+            return new DeployedScanRangeLayout(Mode.PER_DRIVER_SEQ, driverSeqCount);
+        }
+
+        public boolean isPerDriverSeq() {
+            return mode == Mode.PER_DRIVER_SEQ;
+        }
+
+        public int getDriverSeqCount() {
+            return driverSeqCount;
+        }
+    }
 
     /**
      * The index in the job.
@@ -69,14 +109,18 @@ public class FragmentInstance {
     private final ExecutionFragment execFragment;
 
     private int pipelineDop = ABSENT_PIPELINE_DOP;
+    private int groupExecutionScanDop = ABSENT_PIPELINE_DOP;
 
     private final ComputeNode worker;
 
     private final Map<Integer, Integer> bucketSeqToDriverSeq = Maps.newHashMap();
+    private final Map<Integer, DeployedScanRangeLayout> node2DeployedScanRangeLayout = Maps.newHashMap();
     private final Map<Integer, List<TScanRangeParams>> node2ScanRanges = Maps.newHashMap();
     private final Map<Integer, Map<Integer, List<TScanRangeParams>>> node2DriverSeqToScanRanges = Maps.newHashMap();
 
     private FragmentInstanceExecState execution = null;
+
+    private final Map<Integer, Set<Long>> node2SentPartitionIds = Maps.newHashMap();
 
     public FragmentInstance(ComputeNode worker, ExecutionFragment execFragment) {
         this.worker = worker;
@@ -131,9 +175,15 @@ public class FragmentInstance {
             }
 
             node2ScanRanges.forEach((scanId, scanRanges) -> {
-                ScanNode scanNode = execFragment.getScanNode(new PlanNodeId(scanId));
-                builder.addValue(scanId + ":" + scanNode.getPlanNodeName(),
-                        () -> explainScanRanges(builder, scanRanges, 0));
+                String nodeName;
+                PlanNodeId nodeId = new PlanNodeId(scanId);
+                if (nodeId.equals(PlanNodeId.DUMMY_PLAN_NODE_ID)) {
+                    nodeName = "CAPTURE_ROWSET";
+                } else {
+                    ScanNode scanNode = execFragment.getScanNode(new PlanNodeId(scanId));
+                    nodeName = scanNode.getPlanNodeName();
+                }
+                builder.addValue(scanId + ":" + nodeName, () -> explainScanRanges(builder, scanRanges, 0));
             });
         });
     }
@@ -214,6 +264,17 @@ public class FragmentInstance {
         this.pipelineDop = pipelineDop;
     }
 
+    public int getGroupExecutionScanDop() {
+        if (groupExecutionScanDop == ABSENT_PIPELINE_DOP) {
+            return getPipelineDop();
+        }
+        return groupExecutionScanDop;
+    }
+
+    public void setGroupExecutionScanDop(int groupExecutionScanDop) {
+        this.groupExecutionScanDop = groupExecutionScanDop;
+    }
+
     public FragmentInstanceExecState getExecution() {
         return execution;
     }
@@ -258,6 +319,18 @@ public class FragmentInstance {
         return node2DriverSeqToScanRanges;
     }
 
+    public void recordDeployedScanRangesWithoutDriverSeq(Integer scanId) {
+        node2DeployedScanRangeLayout.put(scanId, DeployedScanRangeLayout.normal());
+    }
+
+    public void recordDeployedScanRangesPerDriverSeq(Integer scanId, int driverSeqCount) {
+        node2DeployedScanRangeLayout.put(scanId, DeployedScanRangeLayout.perDriverSeq(driverSeqCount));
+    }
+
+    public Optional<DeployedScanRangeLayout> getDeployedScanRangeLayout(Integer scanId) {
+        return Optional.ofNullable(node2DeployedScanRangeLayout.get(scanId));
+    }
+
     public void addBucketSeqAndDriverSeq(int bucketSeq, int driverSeq) {
         bucketSeqToDriverSeq.putIfAbsent(bucketSeq, driverSeq);
     }
@@ -278,18 +351,50 @@ public class FragmentInstance {
         return bucketSeqToDriverSeq;
     }
 
+    private void removeDuplicatedPartitionValues(Integer scanId, List<TScanRangeParams> scanRangeParamsList) {
+        Set<Long> sentPartitionIds = node2SentPartitionIds.computeIfAbsent(scanId, k -> new HashSet<>());
+        for (TScanRangeParams scanRangeParams : scanRangeParamsList) {
+            TScanRange scanRange = scanRangeParams.scan_range;
+            if (!scanRange.isSetHdfs_scan_range()) {
+                continue;
+            }
+            THdfsScanRange hdfsScanRange = scanRange.getHdfs_scan_range();
+            if (!(hdfsScanRange.isSetPartition_id() && hdfsScanRange.isSetPartition_value())) {
+                continue;
+            }
+            if (sentPartitionIds.contains(hdfsScanRange.getPartition_id())) {
+                // this partition value has been sent down to BE before.
+                // no need to send it anymore.
+                hdfsScanRange.unsetPartition_value();
+            } else {
+                sentPartitionIds.add(hdfsScanRange.getPartition_id());
+            }
+        }
+    }
+
+    public void resetAllScanRanges() {
+        node2ScanRanges.clear();
+        node2DriverSeqToScanRanges.clear();
+    }
+
     public void addScanRanges(Integer scanId, List<TScanRangeParams> scanRanges) {
+        removeDuplicatedPartitionValues(scanId, scanRanges);
         node2ScanRanges.computeIfAbsent(scanId, k -> new ArrayList<>()).addAll(scanRanges);
     }
 
     public void addScanRanges(Integer scanId, Integer driverSeq, List<TScanRangeParams> scanRanges) {
+        removeDuplicatedPartitionValues(scanId, scanRanges);
         node2DriverSeqToScanRanges.computeIfAbsent(scanId, k -> new HashMap<>())
                 .computeIfAbsent(driverSeq, k -> new ArrayList<>()).addAll(scanRanges);
     }
 
     public void paddingScanRanges() {
         node2DriverSeqToScanRanges.forEach((scanId, driverSeqToScanRanges) -> {
-            for (int driverSeq = 0; driverSeq < pipelineDop; driverSeq++) {
+            int scanDop = getDeployedScanRangeLayout(scanId)
+                    .filter(DeployedScanRangeLayout::isPerDriverSeq)
+                    .map(DeployedScanRangeLayout::getDriverSeqCount)
+                    .orElse(groupExecutionScanDop);
+            for (int driverSeq = 0; driverSeq < scanDop; driverSeq++) {
                 driverSeqToScanRanges.computeIfAbsent(driverSeq, k -> new ArrayList<>());
             }
         });
@@ -303,16 +408,24 @@ public class FragmentInstance {
 
         DataSink dataSink = fragment.getSink();
         int dop = fragment.getPipelineDop();
-        if (!(dataSink instanceof IcebergTableSink || dataSink instanceof HiveTableSink
+        ConnectContext connectContext = ConnectContext.get();
+        SessionVariable sessionVariable = connectContext != null ? connectContext.getSessionVariable() : null;
+        if (!(dataSink instanceof IcebergTableSink 
+                || dataSink instanceof IcebergDeleteSink
+                || dataSink instanceof HiveTableSink
                 || dataSink instanceof TableFunctionTableSink)) {
             return dop;
-        } else {
-            int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
-            if (sessionVarSinkDop > 0) {
-                return Math.min(dop, sessionVarSinkDop);
-            } else {
-                return Math.min(dop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
+        } else if (dataSink instanceof IcebergDeleteSink icebergDeleteSink && icebergDeleteSink.isUnpartitionedTable()) {
+            if (sessionVariable == null) {
+                return dop;
             }
+            int sinkDop = sessionVariable.getPipelineSinkDop();
+            if (sinkDop > 0) {
+                return sinkDop;
+            }
+            return sessionVariable.getSinkDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+        } else {
+            return sessionVariable.getPipelineSinkDop();
         }
     }
 

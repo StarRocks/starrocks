@@ -17,17 +17,18 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
-#include "util/raw_container.h"
+#include "column/runtime_type_traits.h"
 
 namespace starrocks {
 
 template <LogicalType Type>
 class ColumnBuilder {
 public:
-    using DataColumnPtr = typename RunTimeColumnType<Type>::Ptr;
-    using NullColumnPtr = NullColumn::Ptr;
+    using DataColumn = RunTimeColumnType<Type>;
+    using DataColumnMutablePtr = typename RunTimeColumnType<Type>::MutablePtr;
+    using NullColumnMutablePtr = NullColumn::MutablePtr;
     using DatumType = RunTimeCppType<Type>;
     using MovableType = RunTimeCppMovableType<Type>;
 
@@ -48,16 +49,16 @@ public:
         if constexpr (lt_is_decimal<Type>) {
             static constexpr auto max_precision = decimal_precision_limit<DatumType>;
             DCHECK(0 <= scale && scale <= precision && precision <= max_precision);
-            auto raw_column = ColumnHelper::cast_to_raw<Type>(_column);
+            auto raw_column = ColumnHelper::cast_to_raw<Type>(_column.get());
             raw_column->set_precision(precision);
             raw_column->set_scale(scale);
         }
     }
 
-    ColumnBuilder(DataColumnPtr column, NullColumnPtr null_column, bool has_null)
+    ColumnBuilder(DataColumnMutablePtr&& column, NullColumnMutablePtr&& null_column, bool has_null)
             : _column(std::move(column)), _null_column(std::move(null_column)), _has_null(has_null) {}
     //do nothing ctor, members are initialized by its offsprings.
-    explicit ColumnBuilder<Type>(void*) {}
+    explicit ColumnBuilder(void*) {}
 
     void append(const DatumType& value) {
         _null_column->append(DATUM_NOT_NULL);
@@ -95,21 +96,23 @@ public:
         _column->append_default(count);
     }
 
-    ColumnPtr build(bool is_const) {
+    MutableColumnPtr build(bool is_const) {
         if (is_const && _has_null) {
             return ColumnHelper::create_const_null_column(_column->size());
         }
 
         if (is_const) {
-            return ConstColumn::create(_column, _column->size());
+            return ConstColumn::create(std::move(*_column).mutate(), _column->size());
         } else if (_has_null) {
-            return NullableColumn::create(_column, _null_column);
+            return NullableColumn::create(std::move(*_column).mutate(), std::move(*_null_column).mutate());
         } else {
-            return _column;
+            return std::move(*_column).mutate();
         }
     }
 
-    ColumnPtr build_nullable_column() { return NullableColumn::create(_column, _null_column); }
+    MutableColumnPtr build_nullable_column() {
+        return NullableColumn::create(std::move(*_column).mutate(), std::move(*_null_column).mutate());
+    }
 
     void reserve(size_t size) {
         _column->reserve(size);
@@ -121,13 +124,13 @@ public:
         _null_column->resize_uninitialized(size);
     }
 
-    DataColumnPtr data_column() { return _column; }
-    NullColumnPtr null_column() { return _null_column; }
+    DataColumn* data_column_raw_ptr() { return _column.get(); }
+    NullColumn* null_column_raw_ptr() { return _null_column.get(); }
     void set_has_null(bool v) { _has_null = v; }
 
 protected:
-    DataColumnPtr _column;
-    NullColumnPtr _null_column;
+    typename DataColumn::WrappedPtr _column;
+    NullColumn::WrappedPtr _null_column;
     bool _has_null;
 };
 
@@ -145,15 +148,16 @@ public:
     // reserve bytes_size bytes for Bytes. size of offsets
     // and null_column are deterministic, so proper memory
     // room can be allocated, but bytes' size is non-deterministic,
-    // so just reserve moderate memory room. offsets need no
-    // initialization(raw::make_room), because it is overwritten
-    // fully. null_columns should be zero-out(resize), just
-    // slot corresponding to null elements is marked to 1.
+    // so just reserve moderate memory room. Offset slots are initialized so
+    // scalar set() remains promotion-safe even when bytes_size is only an estimate.
+    // null_columns should be zero-out(resize), just slot corresponding to null
+    // elements is marked to 1.
     void resize(size_t num_rows, size_t bytes_size) {
         _column->get_bytes().reserve(bytes_size);
         auto& offsets = _column->get_offset();
-        raw::make_room(&offsets, num_rows + 1);
-        offsets[0] = 0;
+        offsets.ensure_width_for_value(bytes_size);
+        offsets.resize(num_rows + 1, 0);
+        offsets.set(0, 0);
         _null_column->get_data().resize(num_rows);
     }
 
@@ -163,21 +167,21 @@ public:
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
         NullColumn::Container& nulls = _null_column->get_data();
-        offsets[i + 1] = bytes.size();
+        offsets.set(i + 1, bytes.size());
         nulls[i] = 1;
     }
 
     void append_empty(size_t i) {
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
-        offsets[i + 1] = bytes.size();
+        offsets.set(i + 1, bytes.size());
     }
 
     void append(uint8_t* begin, uint8_t* end, size_t i) {
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
         bytes.insert(bytes.end(), begin, end);
-        offsets[i + 1] = bytes.size();
+        offsets.set(i + 1, bytes.size());
     }
     // for concat and concat_ws, several columns are concatenated
     // together into a string, so append must be invoked as many times
@@ -199,7 +203,7 @@ public:
     void append_complete(size_t i) {
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
-        offsets[i + 1] = bytes.size();
+        offsets.set(i + 1, bytes.size());
     }
 
     // move current ptr backwards for n bytes, used in concat_ws
@@ -208,7 +212,7 @@ public:
         bytes.resize(bytes.size() - n);
     }
 
-    NullColumnPtr get_null_column() { return _null_column; }
+    NullColumn* get_null_column_raw_ptr() { return _null_column.get(); }
 
     NullColumn::Container& get_null_data() { return _null_column->get_data(); }
 

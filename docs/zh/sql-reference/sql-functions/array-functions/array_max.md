@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回ARRAY中所有元素的最大值。"
 ---
 
 # array_max
 
-## 功能
+
 
 求取一个ARRAY中的所有数据中的最大值，返回这个结果。
 

@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -22,6 +23,7 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "common/statusor.h"
 #include "fs/fs_memory.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -29,7 +31,6 @@
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -48,7 +49,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(fs, fname, 1, _dummy_segment_schema, nullptr);
+        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
     }
 
     void test_int_map() {
@@ -144,7 +145,7 @@ protected:
         }
 
         // read and check
-        auto res = ColumnReader::create(&meta, segment.get());
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
 
@@ -166,7 +167,7 @@ protected:
                 auto dst_offsets = UInt32Column::create();
                 auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -180,14 +181,11 @@ protected:
         }
 
         {
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::OFFSET, "offsets", 1);
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::OFFSET, "offsets", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
 
-            ColumnAccessPath path;
-            path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(std::move(child_path));
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -204,7 +202,7 @@ protected:
                 auto dst_offsets = UInt32Column::create();
                 auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -221,14 +219,11 @@ protected:
         }
 
         {
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::KEY, "key", 1);
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::KEY, "key", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
 
-            ColumnAccessPath path;
-            path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(std::move(child_path));
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -245,7 +240,7 @@ protected:
                 auto dst_offsets = UInt32Column::create();
                 auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -257,6 +252,27 @@ protected:
                 ASSERT_EQ("{2:CONST: NULL,3:CONST: NULL}", dst_column->debug_item(2));
                 ASSERT_EQ("{4:CONST: NULL,5:CONST: NULL,6:CONST: NULL}", dst_column->debug_item(3));
             }
+        }
+
+        {
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            auto dst_offsets = UInt32Column::create();
+            auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
+            SparseRange<> range;
+            range.add(Range<>(0, src_column->size()));
+            auto status_or = iter->get_io_range_vec(range, dst_column.get());
+            ASSERT_TRUE(status_or.ok());
+            ASSERT_EQ((*status_or).size(), 2);
         }
     }
 

@@ -1,0 +1,7 @@
+position: 60
+label: 'Manage your deployment'
+collapsible: true
+collapsed: true
+link:
+  id: manage_deployment
+  type: doc

@@ -15,6 +15,9 @@
 #pragma once
 
 #include "common/status.h"
+#include "common/statusor.h"
+#include "fmt/format.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "storage/olap_common.h"
 
@@ -31,11 +34,13 @@ using DeltaColumnGroupList = std::vector<DeltaColumnGroupPtr>;
 
 class DeltaColumnGroup {
 public:
-    DeltaColumnGroup() {}
-    ~DeltaColumnGroup() {}
-    void init(int64_t version, const std::vector<std::vector<uint32_t>>& column_ids,
-              const std::vector<std::string>& column_files);
+    DeltaColumnGroup() = default;
+    ~DeltaColumnGroup() = default;
+    void init(int64_t version, const std::vector<std::vector<ColumnUID>>& column_ids,
+              const std::vector<std::string>& column_files, const std::vector<std::string>& encryption_metas = {},
+              int64_t file_size = 0);
     Status load(int64_t version, const char* data, size_t length);
+    Status load(int64_t version, const DeltaColumnGroupVerPB& dcg_ver_pb);
     std::string save() const;
     // merge this dcg into dst dcgs by version, returns the number of successful merges
     int merge_into_by_version(DeltaColumnGroupList& dcgs, const std::string& dir, const RowsetId& rowset_id,
@@ -43,12 +48,12 @@ public:
     // merge src dcg into this dcg by version and change the src dcg's file name suffix
     bool merge_by_version(DeltaColumnGroup& dcg, const std::string& dir, const RowsetId& rowset_id, int segment_id);
 
-    std::pair<int32_t, int32_t> get_column_idx(uint32_t cid) const {
-        for (int idx = 0; idx < _column_ids.size(); ++idx) {
-            for (int cidx = 0; cidx < _column_ids[idx].size(); cidx++) {
+    std::pair<int32_t, int32_t> get_column_idx(ColumnUID uid) const {
+        for (int idx = 0; idx < _column_uids.size(); ++idx) {
+            for (int cidx = 0; cidx < _column_uids[idx].size(); cidx++) {
                 // it is impossible that multiple _column_ids[idx][cidx]
                 // will hit cid in a single dcg.
-                if (_column_ids[idx][cidx] == cid) {
+                if (_column_uids[idx][cidx] == uid) {
                     return std::pair<int32_t, int32_t>{std::pair{idx, cidx}};
                 }
             }
@@ -64,7 +69,19 @@ public:
         }
         return column_files;
     }
-    const std::vector<std::vector<uint32_t>>& column_ids() const { return _column_ids; }
+
+    StatusOr<std::string> column_file_by_idx(const std::string& dir_path, uint32_t idx) const {
+        if (idx >= _column_files.size()) {
+            return Status::InvalidArgument(fmt::format("column_file_by_idx fail, path: {} column file cnt: {} idx: {}",
+                                                       dir_path, _column_files.size(), idx));
+        }
+        return dir_path + "/" + _column_files[idx];
+    }
+
+    // TODO: rename
+    std::vector<std::vector<ColumnUID>>& column_ids() { return _column_uids; }
+    // TODO: rename
+    const std::vector<std::vector<ColumnUID>>& column_ids() const { return _column_uids; }
     int64_t version() const { return _version; }
 
     std::string debug_string() {
@@ -72,9 +89,9 @@ public:
         ss << "ver:" << _version << ", ";
         for (int i = 0; i < _column_files.size(); ++i) {
             ss << "file:" << _column_files[i] << ", ";
-            ss << "cids:";
-            for (uint32_t cid : _column_ids[i]) {
-                ss << cid << "|";
+            ss << "uids:";
+            for (auto uid : _column_uids[i]) {
+                ss << uid << "|";
             }
 
             ss << "\n";
@@ -86,21 +103,34 @@ public:
 
     const std::vector<std::string>& relative_column_files() const { return _column_files; }
 
+    const std::vector<std::string>& encryption_metas() const { return _encryption_metas; }
+
+    // Per-file size of each `.cols` file, 1:1 with relative_column_files(). May be empty (and
+    // individual entries may be 0) for data written before the size field existed.
+    const std::vector<int64_t>& column_file_sizes() const { return _column_file_sizes; }
+
+    int64_t file_size() const { return _file_size; }
+
 private:
     void _calc_memory_usage();
 
 private:
     int64_t _version = 0;
-    std::vector<std::vector<uint32_t>> _column_ids;
+    std::vector<std::vector<ColumnUID>> _column_uids;
     std::vector<std::string> _column_files;
+    std::vector<std::string> _encryption_metas;
+    std::vector<int64_t> _column_file_sizes; // per-file size, 1:1 with _column_files; 0/empty = unknown
     size_t _memory_usage = 0;
+    int64_t _file_size = 0; // file size of all column files
 };
 
 class DeltaColumnGroupLoader {
 public:
     DeltaColumnGroupLoader() = default;
     virtual ~DeltaColumnGroupLoader() = default;
+    // Used for PK table
     virtual Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) = 0;
+    // Used for non-PK table
     virtual Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
                         DeltaColumnGroupList* pdcgs) = 0;
 };
@@ -119,8 +149,9 @@ public:
 class DeltaColumnGroupListHelper {
 public:
     static void garbage_collection(DeltaColumnGroupList& dcg_list, const TabletSegmentId& tsid,
-                                   int64_t min_readable_version,
-                                   std::vector<std::pair<TabletSegmentId, int64_t>>& garbage_dcgs);
+                                   int64_t min_readable_version, const std::string& tablet_path,
+                                   std::vector<std::pair<TabletSegmentId, int64_t>>* garbage_dcgs,
+                                   std::vector<std::string>* garbage_files);
 
     // used for non-Primary Key tablet only
     static Status save_snapshot(const std::string& file_path, DeltaColumnGroupSnapshotPB& dcg_snapshot_pb);

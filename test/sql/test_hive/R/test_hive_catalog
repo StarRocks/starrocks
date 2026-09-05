@@ -1,5 +1,16 @@
 -- name: testHiveCatalog
-create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+set enable_dynamic_prune_scan_range=false;
+-- result:
+-- !result
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+drop table if exists hive_sql_test_${uuid0}.hive_oss_db.not_exist_${uuid0};
 -- result:
 -- !result
 select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy where col_date = (select max(col_date) from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy);
@@ -7,6 +18,44 @@ select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy whe
 1	hello world	2022-01-01	1
 2	hello wrold	2022-01-01	1
 -- !result
-drop catalog hive_sql_test_${uuid0}
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet a inner join[shuffle] (select b.id as id from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet b inner join[shuffle] hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet c on b.city=c.city) d on a.id = d.id order by 1, 2, 3, 4;
+-- result:
+1	Alice	bj	1
+1	Alice	bj	1
+2	Bob	bj	2
+2	Bob	bj	2
+-- !result
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet a join hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet b on a.id = b.id where a.city=(select max(city) from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet) and a.name is not null order by 1, 2, 3, 4, 5, 6;
+-- result:
+1	Alice	bj	1	Alice	bj
+2	Bob	bj	2	Bob	bj
+-- !result
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc a inner join[shuffle] (select b.id as id from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc b inner join[shuffle] hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc c on b.city=c.city) d on a.id = d.id order by 1, 2, 3, 4;
+-- result:
+1	Alice	bj	1
+1	Alice	bj	1
+2	Bob	bj	2
+2	Bob	bj	2
+-- !result
+select * from hive_sql_test_${uuid0}.test_oss.test_hive_view;
+-- result:
+1
+-- !result
+create external catalog unified_catalog_${uuid0} PROPERTIES ("type"="unified",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}",
+    "unified.metastore.type"="hive"
+);
+-- result:
+-- !result
+refresh external table unified_catalog_${uuid0}.test_oss.test_hive_view;
+-- result:
+-- !result
+drop catalog unified_catalog_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sql_test_${uuid0};
 -- result:
 -- !result

@@ -1,0 +1,88 @@
+-- name: test_unnest_prune_needs_access_path
+-- Bug: PruneSubfieldsForComplexType narrowed the declared type of an OLAP scan column to the
+-- subfields the query touches, but what BE materializes is decided by the pushed-down
+-- ColumnAccessPath: OlapChunkSource builds its output chunk from the TABLET schema and narrows it
+-- only in _prune_schema_by_access_paths, which returns immediately when the column has no path.
+-- UNNEST over a whole array needs the entire array, so no path survives for it, yet the rule
+-- narrowed the type anyway once the array crossed a materialization boundary (a TopN or a window)
+-- on its way to the UNNEST. FE then declared ARRAY<STRUCT<root_domain>> while the scan handed out
+-- the full four-field element, and every operator that builds a column from the declared type
+-- disagreed with the data flowing into it:
+--   StructColumn::append <- ArrayColumn::append <- ArrayColumn::append_selective
+--   <- NullableColumn::append_selective <- JoinHashMap::probe
+--     Check failed: _fields.size() == struct_column.fields().size() (1 vs. 4)
+-- Across an exchange it is worse: the chunk encoding is positional and only the first chunk carries
+-- the meta, so the receiver walks one sub-column where the sender wrote four, reads the next length
+-- field out of unrelated bytes and can memcpy into an unallocated buffer - SIGSEGV at 0x0 inside
+-- serde::read_raw. Workaround before the fix: set enable_prune_complex_types = false.
+drop database if exists test_unnest_prune_needs_access_path;
+create database test_unnest_prune_needs_access_path;
+use test_unnest_prune_needs_access_path;
+
+-- the last two struct fields carry names that appear nowhere else in a plan, so asserting on them
+-- says whether the declared element type is still the full one, without depending on how a given
+-- version formats types in EXPLAIN
+create table citations_tbl (
+  id bigint null,
+  engine_id int null,
+  cites array<struct<root_domain varchar(64), normalized_url varchar(64),
+                     prunedawaymarker1 int, prunedawaymarker2 int>>
+) duplicate key(id)
+distributed by hash(id) buckets 3 properties("replication_num"="1");
+
+create table engines_tbl (
+  engine_id int null,
+  engine_name varchar(32) null
+) duplicate key(engine_id)
+distributed by hash(engine_id) buckets 3 properties("replication_num"="1");
+
+insert into citations_tbl values
+  (1, 1, [row('apple.com', 'https://a/1', 11, 12), row('other.com', 'https://o/1', 13, 14)]),
+  (2, 2, null),
+  (3, 1, []),
+  (4, 2, [row('apple.com', 'https://a/2', null, null)]),
+  (5, 1, [row(null, null, 15, 16), row('apple.com', 'https://a/3', 17, 18)]);
+
+insert into engines_tbl values (1, 'e1'), (2, 'e2');
+
+-- UNNEST reads the whole array, so no ColumnAccessPath is pushed down for `cites` and BE
+-- materializes the full element from the tablet schema. The declared type must stay just as wide,
+-- even though only root_domain is read. Before the fix this scan declared ARRAY<STRUCT<root_domain>>
+-- and both marker fields disappeared from the plan.
+function: assert_explain_verbose_contains('select count(*) from (select cites from citations_tbl order by id limit 100) s left join unnest(s.cites) t(x) on true where x.root_domain = "apple.com"', 'prunedawaymarker1')
+function: assert_explain_verbose_contains('select count(*) from (select cites from citations_tbl order by id limit 100) s left join unnest(s.cites) t(x) on true where x.root_domain = "apple.com"', 'prunedawaymarker2')
+function: assert_explain_not_contains('select count(*) from (select cites from citations_tbl order by id limit 100) s left join unnest(s.cites) t(x) on true where x.root_domain = "apple.com"', 'ColumnAccessPath')
+
+-- same through a window function, which is the shape the production query had
+function: assert_explain_verbose_contains('select count(*) from (select cites, dense_rank() over (partition by engine_id order by id) rn from citations_tbl) s left join unnest(s.cites) t(x) on true where rn = 1 and x.root_domain = "apple.com"', 'prunedawaymarker1')
+
+-- the fix must stay narrow in scope: reading a subfield directly still pushes an access path down,
+-- and there the declared type is still narrowed in lockstep with what BE reads
+function: assert_explain_verbose_contains('select cites[1].root_domain from citations_tbl', 'ColumnAccessPath')
+
+-- the shape that crashed: the array crosses a materialization boundary and then feeds a join probe
+-- that copies the array-of-struct
+select count(*) from (select cites, engine_id from citations_tbl order by id limit 100) s
+left join unnest(s.cites) as t(x) on true
+join engines_tbl e on s.engine_id = e.engine_id
+where x.root_domain = 'apple.com';
+
+-- the same column carried across a serialized exchange
+set enable_exchange_pass_through = false;
+select e.engine_name, count(*) from (select cites, engine_id from citations_tbl order by id limit 100) s
+left join unnest(s.cites) as t(x) on true
+join engines_tbl e on s.engine_id = e.engine_id
+group by e.engine_name order by e.engine_name;
+
+-- through the window, then shuffled
+select x.root_domain, count(*) from (
+  select cites, dense_rank() over (partition by engine_id order by id) rn from citations_tbl
+) s left join unnest(s.cites) as t(x) on true
+where rn = 1
+group by 1 order by 1;
+
+-- reading every subfield must of course keep working
+select x.root_domain, x.normalized_url, x.prunedawaymarker1, x.prunedawaymarker2
+from citations_tbl c, unnest(c.cites) as t(x) order by 1, 2, 3, 4;
+
+drop database test_unnest_prune_needs_access_path;

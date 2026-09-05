@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns an array of distinct values within the range specified by start and end, with an increment of step."
 ---
 
 # array_generate
 
-## Description
+
 
 Returns an array of distinct values within the range specified by `start` and `end`, with an increment of `step`.
 

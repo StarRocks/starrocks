@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回指定日期对应的月份名称。"
 ---
 
 # monthname
 
-## 功能
+
 
 返回指定日期对应的月份。参数为 DATE 或 DATETIME 类型。
 

@@ -36,17 +36,22 @@
 
 #include <memory> // for unique_ptr
 
+#include "column/global_dict/types.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"      // for Status
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
-#include "runtime/global_dict/types.h"
+#include "storage_primitive/flat_json_config.h"
+#ifndef __APPLE__
+#include "storage/index/inverted/inverted_writer.h"
+#endif
+#include "base/bit/bitmap.h"   // for BitmapChange
+#include "base/string/slice.h" // for OwnedSlice
 #include "storage/rowset/binary_dict_page.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
-#include "util/bitmap.h"                 // for BitmapChange
-#include "util/slice.h"                  // for OwnedSlice
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
@@ -56,26 +61,76 @@ class WritableFile;
 
 class Column;
 
+static const size_t dictionary_min_rowcount = 256;
+
 struct ColumnWriterOptions {
+    ColumnWriterOptions();
+
     // input and output parameter:
     // - input: column_id/unique_id/type/length/encoding/compression/is_nullable members
     // - output: encoding/indexes/dict_page members
     ColumnMetaPB* meta;
-    uint32_t data_page_size = OLAP_PAGE_SIZE;
+    uint32_t data_page_size;
     uint32_t page_format = 2;
     // store compressed page only when space saving is above the threshold.
     // space saving = 1 - compressed_size / uncompressed_size
     double compression_min_space_saving = 0.1;
     bool need_zone_map = false;
+    bool zone_map_truncate_string = false; // truncate string at write time to reduce comparison/metadata overhead.
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
+    bool need_vector_index = false;
+    bool need_inverted_index = false;
+
+    std::unordered_map<IndexType, std::string> standalone_index_file_paths;
+    std::unordered_map<IndexType, TabletIndex> tablet_index;
+
     // for char/varchar will speculate encoding in append
     // for others will decide encoding in init method
     bool need_speculate_encoding = false;
 
     // when column data is encoding by dict
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
-    GlobalDictMap* global_dict = nullptr;
+    const GlobalDictMap* global_dict = nullptr;
+    // map<sub_column_name, dict> for FlatJSON
+    std::unordered_map<std::string, const GlobalDictMap> flat_json_dicts;
+
+    bool is_compaction = false;
+    bool need_flat = false;
+
+    std::string field_name;
+    const FlatJsonConfig* flat_json_config = nullptr;
+
+    std::string to_string() const {
+        std::string meta_str;
+        if (meta) {
+            meta_str = meta->DebugString();
+            std::replace(meta_str.begin(), meta_str.end(), '\n', ',');
+        } else {
+            meta_str = "null";
+        }
+        std::ostringstream oss;
+        oss << "ColumnWriterOptions{";
+        oss << "meta=" << meta_str << ", ";
+        oss << "data_page_size=" << data_page_size << ", ";
+        oss << "page_format=" << page_format << ", ";
+        oss << "compression_min_space_saving=" << compression_min_space_saving << ", ";
+        oss << "need_zone_map=" << need_zone_map << ", ";
+        oss << "need_bitmap_index=" << need_bitmap_index << ", ";
+        oss << "need_bloom_filter=" << need_bloom_filter << ", ";
+        oss << "need_vector_index=" << need_vector_index << ", ";
+        oss << "need_inverted_index=" << need_inverted_index << ", ";
+        // oss << "standalone_index_file_paths.size=" << standalone_index_file_paths.size() << ", ";
+        // oss << "tablet_index.size=" << tablet_index.size() << ", ";
+        oss << "need_speculate_encoding=" << need_speculate_encoding << ", ";
+        // oss << "global_dict=" << (global_dict ? "set" : "null") << ", ";
+        oss << "is_compaction=" << is_compaction << ", ";
+        oss << "need_flat=" << need_flat << ", ";
+        oss << "field_name=\"" << field_name << "\", ";
+        oss << "flat_json_config=" << (flat_json_config ? flat_json_config->to_string() : "null");
+        oss << "}";
+        return oss.str();
+    }
 };
 
 class BitmapIndexWriter;
@@ -119,6 +174,10 @@ public:
 
     virtual Status write_bloom_filter_index() = 0;
 
+    virtual Status write_inverted_index() { return Status::OK(); }
+
+    virtual Status write_vector_index(uint64_t* index_size) { return Status::OK(); }
+
     virtual ordinal_t get_next_rowid() const = 0;
 
     // only invalid in the case of global_dict is not nullptr
@@ -153,6 +212,7 @@ public:
     Status init() override;
 
     Status append(const Column& column) override;
+    Status append(const Column&, const Buffer<Slice>& data);
 
     // Write offset column, it's only used in ArrayColumn
     Status append_array_offsets(const Column& column);
@@ -172,6 +232,8 @@ public:
     Status write_zone_map() override;
     Status write_bitmap_index() override;
     Status write_bloom_filter_index() override;
+    Status write_inverted_index() override;
+
     ordinal_t get_next_rowid() const override { return _next_rowid; }
 
     bool is_global_dict_valid() override { return _is_global_dict_valid; }
@@ -212,7 +274,7 @@ private:
         _data_size += 20;
     }
 
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+    Status _append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
 
     Status _write_data_page(Page* page);
 
@@ -220,7 +282,7 @@ private:
     WritableFile* _wfile;
     uint32_t _curr_page_format;
     // total size of data page list
-    uint64_t _data_size;
+    uint64_t _data_size{0};
 
     // cached generated pages,
     PageHead _pages;
@@ -243,6 +305,10 @@ private:
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
     std::unique_ptr<BitmapIndexWriter> _bitmap_index_builder;
     std::unique_ptr<BloomFilterIndexWriter> _bloom_filter_index_builder;
+#ifndef __APPLE__
+    std::unique_ptr<InvertedWriter> _inverted_index_builder;
+#endif
+
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;
     int64_t _element_ordinal = 0;
@@ -251,6 +317,8 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    Buffer<Slice> _slice_buf;
 };
 
 } // namespace starrocks

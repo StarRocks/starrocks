@@ -1,0 +1,117 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.connector.odps;
+
+import com.aliyun.odps.TableSchema;
+import com.aliyun.odps.type.ArrayTypeInfo;
+import com.aliyun.odps.type.CharTypeInfo;
+import com.aliyun.odps.type.DecimalTypeInfo;
+import com.aliyun.odps.type.MapTypeInfo;
+import com.aliyun.odps.type.StructTypeInfo;
+import com.aliyun.odps.type.TypeInfo;
+import com.aliyun.odps.type.VarcharTypeInfo;
+import com.starrocks.catalog.Column;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+public class EntityConvertUtils {
+
+    public static Type convertType(TypeInfo typeInfo) {
+        switch (typeInfo.getOdpsType()) {
+            case BIGINT:
+                return IntegerType.BIGINT;
+            case INT:
+                return IntegerType.INT;
+            case SMALLINT:
+                return IntegerType.SMALLINT;
+            case TINYINT:
+                return IntegerType.TINYINT;
+            case FLOAT:
+                return FloatType.FLOAT;
+            case DECIMAL:
+                DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) typeInfo;
+                //In odps 2.0, the maximum length of decimal is 38, while in 1.0 it is 54. You need to convert it to String type for processing.
+                //https://help.aliyun.com/zh/maxcompute/user-guide/maxcompute-v2-0-data-type-edition?spm=a2c4g.11186623.help-menu-27797.d_2_15_0_2.1c01123dDL8rEV
+                if (decimalTypeInfo.getPrecision() > 38) {
+                    return TypeFactory.createDefaultCatalogString();
+                }
+                return TypeFactory.createUnifiedDecimalType(decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
+            case DOUBLE:
+                return FloatType.DOUBLE;
+            case CHAR:
+                CharTypeInfo charTypeInfo = (CharTypeInfo) typeInfo;
+                return TypeFactory.createCharType(charTypeInfo.getLength());
+            case VARCHAR:
+                VarcharTypeInfo varcharTypeInfo = (VarcharTypeInfo) typeInfo;
+                return TypeFactory.createVarcharType(varcharTypeInfo.getLength());
+            case STRING:
+            case JSON:
+                return TypeFactory.createDefaultCatalogString();
+            case BINARY:
+                return VarbinaryType.VARBINARY;
+            case BOOLEAN:
+                return BooleanType.BOOLEAN;
+            case DATE:
+                return DateType.DATE;
+            case TIMESTAMP:
+            case DATETIME:
+                return DateType.DATETIME;
+            case MAP:
+                MapTypeInfo mapTypeInfo = (MapTypeInfo) typeInfo;
+                return new MapType(convertType(mapTypeInfo.getKeyTypeInfo()),
+                        convertType(mapTypeInfo.getValueTypeInfo()));
+            case ARRAY:
+                ArrayTypeInfo arrayTypeInfo = (ArrayTypeInfo) typeInfo;
+                return new ArrayType(convertType(arrayTypeInfo.getElementTypeInfo()));
+            case STRUCT:
+                StructTypeInfo structTypeInfo = (StructTypeInfo) typeInfo;
+                List<StructField> structFields = new ArrayList<>();
+                for (int i = 0; i < structTypeInfo.getFieldCount(); i++) {
+                    String name = structTypeInfo.getFieldNames().get(i);
+                    Type t = convertType(structTypeInfo.getFieldTypeInfos().get(i));
+                    structFields.add(new StructField(name, t));
+                }
+                return new StructType(structFields, true);
+            default:
+                return VarcharType.VARCHAR;
+        }
+    }
+
+    public static Column convertColumn(com.aliyun.odps.Column column) {
+        return new Column(column.getName(), convertType(column.getTypeInfo()), true);
+    }
+
+    public static List<Column> getFullSchema(com.aliyun.odps.Table odpsTable) {
+        TableSchema tableSchema = odpsTable.getSchema();
+        List<com.aliyun.odps.Column> columns = new ArrayList<>(tableSchema.getColumns());
+        columns.addAll(tableSchema.getPartitionColumns());
+        return columns.stream().map(EntityConvertUtils::convertColumn).collect(
+                Collectors.toList());
+    }
+}

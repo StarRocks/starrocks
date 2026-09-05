@@ -16,13 +16,9 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.RemoteScanRangeLocations;
+import com.starrocks.connector.hudi.HudiConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -31,11 +27,12 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
 public class HudiScanNode extends ScanNode {
-    private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+    private HudiConnectorScanRangeSource scanRangeSource = null;
 
     private final HudiTable hudiTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
@@ -67,7 +64,8 @@ public class HudiScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
         this.descTbl = descTbl;
-        scanRangeLocations.setup(descTbl, hudiTable, scanNodePredicates);
+        this.scanRangeSource = new HudiConnectorScanRangeSource(descTbl, hudiTable, scanNodePredicates);
+        this.scanRangeSource.setup();
     }
 
     private void setupCloudCredential() {
@@ -85,7 +83,7 @@ public class HudiScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
+        return scanRangeSource.getAllOutputs();
     }
 
     @Override
@@ -99,15 +97,15 @@ public class HudiScanNode extends ScanNode {
         }
         if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         output.append(prefix).append(
@@ -122,6 +120,8 @@ public class HudiScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -132,11 +132,6 @@ public class HudiScanNode extends ScanNode {
         }
 
         return output.toString();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocations.getScanRangeLocationsSize();
     }
 
     @Override
@@ -156,10 +151,18 @@ public class HudiScanNode extends ScanNode {
         HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+
+        setConnectorCatalogType(msg);
     }
 
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    @Override
+    public void prepareRetry() {
+        this.scanRangeSource.reset();
     }
 }

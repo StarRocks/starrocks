@@ -15,13 +15,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class SetDefaultStorageVolumeLog implements Writable {
     @SerializedName(value = "id")
@@ -35,13 +29,4 @@ public class SetDefaultStorageVolumeLog implements Writable {
         return id;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static SetDefaultStorageVolumeLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SetDefaultStorageVolumeLog.class);
-    }
 }

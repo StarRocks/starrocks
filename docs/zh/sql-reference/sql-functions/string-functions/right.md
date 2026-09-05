@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "从字符串右侧返回指定长度的字符。"
 ---
 
 # right
 
-## 功能
+
 
 从字符串右边部分返回指定长度的字符，长度的单位为「utf8 字符」。函数别名为 [strright](strright.md)。
 

@@ -12,47 +12,63 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.CTEContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.NonDeterministicVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.function.Predicate;
 
 /**
- * If the opt expression contains non-deterministic function, force cte reuse to avoid producing wrong result.
+ * Force cte reuse to avoid producing wrong result in the following cases:
+ * 1. The opt expression contains non-deterministic function
+ * 2. The opt expression contains LIMIT without ORDER BY (unstable result order)
  */
 public class ForceCTEReuseRule extends TransformationRule {
+    private final NonDeterministicVisitor functionVisitor;
+    private final boolean checkLimitWithoutOrderBy;
+
     public ForceCTEReuseRule() {
+        this(new NonDeterministicVisitor(), true);
+    }
+
+    public static ForceCTEReuseRule forCallsMatching(Predicate<CallOperator> callPredicate) {
+        return new ForceCTEReuseRule(new NonDeterministicVisitor(callPredicate), false);
+    }
+
+    private ForceCTEReuseRule(NonDeterministicVisitor functionVisitor, boolean checkLimitWithoutOrderBy) {
         super(RuleType.TF_FORCE_CTE_REUSE,
                 Pattern.create(OperatorType.LOGICAL_CTE_PRODUCE, OperatorType.PATTERN_LEAF));
+        this.functionVisitor = functionVisitor;
+        this.checkLimitWithoutOrderBy = checkLimitWithoutOrderBy;
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        if (NonDeterministicVisitor.hasNonDeterministicFunction(input)) {
+        boolean shouldForceReuse = false;
+
+        // Always force reuse for calls selected by this rule instance.
+        if (hasMatchingFunction(input)) {
+            shouldForceReuse = true;
+        }
+
+        // Force reuse for LIMIT without ORDER BY if enabled by session variable
+        if (checkLimitWithoutOrderBy && context.getSessionVariable().isCboCTEForceReuseLimitWithoutOrderBy()
+                && hasLimitWithoutOrderBy(input)) {
+            shouldForceReuse = true;
+        }
+
+        if (shouldForceReuse) {
             LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) input.getOp();
             CTEContext cteContext = context.getCteContext();
             int cteId = produce.getCteId();
@@ -62,157 +78,42 @@ public class ForceCTEReuseRule extends TransformationRule {
         return Collections.emptyList();
     }
 
-    private static class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void> {
-        public static boolean hasNonDeterministicFunction(OptExpression root) {
-            return new NonDeterministicVisitor().visit(root, null);
-        }
+    private boolean hasMatchingFunction(OptExpression root) {
+        return root.getOp().accept(functionVisitor, root, null);
+    }
 
-        boolean checkColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
-            if (columnRefMap == null) {
-                return false;
-            }
-            for (ScalarOperator ref : columnRefMap.values()) {
-                if (hasNonDeterministicFunc(ref)) {
-                    return true;
-                }
-            }
-            return false;
-        }
+    /**
+     * Check if the opt expression contains LIMIT without ORDER BY.
+     * If a CTE has LIMIT without ORDER BY, inline it may cause different results
+     * in different consume points due to unstable row order.
+     */
+    private boolean hasLimitWithoutOrderBy(OptExpression root) {
+        LimitWithoutOrderByVisitor visitor = new LimitWithoutOrderByVisitor();
+        return root.getOp().accept(visitor, root, null);
+    }
 
-        private boolean hasNonDeterministicFunc(ScalarOperator scalarOperator) {
-            if (scalarOperator instanceof CallOperator) {
-                String fnName = ((CallOperator) scalarOperator).getFnName();
-                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
-                    return true;
-                }
-            } else if (scalarOperator instanceof LambdaFunctionOperator) {
-                LambdaFunctionOperator lambdaOp = (LambdaFunctionOperator) scalarOperator;
-                Map<ColumnRefOperator, ScalarOperator> columnRefMap = lambdaOp.getColumnRefMap();
-                if (checkColumnRefMap(columnRefMap)) {
-                    return true;
-                }
-            }
-            for (ScalarOperator child : scalarOperator.getChildren()) {
-                if (hasNonDeterministicFunc(child)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private boolean checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations) {
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
-                CallOperator aggCall = entry.getValue();
-                for (ScalarOperator arg : aggCall.getArguments()) {
-                    if (hasNonDeterministicFunc(arg)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        private boolean checkProject(Projection projection) {
-            if (projection == null) {
-                return false;
-            }
-            Map<ColumnRefOperator, ScalarOperator> columnRefMap =
-                    projection.getColumnRefMap();
-            if (columnRefMap == null) {
-                return false;
-            }
-            for (ScalarOperator scalarOperator : columnRefMap.values()) {
-                if (hasNonDeterministicFunc(scalarOperator)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private boolean checkOptExpression(OptExpression optExpression) {
-            Operator operator = optExpression.getOp();
-            // projections
-            if (operator.getProjection() != null && checkProject(operator.getProjection())) {
-                return true;
-            }
-            // predicates
-            if (operator.getPredicate() != null &&
-                    hasNonDeterministicFunc(operator.getPredicate())) {
-                return true;
-            }
-            return optExpression.getOp().accept(this, optExpression, null);
-        }
-
-        private Boolean visitChildren(OptExpression optExpression) {
-            for (OptExpression input : optExpression.getInputs()) {
-                if (checkOptExpression(input)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
+    /**
+     * Visitor to check if there's a LogicalLimitOperator (LIMIT without ORDER BY)
+     * in the expression tree. Since Limit will merge with TopN, checking for
+     * LogicalLimitOperator is sufficient.
+     */
+    private static class LimitWithoutOrderByVisitor extends OptExpressionVisitor<Boolean, Void> {
         @Override
         public Boolean visit(OptExpression optExpression, Void context) {
-            return visitChildren(optExpression);
-        }
-
-        @Override
-        public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
-            LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
-            if (scanOperator.getPredicate() != null && hasNonDeterministicFunc(scanOperator.getPredicate())) {
-                return true;
+            // Visit children to check for LIMIT without ORDER BY
+            for (OptExpression child : optExpression.getInputs()) {
+                if (child.getOp().accept(this, child, null)) {
+                    return true;
+                }
             }
             return false;
         }
 
         @Override
-        public Boolean visitLogicalJoin(OptExpression optExpression, Void context) {
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
-            if (joinOperator.getOnPredicate() != null &&
-                    hasNonDeterministicFunc(joinOperator.getOnPredicate())) {
-                return true;
-            }
-            return visitChildren(optExpression);
-        }
-
-        @Override
-        public Boolean visitLogicalAggregate(OptExpression optExpression, Void context) {
-            LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
-            if (checkAggCall(aggregationOperator.getAggregations())) {
-                return true;
-            }
-            return visitChildren(optExpression);
-        }
-
-        @Override
-        public Boolean visitLogicalWindow(OptExpression optExpression, Void context) {
-            LogicalWindowOperator operator = (LogicalWindowOperator) optExpression.getOp();
-            if (checkAggCall(operator.getWindowCall())) {
-                return true;
-            }
-            return visitChildren(optExpression);
-        }
-
-        @Override
-        public Boolean visitLogicalProject(OptExpression optExpression, Void context) {
-            Map<ColumnRefOperator, ScalarOperator> map = ((LogicalProjectOperator) optExpression.getOp())
-                    .getColumnRefMap();
-            for (ScalarOperator scalarOperator : map.values()) {
-                if (hasNonDeterministicFunc(scalarOperator)) {
-                    return true;
-                }
-            }
-            return visitChildren(optExpression);
-        }
-
-        @Override
-        public Boolean visitLogicalFilter(OptExpression optExpression, Void context) {
-            LogicalFilterOperator filter = (LogicalFilterOperator) optExpression.getOp();
-            if (filter.getPredicate() != null && hasNonDeterministicFunc(filter.getPredicate()))  {
-                return true;
-            }
-            return visitChildren(optExpression);
+        public Boolean visitLogicalLimit(OptExpression optExpression, Void context) {
+            // Found LogicalLimitOperator, which means LIMIT without ORDER BY
+            // This is unstable and should force CTE reuse
+            return true;
         }
     }
 }

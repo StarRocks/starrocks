@@ -14,63 +14,102 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TableName;
+import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterOpType;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.AlterTableColumnClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
-import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
 
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
-        TableName tbl = statement.getTbl();
-        MetaUtils.normalizationTableName(context, tbl);
-        MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
-        List<AlterClause> alterClauseList = statement.getOps();
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference is null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+        statement.setTableRef(tableRef);
+        TableName tbl = TableName.fromTableRef(tableRef);
+
+        List<AlterClause> alterClauseList = statement.getAlterClauseList();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }
 
-        Table table = MetaUtils.getTable(context, tbl);
-        if (table instanceof MaterializedView && alterClauseList != null) {
+        checkAlterOpConflict(alterClauseList);
+
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tbl.getCatalog(), tbl.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
+        }
+
+        if (alterClauseList.stream().map(AlterOpType::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
+            try {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
+                GlobalStateMgr.getCurrentState().getLocalMetastore().checkDataSizeQuota(db);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().checkReplicaQuota(db);
+            } catch (StarRocksException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        Table table = MetaUtils.getSessionAwareTable(context, null, tbl);
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.ALTER);
+        if (table.isTemporaryTable()) {
+            throw new SemanticException("temporary table doesn't support alter table statement");
+        }
+        if (table instanceof MaterializedView) {
             for (AlterClause alterClause : alterClauseList) {
-                if (!indexCluase(alterClause)) {
+                if (!indexClause(alterClause)) {
                     String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
                             "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
                     throw new SemanticException(msg, tbl.getPos());
                 }
             }
         }
-        AlterTableClauseVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitor();
-        alterTableClauseAnalyzerVisitor.setTable(table);
+        AlterTableClauseAnalyzer alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzer(table);
         for (AlterClause alterClause : alterClauseList) {
-            if ((table instanceof OlapTable) &&
-                    ((OlapTable) table).hasRowStorageType() &&
-                    (alterClause instanceof AddColumnClause || alterClause instanceof DropColumnClause ||
-                            alterClause instanceof AlterTableColumnClause)) {
-                throw new SemanticException(String.format("row store table %s can't do schema change", table.getName()));
-            }
-            alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
+            alterTableClauseAnalyzerVisitor.analyze(context, alterClause);
         }
     }
 
-    public static boolean indexCluase(AlterClause alterClause) {
+    private static void checkAlterOpConflict(List<AlterClause> alterClauses) {
+        Set<AlterOpType> checkedAlterOpTypes = Sets.newHashSet();
+        for (AlterClause alterClause : alterClauses) {
+            AlterOpType opType = AlterOpType.getOpType(alterClause);
+            for (AlterOpType currentOp : checkedAlterOpTypes) {
+                if (!AlterOpType.COMPATIBILITY_MATRIX[currentOp.ordinal()][opType.ordinal()]) {
+                    throw new SemanticException("Alter operation " + opType + " conflicts with operation " + currentOp);
+                }
+            }
+
+            checkedAlterOpTypes.add(opType);
+        }
+    }
+
+    public static boolean indexClause(AlterClause alterClause) {
         if (alterClause instanceof CreateIndexClause || alterClause instanceof DropIndexClause) {
             return true;
-        } else if (alterClause.getProperties() != null && alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
+        } else if (alterClause instanceof ModifyTablePropertiesClause
+                && ((ModifyTablePropertiesClause) alterClause).getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
             return true;
         }
         return false;

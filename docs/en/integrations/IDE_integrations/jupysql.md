@@ -1,12 +1,14 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 40
+displayed_sidebar: docs
+description: "Jupyter notebooks with StarRocks"
 ---
 
 # Jupyter
 
 This guide describes how to integrate your StarRocks cluster with [Jupyter](https://jupyter.org/), the latest web-based interactive development environment for notebooks, code, and data.
 
-All of this is made possible via [JupySQL](https://jupysql.ploomber.io/) which allows you to run SQL and plot large datasets in Jupyter via a %sql, %%sql, and %sqlplot magics.
+All of this is made possible via [JupySQL](https://jupysql.readthedocs.io/) which allows you to run SQL and plot large datasets in Jupyter via a %sql, %%sql, and %sqlplot magics.
 
 You can use JupySQL on top of Jupyter to run queries on top of StarRocks.
 
@@ -16,7 +18,7 @@ Once the data is loaded into the cluster, you can query and visualize it via SQL
 
 Before getting started, you must have the following software installed locally:
 
-- [JupySQL](https://jupysql.ploomber.io/en/latest/quick-start.html): `pip install jupysql`
+- [JupySQL](https://jupysql.readthedocs.io/en/latest/quick-start.html): `pip install jupysql`
 - Jupyterlab: `pip install jupyterlab`
 - [SKlearn Evaluation](https://github.com/ploomber/sklearn-evaluation): `pip install sklearn-evaluation`
 - Python

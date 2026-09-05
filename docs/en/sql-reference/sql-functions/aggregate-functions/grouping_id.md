@@ -1,13 +1,14 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "grouping_id is used to distinguish the grouping statistics results of the same grouping standard."
 ---
 
 
-# GROUPING_ID
+# grouping_id
 
-## Description
 
-GROUPING_ID is used to distinguish the grouping statistics results of the same grouping standard.
+
+grouping_id is used to distinguish the grouping statistics results of the same grouping standard.
 
 ## Syntax
 

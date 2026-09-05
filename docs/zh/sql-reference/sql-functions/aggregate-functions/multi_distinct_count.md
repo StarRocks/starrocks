@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "multi_distinct_count 返回表达式中去除重复值后的行数，等同于 COUNT(DISTINCT expr)。"
 ---
-
 
 # multi_distinct_count
 
-## 功能
+
 
 返回 `expr` 中去除重复值后的行数，功能等同于 COUNT(DISTINCT expr)。
 

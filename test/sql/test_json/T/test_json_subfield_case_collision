@@ -1,0 +1,67 @@
+-- name: test_json_subfield_case_collision
+-- Regression for the JSON subfield case-collision crash: get_json_string(j,'Campaign') and
+-- get_json_string(j,'campaign') address two distinct (case-sensitive) JSON fields. The JSONV2
+-- path-rewrite used to collapse them onto one extended column (case-insensitive Table column map),
+-- producing a scan chunk with mismatched column row counts (CN SIGSEGV) or a wrong global-dict
+-- mapping ("Dict Decode failed"). The rewrite must detect the collision and fall back to reading
+-- the JSON column whole, returning correct distinct values.
+drop database if exists test_json_subfield_case_collision;
+CREATE DATABASE test_json_subfield_case_collision;
+USE test_json_subfield_case_collision;
+
+CREATE TABLE activity (
+  id bigint,
+  tenant_id bigint,
+  fields json
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO activity VALUES
+ (1, 1, parse_json('{"Campaign":"CapA","campaign":"lowa","title":"t1"}')),
+ (2, 1, parse_json('{"Campaign":"CapB","campaign":"lowb","title":"t2"}')),
+ (3, 1, parse_json('{"Campaign":"CapC","title":"t3"}')),
+ (4, 1, parse_json('{"campaign":"lowd"}')),
+ (5, 1, parse_json('{}'));
+
+-- Amplify past chunk_size (4096) so the buggy plan crosses the chunk append / filter paths.
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+
+set cbo_json_v2_rewrite = true;
+set cbo_json_v2_dict_opt = true;
+
+-- Distinct values: 'Campaign' (Cap*) and 'campaign' (low*) must never be equal (eq_cnt = 0).
+SELECT count(get_json_string(fields, 'Campaign')) AS caps_cnt,
+       count(get_json_string(fields, 'campaign')) AS low_cnt,
+       sum(CASE WHEN get_json_string(fields, 'Campaign') = get_json_string(fields, 'campaign')
+                THEN 1 ELSE 0 END) AS eq_cnt
+FROM activity;
+
+-- min/max exercises the global-dict path over the colliding pair (previously "Dict Decode failed").
+SELECT min(get_json_string(fields, 'Campaign')) AS mn_caps,
+       max(get_json_string(fields, 'Campaign')) AS mx_caps,
+       min(get_json_string(fields, 'campaign')) AS mn_low,
+       max(get_json_string(fields, 'campaign')) AS mx_low
+FROM activity;
+
+-- GROUP BY on a coalesced subfield expression (dict-triggering aggregation, mirrors the crash query).
+SELECT COALESCE(get_json_string(fields, 'Campaign'), get_json_string(fields, 'campaign')) AS c,
+       count(*) AS cnt
+FROM activity
+GROUP BY c
+ORDER BY c;
+
+-- Five distinct subfields including the Campaign/campaign case pair (the original crash trigger).
+SELECT count(get_json_string(fields, 'title')) AS t_cnt,
+       count(get_json_string(fields, 'Campaign')) AS caps_cnt,
+       count(get_json_string(fields, 'campaign')) AS low_cnt
+FROM activity;

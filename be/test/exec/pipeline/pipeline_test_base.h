@@ -12,16 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {
@@ -60,7 +65,9 @@ protected:
 
     // lambda used to init _pipelines
     std::function<void(RuntimeState*)> _pipeline_builder;
+
     Pipelines _pipelines;
+    ExecutionGroupPtr exec_group;
 
 private:
     // Prepare execution context of pipeline

@@ -15,6 +15,7 @@
 #include "exec/partition/partition_hash_variant.h"
 
 #include "exec/partition/partition_hash_map.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -170,4 +171,21 @@ bool PartitionHashMapVariant::is_nullable() const {
         return std::decay_t<decltype(*hash_map_with_key)>::is_nullable;
     });
 }
+
+void PartitionHashMapVariant::set_passthrough() {
+    visit([](auto& hash_map_with_key) {
+        if (hash_map_with_key == nullptr) {
+            return;
+        }
+        hash_map_with_key->is_passthrough = true;
+    });
+}
+
+void PartitionHashMapVariant::set_enable_pre_agg() {
+    visit([](auto& hash_map_with_key) {
+        DCHECK(hash_map_with_key != nullptr);
+        hash_map_with_key->enable_pre_agg = true;
+    });
+}
+
 } // namespace starrocks

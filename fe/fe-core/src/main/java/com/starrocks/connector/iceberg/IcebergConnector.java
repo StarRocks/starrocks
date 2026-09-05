@@ -14,18 +14,24 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
+import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.iceberg.jdbc.IcebergJdbcCatalog;
+import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
+import com.starrocks.connector.iceberg.procedure.RegisterTableProcedure;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
@@ -33,36 +39,63 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static org.apache.iceberg.util.ThreadPools.newWorkerPool;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
-    public static final String ICEBERG_CATALOG_TYPE = "iceberg.catalog.type";
-    @Deprecated
-    public static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
-    @Deprecated
-    public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
-    public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
+    private ExecutorService icebergJobPlanningExecutor;
+    private final IcebergCatalogProperties icebergCatalogProperties;
+    private final ConnectorProperties connectorProperties;
+    private final IcebergProcedureRegistry procedureRegistry;
+    // Global commit queue manager for this catalog - shared across all queries
+    // to serialize commits to the same table from different queries
+    private final IcebergCommitQueueManager commitQueueManager;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
+        this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
+        this.connectorProperties = new ConnectorProperties(ConnectorType.ICEBERG, properties);
+        this.procedureRegistry = new IcebergProcedureRegistry();
+
+        // Initialize commit queue manager with a supplier that reads the latest FE configuration
+        // This is a singleton per catalog, shared across all queries
+        this.commitQueueManager = new IcebergCommitQueueManager(() -> {
+            IcebergCommitQueueManager.Config queueConfig = new IcebergCommitQueueManager.Config(
+                    Config.enable_iceberg_commit_queue,
+                    Config.iceberg_commit_queue_timeout_seconds,
+                    Config.iceberg_commit_queue_max_size
+            );
+            return queueConfig;
+        });
+        LOG.info("IcebergCommitQueueManager initialized for catalog {}: enabled={}, timeoutSeconds={}, maxSize={}",
+                catalogName, Config.enable_iceberg_commit_queue,
+                Config.iceberg_commit_queue_timeout_seconds, Config.iceberg_commit_queue_max_size);
+
+        if (!isResourceMappingCatalog(this.catalogName)) {
+            registerProcedures();
+        }
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
-        IcebergCatalogType nativeCatalogType = getNativeCatalogType();
+        IcebergCatalogType nativeCatalogType = icebergCatalogProperties.getCatalogType();
         Configuration conf = hdfsEnvironment.getConfiguration();
 
         if (Config.enable_iceberg_custom_worker_thread) {
             LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
             Properties props = System.getProperties();
-            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
+            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP,
+                    String.valueOf(Config.iceberg_worker_num_threads));
         }
 
         switch (nativeCatalogType) {
@@ -72,34 +105,83 @@ public class IcebergConnector implements Connector {
                 return new IcebergGlueCatalog(catalogName, conf, properties);
             case REST_CATALOG:
                 return new IcebergRESTCatalog(catalogName, conf, properties);
+            case HADOOP_CATALOG:
+                return new IcebergHadoopCatalog(catalogName, conf, properties);
+            case JDBC_CATALOG:
+                return new IcebergJdbcCatalog(catalogName, conf, properties);
             default:
-                throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
+                throw new StarRocksConnectorException("Property %s is missing or not supported now.",
+                        ICEBERG_CATALOG_TYPE);
         }
-    }
-
-    private IcebergCatalogType getNativeCatalogType() {
-        String nativeCatalogTypeStr = properties.get(ICEBERG_CATALOG_TYPE);
-        if (Strings.isNullOrEmpty(nativeCatalogTypeStr)) {
-            nativeCatalogTypeStr = properties.get(ICEBERG_CATALOG_LEGACY);
-        }
-        if (Strings.isNullOrEmpty(nativeCatalogTypeStr)) {
-            throw new StarRocksConnectorException("Can't find iceberg native catalog type. You must specify the" +
-                    " 'iceberg.catalog.type' property when creating an iceberg catalog in the catalog properties");
-        }
-        return IcebergCatalogType.fromString(nativeCatalogTypeStr);
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog());
+        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
+                buildIcebergJobPlanningExecutor(), icebergCatalogProperties,
+                connectorProperties, procedureRegistry, commitQueueManager);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
     // icebergNativeCatalog is lazy, mainly to prevent fe restart failure.
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
-            this.icebergNativeCatalog = buildIcebergNativeCatalog();
+            IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
+
+            if (icebergCatalogProperties.isEnableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
+                nativeCatalog = new CachingIcebergCatalog(catalogName, nativeCatalog,
+                        icebergCatalogProperties, buildBackgroundJobPlanningExecutor());
+                GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                        .registerCachingIcebergCatalog(catalogName, nativeCatalog);
+            }
+            this.icebergNativeCatalog = nativeCatalog;
         }
         return icebergNativeCatalog;
+    }
+
+    private ExecutorService buildIcebergJobPlanningExecutor() {
+        if (icebergJobPlanningExecutor == null) {
+            icebergJobPlanningExecutor = newWorkerPool(catalogName + "-sr-iceberg-worker-pool",
+                    icebergCatalogProperties.getIcebergJobPlanningThreadNum());
+        }
+
+        return icebergJobPlanningExecutor;
+    }
+
+    private ExecutorService buildBackgroundJobPlanningExecutor() {
+        return newWorkerPool(catalogName + "-background-iceberg-worker-pool",
+                icebergCatalogProperties.getBackgroundIcebergJobPlanningThreadNum());
+    }
+
+    private void registerProcedures() {
+        this.procedureRegistry.register(new RegisterTableProcedure(catalogName, getNativeCatalog()));
+    }
+
+    @Override
+    public void shutdown() {
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                .unRegisterCachingIcebergCatalog(catalogName);
+        if (icebergJobPlanningExecutor != null) {
+            icebergJobPlanningExecutor.shutdown();
+        }
+        if (commitQueueManager != null) {
+            commitQueueManager.shutdownAll();
+            LOG.info("IcebergCommitQueueManager shutdown for catalog {}", catalogName);
+        }
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return icebergCatalogProperties.isEnableIcebergMetadataCache() && icebergNativeCatalog != null;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return icebergNativeCatalog.estimateCount();
+    }
+
+    @Override
+    public long estimateSize() {
+        return icebergNativeCatalog.estimateSize();
     }
 }

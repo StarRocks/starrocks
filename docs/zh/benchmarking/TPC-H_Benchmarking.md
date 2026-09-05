@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "TPC-H benchmark on 100 GB dataset: StarRocks native storage is 8.9x faster than Trino; external Hive tables are 2x faster (22 queries)."
 ---
 
 # TPC-H 基准测试
@@ -12,7 +13,7 @@ TPC-H 根据真实的生产运行环境来建模，模拟了一套销售系统�
 
 在 TPC-H 100G 规模的数据集上进行对比测试，共 22 个查询，结果如下：
 
-![TPCH 100G结果](../assets/tpch.png)
+![TPCH 100G结果](../_assets/tpch.png)
 
 StarRocks 测试了使用本地存储查询和 Hive 外表查询两种方式，其中 StarRocks Hive 外表和 Trino 查询的是同一份数据，数据采用 ORC 格式存储，zlib 格式压缩。
 
@@ -20,9 +21,9 @@ StarRocks 测试了使用本地存储查询和 Hive 外表查询两种方式，�
 
 ## 2. 测试准备
 
-### 2.1 硬件环境与成本
+### 2.1 硬件环境
 
-| 机器     | 3台 阿里云主机                                        |
+| 机器     | 4 台阿里云主机                                        |
 | -------- | ----------------------------------------------------- |
 | CPU      | 16core Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz |
 | 内存     | 64 GB                                                  |
@@ -30,6 +31,8 @@ StarRocks 测试了使用本地存储查询和 Hive 外表查询两种方式，�
 | 磁盘     | ESSD 云盘                                              |
 
 ### 2.2 软件环境
+
+StarRocks 和 Trino 部署在相同配置的机器上进行测试，StarRocks 部署 1 个 FE 和 3 个 BE，Trino 部署 1 个 Coordinator 和 3 个 Worker。
 
 - 内核版本：Linux 3.10.0-1127.13.1.el7.x86_64
 
@@ -55,6 +58,7 @@ StarRocks 测试了使用本地存储查询和 Hive 外表查询两种方式，�
 ### 3.2 测试结果
 
 > 查询结果的单位是 ms。
+> 所有查询预热一次，执行三次取平均值作为结果。
 
 |  Query | StarRocks-native-3.0 | StarRocks-3.0-Hive external | Trino-419 |
 | ---- | -------------------- | --------------------------- | --------- |

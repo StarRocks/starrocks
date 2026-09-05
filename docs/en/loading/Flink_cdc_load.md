@@ -1,28 +1,43 @@
 ---
-displayed_sidebar: "English"
+sidebar_position: 100
+displayed_sidebar: docs
+keywords:
+  - MySql
+  - mysql
+  - sync
+  - Flink CDC
+description: "How to use Flink CDC to capture MySQL change data in real time and synchronize it into StarRocks tables using the StarRocks Flink connector."
 ---
 
 # Realtime synchronization from MySQL
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
-StarRocks supports real-time data synchronization from MySQL within seconds, delivering ultra-low latency real-time analytics at scale and enabling users to query real-time data as they happen.
+StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
 
-This tutorial helps you learn how you can bring real-time analytics to your business and users. It demonstrates how to synchronize data from MySQL to StarRocks in real time by using the following tools: StarRocks Migration Tools (SMT), Flink, Flink CDC Connector, and flink-starrocks-connector.
+This topic describes how to synchronize data from MySQL to StarRocks in real-time (within seconds) through Apache Flink®.
 
 <InsertPrivNote />
 
 ## How it works
 
+:::tip
+
+Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Flink CDC whose version is less than 3.0, so SMT is used to synchronize table schemas. However, if Flink CDC 3.0 is used, it is not necessary to use SMT to synchronize table schemas to StarRocks. Flink CDC 3.0 can even synchronize the schemas of the entire MySQL database, the sharded databases and tables, and also supports schema changes synchronization. For detailed usage, see [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/).
+
+:::
+
 The following figure illustrates the entire synchronization process.
 
-![img](../assets/4.9.2.png)
+![img](../_assets/4.9.2.png)
 
-Real-time synchronization from MySQL is implemented in two stages: synchronizing database & table schema and synchronizing data. First, the SMT converts MySQL database & table schema into table creation statements for StarRocks. Then, the Flink cluster runs Flink jobs to synchronize full and incremental MySQL data to StarRocks.
+Real-time synchronization from MySQL through Flink to StarRocks is implemented in two stages: synchronizing database & table schema and synchronizing data. First, the SMT converts MySQL database & table schema into table creation statements for StarRocks. Then, the Flink cluster runs Flink jobs to synchronize full and incremental MySQL data to StarRocks.
 
-> **Note**
->
-> The synchronization process guarantees exactly-once semantics.
+:::info
+
+The synchronization process guarantees exactly-once semantics.
+
+:::
 
 **Synchronization process**:
 
@@ -34,13 +49,15 @@ Real-time synchronization from MySQL is implemented in two stages: synchronizing
 
    a. The Flink SQL client executes the data loading statement `INSERT INTO SELECT` to submit one or more Flink jobs to the Flink cluster.
 
-   b. The Flink cluster runs the Flink jobs to obtain data. The [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/blob/master/docs/content/quickstart/build-real-time-data-lake-tutorial.md) first reads full historical data from the source database, then seamlessly switches to incremental reading, and sends the data to flink-starrocks-connector.
+   b. The Flink cluster runs the Flink jobs to obtain data. The Flink CDC connector first reads full historical data from the source database, then seamlessly switches to incremental reading, and sends the data to flink-connector-starrocks.
 
-   c. flink-starrocks-connector accumulates data in mini-batches, and synchronizes each batch of data to StarRocks.
+   c. flink-connector-starrocks accumulates data in mini-batches, and synchronizes each batch of data to StarRocks.
 
-> **Note**
->
-> Only data manipulation language (DML) operations in MySQL can be synchronized to StarRocks. Data definition language (DDL) operations cannot be synchronized.
+    :::info
+
+    Only data manipulation language (DML) operations in MySQL can be synchronized to StarRocks. Data definition language (DDL) operations cannot be synchronized.
+
+    :::
 
 ## Scenarios
 
@@ -52,7 +69,7 @@ Flink calculates the real-time ranking of commodity sales based on the original 
 
 ### Download and install synchronization tools
 
-To synchronize data from MySQL, you need to install the following tools: SMT, Flink, Flink CDC connector, and flink-starrocks-connector.
+To synchronize data from MySQL, you need to install the following tools: SMT, Flink, Flink CDC connector, and flink-connector-starrocks.
 
 1. Download and install Flink, and start the Flink cluster. You can also perform this step by following the instructions in [Flink official documentation](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/).
 
@@ -68,7 +85,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
         Java HotSpot(TM) 64-Bit Server VM (build 25.301-b09, mixed mode)
     ```
 
-   b. Download the [Flink installation package](https://flink.apache.org/downloads.html) and decompress it. We recommend that you use  Flink 1.14 or later. The minimum allowed version is Flink 1.11. This topic uses Flink 1.14.5.
+   b. Download the [Flink installation package](https://flink.apache.org/downloads/) and decompress it. We recommend that you use  Flink 1.14 or later. The minimum allowed version is Flink 1.11. This topic uses Flink 1.14.5.
 
    ```Bash
       # Download Flink.
@@ -91,7 +108,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
       Starting taskexecutor daemon on host.
     ```
 
-2. Download [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases). This topic uses MySQL as the data source and therefore, `flink-sql-connector-mysql-cdc-x.x.x.jar` is downloaded. The connector version must match the [Flink](https://github.com/ververica/flink-cdc-connectors/releases) version. For detailed version mapping, see [Supported Flink Versions](https://ververica.github.io/flink-cdc-connectors/release-2.2/content/about.html#supported-flink-versions). This topic uses Flink 1.14.5 and you can download `flink-sql-connector-mysql-cdc-2.2.0.jar`.
+2. Download [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases). This topic uses MySQL as the data source and therefore, `flink-sql-connector-mysql-cdc-x.x.x.jar` is downloaded. The connector version must match the [Flink](https://github.com/ververica/flink-cdc-connectors/releases) version. This topic uses Flink 1.14.5 and you can download `flink-sql-connector-mysql-cdc-2.2.0.jar`.
 
     ```Bash
     wget https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.1.1/flink-sql-connector-mysql-cdc-2.2.0.jar
@@ -114,8 +131,8 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
     > If a Flink cluster is already running in your system, you must stop the Flink cluster and restart it to load and validate the JAR packages.
     >
     > ```Bash
-    > $ ./bin/stop-cluster.sh
-    > $ ./bin/start-cluster.sh
+    > ./bin/stop-cluster.sh
+    > ./bin/start-cluster.sh
     > ```
 
 5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory. StarRocks provides SMT packages for Linux x86 and macos ARM64. You can choose one based on your operating system and CPU.
@@ -177,10 +194,11 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 ## Synchronize database & table schema
 
 1. Edit the SMT configuration file.
-   Go to the SMT `conf` directory and edit the configuration file `config_prod.conf`, such as MySQL connection information, the matching rules of the database & table to be synchronized, and configuration information of flink-starrocks-connector.
+   Go to the SMT `conf` directory and edit the configuration file `config_prod.conf`, such as MySQL connection information, the matching rules of the database & table to be synchronized, and configuration information of flink-connector-starrocks.
 
     ```Bash
     [db]
+    type = mysql
     host = xxx.xx.xxx.xx
     port = 3306
     user = user1
@@ -214,7 +232,8 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     flink.starrocks.sink.buffer-flush.interval-ms=15000
     ```
 
-    - `[db]`: MySQL connection information.
+    - `[db]`: information used to access the source database.
+       - `type`: type of the source database. In this topic, the source database is `mysql`.
        - `host`: IP address of the MySQL server.
        - `port`: port number of the MySQL database, defaults to `3306`
        - `user`: username for accessing the MySQL database
@@ -223,13 +242,13 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     - `[table-rule]`: database & table matching rules and the corresponding flink-connector-starrocks configuration.
 
        - `Database`, `table`: the names of the database & table in MySQL. Regular expressions are supported.
-       - `flink.starrocks.*`: configuration information of flink-connector-starrocks. For more configurations and information, see [flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+       - `flink.starrocks.*`: configuration information of flink-connector-starrocks. For more configurations and information, see [flink-connector-starrocks](./Flink-connector-starrocks.md).
 
        > If you need to use different flink-connector-starrocks configurations for different tables. For example, if some tables are frequently updated and you need to accelerate data loading, see [Use different flink-connector-starrocks configurations for different tables](#use-different-flink-connector-starrocks-configurations-for-different-tables). If you need to load multiple tables obtained from MySQL sharding into the same StarRocks table, see [Synchronize multiple tables after MySQL sharding to one table in StarRocks](#synchronize-multiple-tables-after-mysql-sharding-to-one-table-in-starrocks).
 
     - `[other]`: other information
        - `be_num`: The number of BEs in your StarRocks cluster (This parameter will be used for setting a reasonable number of tablets in subsequent StarRocks table creation).
-       - `use_decimal_v3`: Whether to enable [Decimal V3](../sql-reference/sql-statements/data-types/DECIMAL.md). After Decimal V3 is enabled, MySQL decimal data will be converted into Decimal V3 data when data is synchronized to StarRocks.
+       - `use_decimal_v3`: Whether to enable [Decimal V3](../sql-reference/data-types/numeric/DECIMAL.md). After Decimal V3 is enabled, MySQL decimal data will be converted into Decimal V3 data when data is synchronized to StarRocks.
        - `output_dir`: The path to save the SQL files to be generated. The SQL files will be used to create a database & table in StarRocks and submit a Flink job to the Flink cluster. The default path is `./result` and we recommend that you retain the default settings.
 
 2. Run the SMT to read the database & table schema in MySQL and generate SQL files in the `./result` directory based on the configuration file. The `starrocks-create.all.sql` file is used to create a database & table in StarRocks and the `flink-create.all.sql` file is used to submit a Flink job to the Flink cluster.
@@ -249,7 +268,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 
     > **Note**
     >
-    > You can also modify the table creation statement based on your business needs and create a table that does not use the Primary Key table. However, the DELETE operation in the source MySQL database cannot be synchronized to the non-primary key table. Exercise caution when you create such a table.
+    > You can also modify the table creation statement based on your business needs and create a table that does not use the Primary Key table. However, the DELETE operation in the source MySQL database cannot be synchronized to the non- Primary Key table. Exercise caution when you create such a table.
 
     ```Bash
     mysql -h <fe_host> -P <fe_query_port> -u user2 -pxxxxxx < starrocks-create.all.sql
@@ -274,7 +293,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 
     > **NOTICE**
     >
-    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 ## Synchronize data
 
@@ -370,10 +389,10 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
     Job ID: 5ae005c4b3425d8bb13fe660260a35da
     ```
 
-2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
+2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
 
     - Flink WebUI
-      ![img](../assets/4.9.3.png)
+      ![img](../_assets/4.9.3.png)
 
     - `bin/flink list -running`
 
@@ -413,7 +432,9 @@ flink.starrocks.password=xxxxxx
 flink.starrocks.sink.properties.format=csv
 flink.starrocks.sink.properties.column_separator=\x01
 flink.starrocks.sink.properties.row_delimiter=\x02
-flink.starrocks.sink.buffer-flush.interval-ms=15000[table-rule.2]
+flink.starrocks.sink.buffer-flush.interval-ms=15000
+
+[table-rule.2]
 # Pattern to match databases for setting properties
 database = ^order2.*$
 # Pattern to match tables for setting properties

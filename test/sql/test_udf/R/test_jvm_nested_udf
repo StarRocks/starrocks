@@ -1,0 +1,96 @@
+-- name: test_jvm_nested_udf
+create table t_nested (
+    id int,
+    arr array<array<int>>,
+    arr_map array<map<int, string>>,
+    m map<string, array<int>>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_nested values (1, null, null, null);
+-- result:
+-- !result
+insert into t_nested values (2, [[1,2],[3,4]], [map(1,"k1"),map(2,"k2")], map('a', [1,2], 'b', [3,4]));
+-- result:
+-- !result
+CREATE FUNCTION EchoNestedArray(array<array<int>>)
+RETURNS array<array<int>>
+PROPERTIES (
+    "symbol" = "EchoNestedArray",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/nested.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION EchoNestedArray2(array<map<int, string>>)
+RETURNS array<map<int, string>>
+PROPERTIES (
+    "symbol" = "EchoNestedArray2",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/nested.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION EchoNestedMap(map<string,array<int>>)
+RETURNS map<string,array<int>>
+PROPERTIES (
+    "symbol" = "EchoNestedMap",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/nested.jar"
+);
+-- result:
+-- !result
+select EchoNestedArray(null);
+-- result:
+None
+-- !result
+select EchoNestedArray([[1,2],[3,4]]);
+-- result:
+[[1,2],[3,4]]
+-- !result
+select EchoNestedArray2(null);
+-- result:
+None
+-- !result
+select EchoNestedArray2([map(1,"k1"),map(2,"k2")]);
+-- result:
+[{1:"k1"},{2:"k2"}]
+-- !result
+select EchoNestedMap(null);
+-- result:
+None
+-- !result
+select EchoNestedMap(map('a', [1,2], 'b', [3,4]));
+-- result:
+{"a":[1,2],"b":[3,4]}
+-- !result
+select EchoNestedArray(arr) from t_nested order by id;
+-- result:
+None
+[[1,2],[3,4]]
+-- !result
+select EchoNestedArray2(arr_map) from t_nested order by id;
+-- result:
+None
+[{1:"k1"},{2:"k2"}]
+-- !result
+select EchoNestedMap(m) from t_nested order by id;
+-- result:
+None
+{"a":[1,2],"b":[3,4]}
+-- !result
+select * from t_nested where EchoNestedArray(arr) = [[1,2],[3,4]];
+-- result:
+2	[[1,2],[3,4]]	[{1:"k1"},{2:"k2"}]	{"a":[1,2],"b":[3,4]}
+-- !result
+select * from t_nested where EchoNestedArray2(arr_map) = [map(1,"k1"),map(2,"k2")];
+-- result:
+2	[[1,2],[3,4]]	[{1:"k1"},{2:"k2"}]	{"a":[1,2],"b":[3,4]}
+-- !result
+select * from t_nested where EchoNestedMap(m) = map('a', [1,2], 'b', [3,4]);
+-- result:
+2	[[1,2],[3,4]]	[{1:"k1"},{2:"k2"}]	{"a":[1,2],"b":[3,4]}
+-- !result

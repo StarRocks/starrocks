@@ -1,0 +1,789 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/replication_txn_manager.h"
+
+#include <fmt/format.h>
+#include <sys/stat.h>
+
+#include <filesystem>
+#include <numeric>
+#include <set>
+
+#include "base/string/string_parser.hpp"
+#include "base/utility/defer_op.h"
+#include "column/schema.h"
+#include "common/config_http_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/system/backend_options.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
+#include "fs/fs.h"
+#include "fs/fs_memory.h"
+#include "gen_cpp/BackendService.h"
+#include "gen_cpp/Types_constants.h"
+#include "gutil/strings/split.h"
+#include "gutil/strings/stringpiece.h"
+#include "gutil/strings/substitute.h"
+#include "platform/http/http_client.h"
+#include "platform/key_cache.h"
+#include "platform/thrift_rpc_helper.h"
+#include "runtime/current_thread.h"
+#include "storage/chunk_helper.h"
+#include "storage/del_file_stream_converter.h"
+#include "storage/delete_handler.h"
+#include "storage/delta_column_group.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/location_provider.h"
+#include "storage/lake/meta_file.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/vacuum.h"
+#include "storage/protobuf_file.h"
+#include "storage/replication_utils.h"
+#include "storage/rowset/rowset.h"
+#include "storage/rowset/rowset_factory.h"
+#include "storage/segment_stream_converter.h"
+#include "storage/snapshot_manager.h"
+#include "storage/tablet_updates.h"
+#include "types/logical_type.h"
+
+namespace starrocks::lake {
+namespace {
+
+template <typename EncryptionMetas>
+Status validate_unencrypted_shared_nothing_source(const EncryptionMetas& encryption_metas) {
+    for (const auto& encryption_meta : encryption_metas) {
+        if (!encryption_meta.empty()) {
+            return Status::NotSupported(
+                    "Cross-cluster replication from encrypted shared-nothing source files to shared-data targets is "
+                    "not supported");
+        }
+    }
+    return Status::OK();
+}
+
+} // namespace
+
+Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info) {
+    if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
+        return Status::InternalError("Process is going to quit. The remote snapshot will stop");
+    }
+
+    ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(request.tablet_id));
+
+    auto status_or_txn_log = tablet.get_txn_slog(request.transaction_id);
+    if (status_or_txn_log.ok()) {
+        const ReplicationTxnMetaPB& txn_meta = status_or_txn_log.value()->op_replication().txn_meta();
+        if (txn_meta.txn_state() == ReplicationTxnStatePB::TXN_SNAPSHOTED &&
+            txn_meta.snapshot_version() == request.src_visible_version) {
+            LOG(INFO) << "Tablet " << request.tablet_id << " already made remote snapshot"
+                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                      << ", src_tablet_id: " << request.src_tablet_id
+                      << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
+                      << ", snapshot_version: " << request.src_visible_version;
+            return Status::OK();
+        }
+    }
+
+    std::vector<Version> missed_versions;
+    for (auto v = request.data_version + 1; v <= request.src_visible_version; ++v) {
+        missed_versions.emplace_back(v, v);
+    }
+    if (UNLIKELY(missed_versions.empty())) {
+        LOG(WARNING) << "Remote snapshot tablet skipped, no missing version"
+                     << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                     << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+                     << ", data_version: " << request.data_version
+                     << ", snapshot_version: " << request.src_visible_version;
+        return Status::Corruption("No missing version");
+    }
+
+    LOG(INFO) << "Start make remote snapshot, txn_id: " << request.transaction_id
+              << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+              << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
+              << ", snapshot_version: " << request.src_visible_version << ", missed_versions: ["
+              << (request.data_version + 1) << " ... " << request.src_visible_version << "]";
+
+    Status status;
+    if (request.data_version <= 1) { // Make full snapshot
+        src_snapshot_info->incremental_snapshot = false;
+        status = make_remote_snapshot(request, nullptr, nullptr, &src_snapshot_info->backend,
+                                      &src_snapshot_info->snapshot_path);
+    } else { // Try to make incremental snapshot first, if failed, make full snapshot
+        src_snapshot_info->incremental_snapshot = true;
+        status = make_remote_snapshot(request, &missed_versions, nullptr, &src_snapshot_info->backend,
+                                      &src_snapshot_info->snapshot_path);
+        if (!status.ok()) {
+            LOG(INFO) << "Failed to make incremental snapshot: " << status << ". switch to fully snapshot"
+                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                      << ", src_tablet_id: " << request.src_tablet_id
+                      << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
+                      << ", snapshot_version: " << request.src_visible_version;
+            src_snapshot_info->incremental_snapshot = false;
+            status = make_remote_snapshot(request, nullptr, nullptr, &src_snapshot_info->backend,
+                                          &src_snapshot_info->snapshot_path);
+        }
+    }
+
+    if (!status.ok()) {
+        LOG(WARNING) << "Failed to make remote snapshot: " << status << ", txn_id: " << request.transaction_id
+                     << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+                     << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
+                     << ", snapshot_version: " << request.src_visible_version;
+        return status;
+    }
+
+    src_snapshot_info->__isset.backend = true;
+    src_snapshot_info->__isset.snapshot_path = true;
+    src_snapshot_info->__isset.incremental_snapshot = true;
+
+    LOG(INFO) << "Made remote snapshot from " << src_snapshot_info->backend.host << ":"
+              << src_snapshot_info->backend.be_port << ":" << src_snapshot_info->snapshot_path
+              << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+              << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+              << ", data_version: " << request.data_version << ", snapshot_version: " << request.src_visible_version
+              << ", incremental_snapshot: " << src_snapshot_info->incremental_snapshot;
+
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(request.tablet_id);
+    txn_log->set_txn_id(request.transaction_id);
+
+    auto* txn_meta = txn_log->mutable_op_replication()->mutable_txn_meta();
+    txn_meta->set_txn_id(request.transaction_id);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_SNAPSHOTED);
+    txn_meta->set_tablet_id(request.tablet_id);
+    txn_meta->set_visible_version(request.visible_version);
+    txn_meta->set_data_version(request.data_version);
+    txn_meta->set_src_backend_host(src_snapshot_info->backend.host);
+    txn_meta->set_src_backend_port(src_snapshot_info->backend.be_port);
+    txn_meta->set_src_snapshot_path(src_snapshot_info->snapshot_path);
+    txn_meta->set_snapshot_version(request.src_visible_version);
+    txn_meta->set_incremental_snapshot(src_snapshot_info->incremental_snapshot);
+
+    return tablet.put_txn_slog(txn_log);
+}
+
+Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest& request,
+                                                 ThreadPool* replicate_file_thread_pool) {
+    if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
+        return Status::InternalError("Process is going to quit. The replicate snapshot will stop");
+    }
+    if (!request.encryption_meta.empty()) {
+        RETURN_IF_ERROR_WITH_WARN(KeyCache::instance().refresh_keys(request.encryption_meta),
+                                  "refresh keys using encryption_meta in TReplicateSnapshotRequest failed");
+    }
+
+    ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(request.tablet_id));
+
+    auto status_or_txn_log = tablet.get_txn_log(request.transaction_id);
+    if (status_or_txn_log.ok()) {
+        const ReplicationTxnMetaPB& txn_meta = status_or_txn_log.value()->op_replication().txn_meta();
+        if (txn_meta.txn_state() >= ReplicationTxnStatePB::TXN_REPLICATED &&
+            txn_meta.snapshot_version() == request.src_visible_version) {
+            LOG(INFO) << "Tablet " << request.tablet_id << " already replicated remote snapshot"
+                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                      << ", src_tablet_id: " << request.src_tablet_id
+                      << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
+                      << ", snapshot_version: " << request.src_visible_version;
+            return Status::OK();
+        }
+    }
+
+    ASSIGN_OR_RETURN(auto tablet_metadata, tablet.get_metadata(request.visible_version));
+
+    if (request.src_tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        auto status = _lake_replication_txn_manager->replicate_lake_remote_storage(request, replicate_file_thread_pool);
+        if (!status.ok()) {
+            LOG(WARNING) << "Failed to replicate lake remote file, tablet_id: " << request.tablet_id
+                         << ", txn_id: " << request.transaction_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", error: " << status.to_string();
+        }
+        return status;
+    } else {
+        Status status;
+        for (const auto& src_snapshot_info : request.src_snapshot_infos) {
+            status = replicate_remote_snapshot(request, src_snapshot_info, tablet_metadata);
+            if (!status.ok()) {
+                LOG(WARNING) << "Failed to download snapshot from " << src_snapshot_info.backend.host << ":"
+                             << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << ", "
+                             << status << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                             << ", src_tablet_id: " << request.src_tablet_id
+                             << ", visible_version: " << request.visible_version
+                             << ", data_version: " << request.data_version
+                             << ", snapshot_version: " << request.src_visible_version;
+                continue;
+            }
+
+            LOG(INFO) << "Replicated remote snapshot from " << src_snapshot_info.backend.host << ":"
+                      << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << " to "
+                      << _tablet_manager->location_provider()->segment_root_location(request.tablet_id)
+                      << ", keys_type: " << KeysType_Name(tablet_metadata->schema().keys_type())
+                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                      << ", snapshot_version: " << request.src_visible_version;
+
+            return status;
+        }
+
+        return status;
+    }
+}
+
+Status ReplicationTxnManager::clear_snapshots(const TxnLogPtr& txn_slog) {
+    const auto& txn_meta = txn_slog->op_replication().txn_meta();
+    return ReplicationUtils::release_remote_snapshot(txn_meta.src_backend_host(), txn_meta.src_backend_port(),
+                                                     txn_meta.src_snapshot_path(), _snapshot_client);
+}
+
+Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest& request,
+                                                   const std::vector<Version>* missed_versions,
+                                                   const std::vector<int64_t>* missing_version_ranges,
+                                                   TBackend* src_backend, std::string* src_snapshot_path) {
+    int timeout_s = 0;
+    if (request.__isset.timeout_sec) {
+        timeout_s = request.timeout_sec;
+    }
+
+    Status status;
+    for (const auto& src_be : request.src_backends) {
+        // Make snapshot in remote olap engine
+        status = ReplicationUtils::make_remote_snapshot(src_be.host, src_be.be_port, request.src_tablet_id,
+                                                        request.src_schema_hash, request.src_visible_version, timeout_s,
+                                                        missed_versions, missing_version_ranges, src_snapshot_path,
+                                                        _snapshot_client);
+        if (!status.ok()) {
+            continue;
+        }
+
+        *src_backend = src_be;
+        break;
+    }
+
+    return status;
+}
+
+Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
+                                                        const TSnapshotInfo& src_snapshot_info,
+                                                        const TabletMetadataPtr& tablet_metadata) {
+    auto txn_log = std::make_shared<TxnLog>();
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    const TabletSchemaPB* source_schema_pb = nullptr;
+
+    if (!is_primary_key(*tablet_metadata)) { // None-pk table
+        std::string remote_header_file_name = std::to_string(request.src_tablet_id) + ".hdr";
+        ASSIGN_OR_RETURN(auto header_file_content,
+                         ReplicationUtils::download_remote_snapshot_file(
+                                 src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
+                                 src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash,
+                                 remote_header_file_name, config::download_low_speed_time));
+        TabletMeta tablet_meta;
+        auto status = tablet_meta.create_from_memory(header_file_content);
+        if (!status.ok()) {
+            LOG(WARNING) << "Failed to parse remote snapshot header file: " << remote_header_file_name
+                         << ", content: " << header_file_content << ", status: " << status;
+            return status.clone_and_prepend("Failed to parse remote snapshot header file: " + remote_header_file_name +
+                                            ", content: " + header_file_content + ", status");
+        }
+
+        const auto& rowset_metas =
+                tablet_meta.all_rs_metas().empty() ? tablet_meta.all_inc_rs_metas() : tablet_meta.all_rs_metas();
+        for (const auto& rowset_meta : rowset_metas) {
+            auto* op_write = txn_log->mutable_op_replication()->add_op_writes();
+            RETURN_IF_ERROR(convert_rowset_meta(*rowset_meta, request.transaction_id, op_write, &filename_map));
+        }
+
+        // Handle delta column groups (DCGs) for non-PK tables.
+        // Skip .dcgs_snapshot download for incremental snapshots -- snapshot_incremental() never creates
+        // this file, so the download would always get NotFound. Only attempt download for full snapshots.
+        // Note: we cannot add a has_dcg flag to TSnapshotInfo or embed DCG in .hdr because cross-cluster
+        // replication must not depend on the source cluster upgrading its code version, so for full
+        // snapshots of tables without DCGs, the target still makes one NotFound request (acceptable since
+        // full replication is rare -- only initial sync or fallback).
+        if (!src_snapshot_info.incremental_snapshot) {
+            std::string remote_dcgs_snapshot_file_name = std::to_string(request.src_tablet_id) + ".dcgs_snapshot";
+            auto dcgs_snapshot_content_or = ReplicationUtils::download_remote_snapshot_file(
+                    src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
+                    src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash,
+                    remote_dcgs_snapshot_file_name, config::download_low_speed_time);
+            if (dcgs_snapshot_content_or.ok()) {
+                DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+                RETURN_IF_ERROR(
+                        ProtobufFileWithHeader::load_from_buffer(&dcg_snapshot_pb, dcgs_snapshot_content_or.value()));
+
+                std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id;
+                for (const auto& rowset_meta : rowset_metas) {
+                    rowset_id_to_seg_id[rowset_meta->rowset_id().to_string()] = rowset_meta->get_rowset_seg_id();
+                }
+
+                RETURN_IF_ERROR(convert_dcg_meta_for_non_pk(
+                        dcg_snapshot_pb, rowset_id_to_seg_id, request.transaction_id,
+                        txn_log->mutable_op_replication()->mutable_dcg_meta(), &filename_map));
+            } else if (!dcgs_snapshot_content_or.status().is_not_found()) {
+                LOG(WARNING) << "Failed to download dcgs_snapshot file: " << remote_dcgs_snapshot_file_name
+                             << ", status: " << dcgs_snapshot_content_or.status();
+                return dcgs_snapshot_content_or.status().clone_and_prepend("Failed to download dcgs_snapshot file: " +
+                                                                           remote_dcgs_snapshot_file_name);
+            }
+        }
+
+        // None-pk table always has tablet schema in tablet meta
+        tablet_meta.tablet_schema_ptr()->to_schema_pb(txn_log->mutable_op_replication()->mutable_source_schema());
+        source_schema_pb = &txn_log->op_replication().source_schema();
+    } else { // Pk table
+        std::string snapshot_meta_file_name = "meta";
+        ASSIGN_OR_RETURN(auto snapshot_meta_content,
+                         ReplicationUtils::download_remote_snapshot_file(
+                                 src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
+                                 src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash,
+                                 snapshot_meta_file_name, config::download_low_speed_time));
+
+        auto memory_file = new_random_access_file_from_memory(snapshot_meta_file_name, snapshot_meta_content);
+        SnapshotMeta snapshot_meta;
+        auto status = snapshot_meta.parse_from_file(memory_file.get());
+        if (!status.ok()) {
+            LOG(WARNING) << "Failed to parse remote snapshot meta file: " << snapshot_meta_file_name
+                         << ", content: " << snapshot_meta_content << ", status: " << status;
+            return status.clone_and_prepend("Failed to parse remote snapshot meta file: " + snapshot_meta_file_name +
+                                            ", content: " + snapshot_meta_content + ", status");
+        }
+
+        DCHECK(((src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
+                (!src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+                << ", incremental_snapshot: " << src_snapshot_info.incremental_snapshot
+                << ", snapshot_type: " << SnapshotTypePB_Name(snapshot_meta.snapshot_type());
+
+        const auto& rowset_metas = snapshot_meta.rowset_metas();
+        for (const auto& rowset_meta_pb : rowset_metas) {
+            RowsetMeta rowset_meta(rowset_meta_pb);
+            auto* op_write = txn_log->mutable_op_replication()->add_op_writes();
+            RETURN_IF_ERROR(convert_rowset_meta(rowset_meta, request.transaction_id, op_write, &filename_map));
+        }
+
+        for (const auto& [segment_id, delvec] : snapshot_meta.delete_vectors()) {
+            auto* delvecs = txn_log->mutable_op_replication()->mutable_delvecs();
+            auto& delvec_data = (*delvecs)[segment_id];
+            delvec_data.set_version(delvec.version());
+            delvec.save_to(delvec_data.mutable_data());
+        }
+
+        // Handle delta column groups for PK tables
+        RETURN_IF_ERROR(convert_dcg_meta_for_pk(snapshot_meta.delta_column_groups(), request.transaction_id,
+                                                txn_log->mutable_op_replication()->mutable_dcg_meta(), &filename_map));
+
+        if (snapshot_meta.tablet_meta().has_schema()) {
+            // Try to get source schema from tablet meta, only full snapshot has tablet meta
+            txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(snapshot_meta.tablet_meta().schema());
+            source_schema_pb = &txn_log->op_replication().source_schema();
+        } else if (!rowset_metas.empty() && rowset_metas.front().has_tablet_schema()) {
+            // Try to get source schema from rowset meta, rowset meta has schema if light schema change enabled in source cluster
+            txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(
+                    TabletMeta::rowset_meta_pb_with_max_rowset_version(rowset_metas).tablet_schema());
+            source_schema_pb = &txn_log->op_replication().source_schema();
+        } else if (tablet_metadata->has_source_schema()) {
+            // Get source schema from previous saved in tablet meta. Protobuf returns a default
+            // instance if the field is unset; gate on has_source_schema() so the null check
+            // below actually catches a missing schema.
+            source_schema_pb = &tablet_metadata->source_schema();
+        }
+
+        if (source_schema_pb == nullptr) {
+            LOG(WARNING) << "Failed to get source schema for PK tablet " << tablet_metadata->id()
+                         << ", snapshot has_schema=" << snapshot_meta.tablet_meta().has_schema()
+                         << ", front rowset has_tablet_schema="
+                         << (!rowset_metas.empty() && rowset_metas.front().has_tablet_schema())
+                         << ", tablet_meta has_source_schema=" << tablet_metadata->has_source_schema();
+            return Status::Corruption("Failed to get source schema");
+        }
+    }
+
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    ReplicationUtils::calc_column_unique_id_map(source_schema_pb->column(), tablet_metadata->schema().column(),
+                                                &column_unique_id_map);
+
+    // Convert column unique IDs in DCG metadata
+    if (txn_log->op_replication().has_dcg_meta()) {
+        RETURN_IF_ERROR(convert_dcg_column_unique_ids(txn_log->mutable_op_replication()->mutable_dcg_meta(),
+                                                      column_unique_id_map));
+    }
+
+    std::vector<std::string> files_to_delete;
+    CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
+
+    // Determine source/target PK encoding for .del-file transcoding. NONE sentinels stay set for
+    // non-PK tables and cause build_file_converters to skip the .del transcode branch.
+    ASSIGN_OR_RETURN(auto del_transcode_ctx, prepare_del_transcode_context(*tablet_metadata, *source_schema_pb));
+
+    auto file_converters = build_file_converters(_tablet_manager, request, filename_map, column_unique_id_map,
+                                                 files_to_delete, del_transcode_ctx.pkey_schema,
+                                                 del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
+
+    RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
+            src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
+            src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash, file_converters));
+
+    for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
+        if (op_write.has_txn_meta()) {
+            RETURN_IF_ERROR(
+                    ReplicationUtils::convert_rowset_txn_meta(op_write.mutable_txn_meta(), column_unique_id_map));
+        }
+    }
+
+    txn_log->set_tablet_id(request.tablet_id);
+    txn_log->set_txn_id(request.transaction_id);
+
+    auto* txn_meta = txn_log->mutable_op_replication()->mutable_txn_meta();
+    txn_meta->set_txn_id(request.transaction_id);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_tablet_id(request.tablet_id);
+    txn_meta->set_visible_version(request.visible_version);
+    txn_meta->set_data_version(request.data_version);
+    txn_meta->set_src_backend_host(src_snapshot_info.backend.host);
+    txn_meta->set_src_backend_port(src_snapshot_info.backend.be_port);
+    txn_meta->set_src_snapshot_path(src_snapshot_info.snapshot_path);
+    txn_meta->set_snapshot_version(request.src_visible_version);
+    txn_meta->set_incremental_snapshot(src_snapshot_info.incremental_snapshot);
+
+    RETURN_IF_ERROR(_tablet_manager->put_txn_log(txn_log));
+
+    clean_files.cancel();
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_rowset_meta(
+        const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
+    const auto& source_meta = rowset_meta.get_meta_pb_without_schema();
+    RETURN_IF_ERROR(validate_unencrypted_shared_nothing_source(source_meta.segment_encryption_metas()));
+    RETURN_IF_ERROR(validate_unencrypted_shared_nothing_source(source_meta.delfile_encryption_metas()));
+    RETURN_IF_ERROR(validate_unencrypted_shared_nothing_source(source_meta.updatefile_encryption_metas()));
+
+    // Convert rowset metadata
+    auto* rowset_metadata = op_write->mutable_rowset();
+    rowset_metadata->set_id(rowset_meta.get_rowset_seg_id());
+    rowset_metadata->set_overlapped(rowset_meta.is_segments_overlapping());
+    rowset_metadata->set_num_rows(rowset_meta.num_rows());
+    rowset_metadata->set_data_size(rowset_meta.data_disk_size());
+    rowset_metadata->set_num_dels(rowset_meta.get_num_delete_files());
+    if (rowset_meta.has_delete_predicate()) {
+        auto* delete_predicate_pb = rowset_metadata->mutable_delete_predicate();
+        delete_predicate_pb->CopyFrom(rowset_meta.delete_predicate());
+        RETURN_IF_ERROR(convert_delete_predicate_pb(delete_predicate_pb));
+    }
+
+    std::string rowset_id = rowset_meta.rowset_id().to_string();
+    for (int64_t segment_id = 0; segment_id < rowset_meta.num_segments(); ++segment_id) {
+        std::string old_segment_filename = rowset_id + '_' + std::to_string(segment_id) + ".dat";
+        std::string new_segment_filename = gen_segment_filename(transaction_id);
+
+        auto* segment_meta = rowset_metadata->add_segment_metas();
+        segment_meta->set_filename(new_segment_filename);
+        FileEncryptionPair encryption_pair;
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            segment_meta->set_encryption_meta(encryption_pair.encryption_meta);
+        }
+        auto pair = filename_map->emplace(std::move(old_segment_filename),
+                                          std::pair(std::move(new_segment_filename), std::move(encryption_pair)));
+        if (!pair.second) {
+            return Status::Corruption("Duplicated segment file: " + pair.first->first);
+        }
+    }
+
+    // Convert rowset txn meta
+    if (rowset_meta.has_txn_meta()) {
+        auto* rowset_txn_meta = op_write->mutable_txn_meta();
+        rowset_txn_meta->CopyFrom(rowset_meta.txn_meta());
+    }
+
+    // Convert dels
+    for (int64_t del_id = 0; del_id < rowset_meta.get_num_delete_files(); ++del_id) {
+        std::string old_del_filename = rowset_id + '_' + std::to_string(del_id) + ".del";
+        std::string new_del_filename = gen_del_filename(transaction_id);
+
+        // No crc32c: the content is produced by the snapshot download (and possibly re-encoded by
+        // DelFileStreamConverter), so it is not known here. Absent means readers skip verification.
+        auto* del_meta = op_write->add_dels_meta();
+        del_meta->set_name(new_del_filename);
+        FileEncryptionPair encryption_pair;
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            del_meta->set_encryption_meta(encryption_pair.encryption_meta);
+        }
+        auto pair = filename_map->emplace(std::move(old_del_filename),
+                                          std::pair(std::move(new_del_filename), std::move(encryption_pair)));
+        if (!pair.second) {
+            return Status::Corruption("Duplicated del file: " + pair.first->first);
+        }
+    }
+
+    // Fresh uid for the replicated rowset.
+    tablet_reshard_helper::set_rowset_uid(rowset_metadata);
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* delete_predicate) {
+    for (const auto& sub_predicate : delete_predicate->sub_predicates()) {
+        TCondition condition;
+        if (!DeleteHandler::parse_condition(sub_predicate, &condition)) {
+            LOG(WARNING) << "Invalid delete condition: " << sub_predicate;
+            return Status::InternalError("Invalid delete condition: " + sub_predicate);
+        }
+        if (condition.condition_op == "IS") {
+            auto* is_null_predicate = delete_predicate->add_is_null_predicates();
+            is_null_predicate->set_column_name(condition.column_name);
+            is_null_predicate->set_is_not_null(condition.condition_values[0].starts_with("NOT"));
+        } else if (condition.condition_op == "*=" || condition.condition_op == "!*=") {
+            auto* in_predicate = delete_predicate->add_in_predicates();
+            in_predicate->set_column_name(condition.column_name);
+            in_predicate->set_is_not_in(condition.condition_op.starts_with('!'));
+            for (const auto& value : condition.condition_values) {
+                in_predicate->add_values()->assign(value);
+            }
+        } else {
+            auto* binary_predicate = delete_predicate->add_binary_predicates();
+            binary_predicate->set_column_name(condition.column_name);
+            if (condition.condition_op == "<<") {
+                binary_predicate->set_op("<");
+            } else if (condition.condition_op == ">>") {
+                binary_predicate->set_op(">");
+            } else {
+                binary_predicate->set_op(condition.condition_op);
+            }
+            binary_predicate->set_value(condition.condition_values[0]);
+        }
+    }
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_dcg_meta_for_non_pk(
+        const DeltaColumnGroupSnapshotPB& dcg_snapshot_pb,
+        const std::unordered_map<std::string, uint32_t>& rowset_id_to_seg_id, TTransactionId transaction_id,
+        DeltaColumnGroupMetadataPB* dcg_meta,
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
+    for (int i = 0; i < dcg_snapshot_pb.dcg_lists_size(); i++) {
+        auto it = rowset_id_to_seg_id.find(dcg_snapshot_pb.rowset_id(i));
+        if (it == rowset_id_to_seg_id.end()) {
+            continue;
+        }
+        uint32_t rssid = it->second + dcg_snapshot_pb.segment_id(i);
+        const auto& dcg_list_pb = dcg_snapshot_pb.dcg_lists(i);
+        auto& dcg_ver = (*dcg_meta->mutable_dcgs())[rssid];
+
+        if (dcg_list_pb.versions_size() != dcg_list_pb.dcgs_size()) {
+            return Status::Corruption(fmt::format(
+                    "Mismatch between versions_size ({}) and dcgs_size ({}) in DeltaColumnGroup list for rowset {}, "
+                    "segment {}",
+                    dcg_list_pb.versions_size(), dcg_list_pb.dcgs_size(), dcg_snapshot_pb.rowset_id(i),
+                    dcg_snapshot_pb.segment_id(i)));
+        }
+        for (int j = 0; j < dcg_list_pb.dcgs_size(); j++) {
+            const auto& dcg_pb = dcg_list_pb.dcgs(j);
+            int64_t version = dcg_list_pb.versions(j);
+            if (dcg_pb.column_ids_size() != dcg_pb.column_files_size()) {
+                return Status::Corruption(fmt::format(
+                        "Mismatch between column_ids_size ({}) and column_files_size ({}) in DeltaColumnGroup for "
+                        "rowset {}, segment {}, dcg index {}",
+                        dcg_pb.column_ids_size(), dcg_pb.column_files_size(), dcg_snapshot_pb.rowset_id(i),
+                        dcg_snapshot_pb.segment_id(i), j));
+            }
+            RETURN_IF_ERROR(validate_unencrypted_shared_nothing_source(dcg_pb.encryption_metas()));
+            for (int k = 0; k < dcg_pb.column_files_size(); k++) {
+                const auto& old_cols_filename = dcg_pb.column_files(k);
+                std::string new_cols_filename = gen_cols_filename(transaction_id);
+
+                dcg_ver.add_column_files(new_cols_filename);
+                dcg_ver.add_versions(version);
+
+                dcg_ver.add_unique_column_ids()->CopyFrom(dcg_pb.column_ids(k));
+
+                FileEncryptionPair encryption_pair;
+                if (config::enable_transparent_data_encryption) {
+                    ASSIGN_OR_RETURN(encryption_pair,
+                                     KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+                    dcg_ver.add_encryption_metas(encryption_pair.encryption_meta);
+                }
+
+                auto result = filename_map->emplace(
+                        old_cols_filename, std::pair(std::move(new_cols_filename), std::move(encryption_pair)));
+                if (!result.second) {
+                    return Status::Corruption("Duplicated cols file: " + result.first->first);
+                }
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_dcg_meta_for_pk(
+        const std::unordered_map<uint32_t, DeltaColumnGroupList>& delta_column_groups, TTransactionId transaction_id,
+        DeltaColumnGroupMetadataPB* dcg_meta,
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
+    for (const auto& [segment_id, dcg_list] : delta_column_groups) {
+        auto& dcg_ver = (*dcg_meta->mutable_dcgs())[segment_id];
+
+        for (const auto& dcg : dcg_list) {
+            if (dcg->column_ids().size() != dcg->relative_column_files().size()) {
+                return Status::Corruption(fmt::format(
+                        "Mismatch between column_ids size ({}) and column_files size ({}) in DeltaColumnGroup for "
+                        "segment {}",
+                        dcg->column_ids().size(), dcg->relative_column_files().size(), segment_id));
+            }
+            RETURN_IF_ERROR(validate_unencrypted_shared_nothing_source(dcg->encryption_metas()));
+            for (size_t i = 0; i < dcg->relative_column_files().size(); i++) {
+                const auto& old_cols_filename = dcg->relative_column_files()[i];
+                std::string new_cols_filename = gen_cols_filename(transaction_id);
+
+                dcg_ver.add_column_files(new_cols_filename);
+                dcg_ver.add_versions(dcg->version());
+
+                auto* ucids = dcg_ver.add_unique_column_ids();
+                for (auto cid : dcg->column_ids()[i]) {
+                    ucids->add_column_ids(cid);
+                }
+
+                FileEncryptionPair encryption_pair;
+                if (config::enable_transparent_data_encryption) {
+                    ASSIGN_OR_RETURN(encryption_pair,
+                                     KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+                    dcg_ver.add_encryption_metas(encryption_pair.encryption_meta);
+                }
+
+                auto result = filename_map->emplace(
+                        old_cols_filename, std::pair(std::move(new_cols_filename), std::move(encryption_pair)));
+                if (!result.second) {
+                    return Status::Corruption("Duplicated cols file: " + result.first->first);
+                }
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_dcg_column_unique_ids(
+        DeltaColumnGroupMetadataPB* dcg_meta, const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map) {
+    for (auto& [seg_id, dcg_ver] : *dcg_meta->mutable_dcgs()) {
+        for (auto& unique_column_ids : *dcg_ver.mutable_unique_column_ids()) {
+            RETURN_IF_ERROR(ReplicationUtils::convert_column_unique_ids(unique_column_ids.mutable_column_ids(),
+                                                                        column_unique_id_map));
+        }
+    }
+    return Status::OK();
+}
+
+StatusOr<DelTranscodeContext> ReplicationTxnManager::prepare_del_transcode_context(
+        const TabletMetadata& tablet_metadata, const TabletSchemaPB& source_schema_pb) {
+    DelTranscodeContext ctx;
+    if (!is_primary_key(tablet_metadata)) {
+        return ctx;
+    }
+
+    // target_schema is shared because ChunkHelper::convert_schema takes TabletSchemaCSPtr;
+    // source_schema is only read locally for validation, so a stack instance suffices.
+    auto target_schema = std::make_shared<TabletSchema>(tablet_metadata.schema());
+    TabletSchema source_schema(source_schema_pb);
+    // PK encoding must be valid on both sides; PK_ENCODING_TYPE_NONE here would indicate
+    // corrupted metadata (TabletSchema falls back to V1 for pre-PR-69939 PK tables, so
+    // an invalid value should not slip through silently).
+    ASSIGN_OR_RETURN(ctx.target_encoding, target_schema->primary_key_encoding_type_or_error());
+    ASSIGN_OR_RETURN(ctx.source_encoding, source_schema.primary_key_encoding_type_or_error());
+
+    // Cross-cluster PK contract: column count and per-column logical type must agree.
+    // Cluster-to-cluster replication only makes sense if PK structure matches; surface
+    // any mismatch loudly instead of attempting unsafe transcoding.
+    if (source_schema.num_key_columns() != target_schema->num_key_columns()) {
+        return Status::NotSupported(strings::Substitute(
+                "PK column count mismatch between source ($0) and target ($1) on tablet $2",
+                source_schema.num_key_columns(), target_schema->num_key_columns(), tablet_metadata.id()));
+    }
+    for (size_t i = 0; i < target_schema->num_key_columns(); ++i) {
+        if (source_schema.column(i).type() != target_schema->column(i).type()) {
+            return Status::NotSupported(strings::Substitute(
+                    "PK column[$0] logical type mismatch between source ($1) and target ($2) on tablet $3", i,
+                    logical_type_to_string(source_schema.column(i).type()),
+                    logical_type_to_string(target_schema->column(i).type()), tablet_metadata.id()));
+        }
+    }
+
+    // Explicitly reject V2 -> V1 on the byte-incompatible PK shape. The reverse direction
+    // is not transcodable (no V2 -> typed-column decoder) and a byte copy would leave
+    // V2-shaped bytes that the V1 target reader misinterprets.
+    if (ctx.source_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2 &&
+        ctx.target_encoding == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1 &&
+        is_single_fixed_length_non_string_primary_key(*target_schema)) {
+        return Status::NotSupported(
+                strings::Substitute("V2 source -> V1 target cross-cluster replication is not supported on a single "
+                                    "non-string fixed-length PK column (.del files would byte-copy and be misread on "
+                                    "the target). Tablet $0, pk_logical_type $1",
+                                    tablet_metadata.id(), logical_type_to_string(target_schema->column(0).type())));
+    }
+
+    std::vector<ColumnId> pk_idxes(target_schema->num_key_columns());
+    std::iota(pk_idxes.begin(), pk_idxes.end(), 0);
+    ctx.pkey_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(target_schema, pk_idxes));
+    return ctx;
+}
+
+// Helper function to create replication txn log with converted metadata
+FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
+        const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
+        const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
+        std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete,
+        SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding, PrimaryKeyEncodingType target_pk_encoding) {
+    const bool need_del_transcode =
+            pkey_schema != nullptr &&
+            requires_v1_to_v2_del_transcode(source_pk_encoding, target_pk_encoding, *pkey_schema);
+    auto file_converters = [tablet_manager, request, filename_map, &column_unique_id_map, &files_to_delete, pkey_schema,
+                            source_pk_encoding, target_pk_encoding,
+                            need_del_transcode](const std::string& file_name,
+                                                uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        if (request.transaction_id < get_master_info().min_active_txn_id) {
+            LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
+                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", visible_version: " << request.visible_version
+                         << ", data_version: " << request.data_version
+                         << ", snapshot_version: " << request.src_visible_version;
+            return Status::InternalError("Transaction is aborted");
+        }
+
+        auto iter = filename_map.find(file_name);
+        if (iter == filename_map.end()) {
+            return nullptr;
+        }
+
+        auto segment_location = tablet_manager->segment_location(request.tablet_id, iter->second.first);
+        WritableFileOptions opts{.sync_on_close = true,
+                                 .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                 .encryption_info = iter->second.second.info};
+
+        ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
+
+        files_to_delete.push_back(std::move(segment_location));
+
+        if (need_del_transcode && is_del(file_name)) {
+            return std::make_unique<DelFileStreamConverter>(file_name, file_size, std::move(output_file), pkey_schema,
+                                                            source_pk_encoding, target_pk_encoding);
+        }
+        if ((is_segment(file_name) || is_cols(file_name)) && !column_unique_id_map.empty()) {
+            return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
+                                                            &column_unique_id_map);
+        }
+        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output_file));
+    };
+    return file_converters;
+}
+
+} // namespace starrocks::lake

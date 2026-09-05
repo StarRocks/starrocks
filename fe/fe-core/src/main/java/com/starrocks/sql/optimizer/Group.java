@@ -22,12 +22,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -57,12 +60,19 @@ public class Group {
     // mv id -> Statistics
     private final Map<Long, Statistics> mvStatistics;
 
+    // used to adjust mv statistics based on mv nest relationship
+    private final Map<Long, List<Long>> relatedMvs;
+
     private final Map<PhysicalPropertySet, Pair<Double, GroupExpression>> lowestCostExpressions;
     // GroupExpressions in this Group which could satisfy the required property.
     private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyOutputPropertyGroupExpressions;
 
+    private final Map<PhysicalPropertySet, Double> costLowerBounds;
+
     // All expressions in one group have same logical property.
     private LogicalProperty logicalProperty;
+
+    private boolean isStatisticsAdjustedByMv = false;
 
     public Group(int groupId) {
         this.id = groupId;
@@ -72,6 +82,8 @@ public class Group {
         satisfyOutputPropertyGroupExpressions = Maps.newHashMap();
         isExplored = false;
         mvStatistics = Maps.newHashMap();
+        relatedMvs = Maps.newHashMap();
+        costLowerBounds = Maps.newHashMap();
     }
 
     public int getId() {
@@ -95,11 +107,23 @@ public class Group {
     }
 
     public void setMvStatistics(long mvId, Statistics statistics) {
-        mvStatistics.putIfAbsent(mvId, statistics);
+        mvStatistics.put(mvId, statistics);
     }
 
-    public Map<Long, Statistics> getGroupExpressionStatistics() {
+    public void setRelatedMvs(long mvId, List<Long> relatedIds) {
+        relatedMvs.put(mvId, relatedIds);
+    }
+
+    public Map<Long, List<Long>> getRelatedMvs() {
+        return relatedMvs;
+    }
+
+    public Map<Long, Statistics> getGroupMvStatistics() {
         return mvStatistics;
+    }
+
+    public Optional<Statistics> getMvStatistics(long mvId) {
+        return Optional.ofNullable(mvStatistics.get(mvId));
     }
 
     public List<GroupExpression> getLogicalExpressions() {
@@ -126,8 +150,13 @@ public class Group {
         groupExpression.setGroup(this);
     }
 
-    public double getCostLowerBound() {
-        return -1000;
+    public double getCostLowerBound(PhysicalPropertySet requiredProperty) {
+        return costLowerBounds.getOrDefault(requiredProperty, -1000D);
+    }
+
+    public void setCostLowerBound(PhysicalPropertySet requiredProperty, double cost) {
+        double x = costLowerBounds.getOrDefault(requiredProperty, Double.MAX_VALUE);
+        costLowerBounds.put(requiredProperty, Math.min(x, cost));
     }
 
     public PhysicalPropertySet updateOutputPropertySet(GroupExpression expression, double cost,
@@ -297,6 +326,11 @@ public class Group {
             statistics = other.statistics;
         }
         other.satisfyOutputPropertyGroupExpressions.forEach(this::addSatisfyOutputPropertyGroupExpressions);
+        mvStatistics.putAll(other.mvStatistics);
+        other.mvStatistics.clear();
+        relatedMvs.putAll(other.relatedMvs);
+        other.relatedMvs.clear();
+        isStatisticsAdjustedByMv |= other.isStatisticsAdjustedByMv();
     }
 
     private void updateEnforcerGroup(GroupExpression groupExpression, Group checkGroup) {
@@ -383,4 +417,36 @@ public class Group {
         return sb.toString();
     }
 
+    public boolean hasMVGroupExpression() {
+        return logicalExpressions.stream().anyMatch(x -> x.hasAppliedMVRules()) ||
+                physicalExpressions.stream().anyMatch(x -> x.hasAppliedMVRules());
+    }
+
+    /**
+     * When the group expression is derived from mv-rewrite rules and force rewrite is on,
+     * force set all existed group expressions by set max cost.
+     */
+    public void forceChooseMVExpression(TaskContext taskContext) {
+        boolean hasInvalid = false;
+        for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : lowestCostExpressions
+                .entrySet()) {
+            GroupExpression groupExpression = entry.getValue().second;
+            if (groupExpression.hasAppliedMVRules()) {
+                continue;
+            }
+            lowestCostExpressions.put(entry.getKey(), Pair.create(CostModel.MAX_COST, groupExpression));
+            hasInvalid = true;
+        }
+        if (hasInvalid) {
+            taskContext.setUpperBoundCost(CostModel.MAX_COST);
+        }
+    }
+
+    public void setIsStatisticsAdjustedByMv(boolean isStatisticsAdjustedByMv) {
+        this.isStatisticsAdjustedByMv = isStatisticsAdjustedByMv;
+    }
+
+    public boolean isStatisticsAdjustedByMv() {
+        return this.isStatisticsAdjustedByMv;
+    }
 }

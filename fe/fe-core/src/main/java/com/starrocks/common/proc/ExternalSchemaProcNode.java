@@ -16,18 +16,21 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class ExternalSchemaProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Field").add("Type").add("Null").add("Key")
-            .add("Default").add("Extra")
+            .add("Default").add("Extra").add("Comment")
             .build();
 
     private Table table;
@@ -46,17 +49,25 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<Column> schema = table.getFullSchema();
+        List<Column> schema = table.getFullVisibleSchema();
         List<String> partitionColumns = table.getPartitionColumnNames();
+        List<String> primaryKeyColumns = table.isPaimonTable()
+                ? ((PaimonTable) table).getPrimaryKeyColumnNames() : Collections.emptyList();
 
         for (Column column : schema) {
             String extraStr = partitionColumns.contains(column.getName()) ? PARTITION_KEY : "";
+            String defaultStr = column.getMetaDefaultValue(Lists.newArrayList());
+            if (defaultStr == null) {
+                defaultStr = DEFAULT_STR;
+            }
+            boolean isKey = column.isKey() || primaryKeyColumns.contains(column.getName());
             List<String> rowList = Arrays.asList(column.getName(),
                     column.getType().canonicalName(),
                     column.isAllowNull() ? "Yes" : "No",
-                    ((Boolean) column.isKey()).toString(),
-                    DEFAULT_STR,
-                    extraStr);
+                    ((Boolean) isKey).toString(),
+                    defaultStr,
+                    extraStr,
+                    column.getComment());
             result.addRow(rowList);
         }
         return result;

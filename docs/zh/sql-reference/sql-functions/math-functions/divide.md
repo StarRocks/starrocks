@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回x除以y的商，y为0时返回NULL。"
 ---
 
 # divide
 
-## 功能
+
 
 除法函数，返回 `x` 除以 `y` 的结果，如果 `y` 为 0，则返回null。
 

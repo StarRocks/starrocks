@@ -51,12 +51,16 @@
 #include <string>
 #include <vector>
 
+#include "base/types/int128.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/storage_define.h"
+#include "platform/path_rw.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 
 namespace starrocks {
+
+class MemTracker;
 
 const static int32_t g_power_table[] = {1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000};
 
@@ -87,10 +91,6 @@ Status gen_timestamp_string(std::string* out_string);
 Status move_to_trash(const std::filesystem::path& tablet_id_path);
 
 Status copy_dir(const std::string& src_dir, const std::string& dst_dir);
-
-bool check_datapath_rw(const std::string& path);
-
-Status read_write_test_file(const std::string& test_file_path);
 
 class Errno {
 public:
@@ -162,6 +162,8 @@ bool valid_bool(const std::string& value_str);
 std::string parent_name(const std::string& fullpath);
 std::string file_name(const std::string& fullpath);
 
+bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio);
+
 // Util used to get string name of thrift enum item
 #define EnumToString(enum_type, index, out)                   \
     do {                                                      \
@@ -172,5 +174,7 @@ std::string file_name(const std::string& fullpath);
             out = it->second;                                 \
         }                                                     \
     } while (0)
+
+int caculate_delta_writer_thread_num(int thread_num_from_config);
 
 } // namespace starrocks

@@ -14,18 +14,17 @@
 
 package com.starrocks.load.pipe;
 
-import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
+import com.starrocks.common.CloseableLock;
+import com.starrocks.persist.AlterPipeLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.PipeOpEntry;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * Repo: persistence for Pipe
@@ -40,46 +39,13 @@ public class PipeRepo {
         this.pipeManager = pipeManager;
     }
 
-    public void addPipe(Pipe pipe) {
-        PipeOpEntry opEntry = new PipeOpEntry();
-        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_CREATE);
-        opEntry.setPipeJson(pipe.toJson());
-        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        reader.readCollection(Pipe.class, pipeManager::putPipe);
+        LOG.info("loaded {} pipes", pipeManager.getAllPipes().size());
     }
 
-    public void deletePipe(Pipe pipe) {
-        PipeOpEntry opEntry = new PipeOpEntry();
-        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_DROP);
-        opEntry.setPipeJson(pipe.toJson());
-        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
-    }
-
-    public void alterPipe(Pipe pipe) {
-        PipeOpEntry opEntry = new PipeOpEntry();
-        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_ALTER);
-        opEntry.setPipeJson(pipe.toJson());
-        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
-    }
-
-    public long saveImage(DataOutputStream output, long checksum) throws IOException {
-        Pair<String, Integer> jsonAndChecksum = pipeManager.toJson();
-        checksum ^= jsonAndChecksum.second;
-        Text.writeString(output, jsonAndChecksum.first);
-        return checksum;
-    }
-
-    public long loadImage(DataInputStream input, long checksum) throws IOException {
-        String imageJson = Text.readString(input);
-        PipeManager data = GsonUtils.GSON.fromJson(imageJson, PipeManager.class);
-        if (data.getPipesUnlock() != null) {
-            Map<PipeId, Pipe> pipes = data.getPipesUnlock();
-            for (Pipe pipe : pipes.values()) {
-                pipeManager.putPipe(pipe);
-            }
-            LOG.info("Load {} pipes from image: {}", pipes.size(), pipes);
-            checksum ^= pipes.size();
-        }
-        return checksum;
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        pipeManager.save(imageWriter);
     }
 
     public void replay(PipeOpEntry entry) {
@@ -100,5 +66,26 @@ public class PipeRepo {
         }
     }
 
+    public void replayAlterPipe(AlterPipeLog alterPipeLog) {
+        Pipe pipe = pipeManager.getPipeById(alterPipeLog.getPipeId());
+        if (pipe == null) {
+            LOG.warn("Cannot find pipe {} when replaying AlterPipeLog", alterPipeLog.getPipeId());
+            return;
+        }
+
+        try (CloseableLock l = pipe.takeWriteLock()) {
+            if (alterPipeLog.getState() != null) {
+                pipe.setState(alterPipeLog.getState());
+            }
+
+            if (alterPipeLog.getChangeProps() != null) {
+                pipe.processProperties(alterPipeLog.getChangeProps());
+            }
+
+            if (alterPipeLog.getLoadStatus() != null) {
+                pipe.setLoadStatus(alterPipeLog.getLoadStatus());
+            }
+        }
+    }
 }
 

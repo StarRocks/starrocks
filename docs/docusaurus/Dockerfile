@@ -1,9 +1,11 @@
-FROM node:18.18.2
+FROM node:24
 
 WORKDIR /app/docusaurus
-ENV NODE_OPTIONS="--max-old-space-size=8192"
+ENV NODE_OPTIONS="--max-old-space-size=9216 --no-warnings=ExperimentalWarning"
+ENV DISABLE_VERSIONING=true
+ENV DOCUSAURUS_IGNORE_SSG_WARNINGS=true
 
-RUN apt update && apt install -y neovim
+RUN apt update && apt install -y neovim python3.11-venv ghostscript pdftk
 
 EXPOSE 3000
 

@@ -1,0 +1,813 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.alter;
+
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.common.collect.Table;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.Utils;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.Warehouse;
+import io.opentelemetry.api.trace.StatusCode;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import javax.validation.constraints.NotNull;
+
+public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
+    private static final Logger LOG = LogManager.getLogger(LakeTableAlterMetaJobBase.class);
+
+    @SerializedName(value = "watershedTxnId")
+    private long watershedTxnId = -1;
+    @SerializedName(value = "watershedGtid")
+    private long watershedGtid = -1;
+    // PhysicalPartitionId -> indexId -> MaterializedIndex
+    @SerializedName(value = "partitionIndexMap")
+    private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
+    @SerializedName(value = "commitVersionMap")
+    private Map<Long, Long> commitVersionMap = new HashMap<>();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask batchTask = null;
+    private boolean isFileBundling = false;
+
+    public LakeTableAlterMetaJobBase(JobType jobType) {
+        super(jobType);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN is skipped on the live path; RUNNING is the only in-memory-only state
+        // and its durable predecessor is PENDING - the same-state re-log in runPendingJob
+        // already persisted the watershed, and the -1 guard prevents re-allocation on re-run.
+        // replay() throws on RUNNING, so it must never leak into any persisted copy.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.PENDING;
+        }
+        // Recreated fresh per dispatch; a stale value only skews SHOW ALTER progress.
+        batchTask = null;
+        // Filled by updatePartitionTabletMeta AFTER the PENDING re-log, so the durable PENDING image has
+        // it empty; the re-run refills it from the partitions that exist THEN. Keeping stale rows would
+        // let a partition dropped across the demote/re-elect window resurface and fail the re-run with a
+        // non-cancellable exception (checkNotNull), sticking the job until its global timeout.
+        physicalPartitionIndexMap.clear();
+    }
+
+    public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
+                                     String tableName, long timeoutMs) {
+        super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
+    }
+
+    protected LakeTableAlterMetaJobBase(LakeTableAlterMetaJobBase job) {
+        super(job);
+        this.watershedTxnId = job.watershedTxnId;
+        this.watershedGtid = job.watershedGtid;
+        if (job.physicalPartitionIndexMap != null) {
+            this.physicalPartitionIndexMap = HashBasedTable.create();
+            this.physicalPartitionIndexMap.putAll(job.physicalPartitionIndexMap);
+        } else {
+            this.physicalPartitionIndexMap = null;
+        }
+        if (job.commitVersionMap != null) {
+            this.commitVersionMap = new HashMap<>();
+            this.commitVersionMap.putAll(job.commitVersionMap);
+        } else {
+            this.commitVersionMap = null;
+        }
+    }
+
+    /**
+     * Gets the table as OlapTable. LakeTableAlterMetaJobBase supports both LakeTable and LakeMaterializedView,
+     * which are subclasses of OlapTable. Returns null if the table does not exist or is not an OlapTable.
+     */
+    private OlapTable getOlapTable(String dbName, String tableName) {
+        com.starrocks.catalog.Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbName, tableName);
+        return table instanceof OlapTable ? (OlapTable) table : null;
+    }
+
+    private OlapTable getOlapTable(long dbId, long tableId) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return null;
+        }
+        com.starrocks.catalog.Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        return table instanceof OlapTable ? (OlapTable) table : null;
+    }
+
+    @Override
+    protected void runPendingJob() throws AlterCancelException {
+        // send task to be
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<Partition> partitions = Lists.newArrayList();
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+
+        if (db == null) {
+            throw new AlterCancelException("database does not exist, dbId:" + dbId);
+        }
+
+        OlapTable table = getOlapTable(db.getFullName(), tableName);
+        if (table == null) {
+            throw new AlterCancelException("table does not exist, tableName:" + tableName);
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            partitions.addAll(table.getPartitions());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+
+        if (this.watershedTxnId == -1) {
+            this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
+                    .getNextTransactionId();
+            this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
+            persistStateChange(this, this.jobState);
+        }
+
+        try {
+            for (Partition partition : partitions) {
+                updatePartitionTabletMeta(db, table, partition);
+            }
+        } catch (DdlException e) {
+            throw new AlterCancelException(e.getMessage());
+        }
+
+        this.jobState = JobState.RUNNING;
+    }
+
+    protected abstract TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
+                                                                MaterializedIndex index, long nodeId, Set<Long> tablets);
+
+    protected abstract void updateCatalog(Database db, OlapTable table, boolean isReplay);
+
+    /**
+     * Hook method to prepare data that needs to be persisted before calling persistStateChange.
+     * This method is called before copyForPersist(), so any data created here will be included
+     * in the persisted job.
+     */
+    protected void prepareForPersist(Database db, OlapTable table) {
+        // Default implementation is empty. Subclasses can override this to prepare data.
+    }
+
+    /**
+     * Hook for fallible validation that must run under the table WRITE lock BEFORE the FINISHED
+     * state is journaled by {@code persistStateChange}. A failure here throws before any WAL record
+     * is written, so the job stays at {@link JobState#FINISHED_REWRITING} with the catalog untouched.
+     * The default implementation is a no-op; subclasses whose finish callback performs a mutation
+     * that must not fail can move the fallible checks here.
+     */
+    protected void validateBeforeFinishUnprotected(Database db, OlapTable table) throws AlterCancelException {
+        // Default implementation is empty. Subclasses can override this to validate before persist.
+    }
+
+    protected abstract void restoreState(LakeTableAlterMetaJobBase job);
+
+    protected abstract boolean enableFileBundling();
+
+    protected abstract boolean disableFileBundling();
+
+    @Override
+    protected void runWaitingTxnJob() throws AlterCancelException {
+        // do nothing
+    }
+
+    @Override
+    protected void runRunningJob() throws AlterCancelException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            // database has been dropped
+            throw new AlterCancelException("database does not exist, dbId:" + dbId);
+        }
+
+        OlapTable table = getOlapTable(db.getId(), tableId);
+        if (table == null) {
+            // table has been dropped
+            throw new AlterCancelException("table does not exist, tableId:" + tableId);
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            commitVersionMap.clear();
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
+                long commitVersion = physicalPartition.getNextVersion();
+                commitVersionMap.put(physicalPartitionId, commitVersion);
+                LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId,
+                        commitVersion, jobId);
+            }
+
+            this.finishedTimeMs = System.currentTimeMillis();
+
+            persistStateChange(this, JobState.FINISHED_REWRITING, () -> {
+                // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
+                updateNextVersion(table);
+            });
+
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
+    }
+
+    @Override
+    protected void runFinishedRewritingJob() throws AlterCancelException {
+        // run publish version
+        Preconditions.checkState(jobState == JobState.FINISHED_REWRITING);
+        // If the table or database has been dropped, `readyToPublishVersion()` will throw AlterCancelException and
+        // this schema change job will be cancelled.
+        if (!readyToPublishVersion()) {
+            return;
+        }
+
+        if (!publishVersion()) {
+            return;
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            // database has been dropped
+            LOG.warn("database does not exist, dbId:" + dbId);
+            throw new AlterCancelException("database does not exist, dbId:" + dbId);
+        }
+
+        OlapTable table = getOlapTable(db.getId(), tableId);
+        if (table == null) {
+            // table has been dropped
+            LOG.warn("table does not exist, tableId:" + tableId);
+            throw new AlterCancelException("table does not exist, tableId:" + tableId);
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            this.finishedTimeMs = System.currentTimeMillis();
+            // Run all fallible validation before persisting the FINISHED record, so a failure leaves
+            // the job at FINISHED_REWRITING without a durable FINISHED whose callback did not complete.
+            validateBeforeFinishUnprotected(db, table);
+            // Prepare data before persist, so that copyForPersist() can include this data
+            prepareForPersist(db, table);
+            persistStateChange(this, JobState.FINISHED, () -> {
+                updateCatalog(db, table, false);
+                // set visible version
+                updateVisibleVersion(table);
+                table.setState(OlapTable.OlapTableState.NORMAL);
+            });
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
+
+        handleMVRepair(db, table);
+        LOG.info("update meta job finished: {}", jobId);
+    }
+
+    boolean readyToPublishVersion() throws AlterCancelException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            // database has been dropped
+            throw new AlterCancelException("database does not exist, dbId:" + dbId);
+        }
+        OlapTable table = getOlapTable(db.getId(), tableId);
+        if (table == null) {
+            // table has been dropped
+            throw new AlterCancelException("table does not exist, tableId:" + tableId);
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            isFileBundling = table.isFileBundling();
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null, physicalPartitionId);
+                long commitVersion = commitVersionMap.get(physicalPartitionId);
+                if (commitVersion != physicalPartition.getVisibleVersion() + 1) {
+                    Preconditions.checkState(physicalPartition.getVisibleVersion() < commitVersion,
+                            "partition=" + physicalPartitionId + " visibleVersion=" + physicalPartition.getVisibleVersion() +
+                                    " commitVersion=" + commitVersion);
+                    return false;
+                }
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+        return true;
+    }
+
+    protected boolean lakePublishVersion() {
+        try {
+            TxnInfoPB txnInfo = new TxnInfoPB();
+            txnInfo.txnId = watershedTxnId;
+            txnInfo.combinedTxnLog = false;
+            txnInfo.commitTime = finishedTimeMs / 1000;
+            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            txnInfo.gtid = watershedGtid;
+            // there are two scenario we should use aggregate_publish
+            // 1. this task is change `file_bundling` to true
+            // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
+            //    to false.
+            boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                long commitVersion = commitVersionMap.get(physicalPartitionId);
+                Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
+                List<Tablet> tablets = new ArrayList<>();
+                for (MaterializedIndex index : dirtyIndexMap.values()) {
+                    if (!useAggregatePublish) {
+                        Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
+                                computeResource, false);
+                    } else {
+                        tablets.addAll(index.getTablets());
+                    }
+                }
+                if (useAggregatePublish) {
+                    List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
+                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion,
+                                null, null, computeResource, null, vectorIndexBuildInfos);
+                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            LOG.error("Fail to publish version for schema change job {}: {}", jobId, e.getMessage());
+            return false;
+        }
+    }
+
+    public void addDirtyPartitionIndex(long physicalPartitionId, long indexId, MaterializedIndex index) {
+        physicalPartitionIndexMap.put(physicalPartitionId, indexId, index);
+    }
+
+    public void updatePartitionTabletMeta(Database db, OlapTable table, Partition partition) throws DdlException {
+        Collection<PhysicalPartition> physicalPartitions;
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            physicalPartitions = partition.getSubPartitions();
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+
+        for (PhysicalPartition physicalPartition : physicalPartitions) {
+            updatePhysicalPartitionTabletMeta(db, table, physicalPartition);
+        }
+    }
+
+    public void updatePhysicalPartitionTabletMeta(Database db, OlapTable table,
+                                                  PhysicalPartition physicalPartition) throws DdlException {
+        List<MaterializedIndex> indexList;
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            indexList = new ArrayList<>(physicalPartition
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+        for (MaterializedIndex index : indexList) {
+            updateIndexTabletMeta(db, table, physicalPartition, index);
+        }
+    }
+
+    public void updateIndexTabletMeta(Database db, OlapTable table, PhysicalPartition physicalPartition,
+                                      MaterializedIndex index) throws DdlException {
+        addDirtyPartitionIndex(physicalPartition.getId(), index.getId(), index);
+        // be id -> <tablet id,schemaHash>
+        Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
+        List<Tablet> tablets;
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            tablets = new ArrayList<>(index.getTablets());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        for (Tablet tablet : tablets) {
+            Long backendId = warehouseManager.getAliveComputeNodeId(computeResource, tablet.getId());
+            if (backendId == null) {
+                throw new AlterCancelException("no alive node");
+            }
+            Set<Long> set = beIdToTabletSet.computeIfAbsent(backendId, k -> Sets.newHashSet());
+            set.add(tablet.getId());
+        }
+
+        int totalTaskNum = beIdToTabletSet.keySet().size();
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
+        batchTask = new AgentBatchTask();
+        for (Map.Entry<Long, Set<Long>> kv : beIdToTabletSet.entrySet()) {
+            countDownLatch.addMark(kv.getKey(), kv.getValue());
+            TabletMetadataUpdateAgentTask task = createTask(physicalPartition, index, kv.getKey(), kv.getValue());
+            Preconditions.checkState(task != null, "task is null");
+            task.setLatch(countDownLatch);
+            task.setTxnId(watershedTxnId);
+            batchTask.addTask(task);
+        }
+        // send all tasks and wait them finished
+        AgentTaskQueue.addBatchTask(batchTask);
+        AgentTaskExecutor.submit(batchTask);
+        LOG.info("Sent update tablet metadata task. tableName={} partitionId={} indexId={} taskNum={}",
+                tableName, physicalPartition.getId(), index.getId(), batchTask.getTaskNum());
+
+        // estimate timeout
+        long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
+        timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
+        boolean ok = false;
+        try {
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            LOG.warn("InterruptedException: ", e);
+        }
+
+        if (!ok || !countDownLatch.getStatus().ok()) {
+            String errMsg = "Failed to update tablet meta.";
+            // clear tasks
+            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.UPDATE_TABLET_META_INFO);
+
+            if (!countDownLatch.getStatus().ok()) {
+                errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
+            } else {
+                List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                // only show at most 3 results
+                List<Map.Entry<Long, Set<Long>>> subList =
+                        unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                if (!subList.isEmpty()) {
+                    errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
+                }
+            }
+            errMsg += ". This operation maybe partial successfully, You should retry until success.";
+            LOG.warn(errMsg);
+            throw new DdlException(errMsg);
+        }
+    }
+
+    void updateNextVersion(@NotNull OlapTable table) {
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            long commitVersion = commitVersionMap.get(physicalPartition.getId());
+            Preconditions.checkState(physicalPartition.getNextVersion() == commitVersion,
+                    "partitionNextVersion=" + physicalPartition.getNextVersion() + " commitVersion=" + commitVersion);
+            physicalPartition.setNextVersion(commitVersion + 1);
+            LOG.info("LakeTableAlterMetaJob id: {} update next version of partition: {}, commitVersion: {}",
+                    jobId, physicalPartition.getId(), commitVersion);
+        }
+    }
+
+    void updateVisibleVersion(@NotNull OlapTable table) {
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            long commitVersion = commitVersionMap.get(physicalPartitionId);
+            Preconditions.checkState(physicalPartition.getVisibleVersion() == commitVersion - 1,
+                    "partitionVisitionVersion=" + physicalPartition.getVisibleVersion() + " commitVersion=" + commitVersion);
+            physicalPartition.updateVisibleVersion(commitVersion, finishedTimeMs);
+            if (enableFileBundling() || disableFileBundling()) {
+                physicalPartition.setMetadataSwitchVersion(commitVersion);
+            }
+            LOG.info("partitionVisibleVersion=" + physicalPartition.getVisibleVersion() + " commitVersion=" + commitVersion);
+            LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
+                    jobId, physicalPartition.getId(), commitVersion);
+        }
+    }
+
+    protected AgentBatchTask getBatchTask() {
+        return batchTask;
+    }
+
+    public long getWatershedTxnId() {
+        return watershedTxnId;
+    }
+
+    @Override
+    protected boolean cancelImpl(String errMsg) {
+        return cancelImpl(errMsg, false);
+    }
+
+    @Override
+    protected boolean cancelImpl(String errMsg, boolean force) {
+        if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
+            return false;
+        }
+
+        // Force-cancel from FINISHED_REWRITING requires advancing the partition
+        // version chain past the alter's reserved commit version before the FE
+        // releases the table back to NORMAL. Otherwise the alter's txn_log sits
+        // on BE without ever being applied OR skipped, and the next load that
+        // tries to publish at base=commitVersion blocks indefinitely (verified
+        // empirically: INSERTs after a plain FORCE cancel stayed in COMMITTED
+        // forever because BE couldn't materialize tablet_metadata_<V> for the
+        // cancelled alter's V).
+        // The fix: send a publish_version RPC with TxnInfoPB.no_op_publish=true
+        // — BE short-circuits, writes V-1 content as V, and the version chain
+        // resumes. This MUST happen BEFORE the cancel cleanup runs, because
+        // cancel flips OlapTable.state back to NORMAL and at that moment new
+        // loads can race in; if the version chain isn't healthy yet, they will
+        // get stuck the same way.
+        if (force && jobState == JobState.FINISHED_REWRITING) {
+            if (!lakePublishVersionWithSkip(errMsg)) {
+                // Leave the job at FINISHED_REWRITING so the operator can retry
+                // CANCEL ALTER ... FORCE once whatever made the RPC fail is
+                // resolved (network, BE down, etc).
+                return false;
+            }
+            // Mark force-skipped ONLY now that the no-op publish actually
+            // advanced the partition version on BE. Set before the
+            // persistStateChange below so copyForPersist captures it for the
+            // edit log and replay re-applies the VisibleVersion bump. A
+            // force-cancel that never reached FINISHED_REWRITING does not get
+            // here, so the marker stays false and replay won't bump versions.
+            forceSkippedAtCommitted = true;
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db != null) {
+            OlapTable table = getOlapTable(db.getId(), tableId);
+            if (table != null) {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                try {
+                    // Cancel a job of state `FINISHED_REWRITING` only when the database
+                    // or table has been dropped, OR when an operator explicitly opts in
+                    // via ADMIN SKIP COMMITTED TRANSACTION (force=true). The escape hatch
+                    // is needed to unblock alter jobs whose publish is permanently stuck.
+                    // For lake AlterMeta this is always safe: the job has no shadow tablets
+                    // to clean up, no rowsets to roll back; the catalog change simply does
+                    // not take effect.
+                    if (jobState == JobState.FINISHED_REWRITING && !force) {
+                        return false;
+                    } else {
+                        updateErrorInfo(errMsg);
+                        // When force-cancelling out of FINISHED_REWRITING, we just
+                        // wrote no-op metadata at commitVersion on BE. FE's
+                        // partition.VisibleVersion must be advanced to match —
+                        // otherwise the next load's publish will compute base from
+                        // the stale FE-visible version (= commitVersion-1) and
+                        // BE will still try to apply the cancelled alter's
+                        // txn_log when materializing the load's new version.
+                        // Use advanceVisibleVersionForForceSkip (NOT the full
+                        // updateVisibleVersion): the alter is being discarded, so
+                        // it must not record a metadataSwitchVersion, and it must
+                        // match the replay branch exactly to avoid leader/replay
+                        // divergence.
+                        boolean advanceVersionForForce = (jobState == JobState.FINISHED_REWRITING) && force;
+                        persistStateChange(this, JobState.CANCELLED, () -> {
+                            if (advanceVersionForForce) {
+                                advanceVisibleVersionForForceSkip(table, commitVersionMap);
+                            }
+                            table.setState(OlapTable.OlapTableState.NORMAL);
+                        });
+                    }
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                }
+            }
+        }
+        if (jobState != JobState.CANCELLED) {
+            updateErrorInfo(errMsg);
+            persistStateChange(this, JobState.CANCELLED);
+        }
+        return true;
+    }
+
+    /**
+     * No-op publish for the CANCEL ALTER TABLE ... FORCE escape hatch (metadata
+     * alter). Metadata alter has no shadow tablets, so it publishes the tablets
+     * of its own dirty indices directly. The shared publish mechanics live in
+     * {@link Utils#noOpPublishForForceSkip}.
+     *
+     * <p>Dispatch is keyed on the partition's CURRENT (pre-alter) bundling
+     * format, NOT the alter's target: this is a CANCEL, so V must be written in
+     * V-1's format. Keying off the target (e.g. an enabling alter whose V-1 data
+     * is still per-tablet) would emit an aggregate bundle write over per-tablet
+     * data. The alter never reached FINISHED, so updateCatalog() has not flipped
+     * the table's flag yet — table.isFileBundling() is the current format.
+     * (Falls back to the cached isFileBundling field if the table is gone,
+     * though a dropped table needs no version advance anyway.)
+     */
+    protected boolean lakePublishVersionWithSkip(String reason) {
+        OlapTable currentTable = getOlapTable(dbId, tableId);
+        boolean useAggregatePublish = (currentTable != null) ? currentTable.isFileBundling() : isFileBundling;
+        Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            List<Tablet> tablets = new ArrayList<>();
+            for (MaterializedIndex index : physicalPartitionIndexMap.row(physicalPartitionId).values()) {
+                tablets.addAll(index.getTablets());
+            }
+            tabletsByPartition.put(physicalPartitionId, tablets);
+        }
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
+                tabletsByPartition, computeResource, useAggregatePublish);
+    }
+
+    private void updateErrorInfo(String errMsg) {
+        if (span != null) {
+            span.setStatus(StatusCode.ERROR, errMsg);
+            span.end();
+        }
+        this.errMsg = errMsg;
+        this.finishedTimeMs = System.currentTimeMillis();
+    }
+
+    @Override
+    protected void getInfo(List<List<Comparable>> infos) {
+        // A meta-only change (file_bundling / persistent_index / compaction_strategy ...) has no
+        // shadow index or schema version, so the index/schema columns are filled with placeholders.
+        // Numeric columns must stay numeric (not NULL_STRING) so the cross-job sort in
+        // SchemaChangeHandler.getAlterJobInfosByDb does not mix String and Long comparables.
+        String progress = FeConstants.NULL_STRING;
+        if (jobState == JobState.RUNNING && getBatchTask() != null) {
+            progress = getBatchTask().getFinishedTaskNum() + "/" + getBatchTask().getTaskNum();
+        }
+
+        List<Comparable> info = Lists.newArrayList();
+        info.add(jobId);
+        info.add(tableName);
+        info.add(TimeUtils.longToTimeString(createTimeMs));
+        info.add(TimeUtils.longToTimeString(finishedTimeMs));
+        info.add(tableName); // IndexName: meta change applies to the whole table, use the table name
+        info.add(-1L); // IndexId: no shadow index
+        info.add(-1L); // OriginIndexId: no shadow index
+        info.add(FeConstants.NULL_STRING); // SchemaVersion: not a schema change
+        info.add(getWatershedTxnId());
+        info.add(jobState.name());
+        info.add(errMsg);
+        info.add(progress);
+        info.add(timeoutMs / 1000);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+        info.add(warehouse == null ? "null" : warehouse.getName());
+        infos.add(info);
+    }
+
+    @Override
+    public void replay(AlterJobV2 replayedJob) {
+        LakeTableAlterMetaJobBase other = (LakeTableAlterMetaJobBase) replayedJob;
+
+        LOG.info("Replaying lake table update meta job. state={} jobId={}", replayedJob.jobState, replayedJob.jobId);
+
+        if (this != other) {
+            Preconditions.checkState(this.type.equals(other.type));
+            Preconditions.checkState(this.jobId == other.jobId);
+            Preconditions.checkState(this.dbId == other.dbId);
+            Preconditions.checkState(this.tableId == other.tableId);
+
+            this.jobState = other.jobState;
+            this.createTimeMs = other.createTimeMs;
+            this.finishedTimeMs = other.finishedTimeMs;
+            this.errMsg = other.errMsg;
+            this.timeoutMs = other.timeoutMs;
+
+            this.physicalPartitionIndexMap = other.physicalPartitionIndexMap;
+            this.watershedTxnId = other.watershedTxnId;
+            this.watershedGtid = other.watershedGtid;
+            this.commitVersionMap = other.commitVersionMap;
+            // FORCE-cancel audit marker. Must be copied here so the
+            // CANCELLED branch below (which reads `this.forceSkippedAtCommitted`)
+            // sees the persisted value when replaying onto an in-memory job
+            // loaded from a pre-cancel image. Without this copy the bump is
+            // silently skipped on recovery — defeating the whole replay fix.
+            this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
+
+            restoreState(other);
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            // database has been dropped
+            LOG.warn("database does not exist, dbId:" + dbId);
+            return;
+        }
+
+        OlapTable table = getOlapTable(db.getId(), tableId);
+        if (table == null) {
+            return;
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            if (jobState == JobState.FINISHED_REWRITING) {
+                updateNextVersion(table);
+            } else if (jobState == JobState.FINISHED) {
+                updateVisibleVersion(table);
+                updateCatalog(db, table, true);
+                table.setState(OlapTable.OlapTableState.NORMAL);
+            } else if (jobState == JobState.CANCELLED) {
+                // FORCE-cancel left BE with no-op tablet_metadata at commitVersion
+                // and the live path bumped partition.VisibleVersion to match.
+                // Replay must do the SAME bump via the SAME helper; otherwise an
+                // FE recovering from a pre-cancel image keeps
+                // VisibleVersion=commitVersion-1 and subsequent load publishes
+                // compute base from the wrong version.
+                if (forceSkippedAtCommitted) {
+                    advanceVisibleVersionForForceSkip(table, commitVersionMap);
+                }
+                table.setState(OlapTable.OlapTableState.NORMAL);
+            } else if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN) {
+                table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            } else {
+                throw new RuntimeException("unknown job state '{}'" + jobState.name());
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
+    }
+
+    // for test
+    public Table<Long, Long, MaterializedIndex> getPartitionIndexMap() {
+        return physicalPartitionIndexMap;
+    }
+
+    // for test
+    public Map<Long, Long> getCommitVersionMap() {
+        return commitVersionMap;
+    }
+
+    @Override
+    public Optional<Long> getTransactionId() {
+        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
+
+    private void handleMVRepair(Database db, OlapTable table) {
+        if (table.getRelatedMaterializedViews().isEmpty()) {
+            return;
+        }
+
+        List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
+
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        try {
+            for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
+                long partitionId = partitionVersion.getKey();
+                Partition partition = table.getPartition(partitionId);
+                if (partition == null || table.isTempPartition(partitionId)) {
+                    continue;
+                }
+                // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for last commit
+                //  version.
+                // TODO: we may add last version time to check mv's version map with base table's version time.
+                PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),  partition.getName(),
+                        partitionVersion.getValue() - 1, partitionVersion.getValue(), finishedTimeMs);
+                partitionRepairInfos.add(partitionRepairInfo);
+            }
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        }
+
+        if (partitionRepairInfos.isEmpty()) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(db, table, partitionRepairInfos);
+    }
+}

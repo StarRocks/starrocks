@@ -15,14 +15,14 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class PaimonPartitionKeyTest {
     @Test
     public void testInit() {
         PaimonPartitionKey paimonPartitionKey = new PaimonPartitionKey();
-        assertEquals(paimonPartitionKey.nullPartitionValueList(), ImmutableList.of("__DEFAULT_PARTITION__"));
+        assertEquals(paimonPartitionKey.nullPartitionValueList(), ImmutableList.of("__DEFAULT_PARTITION__", "null"));
     }
 }

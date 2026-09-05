@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <boost/algorithm/string.hpp>
+
 #include "column/array_column.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/casts.h"
+#include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/column_writer.h"
+#include "storage/tablet_index.h"
 
 namespace starrocks {
 
@@ -46,6 +50,8 @@ public:
 
     Status write_bloom_filter_index() override { return Status::OK(); }
 
+    Status write_vector_index(uint64_t* index_size) override;
+
     ordinal_t get_next_rowid() const override { return _array_size_writer->get_next_rowid(); }
 
     uint64_t total_mem_footprint() const override;
@@ -56,6 +62,18 @@ private:
     std::unique_ptr<ScalarColumnWriter> _null_writer;
     std::unique_ptr<ScalarColumnWriter> _array_size_writer;
     std::unique_ptr<ColumnWriter> _element_writer;
+    std::unique_ptr<VectorIndexWriter> _vector_index_writer;
+
+    // Vector-index input validation parameters. Populated from
+    // _opts.tablet_index[VECTOR] in init() whenever the schema declares a
+    // vector index for this array column — independently of need_vector_index,
+    // so the same validation runs in both the sync (inline build) and async
+    // (defer_vector_index_build) write paths. Validation runs once per batch
+    // in append() before any column data is written, so writes that succeed
+    // are guaranteed to contain only well-formed vectors.
+    bool _validate_vector_input = false;
+    size_t _vi_dim = 0;
+    bool _vi_is_input_normalized = false;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnWriterOptions& opts,
@@ -68,6 +86,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnW
     element_options.need_zone_map = false;
     element_options.need_bloom_filter = element_column.is_bf_column();
     element_options.need_bitmap_index = element_column.has_bitmap_index();
+    element_options.need_flat = opts.need_flat;
+    element_options.is_compaction = opts.is_compaction;
     if (element_column.type() == LogicalType::TYPE_ARRAY) {
         if (element_options.need_bloom_filter) {
             return Status::NotSupported("Do not support bloom filter for array type");
@@ -89,6 +109,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnW
         null_options.meta->set_length(1);
         null_options.meta->set_encoding(DEFAULT_ENCODING);
         null_options.meta->set_compression(opts.meta->compression());
+        null_options.meta->set_compression_level(opts.meta->compression_level());
         null_options.meta->set_is_nullable(false);
 
         TypeInfoPtr tinyint_type_info = get_type_info(TYPE_TINYINT);
@@ -103,6 +124,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnW
     array_size_options.meta->set_length(4);
     array_size_options.meta->set_encoding(DEFAULT_ENCODING);
     array_size_options.meta->set_compression(opts.meta->compression());
+    array_size_options.meta->set_compression_level(opts.meta->compression_level());
     array_size_options.meta->set_is_nullable(false);
     array_size_options.need_zone_map = false;
     array_size_options.need_bloom_filter = false;
@@ -122,7 +144,15 @@ ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPt
           _opts(opts),
           _null_writer(std::move(null_writer)),
           _array_size_writer(std::move(offset_writer)),
-          _element_writer(std::move(element_writer)) {}
+          _element_writer(std::move(element_writer)) {
+    if (_opts.need_vector_index) {
+        DCHECK(_opts.tablet_index.count(IndexType::VECTOR) > 0);
+        auto tablet_index = std::make_shared<TabletIndex>(_opts.tablet_index.at(IndexType::VECTOR));
+        std::string index_path = _opts.standalone_index_file_paths.at(IndexType::VECTOR);
+        // Element column of array column MUST BE nullable.
+        VectorIndexWriter::create(tablet_index, index_path, true, &_vector_index_writer);
+    }
+}
 
 Status ArrayColumnWriter::init() {
     if (is_nullable()) {
@@ -130,19 +160,53 @@ Status ArrayColumnWriter::init() {
     }
     RETURN_IF_ERROR(_array_size_writer->init());
     RETURN_IF_ERROR(_element_writer->init());
+    if (_opts.need_vector_index) {
+        RETURN_IF_ERROR(_vector_index_writer->init());
+    }
+
+    // Parse vector-index validation parameters whenever the schema declares
+    // a vector index for this column, regardless of whether the index is
+    // built inline (sync) or asynchronously. Without this the async path
+    // would persist malformed vectors that later break index reads or fail
+    // the deferred build, instead of failing the INSERT at write time.
+    if (_opts.tablet_index.count(IndexType::VECTOR) > 0) {
+        const auto& tablet_index = _opts.tablet_index.at(IndexType::VECTOR);
+        const auto& props = tablet_index.common_properties();
+        auto dim_it = props.find("dim");
+        if (dim_it == props.end()) {
+            return Status::InvalidArgument("dim is needed because it's a critical common param");
+        }
+        _vi_dim = static_cast<size_t>(std::atoi(dim_it->second.c_str()));
+        auto normed_it = props.find("is_vector_normed");
+        auto metric_it = props.find("metric_type");
+        // Lowercase-insensitive parsing mirrors get_vector_meta so the writer
+        // and the index builder agree on whether normalization applies.
+        _vi_is_input_normalized = normed_it != props.end() && boost::iequals(normed_it->second, "true") &&
+                                  metric_it != props.end() && boost::iequals(metric_it->second, "cosine_similarity");
+        _validate_vector_input = true;
+    }
 
     return Status::OK();
 }
 
 Status ArrayColumnWriter::append(const Column& column) {
     const ArrayColumn* array_column = nullptr;
-    NullColumn* null_column = nullptr;
+    const NullColumn* null_column = nullptr;
     if (is_nullable()) {
         const auto& nullable_column = down_cast<const NullableColumn&>(column);
-        array_column = down_cast<ArrayColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
+        array_column = down_cast<const ArrayColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<const NullColumn*>(nullable_column.null_column().get());
     } else {
         array_column = down_cast<const ArrayColumn*>(&column);
+    }
+
+    // Validate vector input first so writes that succeed are always
+    // well-formed. This single check covers both the sync inline-build path
+    // and the async defer_vector_index_build path; downstream consumers
+    // (VectorIndexWriter, TenAnnIndexBuilderProxy, lake::VectorIndexBuildTask)
+    // trust the data here and skip re-validation.
+    if (_validate_vector_input) {
+        RETURN_IF_ERROR(validate_vector_index_input(*array_column, _vi_dim, _vi_is_input_normalized));
     }
 
     // 1. Write null column when necessary
@@ -156,6 +220,13 @@ Status ArrayColumnWriter::append(const Column& column) {
     // 3. writer elements column recursively
     RETURN_IF_ERROR(_element_writer->append(array_column->elements()));
 
+    // 4. write vector index
+    if (_vector_index_writer.get()) {
+        // Vector index only support non-nullable array column.
+        DCHECK(!is_nullable());
+        RETURN_IF_ERROR(_vector_index_writer->append(*array_column));
+    }
+
     return Status::OK();
 }
 
@@ -163,6 +234,9 @@ uint64_t ArrayColumnWriter::estimate_buffer_size() {
     size_t estimate_size = _array_size_writer->estimate_buffer_size() + _element_writer->estimate_buffer_size();
     if (is_nullable()) {
         estimate_size += _null_writer->estimate_buffer_size();
+    }
+    if (_vector_index_writer.get()) {
+        estimate_size += _vector_index_writer->estimate_buffer_size();
     }
     return estimate_size;
 }
@@ -186,6 +260,9 @@ uint64_t ArrayColumnWriter::total_mem_footprint() const {
     }
     total_mem_footprint += _array_size_writer->total_mem_footprint();
     total_mem_footprint += _element_writer->total_mem_footprint();
+    if (_vector_index_writer.get()) {
+        total_mem_footprint += _vector_index_writer->total_mem_footprint();
+    }
     return total_mem_footprint;
 }
 
@@ -204,6 +281,13 @@ Status ArrayColumnWriter::write_ordinal_index() {
     }
     RETURN_IF_ERROR(_array_size_writer->write_ordinal_index());
     RETURN_IF_ERROR(_element_writer->write_ordinal_index());
+    return Status::OK();
+}
+
+Status ArrayColumnWriter::write_vector_index(uint64_t* index_size) {
+    if (_vector_index_writer.get()) {
+        RETURN_IF_ERROR(_vector_index_writer->finish(index_size));
+    }
     return Status::OK();
 }
 

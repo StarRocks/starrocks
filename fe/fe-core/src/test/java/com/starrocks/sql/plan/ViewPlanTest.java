@@ -15,10 +15,11 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.CyclicViewException;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,18 +27,20 @@ public class ViewPlanTest extends PlanTestBase {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
 
     private void testView(String sql) throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
         String viewName = "view" + INDEX.getAndIncrement();
         String createView = "create view " + viewName + " as " + sql;
         starRocksAssert.withView(createView);
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
 
         starRocksAssert.dropView(viewName);
     }
 
     private void testViewIgnoreObjectCountDistinct(String sql) throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
         String viewName = "view" + INDEX.getAndIncrement();
         String createView = "create view " + viewName + " as " + sql;
         starRocksAssert.withView(createView);
@@ -45,8 +48,8 @@ public class ViewPlanTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
-        System.out.println(sqlPlan);
-        System.out.println(viewPlan);
+        logSysInfo(sqlPlan);
+        logSysInfo(viewPlan);
 
         sqlPlan = sqlPlan.replaceAll("bitmap_union_count\\(", "count");
         viewPlan = viewPlan.replaceAll("bitmap_union_count\\(", "count");
@@ -56,7 +59,7 @@ public class ViewPlanTest extends PlanTestBase {
         viewPlan = viewPlan.replaceAll("hll_union_agg\\(", "count");
         sqlPlan = sqlPlan.replaceAll("hll_union_agg", "count");
         viewPlan = viewPlan.replaceAll("hll_union_agg", "count");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
     }
 
     @Test
@@ -384,7 +387,7 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql57() throws Exception {
-        String sql = "select column_name, UPPER(DATA_TYPE) from information_schema.columns;";
+        String sql = "select column_name, upper(DATA_TYPE) from information_schema.columns;";
         testView(sql);
     }
 
@@ -1587,7 +1590,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from alias_view");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("alias_view");
     }
 
@@ -1599,7 +1602,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from alias_view");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("alias_view");
     }
 
@@ -1633,7 +1636,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from test_view15");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("test_view15");
     }
 
@@ -1672,7 +1675,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from test_view16;");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
 
         starRocksAssert.dropView("test_view16");
     }
@@ -1712,7 +1715,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
 
         String alterStmt = "with testTbl_cte (w1, w2) as (select v1, v2 from t0) " +
                 "select w1 as c1, sum(w2) as c2 from testTbl_cte where w1 > 10 group by w1";
@@ -1720,11 +1723,11 @@ public class ViewPlanTest extends PlanTestBase {
 
         AlterViewStmt alterViewStmt =
                 (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, starRocksAssert.getCtx());
-        GlobalStateMgr.getCurrentState().alterView(alterViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(connectContext, alterViewStmt);
 
         sqlPlan = getFragmentPlan(alterStmt);
         viewPlan = getFragmentPlan("select * from " + viewName);
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
     }
 
     @Test
@@ -1773,5 +1776,89 @@ public class ViewPlanTest extends PlanTestBase {
     public void testBackquoteAlias() throws Exception {
         String sql = "select `select` from (select v1 from t0) `abc.bcd`(`select`);";
         testView(sql);
+    }
+
+    @Test
+    public void testViewNotInvolveMv() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(true);
+        String createView = "create view v_l as select k1, k2 as k22, k3 as k33 from t7";
+        starRocksAssert.withView(createView);
+
+        createView = "create view v_r as select k1, k2 as k222, k3 as k333 from t8";
+        starRocksAssert.withView(createView);
+
+        String sql = "select l.k1 from v_l l left join v_r r1 on l.k22=r1.k222 left join" +
+                " v_r r2 on trim(l.k33)=r2.k333; ";
+        String sqlPlan = getFragmentPlan(sql);
+        Assertions.assertTrue(sqlPlan.contains("OlapScanNode"));
+
+        starRocksAssert.dropView("v_l");
+        starRocksAssert.dropView("v_r");
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
+    }
+
+    @Test
+    public void testCyclicViewRaisesSemanticErrorNotStackOverflow() throws Exception {
+        starRocksAssert.withTable("create table cyc_base (a int) duplicate key(a) " +
+                "distributed by hash(a) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withView("create view cyc_v1 as select a from cyc_base");
+        starRocksAssert.withView("create view cyc_v2 as select a from cyc_v1");
+
+        // ALTER VIEW is analyzed against the *current* catalog (cyc_v1 still reads cyc_base), so it
+        // passes analysis and commits the cycle cyc_v1 -> cyc_v2 -> cyc_v1.
+        String alterView = "alter view cyc_v1 as select a from cyc_v2";
+        AlterViewStmt alterViewStmt = (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(connectContext, alterViewStmt);
+
+        try {
+            // Selecting through the cycle must raise a graceful SemanticException, never a
+            // StackOverflowError escaping to the top-level handler.
+            Throwable t = Assertions.assertThrows(Throwable.class,
+                    () -> getFragmentPlan("select * from cyc_v1"));
+            Assertions.assertFalse(t instanceof StackOverflowError,
+                    "cyclic view must not overflow the stack");
+            Assertions.assertInstanceOf(CyclicViewException.class, t,
+                    "expected a graceful cycle semantic error, but got: " + t);
+            Assertions.assertTrue(t.getMessage() != null && t.getMessage().contains("cycle"),
+                    "expected the cycle to be reported, but got: " + t);
+            // The cycle reason must surface directly, not be masked behind the generic outer wrapper.
+            Assertions.assertFalse(t.getMessage().contains("references invalid table"),
+                    "cycle error must not be re-wrapped as a generic 'invalid table' error: " + t);
+        } finally {
+            starRocksAssert.dropView("cyc_v1");
+            starRocksAssert.dropView("cyc_v2");
+            starRocksAssert.dropTable("cyc_base");
+        }
+    }
+
+    @Test
+    public void testCyclicViewThroughSubqueryRaisesSemanticErrorNotStackOverflow() throws Exception {
+        starRocksAssert.withTable("create table cyc_sub_base (a int) duplicate key(a) " +
+                "distributed by hash(a) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withView("create view cyc_sub_v1 as select a from cyc_sub_base");
+        starRocksAssert.withView("create view cyc_sub_v2 as " +
+                "select a from cyc_sub_base where a in (select a from cyc_sub_v1)");
+
+        // Close the cycle through an IN subquery: cyc_sub_v1 -> (subquery) cyc_sub_v2 -> (subquery)
+        // cyc_sub_v1. Each subquery is analyzed by a *fresh* QueryAnalyzer, so the guard only fires
+        // if the expansion path is shared across those analyzers (via the session).
+        String alterView = "alter view cyc_sub_v1 as select a from cyc_sub_base where a in (select a from cyc_sub_v2)";
+        AlterViewStmt alterViewStmt = (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(connectContext, alterViewStmt);
+
+        try {
+            Throwable t = Assertions.assertThrows(Throwable.class,
+                    () -> getFragmentPlan("select * from cyc_sub_v1"));
+            Assertions.assertFalse(t instanceof StackOverflowError,
+                    "cyclic view through a subquery must not overflow the stack");
+            Assertions.assertInstanceOf(CyclicViewException.class, t,
+                    "expected a graceful cycle semantic error, but got: " + t);
+            Assertions.assertTrue(t.getMessage() != null && t.getMessage().contains("cycle"),
+                    "expected the cycle to be reported, but got: " + t);
+        } finally {
+            starRocksAssert.dropView("cyc_sub_v1");
+            starRocksAssert.dropView("cyc_sub_v2");
+            starRocksAssert.dropTable("cyc_sub_base");
+        }
     }
 }

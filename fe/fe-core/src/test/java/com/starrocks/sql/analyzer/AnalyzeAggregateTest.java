@@ -17,15 +17,15 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeAggregateTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -82,6 +82,43 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testCollectionSubscriptIsSubjectToGroupBy() {
+        // The subscript of a collection element is an ordinary expression: a bare column there is no more
+        // legal than anywhere else. It used to slip past this check and blow up later in the optimizer
+        // with an unactionable "Invalid plan:".
+        analyzeFail("select map_agg(v1, v2)[v3] from t0",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select map_agg(v1, v2)[v3] from t0 group by v1",
+                "must be an aggregate expression or appear in GROUP BY clause");
+
+        analyzeSuccess("select map_agg(v1, v2)[1] from t0");
+        analyzeSuccess("select map_agg(v1, v2)[v3] from t0 group by v3");
+
+        // The same rule has to hold wherever the check runs, not only in the select list.
+        analyzeFail("select v1 from t0 group by v1 having map_agg(v1, v2)[v3] = 'x'",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select map_agg(v1, v2)[v3] from t0 order by map_agg(v1, v2)[v3]",
+                "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
+    public void testEveryChildIsSubjectToGroupBy() {
+        // Several visitors used to look at only some of their children, so a bare column in the other ones
+        // reached the optimizer, which rejected its own plan with an unactionable "Invalid plan:".
+
+        // The LIKE pattern only has to be a string expression, so it can be a column.
+        analyzeFail("select max(ta) like ta from tall",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeSuccess("select max(ta) like ta from tall group by ta");
+        analyzeSuccess("select max(ta) like 'a%' from tall");
+
+        // BITNOT is a unary ArithmeticExpr: asking for a second child yields null, which used to NPE.
+        analyzeSuccess("select ~v1, count(*) from t0 group by v1");
+        analyzeFail("select ~v1, count(*) from t0",
+                "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
     public void testGrouping() {
         analyzeFail("select grouping(foo) from t0 group by grouping sets((v1), (v2))",
                 "cannot be resolved");
@@ -102,9 +139,9 @@ public class AnalyzeAggregateTest {
         analyzeFail("select grouping(v1) from t0 group by v1",
                 "cannot use GROUPING functions without [grouping sets|rollup|cube] clause");
 
-        //grouping functions only support column.
+        //The arguments of GROUPING must be expressions referenced by GROUP BY
         analyzeFail("select v1, grouping(v1+1) from t0 group by grouping sets((v1))",
-                "grouping functions only support column.");
+                "The arguments of GROUPING must be expressions referenced by GROUP BY.");
 
         //cannot contain grouping
         analyzeFail("select v1 from t0 inner join t1 on grouping(v1)= v4", "JOIN clause cannot contain grouping");
@@ -133,16 +170,21 @@ public class AnalyzeAggregateTest {
         analyzeFail("select distinct v1 from t0 order by v2",
                 "must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select distinct v1 as v from t0 order by v2",
-                "must be an aggregate expression or appear in GROUP BY clause");
+                " must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select * from t0 order by max(v2)",
+                "column must appear in the GROUP BY clause or be used in an aggregate function.");
+        analyzeFail("select distinct max(v1) from t0");
+        analyzeFail("select distinct abs(v1) from t0 order by max(v1)",
+                "for SELECT DISTINCT, ORDER BY expressions must appear in select list");
+        analyzeFail("select distinct abs(v1) from t0 order by max(v2)",
+                "for SELECT DISTINCT, ORDER BY expressions must appear in select list");
 
         analyzeSuccess("select distinct v1 as v from t0 having v = 1");
         analyzeFail("select distinct v1 as v from t0 having v2 = 2",
                 "must be an aggregate expression or appear in GROUP BY clause");
 
-        analyzeFail("select distinct v1,sum(v2) from t0",
-                "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
-        analyzeFail("select distinct v2 from t0 group by v1,v2",
-                "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+        analyzeFail("select distinct v1,sum(v2) from t0");
+        analyzeSuccess("select distinct v2 from t0 group by v1,v2");
 
         analyzeSuccess("select distinct v1, v2 from t0");
         analyzeFail("select v2, distinct v1 from t0");
@@ -161,6 +203,30 @@ public class AnalyzeAggregateTest {
         analyzeFail("SELECT VAR_SAMP ( DISTINCT v2 ) FROM v0");
         analyzeFail("select distinct v1 from t0 having sum(v1) > 2");
     }
+
+    @Test
+    public void testDistinctWithAggFunc() {
+        analyzeSuccess("select distinct v1, count(v2) from t0 group by v1");
+        analyzeSuccess("select distinct v1, count(v2) from t0 group by v1, v2");
+        analyzeSuccess("select distinct v1 + v2, count(v2) from t0 group by v1, v2");
+        analyzeFail("select distinct v1 * v2, sum(v3) from t0 group by v2");
+        analyzeFail("select distinct v1 + v2, sum(v3) from t0 group by v1, v2 + 1");
+        analyzeSuccess("select distinct v1 + 1, sum(v3) from t0 group by v1, v2 + 1");
+        analyzeSuccess("select distinct v1 + v2, count(v2) from t0 group by v1, v2 having max(v1) = 1");
+        analyzeFail("select distinct v1 + v2, count(v2) from t0 having max(v1) = 1");
+        analyzeSuccess("select distinct v1 from t0 having abs(v1) = 1");
+        analyzeFail("select distinct v1 + v2 from t0 having abs(v1) = 1");
+        analyzeSuccess("select distinct v1 from t0 having v1 > 1");
+        analyzeFail("select distinct v1 from t0 having v2 > 1");
+        analyzeSuccess("select distinct v1 from t0 group by v1");
+        analyzeFail("select distinct v1 from t0 group by v2");
+        analyzeSuccess("select distinct vs.a, avg(vs.b) from ttypes group by vs.a");
+        analyzeSuccess("select distinct vs.a, avg(vs1.b) from ttypes group by vs.a");
+        analyzeFail("select distinct vs.a, vs1.b from ttypes group by vs.a");
+        analyzeFail("select distinct vs.a, vs1.b from ttypes group by vs");
+        analyzeSuccess("select distinct vs.a, vs1.b from ttypes group by vs.a, vs1.b");
+    }
+
     @Test
     public void testDistinctAggOnComplexTypes() {
         analyzeSuccess("select count(distinct va) from ttypes group by v1");
@@ -204,46 +270,46 @@ public class AnalyzeAggregateTest {
         QueryRelation query = ((QueryStatement) analyzeSuccess("select grouping_id(t0.v1, t0.v3), " +
                 "grouping(t0.v2) from t0 group by cube(t0.v1, t0.v2, t0.v3);"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(t0.v1, t0.v3), grouping(t0.v2)",
+        Assertions.assertEquals("grouping(t0.v1, t0.v3), grouping(t0.v2)",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
                 "select grouping_id(test.t0.v1, test.t0.v3), grouping(test.t0.v2) from t0 " +
                         "group by cube(test.t0.v1, test.t0.v2, test.t0.v3);"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(test.t0.v1, test.t0.v3), grouping(test.t0.v2)",
+        Assertions.assertEquals("grouping(test.t0.v1, test.t0.v3), grouping(test.t0.v2)",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select grouping(t0.v1), grouping(t0.v2), grouping_id(t0.v1,t0.v2), " +
                 "v1,v2 from t0 group by grouping sets((t0.v1,t0.v2),(t0.v1),(t0.v2))"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(t0.v1), grouping(t0.v2), grouping(t0.v1, t0.v2), v1, v2",
+        Assertions.assertEquals("grouping(t0.v1), grouping(t0.v2), grouping(t0.v1, t0.v2), v1, v2",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select grouping(test.t0.v1), grouping(test.t0.v2), " +
                 "grouping_id(test.t0.v1,test.t0.v2), v1,v2 from t0 " +
                 "group by grouping sets((test.t0.v1,test.t0.v2),(test.t0.v1),(test.t0.v2))"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(test.t0.v1), grouping(test.t0.v2), grouping(test.t0.v1, test.t0.v2), v1, v2",
+        Assertions.assertEquals("grouping(test.t0.v1), grouping(test.t0.v2), grouping(test.t0.v1, test.t0.v2), v1, v2",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select t0.v1, t0.v2, grouping_id(t0.v1, t0.v2), " +
                 "SUM(t0.v3) from t0 group by cube(t0.v1, t0.v2)"))
                 .getQueryRelation();
-        Assert.assertEquals("v1, v2, grouping(t0.v1, t0.v2), sum(t0.v3)",
+        Assertions.assertEquals("v1, v2, grouping(t0.v1, t0.v2), sum(t0.v3)",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess(
                 "select test.t0.v1, test.t0.v2, grouping_id(test.t0.v1, test.t0.v2), " +
                         "SUM(test.t0.v3) from t0 group by cube(test.t0.v1, test.t0.v2)"))
                 .getQueryRelation();
-        Assert.assertEquals("v1, v2, grouping(test.t0.v1, test.t0.v2), sum(test.t0.v3)",
+        Assertions.assertEquals("v1, v2, grouping(test.t0.v1, test.t0.v2), sum(test.t0.v3)",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select grouping(v1), grouping(v2), grouping_id(v1,v2), " +
                 "v1,v2 from t0 group by grouping sets((v1,v2),(v1),(v2))"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+        Assertions.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
                 String.join(", ", query.getColumnOutputNames()));
     }
 
@@ -258,11 +324,120 @@ public class AnalyzeAggregateTest {
         analyzeFail("select percentile_approx('c',0.5) from tall group by tb");
         analyzeFail("select percentile_approx(1,'c') from tall group by tb");
         analyzeFail("select percentile_approx(1,1,'c') from tall group by tb");
-        analyzeFail("select percentile_approx(1,1,tc) from tall group by tb");
         analyzeFail("select percentile_approx(1,1,0.5,tc) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1,1,tc) from tall group by tb");
         analyzeSuccess("select percentile_approx(1,5) from tall group by tb");
         analyzeSuccess("select percentile_approx(1,0.5,1047) from tall group by tb");
         analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");
+        analyzeSuccess("select percentile_cont(tj,0.5) from tall group by tb");
+        analyzeSuccess("select percentile_cont(tj, cast(0.5 as double)) from tall group by tb");
+        analyzeSuccess("select percentile_cont(1, 0.4);");
+        analyzeSuccess("select percentile_cont(1, cast(0.4 as double));");
+
+        // Regression: percentile_disc / percentile_disc_lc on a non-sortable first-arg type
+        // must throw SemanticException rather than NPE. Before the fix, getBuiltinFunction
+        // returned null for these signatures and the following fn.getArgs()[0].isDecimalV3()
+        // dereference crashed with NullPointerException.
+        analyzeFail("select percentile_disc(b1, 0.5) from test_object group by v1",
+                "No matching function with signature: percentile_disc");
+        analyzeFail("select percentile_disc(h1, 0.5) from test_object group by v1",
+                "No matching function with signature: percentile_disc");
+        analyzeFail("select percentile_disc(p1, 0.5) from test_object group by v1",
+                "No matching function with signature: percentile_disc");
+        analyzeFail("select percentile_disc(parse_json('{}'), 0.5)",
+                "No matching function with signature: percentile_disc");
+        analyzeFail("select percentile_disc_lc(bitmap_from_string('1,2,3'), 0.5)",
+                "No matching function with signature: percentile_disc_lc");
+    }
+
+    @Test
+    public void testPercentileApproxWeightedFunction() {
+        // Test parameter count validation
+        analyzeFail("select percentile_approx_weighted(1, 2) from tall group by tb");
+        analyzeFail("select percentile_approx_weighted(1, 2, 0.5, 100, 200) from tall group by tb");
+
+        // Test first parameter (value) type validation
+        analyzeFail("select percentile_approx_weighted('c', 1, 0.5) from tall group by tb",
+                "percentile_approx_weighted requires the first parameter (value) to be numeric type");
+        analyzeSuccess("select percentile_approx_weighted(tc, 1, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(tj, 1, 0.5) from tall group by tb");
+
+        // Test second parameter (weight) type validation
+        analyzeFail("select percentile_approx_weighted(1, 'c', 0.5) from tall group by tb",
+                "requires the second parameter (weight) to be numeric type");
+        analyzeSuccess("select percentile_approx_weighted(1, tc, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 100, 0.5) from tall group by tb");
+
+        // Test third parameter (percentile) type validation - single value
+        analyzeFail("select percentile_approx_weighted(1, 2, 'c') from tall group by tb",
+                "requires the third parameter (percentile) to be numeric type");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.0) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 1.0) from tall group by tb");
+
+        // Test third parameter (percentile) type validation - array
+        analyzeSuccess("select percentile_approx_weighted(tc, tj, [0.5, 0.9]) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(tc, tj, [0.0, 0.5, 1.0]) from tall group by tb");
+        analyzeFail("select percentile_approx_weighted(1, 2, ['a', 'b']) from tall group by tb",
+                "percentile_approx_weighted requires " +
+                        "the third parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<varchar>.");
+
+        // Test fourth parameter (compression) type validation
+        analyzeFail("select percentile_approx_weighted(1, 2, 0.5, 'c') from tall group by tb",
+                "requires the fourth parameter (compression) to be numeric type");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, 100) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, tc) from tall group by tb");
+
+        // Test with different numeric types
+        analyzeSuccess("select percentile_approx_weighted(tc, tj, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(tj, tc, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(tc, 1, 0.5, 1000) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, 2048) from tall group by tb");
+
+        // Test with array percentile and compression
+        analyzeSuccess("select percentile_approx_weighted(tc, tj, [0.25, 0.5, 0.75], 1000) from tall group by tb");
+    }
+
+    @Test
+    public void testPercentileApproxFunction() {
+        // Test parameter count validation
+        analyzeFail("select percentile_approx(1) from tall group by tb");
+        analyzeFail("select percentile_approx(1, 0.5, 100, 200) from tall group by tb");
+
+        // Test first parameter (value) type validation
+        analyzeFail("select percentile_approx('c', 0.5) from tall group by tb",
+                "percentile_approx requires the first parameter (value) to be numeric type");
+        analyzeSuccess("select percentile_approx(tc, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(tj, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 0.5) from tall group by tb");
+
+        // Test second parameter (percentile) type validation - single value
+        analyzeFail("select percentile_approx(1, 'c') from tall group by tb",
+                "requires the second parameter (percentile) to be numeric type");
+        analyzeSuccess("select percentile_approx(1, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 0.0) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 1.0) from tall group by tb");
+
+        // Test second parameter (percentile) type validation - array
+        analyzeSuccess("select percentile_approx(tc, array<double>[0.5, 0.9]) from tall group by tb");
+        analyzeSuccess("select percentile_approx(tc, array<double>[0.0, 0.5, 1.0]) from tall group by tb");
+        analyzeFail("select percentile_approx(1, ['a', 'b']) from tall group by tb",
+                "percentile_approx requires the second parameter (percentile) to be ARRAY<NUMERIC>");
+
+        // Test third parameter (compression) type validation
+        analyzeFail("select percentile_approx(1, 0.5, 'c') from tall group by tb",
+                "requires the third parameter (compression) to be numeric type");
+        analyzeSuccess("select percentile_approx(1, 0.5, 100) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 0.5, tc) from tall group by tb");
+
+        // Test with different numeric types
+        analyzeSuccess("select percentile_approx(tc, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(tj, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(tc, 0.5, 1000) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 0.5, 2048) from tall group by tb");
+
+        // Test with array percentile and compression
+        analyzeSuccess("select percentile_approx(tc, [0.25, 0.5, 0.75], 1000) from tall group by tb");
     }
 
     @Test
@@ -300,4 +475,112 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [true, true, false]) FROM tall");
     }
 
+    @Test
+    public void testMinNMaxNFunction() {
+        // Test MIN_N with valid parameters
+        analyzeSuccess("select min_n(v1, 3) from t0");
+        analyzeSuccess("select min_n(v1, 1) from t0");
+        analyzeSuccess("select min_n(v1, 10000) from t0");
+        analyzeSuccess("select max_n(v1, 3) from t0");
+        analyzeSuccess("select max_n(v1, 1) from t0");
+        analyzeSuccess("select max_n(v1, 10000) from t0");
+
+        // Test MIN_N/MAX_N with invalid second parameter - missing parameter
+        analyzeFail("select min_n(v1) from t0", "No matching function with signature");
+        analyzeFail("select max_n(v1) from t0", "No matching function with signature");
+
+        // Test MIN_N/MAX_N with invalid second parameter - not constant
+        analyzeFail("select min_n(v1, v2) from t0",
+                "The second parameter of min_n must be a constant positive integer");
+        analyzeFail("select max_n(v1, v2) from t0",
+                "The second parameter of max_n must be a constant positive integer");
+
+        // Test MIN_N/MAX_N with invalid second parameter - zero or negative
+        analyzeFail("select min_n(v1, 0) from t0",
+                "The second parameter of min_n must be a constant positive integer");
+        analyzeFail("select min_n(v1, -1) from t0",
+                "The second parameter of min_n must be a constant positive integer");
+        analyzeFail("select max_n(v1, 0) from t0",
+                "The second parameter of max_n must be a constant positive integer");
+        analyzeFail("select max_n(v1, -1) from t0",
+                "The second parameter of max_n must be a constant positive integer");
+
+        // Test MIN_N/MAX_N with invalid second parameter - exceeds maximum
+        analyzeFail("select min_n(v1, 10001) from t0",
+                "The second parameter of min_n cannot exceed 10000");
+        analyzeFail("select max_n(v1, 10001) from t0",
+                "The second parameter of max_n cannot exceed 10000");
+    }
+
+    @Test
+    public void testGroupByAll() {
+        // basic: non-agg columns auto-collected as group by keys
+        analyzeSuccess("select v1, v2, sum(v3) from t0 group by all");
+        analyzeSuccess("select v1, sum(v2) from t0 group by all");
+
+        // only aggregate functions in select list — group by all yields empty group by (scalar agg)
+        analyzeSuccess("select sum(v1), count(v2) from t0 group by all");
+
+        // no aggregate functions — group by all collects all columns
+        analyzeSuccess("select v1, v2, v3 from t0 group by all");
+
+        // expression that contains aggregate: sum(v1)+1 should NOT be a group by key
+        analyzeSuccess("select v1, sum(v1) + 1 from t0 group by all");
+
+        // expression without aggregate: v1+v2 should be a group by key
+        analyzeSuccess("select v1 + v2, sum(v3) from t0 group by all");
+
+        // nested agg expression: count(*) is aggregate, should be excluded
+        analyzeSuccess("select v1, v2, count(*) from t0 group by all");
+
+        // multiple agg functions mixed with non-agg
+        analyzeSuccess("select v1, sum(v2), avg(v3), count(*) from t0 group by all");
+
+        // alias in select list — group by all should work with aliased expressions
+        analyzeSuccess("select v1 as id, sum(v2) as total from t0 group by all");
+
+        // having clause combined with group by all
+        analyzeSuccess("select v1, sum(v2) from t0 group by all having sum(v2) > 0");
+
+        // subquery in from clause
+        analyzeSuccess("select a, sum(b) from (select v1 as a, v2 as b from t0) t group by all");
+
+        // join with group by all
+        analyzeSuccess("select t0.v1, t1.v4, sum(t0.v2) from t0 join t1 on t0.v1 = t1.v4 group by all");
+
+        // group by all with order by
+        analyzeSuccess("select v1, sum(v2) from t0 group by all order by v1");
+
+        // group by all with limit
+        analyzeSuccess("select v1, sum(v2) from t0 group by all limit 10");
+
+        // group by all with where clause
+        analyzeSuccess("select v1, sum(v2) from t0 where v3 > 0 group by all");
+
+        // window function in select — window expr should NOT be a group by key
+        analyzeFail("select v1, sum(v2) over(), sum(v3) from t0 group by all",
+                "GROUP BY clause cannot contain window function");
+
+        // group by all should reject window functions as group by keys
+        analyzeFail("select v1, sum(v2) over() from t0 group by all",
+                "GROUP BY clause cannot contain window function");
+
+        // group by all with star projection should be supported
+        analyzeSuccess("select *, sum(v1) from t0 group by all");
+        analyzeSuccess("select * exclude(v3), sum(v1) from t0 group by all");
+        analyzeSuccess("select *, sum(v1) from t0 group by all having sum(v1) > 0");
+
+        // duplicate non-aggregate expressions should be deduplicated as group by keys
+        analyzeSuccess("select v1, v1, sum(v2) from t0 group by all");
+        analyzeSuccess("select v1 as a, v1 as b, sum(v2) from t0 group by all");
+
+    }
+
+    @Test
+    public void testGroupByAllRegressionCases() {
+        analyzeSuccess("select v1, sum(v2) + grouping(v1) from t0 group by all");
+        analyzeSuccess("select grouping(v1), sum(v2) from t0 group by all");
+        analyzeSuccess("select grouping(v1) from t0 group by all");
+        analyzeSuccess("select *, sum(v1) from t0 group by all");
+    }
 }

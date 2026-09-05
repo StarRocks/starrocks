@@ -17,14 +17,15 @@ package com.starrocks.system;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -32,7 +33,7 @@ import java.net.Socket;
 import java.util.List;
 
 public class PortConnectivityCheckerTest {
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         Config.port_connectivity_check_timeout_ms = 500;
     }
@@ -57,7 +58,8 @@ public class PortConnectivityCheckerTest {
                     // Accept incoming connections
                     Socket clientSocket = serverSocket.accept();
                     System.out.println("Accepted connection from " +
-                            clientSocket.getInetAddress() + ":" + clientSocket.getPort());
+                                    NetUtils.getHostPortInAccessibleFormat(clientSocket.getInetAddress().toString(), 
+                                            clientSocket.getPort()));
                 }
                 System.out.println("Stopped listening on port " + port);
             } catch (IOException e) {
@@ -108,8 +110,8 @@ public class PortConnectivityCheckerTest {
         PortConnectivityChecker portConnectivityChecker = new PortConnectivityChecker();
         portConnectivityChecker.runAfterCatalogReady();
 
-        Assert.assertTrue(portConnectivityChecker.getCurrentPortStates().get(new Pair<>("127.0.0.1", editLogPort1)));
-        Assert.assertFalse(portConnectivityChecker.getCurrentPortStates().get(new Pair<>("127.0.0.1", Config.rpc_port)));
+        Assertions.assertTrue(portConnectivityChecker.getCurrentPortStates().get(new Pair<>("127.0.0.1", editLogPort1)));
+        Assertions.assertFalse(portConnectivityChecker.getCurrentPortStates().get(new Pair<>("127.0.0.1", Config.rpc_port)));
 
         listenerThread.stopListening();
         listenerThread.join();

@@ -1,0 +1,144 @@
+-- name: test_arrays_zip @mac
+-- Basic constant tests
+SELECT arrays_zip([1, 2], ['1b', '2b']) AS result;
+SELECT arrays_zip([1, 2], ['1b', null, '3b']) AS result;
+SELECT arrays_zip([1, 2, 3], ['a', 'b', 'c'], [10, 20, 30]) AS result;
+SELECT arrays_zip([], []) AS result;
+SELECT arrays_zip([1, 2, 3]) AS result;
+SELECT arrays_zip(null, [1, 2]) AS result;
+SELECT arrays_zip([1, null, 3], ['a', 'b', null]) AS result;
+SELECT * FROM (SELECT 1 AS id) a WHERE a.id = 1 AND arrays_zip([1], ['a']) IS NOT NULL;
+
+-- Table-based tests
+CREATE TABLE arrays_zip_test (
+  pk bigint not null,
+  int_array Array<BigInt>,
+  str_array Array<String>,
+  double_array Array<Double>,
+  null_array Array<String>,
+  mixed_null_array Array<BigInt>,
+  empty_array Array<String>,
+  single_element_array Array<BigInt>,
+  large_array Array<String>,
+  decimal_array Array<DECIMAL(10, 2)>
+) ENGINE=OLAP
+DUPLICATE KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 3
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO arrays_zip_test VALUES
+  (1, [1, 2, 3], ['a', 'b', 'c'], [1.1, 2.2, 3.3], NULL, [1, 2, 3], [], [100], ['x1', 'x2', 'x3'], [10.50, 20.75, 30.25]),
+  (2, [10, 20], ['hello', 'world'], [10.5, 20.5], NULL, [10, null, 30], [], [200], ['y1', 'y2'], [100.00, 200.00]),
+  (3, [100], ['single'], [99.9], NULL, [null, null], [], [300], ['single_element'], [999.99]),
+  (4, [], [], [], NULL, [], [], [], [], []),
+  (5, [1, 2, 3, 4, 5], ['a', 'b', 'c', 'd', 'e'], [1.1, 2.2, 3.3, 4.4, 5.5], NULL, [1, 2, 3, 4, 5], [], [400], ['a', 'b', 'c', 'd', 'e', 'f'], [1.11, 2.22, 3.33, 4.44, 5.55]),
+  (6, [null, null, null], [null, null, null], [null, null, null], NULL, [null, null, null], [], [500], [null, null, null], [null, null, null]),
+  (7, [1, null, 3, null, 5], ['x', null, 'z', null, 'w'], [1.1, null, 3.3, null, 5.5], NULL, [1, null, 3, null, 5], [], [600], ['p', null, 'r', null, 't'], [11.11, null, 33.33, null, 55.55]),
+  (8, [999, 888, 777, 666, 555, 444, 333, 222, 111, 0], ['z', 'y', 'x', 'w', 'v', 'u', 't', 's', 'r', 'q'], [99.9, 88.8, 77.7, 66.6, 55.5, 44.4, 33.3, 22.2, 11.1, 0.0], NULL, [9, 8, 7, 6, 5, 4, 3, 2, 1, 0], [], [700], ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'], [9.90, 8.80, 7.70, 6.60, 5.50, 4.40, 3.30, 2.20, 1.10, 0.00]),
+  (9, [1], ['one'], [1.0], NULL, [1], [], [800], ['one'], [1.00]),
+  (10, [2, 4, 6, 8, 10, 12], ['two', 'four', 'six', 'eight', 'ten', 'twelve'], [2.0, 4.0, 6.0, 8.0, 10.0, 12.0], NULL, [2, 4, 6, 8, 10, 12], [], [900], ['even1', 'even2', 'even3', 'even4', 'even5', 'even6'], [2.00, 4.00, 6.00, 8.00, 10.00, 12.00]),
+  (11, [3, 6, 9, 12, 15], ['three', 'six', 'nine', 'twelve', 'fifteen'], [3.0, 6.0, 9.0, 12.0, 15.0], NULL, [3, 6, 9, 12, 15], [], [1000], ['odd1', 'odd2', 'odd3', 'odd4', 'odd5'], [3.00, 6.00, 9.00, 12.00, 15.00]),
+  (12, [null], [null], [null], NULL, [null], [], [1100], [null], [null]),
+  (13, [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200], ['a1', 'b1', 'c1', 'd1', 'e1', 'f1', 'g1', 'h1', 'i1', 'j1', 'k1', 'l1'], [100.1, 200.2, 300.3, 400.4, 500.5, 600.6, 700.7, 800.8, 900.9, 1000.1, 1100.2, 1200.3], NULL, [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200], [], [1200], ['long1', 'long2', 'long3', 'long4', 'long5', 'long6', 'long7', 'long8', 'long9', 'long10', 'long11', 'long12'], [100.10, 200.20, 300.30, 400.40, 500.50, 600.60, 700.70, 800.80, 900.90, 1000.10, 1100.20, 1200.30]),
+  (14, [-1, -2, -3], ['neg_a', 'neg_b', 'neg_c'], [-1.5, -2.5, -3.5], NULL, [-1, -2, -3], [], [1300], ['neg1', 'neg2', 'neg3'], [-1.50, -2.50, -3.50]),
+  (15, [1, 2], ['short', 'array'], [1.0, 2.0], NULL, [1, 2], [], [1400], ['a', 'b'], [1.00, 2.00]),
+  (16, [0, 0, 0], ['zero', 'zero', 'zero'], [0.0, 0.0, 0.0], NULL, [0, 0, 0], [], [1500], ['z1', 'z2', 'z3'], [0.00, 0.00, 0.00]),
+  (17, [111, 222, 333, 444, 555], ['str_111', 'str_222', 'str_333', 'str_444', 'str_555'], [111.1, 222.2, 333.3, 444.4, 555.5], NULL, [111, 222, 333, 444, 555], [], [1600], ['s1', 's2', 's3', 's4', 's5'], [111.11, 222.22, 333.33, 444.44, 555.55]),
+  (18, [1, 1, 1], ['dup', 'dup', 'dup'], [1.1, 1.1, 1.1], NULL, [1, 1, 1], [], [1700], ['d1', 'd2', 'd3'], [1.11, 1.11, 1.11]),
+  (19, [7, 8, 9, 10, 11, 12, 13, 14, 15], ['seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen'], [7.7, 8.8, 9.9, 10.1, 11.1, 12.1, 13.1, 14.1, 15.1], NULL, [7, 8, 9, 10, 11, 12, 13, 14, 15], [], [1800], ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9'], [7.70, 8.80, 9.90, 10.10, 11.10, 12.10, 13.10, 14.10, 15.10]),
+  (20, [42], ['answer'], [42.0], NULL, [42], [], [1900], ['fortytwo'], [42.00]);
+
+-- Test with two arrays (non-constant inputs)
+SELECT pk, arrays_zip(int_array, str_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with three arrays (non-constant inputs)
+SELECT pk, arrays_zip(int_array, str_array, double_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with NULL array input (non-constant)
+SELECT pk, arrays_zip(null_array, int_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with mixed null values in arrays (non-constant)
+SELECT pk, arrays_zip(mixed_null_array, str_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with empty arrays (non-constant)
+SELECT pk, arrays_zip(empty_array, int_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with single element arrays (non-constant)
+SELECT pk, arrays_zip(single_element_array, str_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with large arrays (non-constant)
+SELECT pk, arrays_zip(large_array, double_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with four arrays (non-constant inputs)
+SELECT pk, arrays_zip(int_array, str_array, double_array, decimal_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with only single array input (non-constant)
+SELECT pk, arrays_zip(int_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test arrays_zip result with IS NOT NULL (non-constant)
+SELECT pk FROM arrays_zip_test WHERE arrays_zip(int_array, str_array) IS NOT NULL ORDER BY pk;
+
+-- Test arrays_zip result with IS NULL (non-constant)
+SELECT pk FROM arrays_zip_test WHERE arrays_zip(null_array, str_array) IS NULL ORDER BY pk;
+
+-- Test mixed constant and non-constant arrays
+SELECT pk, arrays_zip(int_array, ['const1', 'const2', 'const3']) FROM arrays_zip_test ORDER BY pk;
+
+-- Test mixed constant and non-constant arrays (reversed order)
+SELECT pk, arrays_zip(['const_a', 'const_b', 'const_c'], str_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test with decimal arrays (non-constant)
+SELECT pk, arrays_zip(int_array, decimal_array) FROM arrays_zip_test ORDER BY pk;
+
+-- Test filtering by pk and using arrays_zip result in WHERE clause
+SELECT pk, arrays_zip(int_array, str_array) AS zipped 
+FROM arrays_zip_test 
+WHERE pk > 5 AND pk <= 15
+ORDER BY pk;
+
+-- Test with ORDER BY on pk after arrays_zip
+SELECT pk, arrays_zip(str_array, double_array, decimal_array) 
+FROM arrays_zip_test 
+WHERE int_array IS NOT NULL
+ORDER BY pk;
+
+-- Test with multiple arrays where some are NULL for specific rows
+SELECT pk, int_array, str_array, arrays_zip(mixed_null_array, str_array, double_array) 
+FROM arrays_zip_test 
+WHERE pk IN (1, 6, 7, 12)
+ORDER BY pk;
+
+-- Test with CASE statement and arrays_zip
+SELECT pk, 
+  CASE 
+    WHEN pk <= 5 THEN arrays_zip(int_array, str_array)
+    WHEN pk <= 10 THEN arrays_zip(str_array, double_array)
+    ELSE arrays_zip(double_array, decimal_array)
+  END AS conditional_zip
+FROM arrays_zip_test
+ORDER BY pk;
+
+-- Test arrays_zip with expressions (non-constant)
+SELECT pk, arrays_zip(int_array, CASE WHEN pk > 10 THEN str_array ELSE empty_array END) 
+FROM arrays_zip_test 
+ORDER BY pk;
+
+-- Test arrays_zip with CAST
+SELECT pk, arrays_zip(CAST(int_array AS Array<String>), str_array) 
+FROM arrays_zip_test 
+ORDER BY pk;
+
+-- Test arrays_zip combined with other array functions
+SELECT pk, array_length(arrays_zip(int_array, str_array)) AS zip_length
+FROM arrays_zip_test
+ORDER BY pk;
+
+-- Test arrays_zip with DISTINCT
+SELECT DISTINCT arrays_zip([1, 2], ['a', 'b']) FROM arrays_zip_test LIMIT 5;
+
+-- Test arrays_zip in aggregation context (GROUP BY)
+SELECT COUNT(*) AS cnt, arrays_zip([1], ['test']) 
+FROM arrays_zip_test 
+GROUP BY arrays_zip([1], ['test']);

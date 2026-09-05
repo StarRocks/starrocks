@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回以弧度表示的角度x的正切值。"
 ---
 
 # tan
 
-## 功能
+
 
 计算参数 `x` 的正切，`x` 为弧度值。
 

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns 1 if a string starts with the specified prefix, or 0 otherwise."
 ---
 
 # starts_with
 
-## Description
+
 
 This function returns 1 when a string starts with a specified prefix. Otherwise, it returns 0. When the argument is NULL, the result is NULL.
 

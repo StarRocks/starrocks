@@ -14,9 +14,10 @@
 
 #pragma once
 
+#include "base/concurrency/race_detect.h"
 #include "exec/partition/chunks_partitioner.h"
 #include "exec/pipeline/hash_partition_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 /**
  * HashPartition{Sink/Source}Operator pair is used to reorder the input sequence by
@@ -67,6 +68,7 @@ private:
     HashPartitionContext* _hash_partition_ctx;
 
     RuntimeProfile::Counter* _partition_num;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class HashPartitionSinkOperatorFactory final : public OperatorFactory {

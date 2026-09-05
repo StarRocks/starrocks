@@ -15,14 +15,20 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.load.routineload.RoutineLoadMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.ImportMetadataStmt;
+import com.starrocks.sql.ast.LabelName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.List;
 
 public class CreateRoutineLoadAnalyzer {
 
@@ -53,8 +59,16 @@ public class CreateRoutineLoadAnalyzer {
             statement.setRoutineLoadDesc(CreateRoutineLoadStmt.buildLoadDesc(statement.getLoadPropertyList()));
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
-        } catch (UserException e) {
-            LOG.error(e);
+            RoutineLoadDesc routineLoadDesc = statement.getRoutineLoadDesc();
+            List<ImportColumnDesc> columnDescs =
+                    (routineLoadDesc != null && routineLoadDesc.getColumnsInfo() != null)
+                            ? routineLoadDesc.getColumnsInfo().getColumns()
+                            : null;
+            ImportMetadataStmt metadata = routineLoadDesc != null ? routineLoadDesc.getMetadata() : null;
+            RoutineLoadMetadata.validateIncludeMetadata(metadata, columnDescs, statement.getTypeName(),
+                    statement.getFormat());
+        } catch (StarRocksException e) {
+            LOG.error(e.getMessage(), e);
             throw new SemanticException(e.getMessage());
         }
     }

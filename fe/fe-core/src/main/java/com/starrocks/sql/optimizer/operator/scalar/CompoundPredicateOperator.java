@@ -25,30 +25,61 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class CompoundPredicateOperator extends PredicateOperator {
     private final CompoundType type;
 
+    // These two filed are used in NormalizePredicateRule to eliminate common CompoundPredicate
+    // For Expr tree like below, the CompoundTreeLeafNodeNumber is 5, and compoundTreeUniqueLeave's size is 4.
+    //           AND
+    //        /        \
+    //      AND         AND
+    //     /   \       /  \
+    // subT1   a+1  And  subT5
+    //             /   \
+    //          subT3  a+1
+    private int compoundTreeLeafNodeNumber;
+    private Set<ScalarOperator> compoundTreeUniqueLeaves;
+
     public CompoundPredicateOperator(CompoundType compoundType, ScalarOperator... arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
         Preconditions.checkState(arguments.length >= 1);
+        incrDepth(arguments);
     }
 
     public CompoundPredicateOperator(CompoundType compoundType, List<ScalarOperator> arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
         Preconditions.checkState(!CollectionUtils.isEmpty(arguments));
+        incrDepth(arguments);
     }
 
     public CompoundType getCompoundType() {
         return type;
     }
 
+    public Set<ScalarOperator> getCompoundTreeUniqueLeaves() {
+        return compoundTreeUniqueLeaves;
+    }
+
+    public void setCompoundTreeUniqueLeaves(Set<ScalarOperator> compoundTreeUniqueLeaves) {
+        this.compoundTreeUniqueLeaves = compoundTreeUniqueLeaves;
+    }
+
+    public int getCompoundTreeLeafNodeNumber() {
+        return compoundTreeLeafNodeNumber;
+    }
+
+    public void setCompoundTreeLeafNodeNumber(int compoundTreeLeafNodeNumber) {
+        this.compoundTreeLeafNodeNumber = compoundTreeLeafNodeNumber;
+    }
+
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCompoundPredicate(this, context);
+        return  visitor.visitCompoundPredicate(this, context);
     }
 
     public enum CompoundType {
@@ -123,6 +154,24 @@ public class CompoundPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
+            return false;
+        }
+        CompoundPredicateOperator that = (CompoundPredicateOperator) o;
+        return type == that.type;
+    }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        CompoundPredicateOperator that = (CompoundPredicateOperator) obj;
+        return type == that.type;
+    }
+
+    @Override
     public int hashCode() {
         int h = 0;
         for (ScalarOperator scalarOperator : this.getChildren()) {
@@ -130,7 +179,12 @@ public class CompoundPredicateOperator extends PredicateOperator {
                 h += scalarOperator.hashCode();
             }
         }
-        return Objects.hash(opType, type, h);
+        return Objects.hash(hashCodeSelf(), h);
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), type);
     }
 
     public static ScalarOperator or(Collection<ScalarOperator> nodes) {

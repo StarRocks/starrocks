@@ -1,0 +1,80 @@
+-- name: test_jvm_arrow_udf @no_arrow_flight_sql
+CREATE FUNCTION arrow_add(INT, INT)
+RETURNS INT
+PROPERTIES (
+    "symbol" = "com.starrocks.example.udf.UDFArrowAdd",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "${udf_url}/starrocks-jdbc/arrow.jar"
+);
+-- result:
+-- !result
+CREATE TABLE FUNCTION arrow_repeat(INT)
+RETURNS INT
+PROPERTIES (
+    "symbol" = "com.starrocks.example.udf.UDTFArrowRepeat",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "${udf_url}/starrocks-jdbc/arrow.jar"
+);
+-- result:
+-- !result
+CREATE AGGREGATE FUNCTION arrow_sum(INT)
+RETURNS BIGINT
+PROPERTIES (
+    "symbol" = "com.starrocks.example.udf.ArrowSum",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "${udf_url}/starrocks-jdbc/arrow.jar"
+);
+-- result:
+-- !result
+CREATE TABLE t_arrow (id INT, a INT, b INT)
+ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_arrow VALUES (1, 1, 10), (2, 2, 20), (3, 3, 30), (4, NULL, 5), (5, 7, NULL);
+-- result:
+-- !result
+SELECT id, arrow_add(a, b) AS r FROM t_arrow ORDER BY id;
+-- result:
+1	12
+2	23
+3	34
+4	None
+5	None
+-- !result
+SELECT a, arrow_repeat AS r FROM t_arrow, arrow_repeat(a) ORDER BY a, r;
+-- result:
+1	1
+1	10
+2	2
+2	20
+3	3
+3	30
+7	7
+7	70
+-- !result
+SELECT arrow_sum(a) AS s FROM t_arrow;
+-- result:
+13
+-- !result
+SELECT b, arrow_sum(a) AS s FROM t_arrow GROUP BY b ORDER BY b;
+-- result:
+[REGEX].*arrow-input UDAF is only supported for global / sorted aggregation, not GROUP BY.*
+-- !result
+DROP FUNCTION arrow_add(INT, INT);
+-- result:
+-- !result
+DROP FUNCTION arrow_repeat(INT);
+-- result:
+-- !result
+DROP FUNCTION arrow_sum(INT);
+-- result:
+-- !result
+DROP TABLE t_arrow;
+-- result:
+-- !result

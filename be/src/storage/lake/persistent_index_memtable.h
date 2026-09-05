@@ -14,30 +14,104 @@
 
 #pragma once
 
-#include <map>
-
-#include "storage/lake/key_index.h"
+#include "base/phmap/btree.h"
+#include "common/thread/threadpool.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 
 namespace starrocks::lake {
 
-class PersistentIndexMemtable {
+class TabletManager;
+class PersistentIndexSstable;
+
+// PersistentIndexMemtable is an in-memory index for persistent index.
+// It supports upsert/insert/erase/replace/get operations.
+// That this class can be submitted to a thread pool for async flush,
+// after flush finish, we can get sstable via `release_sstable()`.
+// E.g.
+// PersistentIndexMemtable memtable;
+// thread_pool->submit(&memtable); // async flush
+// ...
+// RETURN_IF_ERROR(memtable.flush_status()); // check flush status
+// auto sstable = memtable.release_sstable(); // get sstable after flush finish
+class PersistentIndexMemtable : public Runnable {
 public:
+    PersistentIndexMemtable(TabletManager* tablet_mgr = nullptr, int64_t tablet_id = 0, uint64_t max_rss_rowid = 0);
+    ~PersistentIndexMemtable() override;
+    // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  KeyIndexesInfo* not_found, size_t* num_found);
+                  KeyIndexSet* not_founds, size_t* num_found, int64_t version);
 
-    Status insert(size_t n, const Slice* keys, const IndexValue* values);
+    // |version|: version of index values
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexesInfo* not_found, size_t* num_found);
+    // |version|: version of index values
+    // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds, size_t* num_found,
+                 int64_t version, uint32_t del_rssid);
 
-    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes);
+    // Erase from index, used when rebuild index.
+    // |n| : key count
+    // |keys| : key array as raw buffer
+    // |filter| : used for filter keys that need to skip. `True` means need skip.
+    // |version|: version of index values
+    // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
+    Status erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
+                             uint32_t del_rssid);
 
-    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found, size_t* num_found);
+    // |version|: version of index values
+    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes,
+                   int64_t version);
+
+    // |version|: version of index values
+    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* not_founds, int64_t version) const;
+
+    // batch get
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |key_indexes|: the indexes of keys to be found.
+    // |found_key_indexes|: return the found indexes of keys.
+    // |version|: version of values
+    Status get(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes, KeyIndexSet* found_key_indexes,
+               int64_t version) const;
+
+    size_t memory_usage() const;
+
+    Status flush();
+
+    void advance_max_rss_rowid(uint64_t max_rss_rowid);
 
     void clear();
 
+    const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
+
+    bool empty() const { return _map.size() == 0; }
+
+    std::unique_ptr<PersistentIndexSstable> release_sstable();
+
+    void run() override;
+
+    void cancel() override;
+
+    Status flush_status() const;
+
 private:
-    std::map<std::string, IndexValue, std::less<>> _map;
+    Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
+    static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
+
+private:
+    // The size can be up to 230K. The performance of std::map may be poor.
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> _map;
+    int64_t _keys_heap_size{0};
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _tablet_id{0};
+    uint64_t _max_rss_rowid{0};
+    // sstable generated after flush
+    std::unique_ptr<PersistentIndexSstable> _sstable;
+    // flush status
+    Status _flush_status = Status::OK();
+    // flush state mutex
+    mutable std::mutex _flush_mutex;
 };
 
 } // namespace starrocks::lake

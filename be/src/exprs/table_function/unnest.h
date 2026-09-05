@@ -21,7 +21,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/table_function/table_function.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 /**
@@ -29,47 +28,68 @@ namespace starrocks {
  */
 class Unnest final : public TableFunction {
 public:
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* state) const override {
         if (state->get_columns().empty()) {
             return {};
         }
-        Column* arg0 = state->get_columns()[0].get();
-        auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
+        Column* arg0 = state->get_columns()[0]->as_mutable_raw_ptr();
+        // const: every ArrayColumn accessor then resolves to its const overload, which keeps the
+        // offsets read on immutable_data(). The non-const FixedLengthColumnBase::get_data()
+        // materializes a ContainerResource-backed column into its own buffer and drops the
+        // resource, and nothing here may mutate the input column.
+        const ArrayColumn* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
         state->set_processed_rows(arg0->size());
         Columns result;
-        if (arg0->has_null()) {
-            auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
+        if (arg0->has_null() || state->get_is_left_join()) {
+            // Read the offsets buffer directly: Datum::get_int32() would reinterpret any offset in
+            // [2^31, 2^32) as a negative value, because Datum keeps unsigned values in the matching
+            // signed slot.
+            const auto offsets = col_array->offsets().immutable_data();
+            const Column& elements = col_array->elements();
+            const size_t row_count = arg0->size();
 
-            auto offset_column = col_array->offsets_column();
-            auto compacted_offset_column = UInt32Column::create();
-            compacted_offset_column->append_datum(Datum(0));
-
-            ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();
-            int compact_offset = 0;
-
-            for (int row_idx = 0; row_idx < nullable_array_column->size(); ++row_idx) {
-                if (nullable_array_column->is_null(row_idx)) {
-                    compact_offset +=
-                            offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
-                    int32 offset = offset_column->get(row_idx + 1).get_int32();
-                    compacted_offset_column->append_datum(offset - compact_offset);
+            auto copy_count_column = UInt32Column::create();
+            copy_count_column->append(0);
+            MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            uint32_t offset = 0;
+            for (size_t row_idx = 0; row_idx < row_count; ++row_idx) {
+                if (arg0->is_null(row_idx)) {
+                    if (state->get_is_left_join()) {
+                        // to support unnest with null.
+                        if (state->is_required()) {
+                            unnested_array_elements->append_nulls(1);
+                        }
+                        offset += 1;
+                    }
+                    copy_count_column->append(offset);
                 } else {
-                    int32 offset = offset_column->get(row_idx + 1).get_int32();
-                    compacted_offset_column->append_datum(offset - compact_offset);
-
-                    compacted_array_elements->append(
-                            *(col_array->elements_column()), offset_column->get(row_idx).get_int32(),
-                            offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32());
+                    if (offsets[row_idx + 1] == offsets[row_idx] && state->get_is_left_join()) {
+                        // to support unnest with null.
+                        if (state->is_required()) {
+                            unnested_array_elements->append_nulls(1);
+                        }
+                        offset += 1;
+                    } else {
+                        const uint32_t length = offsets[row_idx + 1] - offsets[row_idx];
+                        if (state->is_required()) {
+                            unnested_array_elements->append(elements, offsets[row_idx], length);
+                        }
+                        offset += length;
+                    }
+                    copy_count_column->append(offset);
                 }
             }
 
-            result.emplace_back(compacted_array_elements);
-            return std::make_pair(result, compacted_offset_column);
+            result.emplace_back(unnested_array_elements);
+            return std::make_pair(std::move(result), std::move(copy_count_column));
         } else {
             result.emplace_back(col_array->elements_column());
-            return std::make_pair(result, col_array->offsets_column());
+            return std::make_pair(std::move(result), col_array->offsets_column());
         }
     }
+
+    bool is_exception_safe() const override { return true; }
 
     class UnnestState : public TableFunctionState {
         /**
@@ -78,18 +98,20 @@ public:
          */
     };
 
-    [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
+    Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
+        const auto& table_fn = fn.table_fn;
+        if (table_fn.__isset.is_left_join) {
+            (*state)->set_is_left_join(table_fn.is_left_join);
+        }
         return Status::OK();
     }
 
-    [[nodiscard]] Status prepare(TableFunctionState* state) const override { return Status::OK(); }
+    Status prepare(TableFunctionState* state) const override { return Status::OK(); }
 
-    [[nodiscard]] Status open(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        return Status::OK();
-    };
+    Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); };
 
-    [[nodiscard]] Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
+    Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
         delete state;
         return Status::OK();
     }

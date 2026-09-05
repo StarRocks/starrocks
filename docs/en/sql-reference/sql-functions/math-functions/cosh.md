@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Computes the hyperbolic cosine of the argument."
 ---
 
 # cosh
 
-## Description
+
 
 Computes the hyperbolic cosine of the argument.
 

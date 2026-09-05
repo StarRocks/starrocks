@@ -14,51 +14,48 @@
 
 #include "exprs/java_function_call_expr.h"
 
+#include <any>
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <tuple>
 #include <vector>
 
+#include "base/utility/defer_op.h"
+#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/anyval_util.h"
+#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
+#include "exprs/udf/java/java_data_converter.h"
+#include "exprs/udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_context.h"
+#include "exprs/udf/java/java_udf_reflection.h"
 #include "gutil/casts.h"
 #include "jni.h"
-#include "runtime/types.h"
-#include "runtime/user_function_cache.h"
-#include "udf/java/java_data_converter.h"
-#include "udf/java/java_udf.h"
-#include "udf/java/utils.h"
-#include "util/defer_op.h"
+#include "platform/user_function_cache.h"
+#include "runtime/java/java_env.h"
+#include "runtime/java/java_runtime.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
 struct UDFFunctionCallHelper {
     JavaUDFContext* fn_desc;
-    JavaMethodDescriptor* call_desc;
-    std::vector<std::string> _data_buffer;
+    JavaUdfMethodDescriptor* call_desc;
 
-    // Now we don't support logical type function
-    ColumnPtr call(FunctionContext* ctx, Columns& columns, size_t size) {
+    StatusOr<ColumnPtr> call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
-        JNIEnv* env = helper.getEnv();
-        std::vector<DirectByteBuffer> buffers;
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
         int num_cols = ctx->get_num_args();
         std::vector<const Column*> input_cols;
-
-        for (auto& column : columns) {
-            if (column->only_null()) {
-                // we will handle NULL later
-            } else if (column->is_constant()) {
-                column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
-            }
-        }
 
         for (const auto& col : columns) {
             input_cols.emplace_back(col.get());
@@ -67,30 +64,55 @@ struct UDFFunctionCallHelper {
         // result column as a ref
         env->PushLocalFrame((num_cols + 1) * 3 + 1);
         auto defer = DeferOp([env]() { env->PopLocalFrame(nullptr); });
-        // convert input columns to object columns
+
+        // Pass the per-arg UdfTypeDesc jobjects cached on the UDF context. Only args
+        // whose SQL type subtree contains a STRUCT carry a non-null desc; other
+        // entries are null and the boxer falls back to JavaArrayConverter for those
+        // subtrees.
+        std::vector<jobject> arg_type_descs;
+        arg_type_descs.reserve(fn_desc->evaluate_arg_type_descs.size());
+        for (const auto& gref : fn_desc->evaluate_arg_type_descs) {
+            arg_type_descs.emplace_back(gref.handle());
+        }
+
         std::vector<jobject> input_col_objs;
-        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
-                                                                &input_col_objs);
-        RETURN_IF_UNLIKELY(!st.ok(), ColumnHelper::create_const_null_column(size));
+        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, input_cols.data(), num_cols, size, &input_col_objs,
+                                                                &arg_type_descs);
+        RETURN_IF_ERROR(st);
 
         // call UDF method
-        jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(), input_col_objs.size(), size);
-        RETURN_IF_UNLIKELY_NULL(res, ColumnHelper::create_const_null_column(size));
+        ASSIGN_OR_RETURN(auto res, helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(),
+                                                     input_col_objs.size(), size));
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
         return result_cols;
     }
 
-    ColumnPtr get_boxed_result(FunctionContext* ctx, jobject result, size_t num_rows) {
+    StatusOr<ColumnPtr> get_boxed_result(FunctionContext* ctx, jobject result, size_t num_rows) {
         if (result == nullptr) {
             return ColumnHelper::create_const_null_column(num_rows);
         }
         auto& helper = JVMFunctionHelper::getInstance();
         DCHECK(call_desc->method_desc[0].is_box);
-        TypeDescriptor type_desc(call_desc->method_desc[0].type);
-        auto res = ColumnHelper::create_column(type_desc, true);
-        helper.get_result_from_boxed_array(ctx, type_desc.type, res.get(), result, num_rows);
-        down_cast<NullableColumn*>(res.get())->update_has_null();
+        const auto& return_type = ctx->get_return_type();
+        auto res = ColumnHelper::create_column(return_type, true);
+
+        jobject return_desc = fn_desc->evaluate_return_type_desc.handle();
+        if (return_desc != nullptr) {
+            // Return type subtree contains a STRUCT (top-level, inside ARRAY, or
+            // inside MAP). Hand off to the unified Java writeResult, which walks
+            // the UdfTypeDesc tree and recursively drains records / lists / maps
+            // / scalars into the native column tree.
+            RETURN_IF_ERROR(helper.write_result(result, static_cast<int>(num_rows), reinterpret_cast<jlong>(res.get()),
+                                                return_desc, ctx->error_if_overflow()));
+        } else {
+            // Plain scalar / DECIMAL / ARRAY / MAP without STRUCT: unified writer
+            // dispatches DECIMAL internally based on the LogicalType.
+            RETURN_IF_ERROR(helper.get_result_from_boxed_array(return_type.type, res.get(), result, num_rows,
+                                                               return_type.precision, return_type.scale,
+                                                               ctx->error_if_overflow()));
+        }
+        RETURN_IF_ERROR(ColumnHelper::update_nested_has_null(res.get()));
         return res;
     }
 };
@@ -103,19 +125,19 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
     for (int i = 0; i < _children.size(); ++i) {
         ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, ptr));
     }
-    ColumnPtr res;
+    StatusOr<ColumnPtr> res;
     auto call_udf = [&]() {
         res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
         return Status::OK();
     };
-    (void)call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
+    (void)JavaEnv::GetInstance()->submit_java_udf_call(_runtime_state, call_udf)->get_future().get();
     return res;
 }
 
 JavaFunctionCallExpr::~JavaFunctionCallExpr() {
     // nothing to do if JavaFunctionCallExpr has not been prepared
     if (_runtime_state == nullptr) return;
-    auto promise = call_function_in_pthread(_runtime_state, [this]() {
+    auto promise = JavaEnv::GetInstance()->submit_java_udf_call(_runtime_state, [this]() {
         this->_func_desc.reset();
         this->_call_helper.reset();
         return Status::OK();
@@ -133,11 +155,12 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
         return Status::InternalError("Not Found function id for " + _fn.name.function_name);
     }
 
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
+    FunctionContext::TypeDesc return_type = _type;
     std::vector<FunctionContext::TypeDesc> args_types;
 
+    args_types.reserve(_children.size());
     for (Expr* child : _children) {
-        args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
+        args_types.push_back(child->type());
     }
 
     // todo: varargs use for allocate slice memory, need compute buffer size
@@ -158,6 +181,90 @@ bool JavaFunctionCallExpr::is_constant() const {
     return Expr::is_constant();
 }
 
+StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_desc(
+        FunctionContext::FunctionStateScope scope, const std::string& libpath) {
+    auto desc = std::make_shared<JavaUDFContext>();
+    // init class loader and analyzer
+    desc->udf_classloader = std::make_unique<JavaUdfClassLoader>(libpath);
+    RETURN_IF_ERROR(desc->udf_classloader->init());
+    desc->analyzer = std::make_unique<JavaUdfClassAnalyzer>();
+
+    ASSIGN_OR_RETURN(desc->udf_class, desc->udf_classloader->getClass(_fn.scalar_fn.symbol));
+
+    auto add_method = [&](const std::string& name, std::unique_ptr<JavaUdfMethodDescriptor>* res) {
+        bool has_method = false;
+        std::string method_name = name;
+        std::string signature;
+        std::vector<JavaUdfMethodTypeDescriptor> mtdesc;
+        RETURN_IF_ERROR(desc->analyzer->has_method(desc->udf_class.clazz(), method_name, &has_method));
+        if (has_method) {
+            RETURN_IF_ERROR(desc->analyzer->get_signature(desc->udf_class.clazz(), method_name, &signature));
+            RETURN_IF_ERROR(desc->analyzer->get_method_desc(signature, &mtdesc));
+            *res = std::make_unique<JavaUdfMethodDescriptor>();
+            (*res)->name = std::move(method_name);
+            (*res)->signature = std::move(signature);
+            (*res)->method_desc = std::move(mtdesc);
+            ASSIGN_OR_RETURN((*res)->method, desc->analyzer->get_method_object(desc->udf_class.clazz(), name));
+        }
+        return Status::OK();
+    };
+
+    // Now we don't support prepare/close for UDF
+    // RETURN_IF_ERROR(add_method("prepare", &desc->prepare));
+    // RETURN_IF_ERROR(add_method("method_close", &desc->close));
+    RETURN_IF_ERROR(add_method("evaluate", &desc->evaluate));
+
+    // Build a com.starrocks.udf.UdfTypeDesc Java object for each UDF argument and
+    // for the return type whose SQL type subtree contains a STRUCT. The same
+    // UdfTypeDesc tree is the single source of type info shared with both the input
+    // boxing path (via JNI field accessors) and the unified Java writeResult helper.
+    {
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
+        std::vector<TypeDescriptor> sql_arg_types;
+        sql_arg_types.reserve(_children.size());
+        for (const auto& child : _children) {
+            sql_arg_types.emplace_back(child->type());
+        }
+        ASSIGN_OR_RETURN(JavaUdfMethodTypeDescs descs,
+                         build_method_udf_type_descs(env, desc->evaluate->method.handle(), sql_arg_types, _type,
+                                                     /*state_offset=*/0));
+        desc->evaluate_arg_type_descs = std::move(descs.args);
+        desc->evaluate_return_type_desc = std::move(descs.ret);
+    }
+
+    // create UDF function instance
+    ASSIGN_OR_RETURN(desc->udf_handle, desc->udf_class.newInstance());
+    // BatchEvaluateStub
+    auto* stub_clazz = BatchEvaluateStub::stub_clazz_name;
+    auto* stub_method_name = BatchEvaluateStub::batch_evaluate_method_name;
+    auto udf_clazz = desc->udf_class.clazz();
+    auto update_method = desc->evaluate->method.handle();
+
+    // For varargs UDFs, pass the actual number of varargs input columns (excluding fixed params)
+    // so that the stub generator produces the correct signature.
+    // method_desc layout: [return, fixedParam1, ..., fixedParamF, varargs_elem] → size = F + 2
+    // so numFixedParams = method_desc.size() - 2.
+    int num_fixed_params = (_fn.has_var_args && desc->evaluate)
+                                   ? std::max(0, static_cast<int>(desc->evaluate->method_desc.size()) - 2)
+                                   : 0;
+    int num_actual_var_args = _fn.has_var_args ? std::max(0, static_cast<int>(_children.size()) - num_fixed_params) : 0;
+    ASSIGN_OR_RETURN(auto update_stub_clazz,
+                     desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
+                                                        JavaUdfClassLoader::BATCH_EVALUATE, num_actual_var_args));
+    ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
+    desc->call_stub = std::make_unique<BatchEvaluateStub>(desc->udf_handle.handle(), std::move(update_stub_clazz),
+                                                          JavaGlobalRef(method));
+
+    if (desc->prepare != nullptr) {
+        // we only support fragment local scope to call prepare
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            // TODO: handle prepare function
+        }
+    }
+
+    return desc;
+}
+
 Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
                                   FunctionContext::FunctionStateScope scope) {
     // init parent open
@@ -172,74 +279,35 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
             const_columns.emplace_back(std::move(child_col));
         }
     }
-    auto open_state = [this, scope, context]() {
-        // init class loader and analyzer
-        std::string libpath;
-        auto function_cache = UserFunctionCache::instance();
-        RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &libpath));
-        _func_desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
-        RETURN_IF_ERROR(_func_desc->udf_classloader->init());
-        _func_desc->analyzer = std::make_unique<ClassAnalyzer>();
 
-        ASSIGN_OR_RETURN(_func_desc->udf_class, _func_desc->udf_classloader->getClass(_fn.scalar_fn.symbol));
-
-        auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
-            bool has_method = false;
-            std::string method_name = name;
-            std::string signature;
-            std::vector<MethodTypeDescriptor> mtdesc;
-            RETURN_IF_ERROR(_func_desc->analyzer->has_method(_func_desc->udf_class.clazz(), method_name, &has_method));
-            if (has_method) {
-                RETURN_IF_ERROR(
-                        _func_desc->analyzer->get_signature(_func_desc->udf_class.clazz(), method_name, &signature));
-                RETURN_IF_ERROR(_func_desc->analyzer->get_method_desc(signature, &mtdesc));
-                *res = std::make_unique<JavaMethodDescriptor>();
-                (*res)->name = std::move(method_name);
-                (*res)->signature = std::move(signature);
-                (*res)->method_desc = std::move(mtdesc);
-                ASSIGN_OR_RETURN((*res)->method,
-                                 _func_desc->analyzer->get_method_object(_func_desc->udf_class.clazz(), name));
-            }
-            return Status::OK();
+    UserFunctionCache::FunctionCacheDesc func_cache_desc(_fn.fid, _fn.hdfs_location, _fn.checksum,
+                                                         TFunctionBinaryType::SRJAR, _fn.cloud_configuration);
+    // cacheable
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto get_func_desc = [this, scope, state](const std::string& lib) -> StatusOr<std::any> {
+            std::any func_desc;
+            auto call = [&]() {
+                ASSIGN_OR_RETURN(func_desc, _build_udf_func_desc(scope, lib));
+                return Status::OK();
+            };
+            RETURN_IF_ERROR(JavaEnv::GetInstance()->submit_java_udf_call(state, call)->get_future().get());
+            return func_desc;
         };
 
-        // Now we don't support prepare/close for UDF
-        // RETURN_IF_ERROR(add_method("prepare", &_func_desc->prepare));
-        // RETURN_IF_ERROR(add_method("method_close", &_func_desc->close));
-        RETURN_IF_ERROR(add_method("evaluate", &_func_desc->evaluate));
-
-        // create UDF function instance
-        ASSIGN_OR_RETURN(_func_desc->udf_handle, _func_desc->udf_class.newInstance());
-        // BatchEvaluateStub
-        auto* stub_clazz = BatchEvaluateStub::stub_clazz_name;
-        auto* stub_method_name = BatchEvaluateStub::batch_evaluate_method_name;
-        auto udf_clazz = _func_desc->udf_class.clazz();
-        auto update_method = _func_desc->evaluate->method.handle();
-
-        ASSIGN_OR_RETURN(auto update_stub_clazz,
-                         _func_desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
-                                                                  ClassLoader::BATCH_EVALUATE));
-        ASSIGN_OR_RETURN(auto method,
-                         _func_desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
-        auto function_ctx = context->fn_context(_fn_context_index);
-        _func_desc->call_stub =
-                std::make_unique<BatchEvaluateStub>(function_ctx, _func_desc->udf_handle.handle(),
-                                                    std::move(update_stub_clazz), JavaGlobalRef(std::move(method)));
+        auto function_cache = UserFunctionCache::instance();
+        if (_fn.__isset.isolated && !_fn.isolated) {
+            ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(func_cache_desc, get_func_desc));
+            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc.second);
+        } else {
+            std::string libpath;
+            RETURN_IF_ERROR(function_cache->get_libpath(func_cache_desc, &libpath));
+            ASSIGN_OR_RETURN(auto desc, get_func_desc(libpath));
+            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
+        }
 
         _call_helper = std::make_shared<UDFFunctionCallHelper>();
         _call_helper->fn_desc = _func_desc.get();
         _call_helper->call_desc = _func_desc->evaluate.get();
-
-        if (_func_desc->prepare != nullptr) {
-            // we only support fragment local scope to call prepare
-            if (scope == FunctionContext::FRAGMENT_LOCAL) {
-                // TODO: handle prepare function
-            }
-        }
-        return Status::OK();
-    };
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
     }
     return Status::OK();
 }
@@ -255,20 +323,10 @@ void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, Func
         }
         return Status::OK();
     };
-    (void)call_function_in_pthread(state, function_close)->get_future().get();
+    (void)JavaEnv::GetInstance()->submit_java_udf_call(state, function_close)->get_future().get();
     Expr::close(state, context, scope);
 }
 
-void JavaFunctionCallExpr::_call_udf_close() {
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
-    jmethodID methodID = env->GetMethodID(_func_desc->udf_class.clazz(), _func_desc->close->name.c_str(),
-                                          _func_desc->close->signature.c_str());
-    env->CallVoidMethod(_func_desc->udf_handle.handle(), methodID);
-    if (jthrowable jthr = env->ExceptionOccurred(); jthr) {
-        LOG(WARNING) << "Exception occur:" << helper.dumpExceptionString(jthr);
-        env->ExceptionClear();
-    }
-}
+void JavaFunctionCallExpr::_call_udf_close() {}
 
 } // namespace starrocks

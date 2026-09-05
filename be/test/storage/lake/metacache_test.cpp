@@ -14,11 +14,22 @@
 
 #include "storage/lake/metacache.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <future>
+#include <unordered_map>
 
+#include "base/container/lru_cache.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/scoped_cleanup.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -30,8 +41,6 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -40,37 +49,8 @@ using namespace starrocks;
 class LakeMetacacheTest : public TestBase {
 public:
     LakeMetacacheTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(DUP_KEYS);
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(next_id());
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(next_id());
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-        }
-
-        _tablet_schema = TabletSchema::create(*schema);
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -84,7 +64,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_metadata_cache";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -175,8 +155,8 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -199,16 +179,15 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+        for (const auto& file : writer->segments()) {
+            rowset->add_segment_metas()->set_filename(file.path);
         }
 
         writer->close();
@@ -220,7 +199,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     // no segment
     auto sz0 = metacache->memory_usage();
 
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
@@ -228,7 +207,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     // load segment without indexes
     auto sz1 = metacache->memory_usage();
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -283,7 +262,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
     std::string segment_path("test_cache_segment_if_absent.dat");
 
     EXPECT_EQ(nullptr, metacache->lookup_segment(segment_path));
-    auto seg1 = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+    auto seg1 = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
 
     {
         // cache seg1, since there is no segment cached before, cache_segment_if_absent will cache the seg1 and return it.
@@ -293,7 +272,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
         EXPECT_EQ(seg1, metacache->lookup_segment(segment_path));
     }
 
-    auto seg2 = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+    auto seg2 = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
     {
         auto seg = metacache->cache_segment_if_absent(segment_path, seg2);
         EXPECT_TRUE(seg != nullptr);
@@ -342,7 +321,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
     for (int i = 0; i < kConcurrency; ++i) {
         TestCacheSegmentConcurrency ctx;
         ctx.pending_count = &pending_count;
-        ctx.segment = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+        ctx.segment = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
         ctx.mutex = &m;
         ctx.cv = &cv;
         ctx.cache = metacache;
@@ -369,6 +348,131 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
             EXPECT_EQ(final_result, res);
         }
     }
+}
+
+static uint32_t cache_shard(std::string_view key) {
+    CacheKey cache_key(key);
+    return cache_key.hash(cache_key.data(), cache_key.size(), 0) >> (32 - kNumShardBits);
+}
+
+static std::array<std::string, 2> find_segment_paths_in_same_cache_shard() {
+    std::unordered_map<uint32_t, std::string> first_path_by_shard;
+    for (int i = 0;; ++i) {
+        auto path = fmt::format("segment_destruction_{}.dat", i);
+        auto [it, inserted] = first_path_by_shard.emplace(cache_shard(path), path);
+        if (!inserted) {
+            return {it->second, std::move(path)};
+        }
+    }
+}
+
+// Destroying a cached Segment can be expensive (it tears down every loaded column index).
+// It must therefore never run while a cache lock is held, otherwise one slow eviction stalls
+// every other metacache user. Both paths below target the same cache shard, so if the deleter
+// ran under the shard lock the concurrent lookup would block behind it.
+TEST_F(LakeMetacacheTest, test_segment_destruction_does_not_block_cache) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    const auto paths = find_segment_paths_in_same_cache_shard();
+    auto victim = std::make_shared<Segment>(fs, FileInfo{paths[0]}, 100, schema, _tablet_mgr.get());
+    auto replacement = std::make_shared<Segment>(fs, FileInfo{paths[1]}, 101, schema, _tablet_mgr.get());
+
+    // Size the cache so that a single shard holds exactly one of these segments.
+    const size_t victim_charge = victim->mem_usage() + LRUCache::key_handle_size(CacheKey(paths[0]));
+    const size_t replacement_charge = replacement->mem_usage() + LRUCache::key_handle_size(CacheKey(paths[1]));
+    Metacache metacache(std::max(victim_charge, replacement_charge) * kNumShards);
+    metacache.cache_segment(paths[0], victim);
+
+    auto* victim_ptr = victim.get();
+    std::weak_ptr<Segment> victim_weak = victim;
+    victim.reset();
+
+    std::promise<void> deleter_entered;
+    auto deleter_entered_future = deleter_entered.get_future();
+    std::promise<void> allow_deletion;
+    auto allow_deletion_future = allow_deletion.get_future().share();
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("lake::Metacache::cache_value_deleter", [&](void* arg) {
+        auto* segment = std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(arg));
+        if (segment != nullptr && segment->get() == victim_ptr) {
+            deleter_entered.set_value();
+            allow_deletion_future.wait();
+        }
+    });
+    sync_point->EnableProcessing();
+    auto sync_point_cleanup = MakeScopedCleanup([&]() {
+        sync_point->DisableProcessing();
+        sync_point->ClearCallBack("lake::Metacache::cache_value_deleter");
+    });
+
+    // Evicts the victim, and blocks inside its deleter.
+    auto insert_future = std::async(std::launch::async, [&]() { metacache.cache_segment(paths[1], replacement); });
+    bool deletion_released = false;
+    auto unblock_deleter = MakeScopedCleanup([&]() {
+        if (!deletion_released) {
+            allow_deletion.set_value();
+        }
+    });
+
+    using namespace std::chrono_literals;
+    ASSERT_EQ(std::future_status::ready, deleter_entered_future.wait_for(5s));
+
+    auto lookup_future = std::async(std::launch::async, [&]() { return metacache.lookup_segment(paths[1]); });
+    EXPECT_EQ(std::future_status::ready, lookup_future.wait_for(1s));
+
+    allow_deletion.set_value();
+    deletion_released = true;
+    unblock_deleter.cancel();
+
+    EXPECT_EQ(replacement, lookup_future.get());
+    insert_future.get();
+    EXPECT_TRUE(victim_weak.expired());
+}
+
+TEST_F(LakeMetacacheTest, test_update_segment_cache_size) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    auto* metacache = _tablet_mgr->metacache();
+    metacache->prune();
+
+    std::string segment_path("test_update_segment_cache_size.dat");
+    auto seg = std::make_shared<Segment>(fs, FileInfo{segment_path}, 1000, schema, _tablet_mgr.get());
+    metacache->cache_segment(segment_path, seg);
+    const size_t base_usage = metacache->memory_usage();
+
+    // Absent key is a no-op.
+    EXPECT_FALSE(metacache->update_segment_cache_size("no_such_segment.dat", 4096, seg.get()));
+    EXPECT_EQ(base_usage, metacache->memory_usage());
+
+    // Key that maps to a different Segment instance is a no-op too.
+    auto other = std::make_shared<Segment>(fs, FileInfo{segment_path}, 1000, schema, _tablet_mgr.get());
+    EXPECT_FALSE(metacache->update_segment_cache_size(segment_path, 4096, other.get()));
+    EXPECT_EQ(base_usage, metacache->memory_usage());
+
+    // Matching instance updates the charge in place, the cached segment stays the same object.
+    const size_t old_mem_cost = seg->mem_usage();
+    EXPECT_TRUE(metacache->update_segment_cache_size(segment_path, old_mem_cost + 4096, seg.get()));
+    EXPECT_EQ(base_usage + 4096, metacache->memory_usage());
+    EXPECT_EQ(seg, metacache->lookup_segment(segment_path));
+}
+
+TEST_F(LakeMetacacheTest, test_combined_txn_log_cache) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto log = std::make_shared<CombinedTxnLogPB>();
+    metacache->cache_combined_txn_log("combined1", log);
+
+    auto log2 = metacache->lookup_combined_txn_log("combined1");
+    EXPECT_EQ(log.get(), log2.get());
+
+    auto log3 = metacache->lookup_combined_txn_log("combined2");
+    ASSERT_TRUE(log3 == nullptr);
+
+    auto meta = std::make_shared<TabletMetadataPB>();
+    metacache->cache_tablet_metadata("meta1", meta);
+
+    auto log4 = metacache->lookup_combined_txn_log("meta1");
+    ASSERT_TRUE(log4 == nullptr);
 }
 
 } // namespace starrocks::lake

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "返回dividend除以divisor后的余数。"
 ---
 
 # mod
 
-## 功能
+
 
 取模函数，返回两个数相除之后的余数。
 

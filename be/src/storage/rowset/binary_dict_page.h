@@ -38,16 +38,16 @@
 #include <memory>
 #include <string>
 
+#include "base/phmap/phmap.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
 #include "storage/rowset/binary_plain_page.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/types.h"
-#include "util/phmap/phmap.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
@@ -108,13 +108,13 @@ private:
     };
 
     PageBuilderOptions _options;
-    bool _finished;
+    bool _finished{false};
 
     std::unique_ptr<PageBuilder> _data_page_builder;
 
     std::unique_ptr<BinaryPlainPageBuilder> _dict_builder;
 
-    EncodingTypePB _encoding_type;
+    EncodingTypePB _encoding_type{DICT_ENCODING};
     // query for dict item -> dict id
     phmap::flat_hash_map<std::string, uint32_t, HashOfSlice, Eq> _dictionary;
     faststring _first_value;
@@ -125,13 +125,23 @@ class BinaryDictPageDecoder final : public PageDecoder {
 public:
     BinaryDictPageDecoder(Slice data);
 
-    [[nodiscard]] Status init() override;
+    Status init() override;
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override;
+    Status seek_to_position_in_page(uint32_t pos) override;
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    Status next_batch_with_filter(Column* column, const SparseRange<>& range,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) override;
+
+    Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                          Column* column) override;
+
+    Status read_dict_codes_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                                     Column* dst) override;
 
     uint32_t count() const override { return _data_page_decoder->count(); }
 
@@ -141,19 +151,22 @@ public:
 
     void set_dict_decoder(PageDecoder* dict_decoder);
 
-    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override;
+    Status next_dict_codes(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+
+    void reserve_col(size_t n, Column* column) override;
+    bool supports_read_by_rowids() const override { return true; }
 
 private:
     Slice _data;
     std::unique_ptr<PageDecoder> _data_page_decoder;
     const BinaryPlainPageDecoder<Type>* _dict_decoder = nullptr;
-    bool _parsed;
-    EncodingTypePB _encoding_type;
-    std::shared_ptr<Column> _vec_code_buf;
+    bool _parsed{false};
+    EncodingTypePB _encoding_type{UNKNOWN_ENCODING};
+    MutableColumnPtr _vec_code_buf;
 
-    uint32_t _max_value_legth = 0;
+    uint32_t _max_value_length = 0;
 };
 
 } // namespace starrocks

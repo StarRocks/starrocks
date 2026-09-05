@@ -35,16 +35,16 @@
 #pragma once
 
 #include "agent/status.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "runtime/client_cache.h"
 
 namespace starrocks {
 
 class MasterServerClient {
 public:
-    explicit MasterServerClient(FrontendServiceClientCache* client_cache);
+    explicit MasterServerClient() = default;
     virtual ~MasterServerClient() = default;
 
     // Reprot finished task to the master server
@@ -67,9 +67,6 @@ public:
 
     MasterServerClient(const MasterServerClient&) = delete;
     const MasterServerClient& operator=(const MasterServerClient&) = delete;
-
-private:
-    FrontendServiceClientCache* _client_cache;
 };
 
 } // namespace starrocks

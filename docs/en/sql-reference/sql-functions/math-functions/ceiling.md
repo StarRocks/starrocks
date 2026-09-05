@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Returns values from the input arg rounded to the nearest equal or larger integer."
 ---
 
 # ceiling
 
-## Description
+
 
 Returns values from the input `arg` rounded to the nearest equal or larger integer.
 

@@ -15,13 +15,16 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+
+import java.util.Map;
 
 public class PhysicalNestLoopJoinOperator extends PhysicalJoinOperator {
 
@@ -30,8 +33,10 @@ public class PhysicalNestLoopJoinOperator extends PhysicalJoinOperator {
                                         String joinHint,
                                         long limit,
                                         ScalarOperator predicate,
+                                        Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators,
                                         Projection projection) {
-        super(OperatorType.PHYSICAL_NESTLOOP_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
+        super(OperatorType.PHYSICAL_NESTLOOP_JOIN, joinType, onPredicate, joinHint, limit, predicate,
+                predicateCommonOperators, projection);
     }
 
 

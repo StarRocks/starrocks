@@ -24,14 +24,14 @@ TEST_F(StringFunctionSm3Test, abcA1Test) {
 
     Columns columns;
     auto str = BinaryColumn::create();
-    columns.emplace_back(str);
     str->append("abc");
+    columns.emplace_back(std::move(str));
 
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     std::string s = "66c7f0f4 62eeedd9 d1f2d46b dc10e4e2 4167c487 5cf2f7a2 297da02b 8f4ba8e0";
-    ASSERT_EQ(s, v->get_data()[0].to_string());
+    ASSERT_EQ(s, v->get_slice(0).to_string());
 }
 
 TEST_F(StringFunctionSm3Test, abcA2Test) {
@@ -39,14 +39,14 @@ TEST_F(StringFunctionSm3Test, abcA2Test) {
 
     Columns columns;
     auto str = BinaryColumn::create();
-    columns.emplace_back(str);
     str->append("abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd");
+    columns.emplace_back(std::move(str));
 
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     std::string s = "debe9ff9 2275b8a1 38604889 c18e5a4d 6fdb70e5 387e5765 293dcba3 9c0c5732";
-    ASSERT_EQ(s, v->get_data()[0].to_string());
+    ASSERT_EQ(s, v->get_slice(0).to_string());
 }
 
 TEST_F(StringFunctionSm3Test, abcConstTest) {
@@ -55,12 +55,12 @@ TEST_F(StringFunctionSm3Test, abcConstTest) {
     Columns columns;
     auto str = BinaryColumn::create();
     str->append("abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd");
-    columns.emplace_back(ConstColumn::create(str, 1));
+    columns.emplace_back(ConstColumn::create(std::move(str), 1));
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<ConstColumn>(result)->data_column());
 
     std::string s = "debe9ff9 2275b8a1 38604889 c18e5a4d 6fdb70e5 387e5765 293dcba3 9c0c5732";
-    ASSERT_EQ(s, v->get_data()[0].to_string());
+    ASSERT_EQ(s, v->get_slice(0).to_string());
 }
 
 TEST_F(StringFunctionSm3Test, abcNull1Test) {
@@ -73,7 +73,7 @@ TEST_F(StringFunctionSm3Test, abcNull1Test) {
         str1->append("abc");
         null->append(j % 2 == 0);
     }
-    columns.emplace_back(NullableColumn::create(str1, null));
+    columns.emplace_back(NullableColumn::create(std::move(str1), std::move(null)));
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
     auto nullable_column = ColumnHelper::as_raw_column<NullableColumn>(result);
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(nullable_column->data_column());
@@ -81,7 +81,7 @@ TEST_F(StringFunctionSm3Test, abcNull1Test) {
     for (int j = 0; j < 20; ++j) {
         if (j % 2 != 0) {
             std::string s = "66c7f0f4 62eeedd9 d1f2d46b dc10e4e2 4167c487 5cf2f7a2 297da02b 8f4ba8e0";
-            ASSERT_EQ(s, data_column->get_data()[0].to_string());
+            ASSERT_EQ(s, data_column->get_slice(0).to_string());
         } else {
             ASSERT_TRUE(nullable_column->is_null(j));
         }
@@ -98,7 +98,7 @@ TEST_F(StringFunctionSm3Test, abcNull2Test) {
         str1->append("abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd");
         null->append(j % 2 == 0);
     }
-    columns.emplace_back(NullableColumn::create(str1, null));
+    columns.emplace_back(NullableColumn::create(std::move(str1), std::move(null)));
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
     auto nullable_column = ColumnHelper::as_raw_column<NullableColumn>(result);
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(nullable_column->data_column());
@@ -106,7 +106,7 @@ TEST_F(StringFunctionSm3Test, abcNull2Test) {
     for (int j = 0; j < 20; ++j) {
         if (j % 2 != 0) {
             std::string s = "debe9ff9 2275b8a1 38604889 c18e5a4d 6fdb70e5 387e5765 293dcba3 9c0c5732";
-            ASSERT_EQ(s, data_column->get_data()[0].to_string());
+            ASSERT_EQ(s, data_column->get_slice(0).to_string());
         } else {
             ASSERT_TRUE(nullable_column->is_null(j));
         }
@@ -123,7 +123,7 @@ TEST_F(StringFunctionSm3Test, abcNullLiteralTest) {
         str1->append("");
         null->append(j % 2 == 0);
     }
-    columns.emplace_back(NullableColumn::create(str1, null));
+    columns.emplace_back(NullableColumn::create(std::move(str1), std::move(null)));
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
     auto nullable_column = ColumnHelper::as_raw_column<NullableColumn>(result);
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(nullable_column->data_column());
@@ -131,7 +131,7 @@ TEST_F(StringFunctionSm3Test, abcNullLiteralTest) {
     for (int j = 0; j < 20; ++j) {
         if (j % 2 != 0) {
             std::string s = "";
-            ASSERT_EQ(s, data_column->get_data()[0].to_string());
+            ASSERT_EQ(s, data_column->get_slice(0).to_string());
         } else {
             ASSERT_TRUE(nullable_column->is_null(j));
         }

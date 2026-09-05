@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Indicates whether a column is an aggregate column."
 ---
 
-# GROUPING
+# grouping
 
-## Description
+
 
 Indicates whether a column is an aggregate column. If it is an aggregate column, 0 is returned. Otherwise, 1 is returned.
 

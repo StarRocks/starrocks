@@ -34,7 +34,9 @@ enum CompactionAlgorithm {
     // compaction by all columns together.
     HORIZONTAL_COMPACTION = 0,
     // compaction by column group, for tablet with many columns.
-    VERTICAL_COMPACTION = 1
+    VERTICAL_COMPACTION = 1,
+    // compaction for cloud native index
+    CLOUD_NATIVE_INDEX_COMPACTION = 2,
 };
 
 struct Statistics {
@@ -53,7 +55,7 @@ public:
                                        int64_t total_mem_footprint, size_t source_num);
 
     static Status construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
-                                                 CompactionAlgorithm algorithm, Version version,
+                                                 CompactionAlgorithm algorithm, Version version, int64_t gtid,
                                                  std::unique_ptr<RowsetWriter>* output_rowset_writer,
                                                  const TabletSchemaCSPtr& tablet_schema);
 

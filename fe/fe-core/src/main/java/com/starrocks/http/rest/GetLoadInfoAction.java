@@ -35,14 +35,14 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.load.Load;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
@@ -76,13 +76,10 @@ public class GetLoadInfoAction extends RestBaseAction {
         }
 
         if (info.tblNames.isEmpty()) {
-            Authorizer.checkActionInDb(ConnectContext.get().getCurrentUserIdentity(),
-                    ConnectContext.get().getCurrentRoleIds(), info.dbName, PrivilegeType.INSERT);
+            Authorizer.checkActionInDb(ConnectContext.get(), info.dbName, PrivilegeType.INSERT);
         } else {
             for (String tblName : info.tblNames) {
-                Authorizer.checkTableAction(
-                        ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                        info.dbName, tblName, PrivilegeType.INSERT);
+                Authorizer.checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.INSERT);
             }
         }
         globalStateMgr.getLoadMgr().getLoadJobInfo(info);

@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "gen_cpp/lake_types.pb.h"
 #include "storage/compaction_utils.h"
 
 namespace starrocks::lake {
@@ -24,12 +25,16 @@ struct CompactionParam {
     CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
     uint32_t vertical_compaction_max_columns_per_group = 5;
     bool enable_persistent_index = false;
+    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
+    bool enable_size_tiered_compaction_strategy = true;
 };
 
 static std::string to_string_param_name(const testing::TestParamInfo<CompactionParam>& info) {
     std::stringstream ss;
     ss << CompactionUtils::compaction_algorithm_to_string(info.param.algorithm) << "_"
-       << info.param.vertical_compaction_max_columns_per_group << "_" << info.param.enable_persistent_index;
+       << info.param.vertical_compaction_max_columns_per_group << "_" << info.param.enable_persistent_index << "_"
+       << PersistentIndexTypePB_Name(info.param.persistent_index_type) << "_"
+       << info.param.enable_size_tiered_compaction_strategy;
     return ss.str();
 }
 

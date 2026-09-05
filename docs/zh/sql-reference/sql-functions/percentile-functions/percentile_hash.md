@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将 DOUBLE 类型数值构造为 PERCENTILE 类型数值。"
 ---
 
 # percentile_hash
 
-## 功能
+
 
 将 `double` 类型数值构造成 `percentile` 类型数值。
 

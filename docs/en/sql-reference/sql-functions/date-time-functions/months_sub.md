@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Subtracts specified months from the date."
 ---
 
 # months_sub
 
-## Description
+
 
 Subtracts specified months from the date.
 

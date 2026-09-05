@@ -17,12 +17,7 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 @Deprecated
 public class LinkDbInfo implements Writable {
@@ -51,20 +46,8 @@ public class LinkDbInfo implements Writable {
         this.id = id;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, cluster);
-        Text.writeString(out, name);
-        out.writeLong(id);
 
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        cluster = Text.readString(in);
-        name = Text.readString(in);
-        id = in.readLong();
-
-    }
 
     public String getCluster() {
         return cluster;

@@ -15,7 +15,6 @@
 #include "exprs/es_functions.h"
 
 #include "column/column_builder.h"
-#include "column/column_viewer.h"
 
 namespace starrocks {
 
@@ -30,3 +29,5 @@ StatusOr<ColumnPtr> ESFunctions::match(FunctionContext* context, const Columns& 
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/ESFunctions.inc"

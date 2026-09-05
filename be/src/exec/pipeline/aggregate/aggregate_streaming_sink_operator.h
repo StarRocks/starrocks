@@ -17,10 +17,12 @@
 #include <utility>
 
 #include "exec/aggregator.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 
+class AggregateStreamingSinkOperatorFactory;
 class AggregateStreamingSinkOperator : public Operator {
 public:
     AggregateStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -38,32 +40,40 @@ public:
         return !is_finished() && !_aggregator->is_streaming_all_states() && !_aggregator->is_chunk_buffer_full();
     }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
     bool releaseable() const override { return true; }
     void set_execute_mode(int performance_level) override;
 
+    std::string get_name() const override;
+
 private:
+    AggregateStreamingSinkOperatorFactory* factory() {
+        return down_cast<AggregateStreamingSinkOperatorFactory*>(_factory);
+    }
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
-    [[nodiscard]] Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
+    Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
-    [[nodiscard]] Status _push_chunk_by_force_preaggregation(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_force_preaggregation(RuntimeState* state, const ChunkPtr& chunk, const size_t chunk_size);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
-    [[nodiscard]] Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_auto(RuntimeState* state, const ChunkPtr& chunk, const size_t chunk_size);
 
-    [[nodiscard]] Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size,
-                                                                 bool need_build);
+    Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size, bool need_build);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
-    [[nodiscard]] Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_limited_memory(RuntimeState* state, const ChunkPtr& chunk, const size_t chunk_size);
+
+    // Build the topn runtime filter for the current chunk
+    Status _build_topn_runtime_filter(RuntimeState* state);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
@@ -76,15 +86,25 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+    // the size of hash table when the last time the topn runtime filter is built
+    size_t _hash_table_size = 0;
+
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
 public:
-    AggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory)
+    AggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory,
+                                          const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters)
             : OperatorFactory(id, "aggregate_streaming_sink", plan_node_id),
-              _aggregator_factory(std::move(aggregator_factory)) {}
+              _aggregator_factory(std::move(aggregator_factory)),
+              _build_runtime_filters(build_runtime_filters) {}
 
     ~AggregateStreamingSinkOperatorFactory() override = default;
+
+    const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters() { return _build_runtime_filters; }
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateStreamingSinkOperator>(this, _id, _plan_node_id, driver_sequence,
@@ -93,5 +113,7 @@ public:
 
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
+    std::once_flag _set_collector_flag;
+    const std::vector<RuntimeFilterBuildDescriptor*>& _build_runtime_filters;
 };
 } // namespace starrocks::pipeline

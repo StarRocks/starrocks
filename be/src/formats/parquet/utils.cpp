@@ -14,9 +14,161 @@
 
 #include "formats/parquet/utils.h"
 
+#include <glog/logging.h>
+#include <parquet/metadata.h>
+
+#include <cstring>
+
+#include "base/hash/hash_std.hpp"
+#include "base/simd/simd.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
+#include "formats/parquet/schema.h"
+#include "gutil/casts.h"
+
 namespace starrocks::parquet {
 
-CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type codec) {
+namespace {
+
+const TypeDescriptor& variant_type_desc() {
+    static const TypeDescriptor k_variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    return k_variant_type;
+}
+
+TypeDescriptor variant_decimal_desc_from_schema(const ParquetField* field) {
+    const int precision = field->precision;
+    const int scale = field->scale;
+    if (precision <= 0 || scale < 0 || scale > precision) {
+        return variant_type_desc();
+    }
+    TypeDescriptor desc = TypeDescriptor::promote_decimal_type(precision, scale);
+    if (!desc.is_decimal_type()) {
+        return variant_type_desc();
+    }
+    return desc;
+}
+
+TypeDescriptor variant_integer_desc_from_bitwidth(int bit_width, bool is_signed) {
+    if (is_signed) {
+        switch (bit_width) {
+        case 8:
+            return TYPE_TINYINT_DESC;
+        case 16:
+            return TYPE_SMALLINT_DESC;
+        case 32:
+            return TYPE_INT_DESC;
+        case 64:
+            return TYPE_BIGINT_DESC;
+        default:
+            return variant_type_desc();
+        }
+    }
+    // StarRocks has no native UINT types, widen to a safe signed type where possible.
+    switch (bit_width) {
+    case 8:
+        return TYPE_SMALLINT_DESC;
+    case 16:
+        return TYPE_INT_DESC;
+    case 32:
+        return TYPE_BIGINT_DESC;
+    case 64:
+    default:
+        // UINT64 cannot be losslessly represented by BIGINT.
+        return variant_type_desc();
+    }
+}
+
+TypeDescriptor variant_scalar_typed_desc_from_parquet_field(const ParquetField* field) {
+    DCHECK(field != nullptr);
+    const auto& schema = field->schema_element;
+
+    if (schema.__isset.logicalType) {
+        const auto& logical_type = schema.logicalType;
+        if (logical_type.__isset.DECIMAL) {
+            return variant_decimal_desc_from_schema(field);
+        }
+        if (logical_type.__isset.DATE) {
+            return TYPE_DATE_DESC;
+        }
+        if (logical_type.__isset.TIME) {
+            return TYPE_TIME_DESC;
+        }
+        if (logical_type.__isset.TIMESTAMP) {
+            return TYPE_DATETIME_DESC;
+        }
+        if (logical_type.__isset.INTEGER) {
+            return variant_integer_desc_from_bitwidth(logical_type.INTEGER.bitWidth, logical_type.INTEGER.isSigned);
+        }
+        if (logical_type.__isset.STRING || logical_type.__isset.ENUM || logical_type.__isset.JSON) {
+            return TYPE_VARCHAR_DESC;
+        }
+        if (logical_type.__isset.BSON || logical_type.__isset.UUID) {
+            return TYPE_VARBINARY_DESC;
+        }
+    }
+
+    if (schema.__isset.converted_type) {
+        switch (schema.converted_type) {
+        case tparquet::ConvertedType::UTF8:
+        case tparquet::ConvertedType::ENUM:
+        case tparquet::ConvertedType::JSON:
+            return TYPE_VARCHAR_DESC;
+        case tparquet::ConvertedType::BSON:
+        case tparquet::ConvertedType::INTERVAL:
+            return TYPE_VARBINARY_DESC;
+        case tparquet::ConvertedType::DECIMAL:
+            return variant_decimal_desc_from_schema(field);
+        case tparquet::ConvertedType::DATE:
+            return TYPE_DATE_DESC;
+        case tparquet::ConvertedType::TIME_MILLIS:
+        case tparquet::ConvertedType::TIME_MICROS:
+            return TYPE_TIME_DESC;
+        case tparquet::ConvertedType::TIMESTAMP_MILLIS:
+        case tparquet::ConvertedType::TIMESTAMP_MICROS:
+            return TYPE_DATETIME_DESC;
+        case tparquet::ConvertedType::INT_8:
+            return TYPE_TINYINT_DESC;
+        case tparquet::ConvertedType::INT_16:
+            return TYPE_SMALLINT_DESC;
+        case tparquet::ConvertedType::INT_32:
+            return TYPE_INT_DESC;
+        case tparquet::ConvertedType::INT_64:
+            return TYPE_BIGINT_DESC;
+        case tparquet::ConvertedType::UINT_8:
+            return TYPE_SMALLINT_DESC;
+        case tparquet::ConvertedType::UINT_16:
+            return TYPE_INT_DESC;
+        case tparquet::ConvertedType::UINT_32:
+            return TYPE_BIGINT_DESC;
+        case tparquet::ConvertedType::UINT_64:
+            return variant_type_desc();
+        default:
+            break;
+        }
+    }
+
+    switch (field->physical_type) {
+    case tparquet::Type::BOOLEAN:
+        return TYPE_BOOLEAN_DESC;
+    case tparquet::Type::INT32:
+        return TYPE_INT_DESC;
+    case tparquet::Type::INT64:
+        return TYPE_BIGINT_DESC;
+    case tparquet::Type::FLOAT:
+        return TYPE_FLOAT_DESC;
+    case tparquet::Type::DOUBLE:
+        return TYPE_DOUBLE_DESC;
+    case tparquet::Type::BYTE_ARRAY:
+    case tparquet::Type::FIXED_LEN_BYTE_ARRAY:
+        return TYPE_VARBINARY_DESC;
+    default:
+        return variant_type_desc();
+    }
+}
+
+} // namespace
+
+CompressionTypePB ParquetUtils::convert_compression_codec(tparquet::CompressionCodec::type codec) {
     switch (codec) {
     case tparquet::CompressionCodec::UNCOMPRESSED:
         return NO_COMPRESSION;
@@ -33,9 +185,252 @@ CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type cod
         return LZO;
     case tparquet::CompressionCodec::BROTLI:
         return BROTLI;
+    case tparquet::CompressionCodec::LZ4_RAW:
+        return LZ4;
     default:
         return UNKNOWN_COMPRESSION;
     }
+}
+
+int decimal_precision_to_byte_count_inner(int precision) {
+    return std::ceil((std::log(std::pow(10, precision) - 1) / std::log(2) + 1) / 8);
+}
+
+int ParquetUtils::decimal_precision_to_byte_count(int precision) {
+    DCHECK(precision > 0 && precision <= 38);
+    static std::array<int, 39> table = {
+            0,
+            decimal_precision_to_byte_count_inner(1),
+            decimal_precision_to_byte_count_inner(2),
+            decimal_precision_to_byte_count_inner(3),
+            decimal_precision_to_byte_count_inner(4),
+            decimal_precision_to_byte_count_inner(5),
+            decimal_precision_to_byte_count_inner(6),
+            decimal_precision_to_byte_count_inner(7),
+            decimal_precision_to_byte_count_inner(8),
+            decimal_precision_to_byte_count_inner(9),
+            decimal_precision_to_byte_count_inner(10),
+            decimal_precision_to_byte_count_inner(11),
+            decimal_precision_to_byte_count_inner(12),
+            decimal_precision_to_byte_count_inner(13),
+            decimal_precision_to_byte_count_inner(14),
+            decimal_precision_to_byte_count_inner(15),
+            decimal_precision_to_byte_count_inner(16),
+            decimal_precision_to_byte_count_inner(17),
+            decimal_precision_to_byte_count_inner(18),
+            decimal_precision_to_byte_count_inner(19),
+            decimal_precision_to_byte_count_inner(20),
+            decimal_precision_to_byte_count_inner(21),
+            decimal_precision_to_byte_count_inner(22),
+            decimal_precision_to_byte_count_inner(23),
+            decimal_precision_to_byte_count_inner(24),
+            decimal_precision_to_byte_count_inner(25),
+            decimal_precision_to_byte_count_inner(26),
+            decimal_precision_to_byte_count_inner(27),
+            decimal_precision_to_byte_count_inner(28),
+            decimal_precision_to_byte_count_inner(29),
+            decimal_precision_to_byte_count_inner(30),
+            decimal_precision_to_byte_count_inner(31),
+            decimal_precision_to_byte_count_inner(32),
+            decimal_precision_to_byte_count_inner(33),
+            decimal_precision_to_byte_count_inner(34),
+            decimal_precision_to_byte_count_inner(35),
+            decimal_precision_to_byte_count_inner(36),
+            decimal_precision_to_byte_count_inner(37),
+            decimal_precision_to_byte_count_inner(38),
+    };
+
+    return table[precision];
+}
+
+std::vector<int64_t> ParquetUtils::collect_split_offsets(const ::parquet::FileMetaData& meta_data) {
+    std::vector<int64_t> split_offsets;
+    split_offsets.reserve(meta_data.num_row_groups());
+    for (int i = 0; i < meta_data.num_row_groups(); i++) {
+        auto first_column_meta = meta_data.RowGroup(i)->ColumnChunk(0);
+        int64_t dict_page_offset = first_column_meta->dictionary_page_offset();
+        int64_t first_data_page_offset = first_column_meta->data_page_offset();
+        int64_t split_offset = dict_page_offset > 0 && dict_page_offset < first_data_page_offset
+                                       ? dict_page_offset
+                                       : first_data_page_offset;
+        split_offsets.emplace_back(split_offset);
+    }
+    return split_offsets;
+}
+
+int64_t ParquetUtils::get_column_start_offset(const tparquet::ColumnMetaData& column) {
+    int64_t offset = column.data_page_offset;
+    if (column.__isset.index_page_offset) {
+        offset = std::min(offset, column.index_page_offset);
+    }
+    if (column.__isset.dictionary_page_offset) {
+        offset = std::min(offset, column.dictionary_page_offset);
+    }
+    return offset;
+}
+
+int64_t ParquetUtils::get_row_group_start_offset(const tparquet::RowGroup& row_group) {
+    const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
+    int64_t offset = get_column_start_offset(first_column);
+
+    if (row_group.__isset.file_offset) {
+        offset = std::min(offset, row_group.file_offset);
+    }
+    return offset;
+}
+
+int64_t ParquetUtils::get_row_group_end_offset(const tparquet::RowGroup& row_group) {
+    // following computation is not correct. `total_compressed_size` means compressed size of all columns
+    // but between columns there could be holes, which means end offset inaccurate.
+    // if (row_group.__isset.file_offset && row_group.__isset.total_compressed_size) {
+    //     return row_group.file_offset + row_group.total_compressed_size;
+    // }
+    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
+    return get_column_start_offset(last_column) + last_column.total_compressed_size;
+}
+
+std::string ParquetUtils::get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
+                                             uint64_t file_size) {
+    std::string key;
+    key.resize(14);
+    char* data = key.data();
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    const std::string& prefix = cache_key_prefix[type];
+    memcpy(data + 8, prefix.data(), prefix.size());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (modification_time > 0) {
+        uint32_t mtime_s = (modification_time >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+    return key;
+}
+
+bool ParquetUtils::get_non_null_data_column_and_row(const Column* column, size_t row, const Column** out_column,
+                                                    size_t* out_row) {
+    if (column == nullptr || out_column == nullptr || out_row == nullptr) {
+        return false;
+    }
+    if (column->is_constant()) {
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+        row = 0;
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        if (nullable->is_null(row)) {
+            return false;
+        }
+        column = nullable->data_column().get();
+    }
+    *out_column = column;
+    *out_row = row;
+    return true;
+}
+
+bool ParquetUtils::has_non_null_value(const Column* input_column, size_t num_rows) {
+    if (input_column == nullptr || num_rows == 0) {
+        return false;
+    }
+    const Column* column = input_column;
+    bool is_const = false;
+    if (column->is_constant()) {
+        is_const = true;
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const auto& nulls = nullable->null_column_data();
+        if (is_const) {
+            return nulls[0] == 0;
+        }
+        return SIMD::count_nonzero(nulls.data(), num_rows) < num_rows;
+    }
+    return true;
+}
+
+bool ParquetUtils::has_non_null_binary_value(const Column* input_column, size_t num_rows) {
+    if (input_column == nullptr || num_rows == 0) {
+        return false;
+    }
+    const Column* column = input_column;
+    bool is_const = false;
+    if (column->is_constant()) {
+        is_const = true;
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const Column* data = nullable->data_column().get();
+        if (!data->is_binary()) {
+            return false;
+        }
+        const auto& nulls = nullable->null_column_data();
+        if (is_const) {
+            return nulls[0] == 0;
+        }
+        return SIMD::count_nonzero(nulls.data(), num_rows) < num_rows;
+    }
+    return column->is_binary();
+}
+
+TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field) {
+    DCHECK(field != nullptr);
+    const TypeDescriptor& k_variant_type = variant_type_desc();
+    switch (field->type) {
+    case ColumnType::ARRAY:
+        if (field->children.empty()) {
+            return TypeDescriptor::create_array_type(k_variant_type);
+        }
+        return TypeDescriptor::create_array_type(variant_typed_desc_from_parquet_field(&field->children[0]));
+    case ColumnType::MAP:
+        if (field->children.size() < 2) {
+            return k_variant_type;
+        }
+        return TypeDescriptor::create_map_type(variant_typed_desc_from_parquet_field(&field->children[0]),
+                                               variant_typed_desc_from_parquet_field(&field->children[1]));
+    case ColumnType::STRUCT: {
+        std::vector<std::string> field_names;
+        std::vector<TypeDescriptor> children;
+        field_names.reserve(field->children.size());
+        children.reserve(field->children.size());
+        for (const auto& child : field->children) {
+            field_names.emplace_back(child.name);
+            children.emplace_back(variant_typed_desc_from_parquet_field(&child));
+        }
+        return TypeDescriptor::create_struct_type(field_names, children);
+    }
+    case ColumnType::SCALAR:
+        return variant_scalar_typed_desc_from_parquet_field(field);
+    }
+    return k_variant_type;
+}
+
+bool is_unsigned_integer(const tparquet::SchemaElement& schema_element) {
+    // The modern logical type is authoritative when present, and only the INTEGER
+    // logical type carries signedness; any other logical type is therefore not an
+    // unsigned integer. Only fall back to the legacy converted type when no logical
+    // type is set, so a contradictory UINT_* converted type cannot override it.
+    if (schema_element.__isset.logicalType) {
+        return schema_element.logicalType.__isset.INTEGER && !schema_element.logicalType.INTEGER.isSigned;
+    }
+    if (schema_element.__isset.converted_type) {
+        switch (schema_element.converted_type) {
+        case tparquet::ConvertedType::UINT_8:
+        case tparquet::ConvertedType::UINT_16:
+        case tparquet::ConvertedType::UINT_32:
+        case tparquet::ConvertedType::UINT_64:
+            return true;
+        default:
+            return false;
+        }
+    }
+    return false;
 }
 
 } // namespace starrocks::parquet

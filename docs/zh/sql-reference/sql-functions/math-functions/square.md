@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算参数的平方。"
 ---
 
 # SQUARE
 
-## 功能
+
 
 计算参数的平方。
 

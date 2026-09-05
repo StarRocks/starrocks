@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.Assert;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -35,29 +35,29 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
 
     public void testAllInlineCTE(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
     public void testCTE(String sql) throws Exception {
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks"));
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks"));
 
         connectContext.getSessionVariable().setCboCTERuseRatio(-1);
         plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
     public void testForceCTE(String sql) throws Exception {
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks"));
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks"));
 
         connectContext.getSessionVariable().setCboCTERuseRatio(-1);
         plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks"));
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks"));
     }
 
     @Test
@@ -614,5 +614,56 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
         assertContains(plan, "13:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 31: i_brand_id, 33: i_class_id, 35: i_category_id");
 
+    }
+
+    @Test
+    public void testQuery67() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        String plan = getFragmentPlan(Q67);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 15\n" +
+                "    HASH_PARTITIONED: 102: i_product_name\n" +
+                "\n" +
+                "  14:AGGREGATE (update serialize)");
+        assertContains(plan, "  20:REPEAT_NODE\n" +
+                "  |  repeat: repeat 7 lines [[], [108], [108, 109], [108, 109, 110], " +
+                "[108, 109, 110, 111], [112, 108, 109, 110, 111], [112, 113, 108, 109, 110, 111], " +
+                "[112, 113, 114, 108, 109, 110, 111]]\n");
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 18\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 26\n" +
+                "    RANDOM");
+    }
+
+    @Test
+    public void testPartitionTopNStatistics() throws Exception {
+        String plan = getCostExplain("select * from (select i_category, i_brand,\n" +
+                "        cc_name,\n" +
+                "        d_year, d_moy,\n" +
+                "        rank() over\n" +
+                "          (partition by i_category order by d_year, d_moy) rn\n" +
+                " from item, catalog_sales, date_dim, call_center\n" +
+                " where cs_item_sk = i_item_sk and\n" +
+                "       cs_sold_date_sk = d_date_sk and\n" +
+                "       cc_call_center_sk= cs_call_center_sk and\n" +
+                "       (\n" +
+                "         d_year = 1999 or\n" +
+                "         ( d_year = 1999-1 and d_moy =12) or\n" +
+                "         ( d_year = 1999+1 and d_moy =1)\n" +
+                "       )\n" +
+                " group by i_category, i_brand,\n" +
+                "          cc_name , d_year, d_moy) x" +
+                " where rn <= 1");
+        assertContains(plan, "  16:PARTITION-TOP-N\n" +
+                "  |  type: RANK\n" +
+                "  |  partition by: [13: i_category, VARCHAR, true] \n" +
+                "  |  partition limit: 1\n" +
+                "  |  order by: [13, VARCHAR, true] ASC, [63, INT, true] ASC, [65, INT, true] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  cardinality: 10");
     }
 }

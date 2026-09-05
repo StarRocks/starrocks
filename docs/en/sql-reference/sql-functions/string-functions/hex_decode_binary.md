@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Decodes a hex encoded string to a binary."
 ---
 
 # hex_decode_binary
 
-## Description
+
 
 Decodes a hex encoded string to a binary.
 

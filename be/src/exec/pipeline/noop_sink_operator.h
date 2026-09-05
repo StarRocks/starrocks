@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 
@@ -54,6 +54,8 @@ public:
     NoopSinkOperatorFactory(int32_t id, int32_t plan_node_id) : OperatorFactory(id, "noop_sink", plan_node_id) {}
 
     ~NoopSinkOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<NoopSinkOperator>(this, _id, _plan_node_id, driver_sequence);

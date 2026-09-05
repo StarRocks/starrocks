@@ -36,17 +36,20 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.ColumnDef;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
@@ -60,7 +63,7 @@ public class ColumnGsonSerializationTest {
 
     private static String fileName = "./ColumnGsonSerializationTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
@@ -76,10 +79,72 @@ public class ColumnGsonSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static ColumnList read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, ColumnList.class);
-        }
+    }
+
+    @Test
+    public void testSerializeDefaultExprHasArgumentsPreserved() {
+        // current_timestamp(3) — hasArguments must survive a Gson roundtrip.
+        FunctionCallExpr ctsExpr = new FunctionCallExpr("current_timestamp",
+                Lists.newArrayList(new IntLiteral(3L, IntegerType.INT)));
+        Column tsCol = new Column("ts", DateType.DATETIME, false, null, true,
+                new ColumnDef.DefaultValueDef(true, true, ctsExpr), "");
+
+        Assertions.assertNotNull(tsCol.getDefaultExpr());
+        Assertions.assertTrue(tsCol.getDefaultExpr().hasArgs(),
+                "parser-built DefaultExpr for current_timestamp(3) must carry hasArguments=true");
+
+        String json = GsonUtils.GSON.toJson(tsCol);
+        Column restored = GsonUtils.GSON.fromJson(json, Column.class);
+
+        Assertions.assertNotNull(restored.getDefaultExpr());
+        Assertions.assertTrue(restored.getDefaultExpr().hasArgs(),
+                "hasArguments must persist across Gson roundtrip");
+        // VARY rather than CONST: precision-bearing time functions are not 'empty' generators.
+        Assertions.assertEquals(Column.DefaultValueType.VARY, restored.getDefaultValueType(),
+                "current_timestamp(N) must stay classified as VARY after roundtrip");
+    }
+
+    @Test
+    public void testLegacyDefaultExprWithoutHasArgumentsRestoresFromString() {
+        // Columns persisted before @SerializedName("hasArguments") existed wrote JSON without the field.
+        // Simulate that by stripping "hasArguments":true from the serialized form and verify that
+        // gsonPostProcess recovers the flag from the expr string.
+        FunctionCallExpr ctsExpr = new FunctionCallExpr("current_timestamp",
+                Lists.newArrayList(new IntLiteral(3L, IntegerType.INT)));
+        Column tsCol = new Column("ts", DateType.DATETIME, false, null, true,
+                new ColumnDef.DefaultValueDef(true, true, ctsExpr), "");
+        String legacyJson = GsonUtils.GSON.toJson(tsCol).replaceAll(",\"hasArguments\":(true|false)", "");
+        Assertions.assertFalse(legacyJson.contains("hasArguments"),
+                "test precondition: hasArguments must be absent from the simulated legacy JSON");
+
+        Column restored = GsonUtils.GSON.fromJson(legacyJson, Column.class);
+
+        Assertions.assertNotNull(restored.getDefaultExpr());
+        Assertions.assertEquals("current_timestamp(3)", restored.getDefaultExpr().getExpr());
+        Assertions.assertTrue(restored.getDefaultExpr().hasArgs(),
+                "legacy persisted current_timestamp(3) must recover hasArguments via gsonPostProcess");
+        Assertions.assertEquals(Column.DefaultValueType.VARY, restored.getDefaultValueType());
+
+        // An empty-arg form persisted under the same legacy schema must stay empty.
+        FunctionCallExpr emptyExpr = new FunctionCallExpr("current_timestamp", Lists.newArrayList());
+        Column tsEmpty = new Column("ts", DateType.DATETIME, false, null, true,
+                new ColumnDef.DefaultValueDef(true, false, emptyExpr), "");
+        String legacyEmptyJson =
+                GsonUtils.GSON.toJson(tsEmpty).replaceAll(",\"hasArguments\":(true|false)", "");
+        Column restoredEmpty = GsonUtils.GSON.fromJson(legacyEmptyJson, Column.class);
+        Assertions.assertFalse(restoredEmpty.getDefaultExpr().hasArgs(),
+                "legacy current_timestamp() must remain hasArguments=false");
+        Assertions.assertEquals(Column.DefaultValueType.CONST, restoredEmpty.getDefaultValueType());
+
+        // Same empty form but with trailing whitespace in the persisted expr string. The regex
+        // pre-check trims, so without symmetric trimming on the endsWith("()") guard the backfill
+        // would misclassify this as having args. Both checks must operate on the trimmed value.
+        String legacyEmptyWithSpaces = legacyEmptyJson.replace(
+                "\"expr\":\"current_timestamp()\"", "\"expr\":\"current_timestamp() \"");
+        Column restoredEmptyWithSpaces = GsonUtils.GSON.fromJson(legacyEmptyWithSpaces, Column.class);
+        Assertions.assertFalse(restoredEmptyWithSpaces.getDefaultExpr().hasArgs(),
+                "legacy current_timestamp() with trailing whitespace must remain hasArguments=false");
+        Assertions.assertEquals(Column.DefaultValueType.CONST, restoredEmptyWithSpaces.getDefaultValueType());
     }
 
     @Test
@@ -89,7 +154,7 @@ public class ColumnGsonSerializationTest {
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
-        Column c1 = new Column("c1", Type.fromPrimitiveType(PrimitiveType.BIGINT), true, null, true,
+        Column c1 = new Column("c1", IntegerType.BIGINT, true, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "abc");
 
         String c1Json = GsonUtils.GSON.toJson(c1);
@@ -103,44 +168,6 @@ public class ColumnGsonSerializationTest {
         String readJson = Text.readString(in);
         Column readC1 = GsonUtils.GSON.fromJson(readJson, Column.class);
 
-        Assert.assertEquals(c1, readC1);
+        Assertions.assertEquals(c1, readC1);
     }
-
-    @Test
-    public void testSerializeColumnList() throws IOException, AnalysisException {
-        // 1. Write objects to file
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        Column c1 = new Column("c1", Type.fromPrimitiveType(PrimitiveType.BIGINT), true, null, true,
-                new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "abc");
-        Column c2 =
-                new Column("c2", ScalarType.createType(PrimitiveType.VARCHAR, 32, -1, -1), true, null, true,
-                        new ColumnDef.DefaultValueDef(true, new StringLiteral("cmy")), "");
-        Column c3 = new Column("c3", ScalarType.createDecimalV2Type(27, 9), false, AggregateType.SUM, false,
-                new ColumnDef.DefaultValueDef(true, new StringLiteral("1.1")),
-                "decimalv2");
-
-        ColumnList columnList = new ColumnList();
-        columnList.columns.add(c1);
-        columnList.columns.add(c2);
-        columnList.columns.add(c3);
-
-        columnList.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-
-        ColumnList readList = ColumnList.read(in);
-        List<Column> columns = readList.columns;
-
-        Assert.assertEquals(3, columns.size());
-        Assert.assertEquals(c1, columns.get(0));
-        Assert.assertEquals(c2, columns.get(1));
-        Assert.assertEquals(c3, columns.get(2));
-    }
-
 }

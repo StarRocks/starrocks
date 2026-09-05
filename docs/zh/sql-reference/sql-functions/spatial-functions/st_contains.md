@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "判断几何图形 shape1 是否完全包含几何图形 shape2。"
 ---
 
 # ST_Contains
 
-## 功能
+
 
 判断几何图形 `shape1` 是否完全能够包含几何图形 `shape2`。
 

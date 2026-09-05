@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+description: "Intercepts elements from a Bitmap value within the range of start_range and end_range (exclusive)."
 ---
 
 # bitmap_subset_in_range
 
-## Description
+
 
 Intercepts elements from a Bitmap value within the range of `start_range` and `end_range` (exclusive). The output elements are a subset of the Bitmap value.
 

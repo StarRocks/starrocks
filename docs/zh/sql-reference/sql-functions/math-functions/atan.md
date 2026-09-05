@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "计算数值的反正切值（单位为弧度）。"
 ---
 
 # atan
 
-## 功能
+
 
 返回 `x` 的反正切值（单位为弧度），`x` 为 DOUBLE 类型的数值。
 

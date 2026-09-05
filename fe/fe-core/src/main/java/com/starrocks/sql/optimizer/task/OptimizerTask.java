@@ -16,7 +16,7 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.starrocks.sql.optimizer.GroupExpression;
-import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.rule.Rule;
 
 import java.util.List;
@@ -47,16 +47,18 @@ public abstract class OptimizerTask {
     void filterInValidRules(GroupExpression groupExpression,
                             List<Rule> candidateRules,
                             List<Rule> validRules) {
-        OptimizerConfig optimizerConfig = context.getOptimizerContext().getOptimizerConfig();
+        OptimizerOptions optimizerOptions = context.getOptimizerContext().getOptimizerOptions();
         for (Rule rule : candidateRules) {
             if (groupExpression.hasRuleExplored(rule)) {
                 continue;
             }
-
             if (!rule.getPattern().matchWithoutChild(groupExpression)) {
                 continue;
             }
-            if (optimizerConfig.isRuleDisable(rule.type())) {
+            if (optimizerOptions.isRuleDisable(rule.type())) {
+                continue;
+            }
+            if (rule.exhausted(context.getOptimizerContext())) {
                 continue;
             }
             validRules.add(rule);

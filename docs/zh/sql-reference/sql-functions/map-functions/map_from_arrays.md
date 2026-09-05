@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "将两个 Array 数组组合成一个 Map，分别作为 Key 和 Value。"
 ---
 
 # map_from_arrays
 
-## 功能
+
 
 将两个 ARRAY 数组作为 Key 和 Value 组合成一个 MAP 对象。
 

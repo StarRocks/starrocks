@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "检查两个数组的交集是否为空。"
 ---
 
 # arrays_overlap
 
-## 功能
+
 
 判断两个相同类型的数组中是否包含相同的元素。返回`1`代表存在相同元素，返回`0`代表不存在相同元素。
 

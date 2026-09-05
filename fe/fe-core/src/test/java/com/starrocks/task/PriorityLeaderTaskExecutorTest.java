@@ -16,16 +16,18 @@
 package com.starrocks.task;
 
 import com.starrocks.common.PriorityThreadPoolExecutor;
-import com.starrocks.common.jmockit.Deencapsulation;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class PriorityLeaderTaskExecutorTest {
     private static final Logger LOG = LoggerFactory.getLogger(PriorityLeaderTaskExecutorTest.class);
@@ -36,13 +38,14 @@ public class PriorityLeaderTaskExecutorTest {
 
     private PriorityLeaderTaskExecutor executor;
 
-    @Before
+    @BeforeEach
     public void setUp() {
+        SEQ.clear();
         executor = new PriorityLeaderTaskExecutor("priority_task_executor_test", THREAD_NUM, 100, false);
         executor.start();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         if (executor != null) {
             executor.close();
@@ -53,60 +56,167 @@ public class PriorityLeaderTaskExecutorTest {
     public void testSubmit() {
         // submit task
         PriorityLeaderTask task1 = new TestLeaderTask(1L);
-        Assert.assertTrue(executor.submit(task1));
-        Assert.assertEquals(1, executor.getTaskNum());
+        Assertions.assertTrue(executor.submit(task1));
+        Assertions.assertEquals(1, executor.getTaskNum());
         // submit same running task error
-        Assert.assertFalse(executor.submit(task1));
-        Assert.assertEquals(1, executor.getTaskNum());
+        Assertions.assertFalse(executor.submit(task1));
+        Assertions.assertEquals(1, executor.getTaskNum());
 
         // submit another task
         PriorityLeaderTask task2 = new TestLeaderTask(2L);
-        Assert.assertTrue(executor.submit(task2));
-        Assert.assertEquals(2, executor.getTaskNum());
+        Assertions.assertTrue(executor.submit(task2));
+        Assertions.assertEquals(2, executor.getTaskNum());
 
         // submit priority task
         PriorityLeaderTask task3 = new TestLeaderTask(3L, 1);
-        Assert.assertTrue(executor.submit(task3));
-        Assert.assertEquals(3, executor.getTaskNum());
+        Assertions.assertTrue(executor.submit(task3));
+        Assertions.assertEquals(3, executor.getTaskNum());
 
         // submit priority task
         PriorityLeaderTask task4 = new TestLeaderTask(4L);
-        Assert.assertTrue(executor.submit(task4));
-        Assert.assertEquals(4, executor.getTaskNum());
+        Assertions.assertTrue(executor.submit(task4));
+        Assertions.assertEquals(4, executor.getTaskNum());
 
-        Assert.assertTrue(executor.updatePriority(4L, 5));
+        Assertions.assertTrue(executor.updatePriority(4L, 5));
 
         // wait for tasks run to end
         try {
             Thread.sleep(2000);
-            Assert.assertEquals(0, executor.getTaskNum());
+            Assertions.assertEquals(0, executor.getTaskNum());
         } catch (InterruptedException e) {
             LOG.error("error", e);
         }
 
-        Assert.assertEquals(4, SEQ.size());
-        Assert.assertEquals(1L, SEQ.get(0).longValue());
-        Assert.assertEquals(4L, SEQ.get(1).longValue());
-        Assert.assertEquals(3L, SEQ.get(2).longValue());
-        Assert.assertEquals(2L, SEQ.get(3).longValue());
+        Assertions.assertEquals(4, SEQ.size());
+        Assertions.assertEquals(1L, SEQ.get(0).longValue());
+        Assertions.assertEquals(4L, SEQ.get(1).longValue());
+        Assertions.assertEquals(3L, SEQ.get(2).longValue());
+        Assertions.assertEquals(2L, SEQ.get(3).longValue());
     }
 
     @Test
     public void testUpdatePoolSize() {
-        PriorityThreadPoolExecutor priorityExecutor = Deencapsulation.getField(executor, "executor");
-        Assert.assertEquals(THREAD_NUM, executor.getCorePoolSize());
-        Assert.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
+        PriorityThreadPoolExecutor priorityExecutor = executor.executor;
+        Assertions.assertEquals(THREAD_NUM, executor.getCorePoolSize());
+        Assertions.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
 
         // set from 1 to 2
         int newThreadNum = THREAD_NUM + 1;
         executor.setPoolSize(newThreadNum);
-        Assert.assertEquals(newThreadNum, executor.getCorePoolSize());
-        Assert.assertEquals(newThreadNum, priorityExecutor.getMaximumPoolSize());
+        Assertions.assertEquals(newThreadNum, executor.getCorePoolSize());
+        Assertions.assertEquals(newThreadNum, priorityExecutor.getMaximumPoolSize());
 
         // set from 2 to 1
         executor.setPoolSize(THREAD_NUM);
-        Assert.assertEquals(THREAD_NUM, executor.getCorePoolSize());
-        Assert.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
+        Assertions.assertEquals(THREAD_NUM, executor.getCorePoolSize());
+        Assertions.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
+    }
+
+    @Test
+    public void testStartAfterCloseRebuildsPoolsForReuse() {
+        // close() shuts down both pools so a singleton instance can be used by the demotion
+        // drain. A subsequent start() on the SAME instance must rebuild both pools so the next
+        // leader session does not get RejectedExecutionException when scheduling tasks.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_reuse_test", 1, 100, false);
+        target.start();
+        PriorityThreadPoolExecutor originalExecutor = target.executor;
+        ScheduledThreadPoolExecutor originalSched = target.scheduledThreadPool;
+
+        target.close(5000L);
+        Awaitility.await().timeout(5, TimeUnit.SECONDS).until(originalExecutor::isTerminated);
+
+        target.start();
+
+        Assertions.assertNotSame(originalExecutor, target.executor, "executor must be rebuilt on restart");
+        Assertions.assertNotSame(originalSched, target.scheduledThreadPool,
+                "scheduledThreadPool must be rebuilt on restart");
+        Assertions.assertFalse(target.executor.isShutdown());
+        Assertions.assertFalse(target.scheduledThreadPool.isShutdown());
+
+        // The rebuilt executor must accept new work; submit a no-op task and verify it does
+        // not raise RejectedExecutionException.
+        Assertions.assertTrue(target.submit(new TestLeaderTask(99L)));
+
+        target.close(5000L);
+    }
+
+    @Test
+    public void testCloseInterruptsInFlightTaskFast() throws Exception {
+        // Demotion-drain contract: close() uses shutdownNow() so an in-flight task blocked in
+        // an interruptible wait is cancelled immediately instead of waiting out its own await.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_interrupt_test", 1, 100, false);
+        target.start();
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean interrupted = new java.util.concurrent.atomic.AtomicBoolean(false);
+        PriorityLeaderTask blocked = new PriorityLeaderTask() {
+            {
+                this.signature = 8L;
+            }
+
+            @Override
+            protected void exec() {
+                entered.countDown();
+                try {
+                    new java.util.concurrent.CountDownLatch(1).await();
+                } catch (InterruptedException e) {
+                    interrupted.set(true);
+                }
+            }
+        };
+        Assertions.assertTrue(target.submit(blocked));
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        target.close(5000L);
+
+        Assertions.assertTrue(interrupted.get(), "shutdownNow must interrupt the in-flight task");
+        Assertions.assertTrue(target.executor.isTerminated());
+    }
+
+    @Test
+    public void testCloseWithTimeoutLogsWhenExecutorRefusesToTerminate() {
+        // close(awaitMillis) returning false from awaitTermination triggers a LOG.warn for
+        // each pool that did not drain. Exercise both branches by submitting an
+        // uninterruptible task and using a very short timeout budget.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_timeout_test", 1, 100, false);
+        target.start();
+        target.executor.execute(() -> {
+            long deadline = System.currentTimeMillis() + 1500L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible work
+                }
+            }
+        });
+
+        target.close(50L);
+
+        Assertions.assertTrue(target.executor.isShutdown());
+        // worker is still running but close() returned; cleanup at the end
+        target.executor.shutdownNow();
+    }
+
+    @Test
+    public void testCloseWithTimeoutAwaitsTermination() throws Exception {
+        // close(awaitMillis) must block until BOTH pools have actually terminated, so a
+        // re-elected leader does not race a still-alive worker from the previous session.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_close_test", 1, 100, false);
+        target.start();
+        PriorityThreadPoolExecutor inner = target.executor;
+        ScheduledThreadPoolExecutor sched = target.scheduledThreadPool;
+
+        target.close(5000L);
+
+        Assertions.assertTrue(inner.isShutdown(), "executor must be shutdown");
+        Assertions.assertTrue(inner.isTerminated(), "executor must be terminated after close(awaitMillis)");
+        Assertions.assertTrue(sched.isShutdown(), "scheduledThreadPool must be shutdown");
+        Assertions.assertTrue(sched.isTerminated(),
+                "scheduledThreadPool must be terminated after close(awaitMillis)");
     }
 
     private class TestLeaderTask extends PriorityLeaderTask {

@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+description: "CASE 是条件表达式，支持简单 CASE 和搜索 CASE 两种写法。"
 ---
 
 # case
 
-## 功能
+
 
 CASE 是一种条件表达式，有两种写法：简单 CASE 表达式和搜索 CASE 表达式。
 
