@@ -83,6 +83,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TRANSFORMS_DB_NAME = "partitioned_transforms_db";
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
+    // iceberg view whose definition references a relation alias in mixed case
+    public static final String MOCKED_CASE_INSENSITIVE_VIEW_NAME = "t0_case_insensitive_view";
     public static final String MOCKED_UNPARTITIONED_V2_TABLE_NAME = "t0_v2";
     public static final String MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME = "variant_t0";
     public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
@@ -815,6 +817,20 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return new IcebergView(idGen.getAndIncrement(), MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
                     def, MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
         }
+        if (dbName.equalsIgnoreCase(MOCKED_UNPARTITIONED_DB_NAME)
+                && viewName.equalsIgnoreCase(MOCKED_CASE_INSENSITIVE_VIEW_NAME)) {
+            return buildMockedCaseInsensitiveView();
+        }
         return null;
+    }
+
+    private com.starrocks.catalog.Table buildMockedCaseInsensitiveView() {
+        List<Column> schema = ImmutableList.of(new Column("id", IntegerType.INT, true),
+                new Column("data", StringType.STRING, true));
+        // T0_UPPER alias is referenced both as t0_upper and T0_UPPER
+        String definition = "select t0_upper.id, T0_UPPER.data from (select * from t0) T0_UPPER";
+        return new IcebergView(idGen.getAndIncrement(), MOCKED_ICEBERG_CATALOG_NAME, MOCKED_UNPARTITIONED_DB_NAME,
+                MOCKED_CASE_INSENSITIVE_VIEW_NAME, schema, definition,
+                MOCKED_ICEBERG_CATALOG_NAME, MOCKED_UNPARTITIONED_DB_NAME, "view_location", Maps.newHashMap());
     }
 }
