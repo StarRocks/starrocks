@@ -1216,6 +1216,12 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void modDouble() {
+        assertEquals(1.5, ScalarOperatorFunctions.modDouble(
+                ConstantOperator.createDouble(10.5), ConstantOperator.createDouble(3.0)).getDouble());
+    }
+
+    @Test
     public void modDecimal() {
         assertEquals("0", ScalarOperatorFunctions.modDecimal(O_DECIMAL_100, O_DECIMAL_100).getDecimal().toString());
         assertEquals("0",
