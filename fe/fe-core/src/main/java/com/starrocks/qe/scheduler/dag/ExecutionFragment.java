@@ -70,7 +70,9 @@ public class ExecutionFragment {
     private final Map<Integer, Integer> numSendersPerExchange;
     private final Map<Integer, Integer> numFetchersPerLookUp;
 
-    private final List<FragmentInstance> instances;
+    // Volatile because addInstanceLate publishes a copied list while report and cancel
+    // threads may be iterating; the prepare-time addInstance path still mutates in place.
+    private volatile List<FragmentInstance> instances;
 
     private final FragmentScanRangeAssignment scanRangeAssignment;
     private ColocatedBackendSelector.Assignment colocatedAssignment = null;
@@ -274,6 +276,19 @@ public class ExecutionFragment {
     public void addInstance(FragmentInstance instance) {
         instance.setIndexInFragment(instances.size());
         instances.add(instance);
+    }
+
+    /**
+     * Adds an instance after {@link ExecutionDAG#finalizeDAG()}. Publishes a new list instead of
+     * mutating in place, so concurrent readers iterating {@link #getInstances()} (report handling,
+     * cancel fan-out) never observe a partially updated list. Appending keeps the existing
+     * instances' indexInFragment stable.
+     */
+    public void addInstanceLate(FragmentInstance instance) {
+        instance.setIndexInFragment(instances.size());
+        List<FragmentInstance> copied = Lists.newArrayList(instances);
+        copied.add(instance);
+        instances = copied;
     }
 
     public void shuffleInstances(Random random) {
