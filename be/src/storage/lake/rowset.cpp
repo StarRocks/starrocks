@@ -668,7 +668,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
-    // Contract: callers downstream (SegmentPKIterator + LakePrimaryIndex
+    // Contract: callers downstream (SegmentPKIterator + LakePersistentIndex
     // publish) require each emitted chunk's physical rowids to form a single
     // contiguous run. The only filter applied below is the optional
     // tablet_range over a PK-sorted segment, which preserves contiguity. Any
