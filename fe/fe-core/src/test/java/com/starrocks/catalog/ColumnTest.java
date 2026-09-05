@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -44,6 +45,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TColumn;
@@ -320,5 +322,51 @@ public class ColumnTest {
         String toSql = column.toSqlWithoutAggregateTypeName(null);
 
         Assertions.assertEquals("`col` json NULL COMMENT \"{\\\"id\\\":\\\"0\\\",\\\"value\\\":\\\"1\\\"}\"", toSql);
+    }
+
+    @Test
+    public void testTimeFunctionDefaultIsConstWithPrecision() {
+        // now(N)/current_timestamp(N) are stable within a statement, so they are CONST (not volatile),
+        // and the materialized literal keeps the N fractional-second digits (DATETIME stores microseconds).
+        // Fractional digits are timezone-invariant, so we can assert on them without pinning a time zone.
+        long ts = 1_000_000_000_789L; // ...789 milliseconds since epoch
+
+        Column ctsN = timeFunctionColumn("current_timestamp", 3);
+        Assertions.assertTrue(ctsN.getDefaultExpr().isTimeFunction());
+        Assertions.assertEquals(Column.DefaultValueType.CONST, ctsN.getDefaultValueType());
+        Assertions.assertEquals(3, ctsN.getDefaultExpr().getTimeFunctionScale());
+        String v3 = ctsN.calculatedDefaultValueWithTime(ts);
+        Assertions.assertTrue(v3.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}"),
+                "now(3) default must carry exactly 3 fractional digits, got: " + v3);
+        Assertions.assertTrue(v3.endsWith(".789"), "fractional part must be preserved, got: " + v3);
+        // Metadata reports the generator (with precision), never the frozen literal.
+        Assertions.assertEquals("CURRENT_TIMESTAMP(3)", ctsN.getMetaDefaultValue(new ArrayList<>()));
+
+        Column now6 = timeFunctionColumn("now", 6);
+        Assertions.assertEquals(Column.DefaultValueType.CONST, now6.getDefaultValueType());
+        Assertions.assertEquals(6, now6.getDefaultExpr().getTimeFunctionScale());
+        Assertions.assertTrue(now6.calculatedDefaultValueWithTime(ts).endsWith(".789000"),
+                "now(6) pads a millisecond-resolution source out to 6 digits");
+
+        Column nowEmpty = timeFunctionColumn("now", -1);
+        Assertions.assertEquals(Column.DefaultValueType.CONST, nowEmpty.getDefaultValueType());
+        Assertions.assertEquals(0, nowEmpty.getDefaultExpr().getTimeFunctionScale());
+        Assertions.assertFalse(nowEmpty.calculatedDefaultValueWithTime(ts).contains("."),
+                "bare now() stays at second granularity");
+        Assertions.assertEquals("CURRENT_TIMESTAMP", nowEmpty.getMetaDefaultValue(new ArrayList<>()));
+
+        Column uuidCol = new Column("u", VarcharType.VARCHAR, false, null, true,
+                new DefaultValueDef(true, false, new FunctionCallExpr("uuid", Lists.newArrayList())), "");
+        Assertions.assertFalse(uuidCol.getDefaultExpr().isTimeFunction());
+        Assertions.assertEquals(Column.DefaultValueType.VARY, uuidCol.getDefaultValueType(),
+                "uuid() is genuinely per-row volatile and stays VARY");
+    }
+
+    private static Column timeFunctionColumn(String fn, int scale) {
+        FunctionCallExpr expr = scale >= 0
+                ? new FunctionCallExpr(fn, Lists.newArrayList(new IntLiteral(scale, IntegerType.INT)))
+                : new FunctionCallExpr(fn, Lists.newArrayList());
+        return new Column("ts", DateType.DATETIME, false, null, true,
+                new DefaultValueDef(true, scale >= 0, expr), "");
     }
 }
