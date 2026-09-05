@@ -911,4 +911,19 @@ TEST_F(OrdinaryCompactionSharedWindowTest, test_does_not_block_when_the_sort_key
     EXPECT_EQ(2, pick(metadata).size()) << "the guard is only for the shape whose range has no rowid interval";
 }
 
+// A tablet merge stamps its range onto every rowset it emits (update_rowset_range at
+// tablet_merger.cpp:454), never marks a segment shared, and nothing under be/src/storage/lake ever
+// clears a rowset's range. So waiting on a rowset's range rather than on its shared segments would
+// stall this tablet's ordinary compaction for good -- and FE schedules an UNSHARE only from a split,
+// so nothing would ever release it.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_does_not_block_on_a_merge_product) {
+    auto metadata = make_metadata(/*separate_sort_key=*/true, /*shared_segment=*/false);
+    for (auto& rowset : *metadata->mutable_rowsets()) {
+        rowset.mutable_range()->CopyFrom(metadata->range());
+    }
+    ASSERT_TRUE(TabletSchema::create(metadata->schema())->has_separate_sort_key());
+    ASSERT_TRUE(metadata->rowsets(0).has_range());
+    EXPECT_EQ(2, pick(metadata).size()) << "a merge product's range must not stall ordinary compaction";
+}
+
 } // namespace starrocks::lake
