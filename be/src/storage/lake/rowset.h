@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -41,6 +42,8 @@ class SegmentReadOptions;
 } // namespace starrocks
 
 namespace starrocks::lake {
+
+class CompactionDelvecHolder;
 
 class MetaFileBuilder;
 class TabletManager;
@@ -236,6 +239,19 @@ public:
     // Check if this rowset uses segment range mode (for large rowset split compaction)
     [[nodiscard]] bool is_segment_range_mode() const { return _segment_range_end > 0; }
 
+    // Whether LakeIOOptions::hold_segments can be honoured for this rowset. Holding only pays off
+    // when read() can feed the held set through the prepared-segments path, and that path indexes
+    // segments by metadata position: partial-compaction trims the head of the loaded vector and
+    // segment-range mode starts it at _segment_range_start, so neither can be indexed that way.
+    // Those rowsets keep the original load-per-read path (and therefore the metadata cache).
+    [[nodiscard]] bool can_hold_segments() const { return !partial_segments_compaction() && !is_segment_range_mode(); }
+
+    // Drop the held input segments and the task-scoped delvec store, so a compaction task that
+    // decided its input set does not fit the per-worker memory budget stops pinning them (see
+    // CompactionTask::chunk_size_with_held_segments). Callers already holding a set returned by
+    // segments() keep their own references, so this is safe while a read is in flight.
+    void release_held_segments();
+
     // Get segment range [start, end), only valid when is_segment_range_mode() returns true
     [[nodiscard]] int32_t segment_range_start() const { return _segment_range_start; }
     [[nodiscard]] int32_t segment_range_end() const { return _segment_range_end; }
@@ -328,6 +344,27 @@ private:
     // default is 0 means every segment will be used.
     // only used for compaction
     size_t _compaction_segment_limit;
+    // Guards _held_segments: the column-group pass loop is single-threaded, but range-split
+    // parallel compaction may share one Rowset instance across subtasks.
+    mutable std::mutex _held_segments_mutex;
+    // Segments held by segments() when LakeIOOptions::hold_segments is set; lives as long as this
+    // Rowset instance, which for compaction is the whole task.
+    std::vector<SegmentPtr> _held_segments;
+    // What the held set was measured at when it was published, and therefore exactly what this
+    // Rowset contributed to the lake_compaction_held_segment_bytes gauge -- the same amount must be
+    // taken back when the set goes away, so it is remembered rather than re-measured (a segment's
+    // mem_usage() grows as later column-group passes load more column indexes).
+    int64_t _held_segments_bytes = 0;
+    // Single-flight election for the held-segment load: true while one caller is loading outside
+    // the lock. Range-split subtasks that miss together must not each load the full input set;
+    // waiters block on _held_segments_cv, and a failed (or unheld) load clears the flag before
+    // notifying so a waiter takes over and retry semantics survive.
+    bool _held_segments_loading = false;
+    std::condition_variable _held_segments_cv;
+    // Delvec store shared by every pass's delvec loader, same lifetime and guard rules as
+    // _held_segments; created lazily on the primary-key compaction read path.
+    // mutable: lazily created inside const init_segment_read_options.
+    mutable std::shared_ptr<CompactionDelvecHolder> _held_delvecs;
     // Segment range for large rowset split compaction.
     // When _segment_range_end > 0, only segments in [_segment_range_start, _segment_range_end) are used.
     // Default is 0, meaning all segments are used.

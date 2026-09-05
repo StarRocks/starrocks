@@ -14,7 +14,10 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <optional>
+#include <thread>
 #include <unordered_set>
 
 #include "base/testutil/assert.h"
@@ -27,13 +30,16 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
+#include "storage/compaction_utils.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
@@ -43,8 +49,10 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/disjunctive_predicates.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "storage_primitive/primary_key_encoding_types.h"
 #include "test_util.h"
@@ -243,6 +251,170 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     }
 }
 
+// LakeIOOptions::hold_segments memoizes the loaded Segment objects on the Rowset, so every later
+// pass of the same compaction task reuses those instances instead of reloading them; and because
+// the held set replaces the shared metadata cache as the reuse mechanism, nothing is pushed into
+// that cache. get_segments() (the flat-json compaction path) must reuse the held set too, or the
+// task keeps a second full copy of every input segment and caches it after all.
+TEST_F(LakeRowsetTest, test_hold_segments_reuses_and_skips_metacache) {
+    create_rowsets_for_testing();
+
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    ASSERT_EQ(3, rowset->num_segments());
+    ASSERT_TRUE(rowset->can_hold_segments());
+
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    ASSIGN_OR_ABORT(auto first, rowset->segments(lake_io_opts));
+    ASSERT_EQ(3, first.size());
+    for (const auto& seg : first) {
+        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) == nullptr);
+    }
+
+    // Second call: the very same Segment instances, no reload.
+    ASSIGN_OR_ABORT(auto second, rowset->segments(lake_io_opts));
+    ASSERT_EQ(first.size(), second.size());
+    for (size_t i = 0; i < first.size(); i++) {
+        EXPECT_EQ(first[i].get(), second[i].get());
+    }
+
+    // get_segments() must hand back the held set rather than loading (and caching) a second copy.
+    auto via_get_segments = rowset->get_segments();
+    ASSERT_EQ(first.size(), via_get_segments.size());
+    for (size_t i = 0; i < first.size(); i++) {
+        EXPECT_EQ(first[i].get(), via_get_segments[i].get());
+    }
+    for (const auto& seg : first) {
+        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) == nullptr);
+    }
+}
+
+// A segment-range rowset (large-rowset split subtask of parallel compaction) cannot use the
+// prepared-segments path, because that path derives each segment's metadata position from its index
+// in the vector and this rowset's vector starts at _segment_range_start. Holding for it would pin a
+// set the read path never consults -- and, since the compaction tasks turn the metadata cache off
+// whenever they ask for holding, would leave every column-group pass reloading every segment from
+// remote storage. hold_segments must therefore degrade to the pre-hold behavior here: no held set,
+// metadata cache filled.
+TEST_F(LakeRowsetTest, test_hold_segments_falls_back_for_segment_range_rowset) {
+    create_rowsets_for_testing();
+
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 3 /* segment_end */);
+    ASSERT_EQ(2, rowset->num_segments());
+    ASSERT_FALSE(rowset->can_hold_segments());
+
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    ASSIGN_OR_ABORT(auto first, rowset->segments(lake_io_opts));
+    ASSERT_EQ(2, first.size());
+    // The fallback keeps filling the shared metadata cache, which is what the read pass relies on.
+    for (const auto& seg : first) {
+        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) != nullptr);
+    }
+    // And the reuse still works, through the cache rather than through a held set.
+    ASSIGN_OR_ABORT(auto second, rowset->segments(lake_io_opts));
+    ASSERT_EQ(first.size(), second.size());
+    for (size_t i = 0; i < first.size(); i++) {
+        EXPECT_EQ(first[i].get(), second[i].get());
+    }
+}
+
+// The pinned-bytes gauge is the only way an operator sees this memory class: it is not in the
+// metadata cache, so the cache's own usage metric never reports it. What matters is that it balances
+// -- the exact amount reported when a set is held is taken back whether the task releases the set
+// (fallback) or simply ends (Rowset destroyed) -- otherwise the gauge drifts and becomes useless.
+TEST_F(LakeRowsetTest, test_held_segment_bytes_metric_balances) {
+    create_rowsets_for_testing();
+
+    auto* gauge = &StorageMetrics::instance()->lake_compaction_held_segment_bytes;
+    const int64_t before = gauge->value();
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+
+    // Released explicitly, the way a task that stops holding does.
+    {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSIGN_OR_ABORT(auto held, rowset->segments(lake_io_opts));
+        int64_t expected = 0;
+        for (const auto& seg : held) {
+            expected += static_cast<int64_t>(seg->mem_usage());
+        }
+        EXPECT_EQ(before + expected, gauge->value());
+        rowset->release_held_segments();
+        EXPECT_EQ(before, gauge->value());
+        // Releasing twice must not take the amount back twice.
+        rowset->release_held_segments();
+        EXPECT_EQ(before, gauge->value());
+    }
+    EXPECT_EQ(before, gauge->value());
+
+    // Never released, just destroyed with the task: the destructor must still give it back.
+    {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSIGN_OR_ABORT(auto held, rowset->segments(lake_io_opts));
+        EXPECT_GT(gauge->value(), before);
+    }
+    EXPECT_EQ(before, gauge->value());
+}
+
+// Range-split parallel compaction shares one Rowset across concurrent subtasks; the held-segment
+// load must be single-flight, or every subtask that misses loads and parses the complete input set
+// (full remote IO plus a private copy each, with cache filling off). Elect-one semantics: N
+// concurrent callers produce exactly one load, and everyone gets the same held instances. The
+// elected load is held in flight long enough for every other thread to arrive, so the pre-fix
+// behavior (each thread loading its own copy) would be caught as loads > 1.
+TEST_F(LakeRowsetTest, test_hold_segments_single_flight) {
+    create_rowsets_for_testing();
+    _tablet_mgr->metacache()->prune();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    std::atomic<int> loads{0};
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::segments::load_for_hold", [&](void*) {
+        loads++;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::segments::load_for_hold");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    constexpr int kThreads = 4;
+    std::vector<std::vector<SegmentPtr>> results(kThreads);
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+    for (int t = 0; t < kThreads; t++) {
+        threads.emplace_back([&, t]() {
+            auto res = rowset->segments(lake_io_opts);
+            EXPECT_TRUE(res.ok());
+            if (res.ok()) {
+                results[t] = std::move(res).value();
+            }
+        });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+
+    EXPECT_EQ(1, loads.load());
+    for (int t = 0; t < kThreads; t++) {
+        ASSERT_EQ(3, results[t].size());
+        for (size_t i = 0; i < results[t].size(); i++) {
+            EXPECT_EQ(results[0][i].get(), results[t][i].get());
+        }
+    }
+}
+
 // experimental_lake_ignore_lost_segment: when a segment file is physically missing, load_segments
 // must (a) fail hard when the flag is off, and (b) when the flag is on, skip the lost segment while
 // keeping the result positionally aligned -- a null placeholder in the lost slot, size unchanged --
@@ -402,6 +574,168 @@ TEST_F(LakeRowsetTest, test_ignore_lost_segment_vertical_chunk_size) {
     // Must skip the lost (null) segment instead of crashing on segment->column_with_uid.
     ASSIGN_OR_ABORT(auto chunk_size, task.calculate_chunk_size_for_column_group({0}));
     EXPECT_GT(chunk_size, 0);
+}
+
+// get_read_iterator_num() must answer from the rowset metadata when every segment in its window
+// records num_rows: choose_compaction_algorithm() calls it before every compaction, and the old
+// implementation parsed every input segment's footer only to throw the result away. The segment
+// files are deleted before the call, so a successful count proves no segment was loaded; the
+// legacy fallback is then proven engaged by stripping num_rows from one segment meta and watching
+// the same call fail on the missing files.
+TEST_F(LakeRowsetTest, test_get_read_iterator_num_from_metadata) {
+    create_rowsets_for_testing();
+
+    for (auto& seg_meta : *_tablet_metadata->mutable_rowsets(0)->mutable_segment_metas()) {
+        seg_meta.set_num_rows(44);
+    }
+
+    // Remove the files: only a metadata-based count can still succeed.
+    for (const auto& seg_meta : _tablet_metadata->rowsets(0).segment_metas()) {
+        ASSERT_OK(FileSystem::Default()->delete_file(
+                _tablet_mgr->segment_location(_tablet_metadata->id(), seg_meta.filename())));
+    }
+    _tablet_mgr->metacache()->prune();
+
+    {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSIGN_OR_ABORT(auto num, rowset->get_read_iterator_num());
+        ASSERT_EQ(3, num); // overlapped rowset: one iterator per non-empty segment
+    }
+
+    // A zero-row segment contributes no iterator, exactly like the footer-based count.
+    {
+        _tablet_metadata->mutable_rowsets(0)->mutable_segment_metas(1)->set_num_rows(0);
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSIGN_OR_ABORT(auto num, rowset->get_read_iterator_num());
+        ASSERT_EQ(2, num);
+    }
+
+    // Any segment without num_rows (e.g. written by cross-cluster replication) forces the legacy
+    // loading path for the whole rowset -- which must now fail on the deleted files.
+    {
+        _tablet_metadata->mutable_rowsets(0)->mutable_segment_metas(1)->clear_num_rows();
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSERT_FALSE(rowset->get_read_iterator_num().ok());
+    }
+}
+
+// The held input set stays resident for the whole task, so it is charged against the same
+// compaction_memory_limit_per_worker the read chunks are sized from -- but only up to a point: past
+// the point where holding would shrink the read chunk by more than kMaxHeldChunkShrink, the task
+// stops holding and sizes from the full budget instead. Driven with synthetic sizing inputs so the
+// arithmetic (including the non-positive remainder, which get_read_chunk_size would read as "no
+// memory cap") is pinned independently of what the test segments happen to measure.
+TEST_F(LakeRowsetTest, test_chunk_size_charges_held_segments) {
+    create_rowsets_for_testing();
+
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    CompactionTaskContext context(next_id(), _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+
+    // Synthetic sizing inputs, so the arithmetic is exercised without depending on what the tiny
+    // test segments happen to measure.
+    const int64_t kLimit = 1000000;
+    const int64_t kRows = 1000;
+    const int64_t kFootprint = 100000;
+    const size_t kSources = 10;
+    const int32_t kCfgChunk = config::lake_compaction_chunk_size;
+    config::compaction_memory_limit_per_worker = kLimit;
+
+    const int32_t unheld = CompactionUtils::get_read_chunk_size(kLimit, kCfgChunk, kRows, kFootprint, kSources);
+
+    // Half the budget held: charged against the sizing, and holding continues.
+    task._hold_input_segments = true;
+    const int64_t half = kLimit / 2;
+    EXPECT_EQ(CompactionUtils::get_read_chunk_size(kLimit - half, kCfgChunk, kRows, kFootprint, kSources),
+              task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
+    EXPECT_TRUE(task._hold_input_segments);
+
+    // Not holding: the held measurement must not touch the sizing at all.
+    task._hold_input_segments = false;
+    EXPECT_EQ(unheld, task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
+
+    // Nearly the whole budget held: the read chunk would shrink by more than kMaxHeldChunkShrink,
+    // so the task stops holding and sizes from the full budget instead.
+    task._hold_input_segments = true;
+    EXPECT_EQ(unheld, task.chunk_size_with_held_segments(kLimit - kLimit / 100, kRows, kFootprint, kSources));
+    EXPECT_FALSE(task._hold_input_segments);
+
+    // At or over budget: get_read_chunk_size() must never see the non-positive remainder (it reads
+    // that as "no memory cap" and would answer with the largest chunk of all).
+    task._hold_input_segments = true;
+    EXPECT_EQ(unheld, task.chunk_size_with_held_segments(kLimit, kRows, kFootprint, kSources));
+    EXPECT_FALSE(task._hold_input_segments);
+
+    // A non-positive limit means "no memory cap" and must stay that way, holding or not.
+    config::compaction_memory_limit_per_worker = -1;
+    task._hold_input_segments = true;
+    EXPECT_EQ(kCfgChunk, task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
+    EXPECT_TRUE(task._hold_input_segments);
+}
+
+// When the input set does not fit the per-worker budget, holding it is worse than not holding:
+// get_read_chunk_size() divides what is left by the per-row footprint, so a starved budget collapses
+// the read chunk to a single row and the task crawls -- while pinning a set the metadata-cache LRU
+// cannot reclaim. The task must stop holding instead: release the held sets, clear the flag (so the
+// remaining passes fill the shared metadata cache again), and size the chunks from the full budget.
+TEST_F(LakeRowsetTest, test_chunk_size_falls_back_when_held_segments_do_not_fit) {
+    create_rowsets_for_testing();
+
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    const bool saved_parallel = config::enable_load_segment_parallel;
+    config::enable_load_segment_parallel = false;
+    DeferOp restore([&]() {
+        config::compaction_memory_limit_per_worker = saved_mem_limit;
+        config::enable_load_segment_parallel = saved_parallel;
+    });
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    CompactionTaskContext context(next_id(), _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+
+    int64_t held_bytes = 0;
+    {
+        ASSIGN_OR_ABORT(auto segments, rs->segments(false));
+        for (const auto& seg : segments) {
+            held_bytes += static_cast<int64_t>(seg->mem_usage());
+        }
+    }
+    ASSERT_GT(held_bytes, 4);
+
+    // Half the held set: whatever the implementation measures on its own instances cannot fit.
+    // Both legs run at this same budget, so the sizing is comparable: falling back must produce
+    // exactly the not-holding chunk size, never the starved one the subtraction would have given.
+    config::compaction_memory_limit_per_worker = held_bytes / 2;
+
+    task._hold_input_segments = false;
+    ASSIGN_OR_ABORT(auto chunk_no_hold, task.calculate_chunk_size_for_column_group({0}));
+
+    // Empty the cache the non-holding leg just filled, so the handoff assertion below can only be
+    // satisfied by the fallback itself.
+    _tablet_mgr->metacache()->prune();
+
+    task._hold_input_segments = true;
+    ASSIGN_OR_ABORT(auto chunk_hold, task.calculate_chunk_size_for_column_group({0}));
+
+    EXPECT_EQ(chunk_no_hold, chunk_hold);
+    // Flag cleared, so the remaining passes fill the shared metadata cache again; nothing pinned.
+    EXPECT_FALSE(task._hold_input_segments);
+    EXPECT_TRUE(rs->_held_segments.empty());
+    EXPECT_TRUE(rs->_held_delvecs == nullptr);
+    // The released set was handed to the shared cache rather than dropped: the read pass must not
+    // have to re-parse the footers this task just parsed.
+    for (const auto& seg_meta : _tablet_metadata->rowsets(0).segment_metas()) {
+        EXPECT_TRUE(_tablet_mgr->metacache()->lookup_segment(
+                            _tablet_mgr->segment_location(_tablet_metadata->id(), seg_meta.filename())) != nullptr);
+    }
 }
 
 TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
@@ -739,6 +1073,67 @@ TEST_F(LakeRowsetTest, test_rowset_range_overrides_tablet_range) {
 
     // If rowset range takes precedence, keep keys [11,13) => each segment contributes 11,12
     ASSERT_EQ(count_rows_from_iters(iters), 3 * 2);
+}
+
+// When a compaction task holds its inputs it also turns fill_metadata_cache off, and read() on a
+// rowset that cannot hold (segment-range mode, partial compaction) skips the prepared-segments
+// path. That per-read load must re-apply the segments() downgrade -- fill the shared metadata
+// cache -- or such a rowset would be read with neither a held set nor a cache, reloading and
+// reparsing every segment from remote storage on every column-group pass.
+TEST_F(LakeRowsetTest, test_read_fills_metadata_cache_for_unholdable_rowset) {
+    create_rowsets_for_testing();
+
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 3 /* segment_end */);
+    ASSERT_FALSE(rowset->can_hold_segments());
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    rs_opts.lake_io_opts = {.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_EQ(count_rows_from_iters(iters), 2 * (22 + 12));
+
+    // The read went through the per-read load path with the downgrade applied: segments cached.
+    const auto& rs_meta = _tablet_metadata->rowsets(0);
+    for (int i = 1; i < 3; i++) {
+        EXPECT_TRUE(cache->lookup_segment(_tablet_mgr->segment_location(
+                            _tablet_metadata->id(), rs_meta.segment_metas(i).filename())) != nullptr);
+    }
+}
+
+// The compaction read path hands its delvec loader the metadata this Rowset was built from, so a
+// primary-key read does not re-fetch the tablet metadata once per segment: on the hold_segments leg
+// the loader runs with fill_cache off, so nothing would ever repopulate a cold or crowded metacache
+// and every miss would be a remote read of the same metadata file.
+TEST_F(LakeRowsetTest, test_delvec_loader_reuses_rowset_metadata) {
+    create_rowsets_for_testing();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    rs_opts.is_primary_keys = true;
+    rs_opts.version = _tablet_metadata->version();
+    rs_opts.lake_io_opts = {.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+
+    SegmentReadOptions seg_options;
+    ASSERT_OK(rowset->init_segment_read_options(rs_opts, rs_opts.lake_io_opts, DisjunctivePredicates{}, &stats,
+                                                &seg_options));
+    auto* loader = static_cast<LakeDelvecLoader*>(seg_options.delvec_loader.get());
+    ASSERT_TRUE(loader != nullptr);
+    // -fno-access-control lets the test pin the wiring directly: the loader must reuse this
+    // Rowset's metadata instance and carry the task-scoped delvec holder.
+    EXPECT_EQ(_tablet_metadata.get(), loader->_cached_metadata.get());
+    EXPECT_TRUE(loader->_holder != nullptr);
 }
 
 // Regression: after a metadata-only trailing sort-key add (N -> N+1), a reshard that runs later

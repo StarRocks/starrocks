@@ -61,6 +61,11 @@ public:
     METRIC_DEFINE_INT_COUNTER(txn_persist_duration_us, MetricUnit::MICROSECONDS);
 
     METRIC_DEFINE_INT_GAUGE(metadata_cache_bytes_total, MetricUnit::BYTES);
+    // Segment metadata currently pinned by running lake compaction tasks
+    // (config::lake_compaction_hold_input_segments). Unlike metadata_cache_bytes_total this memory is
+    // NOT under the cache's LRU: it is released when the holding task ends, so a persistently high
+    // value means long-running compactions, not a cache to resize.
+    METRIC_DEFINE_INT_GAUGE(lake_compaction_held_segment_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(segment_file_not_found_total, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_UINT_GAUGE(update_primary_index_num, MetricUnit::OPERATIONS);

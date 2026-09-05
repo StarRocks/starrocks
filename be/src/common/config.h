@@ -2341,6 +2341,13 @@ CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 CONF_mBool(enable_lake_compaction_range_split, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
+// Hold the input segments of a compaction task on its Rowset objects for the whole task, so the
+// per-column-group passes of vertical compaction reuse them instead of reloading through the
+// metadata cache. When the cache cannot hold all input segments (small limit, or a node crowded
+// with many tablets), every pass otherwise rebuilds every segment's column metadata, which is
+// CPU-bound and proportional to the column count. Memory cost is one set of segment metadata per
+// running task, bounded by the task's input size.
+CONF_mBool(lake_compaction_hold_input_segments, "true");
 
 // Enable tablet write log tracking for write amplification analysis
 CONF_mBool(enable_tablet_write_log, "false");

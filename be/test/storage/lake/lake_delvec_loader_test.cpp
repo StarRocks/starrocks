@@ -16,6 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <thread>
+#include <vector>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "fs/fs_util.h"
@@ -308,6 +313,114 @@ TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_mismatched_cached_metadata
     ASSERT_TRUE(loader.load_from_file(tsid, version, &pdelvec).ok());
     ASSERT_TRUE(pdelvec != nullptr);
     EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// CompactionDelvecHolder is what keeps a vertical compaction from reloading every delvec once per
+// column-group pass: the pass loop keeps re-inserting the (much larger) segment objects over them in
+// the metadata cache, so the cache does not keep them alive. Pins the contract every pass relies on:
+// a (segment, version) already loaded is served from the holder -- the same instance, no file read --
+// while a different segment or a different version is not.
+TEST_F(LakeDelvecLoaderTest, test_load_with_compaction_delvec_holder) {
+    const int64_t tablet_id = 10008;
+    const uint32_t segment_id = 800;
+    const int64_t version = 17;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {2, 4, 8, 16};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    TabletSegmentId tsid(tablet_id, segment_id);
+    LakeIOOptions lake_io_opts;
+
+    DelVectorPtr first;
+    {
+        LakeDelvecLoader loader(_tablet_manager.get(), nullptr, false /* fill_cache */, lake_io_opts, nullptr, holder);
+        ASSERT_TRUE(loader.load(tsid, version, &first).ok());
+        ASSERT_TRUE(first != nullptr);
+        EXPECT_EQ(expected_delvec, first->save());
+    }
+
+    // Make every path to the file fail, so only the holder can still answer.
+    ASSERT_TRUE(FileSystem::Default()->delete_file(_tablet_manager->tablet_metadata_location(tablet_id, version)).ok());
+    _tablet_manager->metacache()->prune();
+
+    // A later pass builds its own loader but shares the holder: same (segment, version), same
+    // instance handed back, no file read.
+    LakeDelvecLoader next_pass(_tablet_manager.get(), nullptr, false /* fill_cache */, lake_io_opts, nullptr, holder);
+    DelVectorPtr second;
+    ASSERT_TRUE(next_pass.load(tsid, version, &second).ok());
+    ASSERT_EQ(first.get(), second.get());
+
+    // Neither the segment id nor the version may be dropped from the key: a different one must miss
+    // the holder and go to the (now missing) file rather than silently reusing this delvec.
+    DelVectorPtr other;
+    EXPECT_FALSE(next_pass.load(TabletSegmentId(tablet_id, segment_id + 1), version, &other).ok());
+    EXPECT_FALSE(next_pass.load(tsid, version + 1, &other).ok());
+}
+
+// Range-split parallel compaction shares one holder across concurrent PK subtasks; get_or_load
+// must be single-flight per key: concurrent callers that miss together produce exactly one load,
+// everyone shares that instance, and a failed load releases the key for a retry instead of
+// caching the error or leaving waiters stuck.
+TEST_F(LakeDelvecLoaderTest, test_compaction_delvec_holder_single_flight) {
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    const TabletSegmentId tsid(10009, 900);
+    const int64_t version = 7;
+
+    std::atomic<int> loads{0};
+    constexpr int kThreads = 4;
+    std::vector<DelVectorPtr> results(kThreads);
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+    for (int t = 0; t < kThreads; t++) {
+        threads.emplace_back([&, t]() {
+            DelVectorPtr dv;
+            auto st = holder->get_or_load(tsid, version, &dv, [&](DelVectorPtr* out) {
+                loads++;
+                // Keep the elected load in flight long enough for every other thread to arrive.
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                *out = std::make_shared<DelVector>();
+                return Status::OK();
+            });
+            EXPECT_TRUE(st.ok());
+            results[t] = std::move(dv);
+        });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+    EXPECT_EQ(1, loads.load());
+    for (int t = 0; t < kThreads; t++) {
+        ASSERT_TRUE(results[t] != nullptr);
+        EXPECT_EQ(results[0].get(), results[t].get());
+    }
+
+    // A failed load must release the in-flight key: the next caller retries and can succeed.
+    const TabletSegmentId failing(10009, 901);
+    DelVectorPtr dv;
+    EXPECT_FALSE(holder->get_or_load(failing, version, &dv, [](DelVectorPtr*) {
+                           return Status::InternalError("boom");
+                       }).ok());
+    EXPECT_TRUE(holder->get_or_load(failing, version, &dv, [](DelVectorPtr* out) {
+                          *out = std::make_shared<DelVector>();
+                          return Status::OK();
+                      }).ok());
+    EXPECT_TRUE(dv != nullptr);
 }
 
 // Test load with pk_builder
