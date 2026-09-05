@@ -463,6 +463,10 @@ public class AlterJobMgr {
         long dbId = log.getDbId();
         long tableId = log.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            LOG.warn("replay alter materialized-view status failed: db {} not found", dbId);
+            return;
+        }
         MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getId(), tableId);
         if (mv == null) {
