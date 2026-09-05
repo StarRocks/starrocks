@@ -404,9 +404,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
 
     size_t num_columns = _tablet_schema->num_columns();
 
-    // Gather the two indexes a cold scan cannot avoid -- the ordinal index of every accessed
-    // column and the page zone map of every predicate column -- into one contiguous run at the
-    // tail (see config::enable_segment_tail_index_region).
+    // Gather the ordinal index of every column into one contiguous run at the tail (see
+    // config::enable_segment_tail_index_region). Keep each page zone map next to its column's
+    // data pages: a predicate scan often reads both, so moving the zone map away can add a remote
+    // cache-block read rather than remove one.
     //
     // This works for a vertical writer too, which calls finalize_columns() once per column
     // group: the deferred writers accumulate across groups and finalize_footer() flushes them
@@ -416,10 +417,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     // than one source rowset, so leaving it on the legacy layout would mean the region vanished
     // from essentially every wide table at its first real compaction.
     //
-    // The larger optional indexes (bloom filter, bitmap, inverted, vector) deliberately stay
-    // inline: they are read only when a predicate needs them, and hoisting them would dilute
-    // the cache locality of the small indexes every scan needs.
-    const bool defer_small_index = config::enable_segment_tail_index_region;
+    // Page zone maps and the larger optional indexes (bloom filter, bitmap, inverted, vector)
+    // deliberately stay inline. Only ordinal indexes are needed by every projected column and
+    // benefit consistently from being adjacent to the footer.
+    const bool defer_ordinal_index = config::enable_segment_tail_index_region;
 
     for (size_t i = 0; i < _column_indexes.size(); ++i) {
         uint32_t column_index = _column_indexes[i];
@@ -434,10 +435,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_data());
         // write index
         uint64_t index_offset = _wfile->size();
-        if (!defer_small_index) {
+        if (!defer_ordinal_index) {
             RETURN_IF_ERROR(column_writer->write_ordinal_index());
-            RETURN_IF_ERROR(column_writer->write_zone_map());
         }
+        RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
         RETURN_IF_ERROR(column_writer->write_inverted_index());
@@ -467,10 +468,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // check global dict valid
         _check_column_global_dict_valid(column_writer.get(), column_index);
 
-        if (defer_small_index) {
+        if (defer_ordinal_index) {
             // Survives until finalize_footer(). The data pages this writer was buffering were
-            // just released by write_data(), so what is retained is only the ordinal-index and
-            // zone-map builders.
+            // just released by write_data(), so what is retained is only the ordinal-index
+            // builder. The page zone map has already been written next to the column data.
             _deferred_small_index_writers.push_back(std::move(column_writer));
         } else {
             // reset to release memory
@@ -481,7 +482,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     _column_writers.clear();
     _column_indexes.clear();
 
-    if (defer_small_index) {
+    if (defer_ordinal_index) {
         // The short key index waits too. A vertical writer only has the key columns in its
         // first group, so writing it here would bury it under every later group's data.
         _small_index_region_deferred = true;
@@ -499,10 +500,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     return Status::OK();
 }
 
-// Everything a cold scan must read before it can touch a data page, written back to back
-// immediately before the footer: the short key index, every page zone map, then every column's
-// ordinal index. Called from finalize_footer() so that it runs after the LAST column group's
-// data, which is what lets a vertical writer produce the layout at all.
+// The short key index followed by every column's ordinal index, written back to back immediately
+// before the footer. Called from finalize_footer() so that it runs after the LAST column group's
+// data, which is what lets a vertical writer produce the layout at all. Page zone maps stay next
+// to their column data and are not part of this region.
 Status SegmentWriter::_write_small_index_region(uint64_t* index_size) {
     const uint64_t region_offset = _wfile->size();
 
@@ -515,12 +516,8 @@ Status SegmentWriter::_write_small_index_region(uint64_t* index_size) {
         _short_key_index_pending = false;
     }
 
-    // Group by index kind and put ordinal indexes last. Parsing the footer already fetches the
-    // file's final cache block, so the ordinal indexes needed by every projected column can often
-    // be served from that block. Zone maps are conditional on predicates and therefore go first.
-    for (auto& column_writer : _deferred_small_index_writers) {
-        RETURN_IF_ERROR(column_writer->write_zone_map());
-    }
+    // Parsing the footer already fetches the file's final cache block, so the ordinal indexes
+    // needed by every projected column can often be served from that block.
     for (auto& column_writer : _deferred_small_index_writers) {
         RETURN_IF_ERROR(column_writer->write_ordinal_index());
         // reset to release memory

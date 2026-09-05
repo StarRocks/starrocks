@@ -217,14 +217,11 @@ private:
     // test), so both indexes have one entry per block with matching num_items / rows-per-block.
     std::unique_ptr<ShortKeyIndexBuilder> _full_sort_key_index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
-    // Column writers whose ordinal index and page zone map have NOT been written yet,
-    // accumulated across every finalize_columns() call and flushed as one contiguous
-    // region by finalize_footer(). A vertical writer calls finalize_columns() once per
-    // column group, so an early group's indexes can only reach the tail by surviving
-    // until the last group's data is on disk. Only the ordinal-index and zone-map
-    // builders are held, which the 1 GB max_segment_file_size caps at single-digit MB
-    // per segment regardless of column count (pages are cut on uncompressed size, so a
-    // wider schema simply means fewer pages per column).
+    // Column writers whose ordinal index has NOT been written yet, accumulated across every
+    // finalize_columns() call and flushed as one contiguous region by finalize_footer(). A
+    // vertical writer calls finalize_columns() once per column group, so an early group's
+    // ordinal index can only reach the tail by surviving until the last group's data is on disk.
+    // Page zone maps are written inline next to their column data and are not retained here.
     std::vector<std::unique_ptr<ColumnWriter>> _deferred_small_index_writers;
     bool _small_index_region_deferred = false;
     // Set by whichever column group carries the key columns, consumed when the region is

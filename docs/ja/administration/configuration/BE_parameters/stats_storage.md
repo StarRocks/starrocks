@@ -431,7 +431,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: Yes
-- 説明: segment の書き込み時に、short key index、全列の ordinal index、およびページ単位の zone map を segment footer の直前の連続領域に配置するかどうか。従来は各列のインデックスをその列のデータページの直後に書き込みます。領域内では、独立して読み込まれる short key index を先頭に置き、続いて全ページ単位 zone map、最後に全 ordinal index を配置します。ordinal index を footer に隣接させることで、footer の解析時に読み込まれた Data Cache block を再利用できます。インデックスを集約することで、オブジェクトストレージからのコールド読み取り時に Data Cache block を再利用しやすくなります。本設定は書き込み側のみを制御します。垂直 Compaction と部分列更新の書き換えを含め、segment footer を書き出すすべてのパスがこの領域を生成します。どちらのレイアウトも任意の BE/CN バージョンで読み取ることができ、同一テーブル内に共存できます。
+- 説明: segment の書き込み時に、short key index と全列の ordinal index を segment footer の直前の連続領域に配置するかどうか。従来は各 ordinal index をその列のデータページの直後に書き込みます。ページ単位の zone map は列データの近くに残すため、述語スキャンでは同じ Data Cache block を再利用できます。ordinal index を footer に隣接させることで、footer の解析時に読み込まれた Data Cache block を再利用し、オブジェクトストレージからのコールド読み取り時の分散したアクセスを減らせます。本設定は書き込み側のみを制御します。垂直 Compaction と部分列更新の書き換えを含め、segment footer を書き出すすべてのパスがこの領域を生成します。どちらのレイアウトも任意の BE/CN バージョンで読み取ることができ、同一テーブル内に共存できます。
 - 導入バージョン: v4.2.0
 
 ### enable_size_tiered_compaction_strategy

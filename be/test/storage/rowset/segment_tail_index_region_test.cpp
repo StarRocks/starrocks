@@ -13,9 +13,8 @@
 // limitations under the License.
 
 // Covers config::enable_segment_tail_index_region: the segment writer gathers the short key index
-// and every column's ordinal index and page zone map into one contiguous run immediately before
-// the footer, grouped by index kind so all page zone maps precede all ordinal indexes, instead of
-// interleaving each column's indexes after that column's own data pages.
+// and every column's ordinal index into one contiguous run immediately before the footer, while
+// each page zone map stays next to its column's data pages.
 //
 // The two layouts must be indistinguishable to a reader -- every index is located through an
 // absolute PagePointer either way -- so each test that asserts something about the layout also
@@ -86,14 +85,6 @@ std::vector<uint64_t> collect_zone_map_offsets(const SegmentFooterPB& footer) {
             }
         }
     }
-    return offsets;
-}
-
-// Every byte range the read path must load before it can touch a data page.
-std::vector<uint64_t> collect_small_index_offsets(const SegmentFooterPB& footer) {
-    std::vector<uint64_t> offsets = collect_ordinal_index_offsets(footer);
-    auto zone_maps = collect_zone_map_offsets(footer);
-    offsets.insert(offsets.end(), zone_maps.begin(), zone_maps.end());
     return offsets;
 }
 
@@ -216,9 +207,9 @@ protected:
     bool _saved_region = false;
 };
 
-// With the region on, every small index sits between the last data page and the footer, and the
-// declared range covers exactly that gap.
-TEST_F(SegmentTailIndexRegionTest, RegionCoversEverySmallIndex) {
+// With the region on, every ordinal index sits between the last inline index and the footer. Page
+// zone maps remain inline and therefore precede the declared region.
+TEST_F(SegmentTailIndexRegionTest, RegionCoversEveryOrdinalIndex) {
     auto tablet_schema = make_schema();
     config::enable_segment_tail_index_region = true;
 
@@ -233,11 +224,17 @@ TEST_F(SegmentTailIndexRegionTest, RegionCoversEverySmallIndex) {
     // The region ends right where the footer starts.
     EXPECT_EQ(result.footer_position, region_end);
 
-    auto offsets = collect_small_index_offsets(result.footer);
-    ASSERT_FALSE(offsets.empty()) << "no ordinal/zone map index was written -- assertions would be vacuous";
-    for (uint64_t offset : offsets) {
+    auto ordinals = collect_ordinal_index_offsets(result.footer);
+    ASSERT_FALSE(ordinals.empty()) << "no ordinal index was written -- assertions would be vacuous";
+    for (uint64_t offset : ordinals) {
         EXPECT_GE(offset, region_begin);
         EXPECT_LT(offset, region_end);
+    }
+
+    auto zone_maps = collect_zone_map_offsets(result.footer);
+    ASSERT_FALSE(zone_maps.empty());
+    for (uint64_t offset : zone_maps) {
+        EXPECT_LT(offset, region_begin);
     }
 
     // The short key index is on the same critical path, so it belongs to the region too.
@@ -251,7 +248,7 @@ TEST_F(SegmentTailIndexRegionTest, RegionCoversEverySmallIndex) {
     verify_all_rows(file_name, tablet_schema);
 }
 
-// With the region off nothing changes: no footer fields, and the small indexes stay spread across
+// With the region off nothing changes: no footer fields, and ordinal indexes stay spread across
 // the file instead of clustering at the tail.
 TEST_F(SegmentTailIndexRegionTest, LegacyLayoutIsUnchanged) {
     auto tablet_schema = make_schema();
@@ -268,8 +265,8 @@ TEST_F(SegmentTailIndexRegionTest, LegacyLayoutIsUnchanged) {
     auto region = write_horizontal(region_file, tablet_schema);
 
     // The whole point of the change: gathered indexes span a fraction of what scattered ones do.
-    auto legacy_offsets = collect_small_index_offsets(legacy.footer);
-    auto region_offsets = collect_small_index_offsets(region.footer);
+    auto legacy_offsets = collect_ordinal_index_offsets(legacy.footer);
+    auto region_offsets = collect_ordinal_index_offsets(region.footer);
     ASSERT_EQ(legacy_offsets.size(), region_offsets.size());
     ASSERT_FALSE(legacy_offsets.empty());
     EXPECT_GT(span_of(legacy_offsets), 2 * span_of(region_offsets));
@@ -301,11 +298,17 @@ TEST_F(SegmentTailIndexRegionTest, VerticalWriteAlsoProducesRegion) {
 
     // Every column, including those from the FIRST group, must have landed in the tail region --
     // that is the whole point, and the case a per-group write would get wrong.
-    auto offsets = collect_small_index_offsets(result.footer);
-    ASSERT_FALSE(offsets.empty());
-    for (uint64_t offset : offsets) {
+    auto ordinals = collect_ordinal_index_offsets(result.footer);
+    ASSERT_FALSE(ordinals.empty());
+    for (uint64_t offset : ordinals) {
         EXPECT_GE(offset, region_begin);
         EXPECT_LT(offset, region_end);
+    }
+
+    auto zone_maps = collect_zone_map_offsets(result.footer);
+    ASSERT_FALSE(zone_maps.empty());
+    for (uint64_t offset : zone_maps) {
+        EXPECT_LT(offset, region_begin);
     }
 
     // The short key index belongs to the region too. _has_key is reassigned by every init() and
@@ -328,7 +331,7 @@ TEST_F(SegmentTailIndexRegionTest, VerticalAndHorizontalRegionsAgree) {
     auto h = write_horizontal(h_file, tablet_schema);
     auto v = write_vertical(v_file, tablet_schema);
 
-    EXPECT_EQ(collect_small_index_offsets(h.footer).size(), collect_small_index_offsets(v.footer).size());
+    EXPECT_EQ(collect_ordinal_index_offsets(h.footer).size(), collect_ordinal_index_offsets(v.footer).size());
     EXPECT_EQ(h.footer_position, h.footer.small_index_region_offset() + h.footer.small_index_region_size());
     EXPECT_EQ(v.footer_position, v.footer.small_index_region_offset() + v.footer.small_index_region_size());
 
@@ -336,10 +339,9 @@ TEST_F(SegmentTailIndexRegionTest, VerticalAndHorizontalRegionsAgree) {
     verify_all_rows(v_file, tablet_schema);
 }
 
-// The region holds the independently loaded short key index first, then all page zone maps, with
-// all ordinal indexes next to the footer. The footer read can therefore warm the ordinal indexes
-// needed by every projected column, while conditional zone maps do not displace them.
-TEST_F(SegmentTailIndexRegionTest, RegionIsOrderedByIndexKind) {
+// Page zone maps remain inline, while the region holds the independently loaded short key index
+// followed by all ordinal indexes next to the footer.
+TEST_F(SegmentTailIndexRegionTest, PageZoneMapsStayInline) {
     auto tablet_schema = make_schema();
     config::enable_segment_tail_index_region = true;
 
@@ -356,11 +358,13 @@ TEST_F(SegmentTailIndexRegionTest, RegionIsOrderedByIndexKind) {
         ASSERT_TRUE(result.footer.has_short_key_index_page());
         const uint64_t short_key = result.footer.short_key_index_page().offset();
         const uint64_t first_ordinal = *std::min_element(ordinals.begin(), ordinals.end());
-        const uint64_t last_zone_map = *std::max_element(zone_maps.begin(), zone_maps.end());
-        const uint64_t first_zone_map = *std::min_element(zone_maps.begin(), zone_maps.end());
+        const uint64_t region_begin = result.footer.small_index_region_offset();
 
-        EXPECT_LT(short_key, first_zone_map);
-        EXPECT_LT(last_zone_map, first_ordinal);
+        EXPECT_GE(short_key, region_begin);
+        EXPECT_LT(short_key, first_ordinal);
+        for (uint64_t offset : zone_maps) {
+            EXPECT_LT(offset, region_begin);
+        }
     }
 }
 

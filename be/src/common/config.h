@@ -411,22 +411,18 @@ CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int32(data_page_size, "65536");
 
 // Write-time gate for the segment "small index region" layout. When true, a segment emits the
-// short key index, every column's ordinal index, and every column's page zone map as one
-// contiguous run immediately before the footer, instead of interleaving each column's indexes
-// after that column's data pages. Both layouts are readable by any binary -- indexes are always
-// located through absolute PagePointers -- so this can be flipped at any time and mixed within
-// a tablet.
+// short key index and every column's ordinal index as one contiguous run immediately before the
+// footer, instead of writing each ordinal index directly after that column's data pages. Both
+// layouts are readable by any binary -- indexes are always located through absolute PagePointers
+// -- so this can be flipped at any time and mixed within a tablet.
 //
-// The point is cold-read latency on shared-data: the reader must load the ordinal index of
-// every accessed column, and the page zone map of every predicate column, before it can read
-// any data. In the legacy layout those live at N scattered offsets, so they cost N serial
-// round trips to remote storage, each pulling a whole cache block. At the tail they share cache
-// blocks. Page zone maps precede ordinal indexes so the ordinal indexes -- required by every
-// projected column -- sit next to the footer and can reuse the cache block fetched while parsing
-// it. The independently loaded, conditional short key index leads the region so it does not
-// displace ordinal indexes from the footer block. Writers that finalize columns in several groups
-// retain these small indexes until the footer is finalized, so vertical compaction and
-// partial-update rewrites use the same layout.
+// The point is cold-read latency on shared-data: the reader must load the ordinal index of every
+// accessed column before it can read data. In the legacy layout those indexes live at scattered
+// offsets, so they can cost several serial round trips to remote storage. At the tail they share
+// cache blocks and can reuse the block fetched while parsing the footer. Page zone maps remain
+// beside their column data, because predicate scans commonly read both from the same cache block.
+// Writers that finalize columns in several groups retain the ordinal indexes until the footer is
+// finalized, so vertical compaction and partial-update rewrites use the same layout.
 CONF_mBool(enable_segment_tail_index_region, "false");
 
 // When true, high-cardinality string columns that fall back to plain encoding are written with
