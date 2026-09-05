@@ -19,6 +19,7 @@ endif()
 
 set(EXPR_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    agg/agg_state_bounded_test.cpp
     agg/aggregate_factory_core_test.cpp
     ai/ai_function_call_expr_test.cpp
     ai/ai_provider_options_builder_test.cpp
