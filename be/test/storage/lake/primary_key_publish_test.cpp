@@ -3971,6 +3971,117 @@ TEST_P(LakePrimaryKeyPublishTest, test_same_cache_second_upsert_preserves_old_ro
     EXPECT_EQ(expected_new_value, cached_point_get(tablet_id, kLowKey));
 }
 
+// Merge-based dedup has to produce the same delete set as the per-segment lookup path it replaces,
+// and therefore the same visible rows. This loads a shape carrying both kinds of duplicate the merge
+// must resolve -- a key repeated across two segments of a single transaction, and a key carried over
+// from an earlier transaction -- into two identical tablets, one down each path, and compares the
+// results row for row. Values are biased per write so the assertion pins down *which* duplicate won,
+// not merely how many survived.
+TEST_P(LakePrimaryKeyPublishTest, test_merge_dedup_matches_lookup_path) {
+    // Multi-segment rowsets, each segment carrying its own index sst: the precondition merge dedup
+    // gates on. Same recipe as test_light_compaction_publish_row_count_from_metadata.
+    ConfigResetGuard<int64_t> g_write_buffer(&config::write_buffer_size, 512);
+    ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
+    // Eager index-sst build is unsupported for the fixture's default PK encoding V1.
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    // The fixture's gen_data derives the value from the key, so a re-write of the same key is
+    // indistinguishable from the original and could not tell a right winner from a wrong one.
+    auto gen = [&](int first_key, int n, int value_bias) {
+        std::vector<int> v0(n);
+        std::vector<int> v1(n);
+        std::vector<uint8_t> v2(n, static_cast<uint8_t>(TOpType::UPSERT));
+        for (int i = 0; i < n; i++) {
+            v0[i] = first_key + i;
+            v1[i] = v0[i] * 3 + value_bias;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int8Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        c2->append_numbers(v2.data(), v2.size() * sizeof(uint8_t));
+        return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
+    };
+
+    // Writes chunks into one transaction, publishes it, and asserts the load built an index sst per
+    // segment -- without that the gate never fires and the test would compare two identical runs of
+    // the lookup path.
+    auto load = [&](int64_t tablet_id, int64_t version, const std::vector<ChunkPtr>& chunks) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_slot_pointers)
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+        CHECK_OK(dw->open());
+        for (const auto& chunk : chunks) {
+            std::vector<uint32_t> indexes(chunk->num_rows());
+            for (uint32_t i = 0; i < chunk->num_rows(); i++) {
+                indexes[i] = i;
+            }
+            CHECK_OK(dw->write(*chunk, indexes.data(), indexes.size()));
+        }
+        CHECK_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSIGN_OR_ABORT(auto wlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_GT(wlog->op_write().ssts_size(), 0);
+        ASSERT_EQ(wlog->op_write().rowset().segment_metas_size(), wlog->op_write().ssts_size());
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    };
+
+    // txn 1 seeds keys 0..239. txn 2 rewrites 100..239 and extends to 299, so its segments shadow
+    // rows already in the index. txn 3 writes two overlapping chunks in one transaction, so keys
+    // 50..149 are duplicated *within* it and the later chunk has to win.
+    auto run = [&](int64_t tablet_id) {
+        load(tablet_id, 2, {gen(0, 240, 0)});
+        load(tablet_id, 3, {gen(100, 200, 1)});
+        load(tablet_id, 4, {gen(0, 150, 2), gen(50, 150, 3)});
+        ASSIGN_OR_ABORT(auto chunk, read(tablet_id, 4));
+        std::map<int32_t, int32_t> rows;
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            rows.emplace(chunk->get(i)[0].get_int32(), chunk->get(i)[1].get_int32());
+        }
+        // A duplicate left unresolved would show up as a smaller map than the row count.
+        EXPECT_EQ(chunk->num_rows(), rows.size());
+        return rows;
+    };
+
+    std::map<int32_t, int32_t> expected;
+    for (int k = 0; k < 300; k++) {
+        int bias = 1; // txn 2 covers 100..299
+        if (k < 50) {
+            bias = 2; // txn 3's first chunk only
+        } else if (k < 200) {
+            bias = 3; // txn 3's second chunk wins over its first
+        }
+        expected[k] = k * 3 + bias;
+    }
+
+    std::map<int32_t, int32_t> lookup_rows;
+    {
+        ConfigResetGuard<bool> g_merge(&config::enable_pk_index_merge_dedup, false);
+        lookup_rows = run(_tablet_metadata->id());
+    }
+    ASSERT_EQ(expected, lookup_rows);
+
+    std::map<int32_t, int32_t> merge_rows;
+    {
+        ConfigResetGuard<bool> g_merge(&config::enable_pk_index_merge_dedup, true);
+        auto metadata = new_cloud_native_pk_tablet();
+        merge_rows = run(metadata->id());
+    }
+    ASSERT_EQ(lookup_rows, merge_rows);
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE,

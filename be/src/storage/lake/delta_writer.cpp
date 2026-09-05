@@ -125,7 +125,7 @@ public:
                              int64_t schema_id, const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
-                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
+                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn, bool shard_write,
                              std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
@@ -148,6 +148,7 @@ public:
               _bundle_writable_file_context(bundle_writable_file_context),
               _global_dicts(global_dicts),
               _is_multi_statements_txn(is_multi_statements_txn),
+              _shard_write(shard_write),
               _force_build_vector_index_inline(force_build_vector_index_inline) {}
 
     ~DeltaWriterImpl() = default;
@@ -334,6 +335,9 @@ private:
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    // See TOlapTableSink.enable_shard_write: this writer holds only PART of the tablet's rows for
+    // this transaction, so the txn log it produces must not be cached as if it were the whole thing.
+    bool _shard_write = false;
     // When true, the internal TabletWriter builds the vector index inline (overriding async
     // index_build_mode). Set by lake schema-change conversions (SortedSchemaChange) so the
     // shadow tablet's existing data is fully indexed during the ALTER, matching DirectSchemaChange.
@@ -1015,7 +1019,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         VLOG(2) << "Wrote txn log for tablet=" << _tablet_id << " txn=" << _txn_id
                 << " load_id=" << UniqueId(_load_id).to_string();
     } else {
-        if (_is_multi_statements_txn) {
+        if (_shard_write) {
+            // Under shard write this log covers only the rows THIS node received, while the cache key
+            // below claims to hold the tablet's whole transaction. publish consults that key before
+            // reading the aggregated {txn_id}.logs and would stop at this partial log, dropping every
+            // other node's data. Skipping the fill makes publish miss and read the aggregated file.
+            VLOG(2) << "Skipped caching partial shard-write txn log for tablet=" << _tablet_id << " txn=" << _txn_id;
+        } else if (_is_multi_statements_txn) {
             auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id, _load_id);
             _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
         } else {
@@ -1385,7 +1395,7 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
             _tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition, _miss_auto_increment_column,
             _db_id, _table_id, _immutable_tablet_size, _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
             _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context, _global_dicts,
-            _is_multi_statements_txn, _tablet_schema, _force_build_vector_index_inline);
+            _is_multi_statements_txn, _shard_write, _tablet_schema, _force_build_vector_index_inline);
     return std::make_unique<DeltaWriter>(impl);
 }
 
