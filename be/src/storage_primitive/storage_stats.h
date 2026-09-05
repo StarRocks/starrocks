@@ -159,6 +159,18 @@ struct OlapReaderStatistics {
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
 
+    // Concurrent data page prefetch (enable_segment_data_page_concurrent_prefetch). Prefetch time
+    // measures task start to completion; wait time is the part still visible to the scan thread.
+    // With cross-segment lookahead their difference is overlapped with reading the preceding segment.
+    // Tasks is the submitted fan-out, which the scan operator's PeakIOTasks cannot show: that counter
+    // tracks morsel-driven chunk sources, not IO issued underneath one of them.
+    int64_t data_page_prefetch_ns = 0;
+    int64_t data_page_prefetch_wait_ns = 0;
+    int64_t data_page_prefetch_blocks = 0;
+    int64_t data_page_prefetch_tasks = 0;
+    int64_t data_page_prefetch_segments = 0;
+    int64_t data_page_prefetch_lookahead_segments = 0;
+
     int64_t lake_prepared_rowsets = 0;
     int64_t lake_prepared_segments = 0;
     int64_t lake_prepared_scan_rows = 0;

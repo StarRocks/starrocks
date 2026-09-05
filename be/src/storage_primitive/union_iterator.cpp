@@ -14,16 +14,21 @@
 
 #include "storage_primitive/union_iterator.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "column/chunk.h"
+#include "common/config_rowset_fwd.h"
 
 namespace starrocks {
 
 class UnionIterator final : public ChunkIterator {
 public:
     explicit UnionIterator(std::vector<ChunkIteratorPtr> children)
-            : ChunkIterator(children[0]->schema(), children[0]->chunk_size()), _children(std::move(children)) {
+            : ChunkIterator(children[0]->schema(), children[0]->chunk_size()),
+              _children(std::move(children)),
+              _prepared(_children.size(), false),
+              _prepare_statuses(_children.size(), Status::OK()) {
 #ifndef NDEBUG
         for (auto& iter : _children) {
             const Schema& child_schema = iter->schema();
@@ -66,13 +71,54 @@ protected:
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
 
 private:
+    Status _prepare_window();
+
     std::vector<ChunkIteratorPtr> _children;
+    std::vector<bool> _prepared;
+    std::vector<Status> _prepare_statuses;
     size_t _cur_idx = 0;
+    size_t _prepared_until = 0;
     size_t _merged_rows = 0;
 };
 
+inline Status UnionIterator::_prepare_window() {
+    if (config::segment_iterator_lookahead <= 0 || _cur_idx >= _children.size()) {
+        return Status::OK();
+    }
+    const size_t window = static_cast<size_t>(std::clamp(config::segment_iterator_lookahead, 2, 4));
+
+    auto prepare_child = [&](size_t idx) -> const Status& {
+        if (!_prepared[idx]) {
+            _prepare_statuses[idx] = _children[idx]->prepare_for_read();
+            _prepared[idx] = true;
+        }
+        return _prepare_statuses[idx];
+    };
+
+    // A future child's error is stored and surfaced only when that child becomes current,
+    // after valid rows from the preceding children have been returned.
+    RETURN_IF_ERROR(prepare_child(_cur_idx));
+
+    const size_t end = std::min(_children.size(), _cur_idx + window);
+    _prepared_until = std::max(_prepared_until, _cur_idx + 1);
+    while (_prepared_until < end) {
+        (void)prepare_child(_prepared_until);
+        ++_prepared_until;
+    }
+    return Status::OK();
+}
+
 inline Status UnionIterator::do_get_next(Chunk* chunk) {
     while (_cur_idx < _children.size()) {
+        Status prepared = _prepare_window();
+        if (prepared.is_end_of_file()) {
+            _merged_rows += _children[_cur_idx]->merged_rows();
+            _children[_cur_idx]->close();
+            _children[_cur_idx].reset();
+            ++_cur_idx;
+            continue;
+        }
+        RETURN_IF_ERROR(prepared);
         Status res = _children[_cur_idx]->get_next(chunk);
         if (res.is_end_of_file()) {
             _merged_rows += _children[_cur_idx]->merged_rows();
@@ -88,6 +134,15 @@ inline Status UnionIterator::do_get_next(Chunk* chunk) {
 
 inline Status UnionIterator::do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
     while (_cur_idx < _children.size()) {
+        Status prepared = _prepare_window();
+        if (prepared.is_end_of_file()) {
+            _merged_rows += _children[_cur_idx]->merged_rows();
+            _children[_cur_idx]->close();
+            _children[_cur_idx].reset();
+            ++_cur_idx;
+            continue;
+        }
+        RETURN_IF_ERROR(prepared);
         Status res = _children[_cur_idx]->get_next(chunk, rowid);
         if (res.is_end_of_file()) {
             _merged_rows += _children[_cur_idx]->merged_rows();
@@ -103,6 +158,15 @@ inline Status UnionIterator::do_get_next(Chunk* chunk, std::vector<uint32_t>* ro
 
 inline Status UnionIterator::do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
     while (_cur_idx < _children.size()) {
+        Status prepared = _prepare_window();
+        if (prepared.is_end_of_file()) {
+            _merged_rows += _children[_cur_idx]->merged_rows();
+            _children[_cur_idx]->close();
+            _children[_cur_idx].reset();
+            ++_cur_idx;
+            continue;
+        }
+        RETURN_IF_ERROR(prepared);
         Status res = _children[_cur_idx]->get_next(chunk, rssid_rowids);
         if (res.is_end_of_file()) {
             _merged_rows += _children[_cur_idx]->merged_rows();

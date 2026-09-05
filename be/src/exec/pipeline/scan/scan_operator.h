@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "base/concurrency/race_detect.h"
 #include "base/concurrency/spinlock.h"
 #include "compute_env/pipeline/driver_scan_operator.h"
@@ -320,6 +322,17 @@ private:
 
     RuntimeProfile::Counter* _prepare_chunk_source_timer = nullptr;
     RuntimeProfile::Counter* _submit_io_task_timer = nullptr;
+
+    // How long the operator took to hand its first chunk downstream, and how much of that the
+    // first io task itself accounted for. Everything below the operator is already timed, but
+    // nothing said when the first chunk arrived -- so a change that made the scan cheaper while
+    // delaying its first delivery showed up only as FirstInputEmptyTime moving, with no way to
+    // attribute it. Set once per operator; zero means no chunk was ever produced.
+    RuntimeProfile::Counter* _first_chunk_latency_timer = nullptr;
+    RuntimeProfile::Counter* _first_io_task_timer = nullptr;
+    int64_t _first_task_submit_nano = 0;
+    bool _first_chunk_delivered = false;
+    std::atomic<bool> _first_io_task_timed{false};
 
     RuntimeMembershipFilterEvalContext _topn_filter_eval_context;
     std::unique_ptr<TopnRfBackPressure> _topn_filter_back_pressure = nullptr;

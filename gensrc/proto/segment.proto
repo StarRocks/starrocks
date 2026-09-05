@@ -270,6 +270,26 @@ message SegmentFooterPB {
     // only when enable_full_sort_key_index is on; absent otherwise. Old binaries ignore this field
     // and read short_key_index_page as before.
     optional PagePointerPB full_sort_key_index_page = 11;
+
+    // Byte range of the "small index region": one contiguous run, written immediately before
+    // this footer, holding the ordinal index and the page zone map of EVERY column plus the
+    // short key index page(s) -- i.e. exactly the indexes a cold scan must read before it can
+    // touch a single data page. In the legacy layout each column's indexes sit right after
+    // that column's own data pages, so opening a segment costs one scattered small read per
+    // column; with a block-granular cache in front of object storage each of those reads
+    // fetches (and mostly wastes) a whole cache block, one round trip at a time.
+    //
+    // Written only when config::enable_segment_tail_index_region was on at write time AND the
+    // segment was written horizontally (a single column group covering all columns). Absent
+    // otherwise, in which case the layout is exactly as before.
+    //
+    // These two fields are purely a read-side prefetch hint: every index is still located
+    // through its own absolute PagePointer in `columns`, so a reader that ignores them stays
+    // correct on either layout. Offsets use the same origin as every other PagePointer in this
+    // footer -- the segment's own start, which is bundle-file relative when this segment is a
+    // slice of a bundle file.
+    optional uint64 small_index_region_offset = 12;
+    optional uint64 small_index_region_size = 13;
 }
 
 message BTreeMetaPB {

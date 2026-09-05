@@ -30,6 +30,8 @@ public:
 
     size_t merged_rows() const override { return _child->merged_rows(); }
 
+    Status prepare_for_read() override { return _child->prepare_for_read(); }
+
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         return _child->init_encoded_schema(dict_maps);

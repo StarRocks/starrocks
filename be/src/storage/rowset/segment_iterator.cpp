@@ -24,9 +24,11 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/concurrency/countdown_latch.h"
 #include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "base/simd/simd.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
@@ -42,6 +44,7 @@
 #include "common/config_storage_fwd.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "compute_env/runtime_range_pruner.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "fs/fs.h"
@@ -205,6 +208,7 @@ public:
     ~SegmentIterator() override = default;
 
     void close() override;
+    Status prepare_for_read() override;
     Status reset_for_reuse(const SegmentReadOptions& options);
 
     // Public entry point used by the segment_seek_range_to_rowid_range() /
@@ -431,6 +435,8 @@ private:
     Status _init_internal();
     Status _init_reused_scan();
     Status _init_scan_range_and_context();
+    Status _prefetch_data_pages_concurrently();
+    void _wait_for_data_page_prefetch();
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
@@ -558,6 +564,9 @@ private:
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
     Status _init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc);
+    // The stream every column's small index reads share, or nullptr to leave them on the
+    // per-column files. Opened on first use so a scan that reads no column never opens it.
+    io::SeekableInputStream* _shared_small_index_stream();
 
     // init column iterator for virtual column like '_tablet_id_', '_rowid_'
     Status _init_virtual_column_iterator(const ColumnId cid, const std::string_view col_name);
@@ -603,6 +612,8 @@ private:
     void _build_column_oriented_rf(ScanContext* ctx);
 
 private:
+    struct DataPagePrefetchState;
+
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
 
@@ -611,6 +622,11 @@ private:
     SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     std::vector<int> _io_coalesce_column_index;
+    // cids whose `_column_files` entry is a handle on the segment file itself rather than on a
+    // delta column group file, i.e. the handles _prefetch_data_pages_concurrently may fetch
+    // through. A cachefs handle serializes on its own persist stream, so these also bound how
+    // many blocks that prefetch can fetch at once.
+    std::vector<ColumnId> _segment_file_column_index;
     ColumnDecoders _column_decoders;
     BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
@@ -628,6 +644,10 @@ private:
     roaring::api::roaring_uint32_iterator_t _roaring_iter;
 
     std::unordered_map<ColumnId, std::unique_ptr<io::SeekableInputStream>> _column_files;
+    // Backing file for _shared_small_index_stream(). One per segment iterator, buffered to the
+    // width of the segment's small index region.
+    std::unique_ptr<RandomAccessFile> _small_index_file;
+    bool _small_index_stream_unavailable = false;
 
     SparseRange<> _scan_range;
     SparseRangeIterator<> _range_iter;
@@ -667,6 +687,9 @@ private:
 
     bool _inited = false;
     bool _one_time_setup_done = false;
+    bool _prepared = false;
+    Status _prepare_status = Status::OK();
+    std::shared_ptr<DataPagePrefetchState> _data_page_prefetch_state;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
@@ -678,6 +701,31 @@ private:
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
 
     bool _enable_predicate_col_late_materialize;
+};
+
+struct SegmentIterator::DataPagePrefetchState {
+    explicit DataPagePrefetchState(size_t task_count)
+            : done(static_cast<int>(task_count)), remaining(task_count), start_ns(MonotonicNanos()) {}
+
+    void finish_task() {
+        if (remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            finish_ns.store(MonotonicNanos(), std::memory_order_release);
+        }
+        done.count_down();
+    }
+
+    CountDownLatch done;
+    std::atomic<size_t> remaining;
+    std::atomic<int64_t> finish_ns{0};
+    int64_t start_ns;
+    int64_t block_size = 0;
+    int64_t file_base = 0;
+    size_t per_task = 0;
+    int64_t submitted_tasks = 0;
+    bool lookahead = false;
+    std::string file_name;
+    std::vector<int64_t> blocks;
+    std::vector<io::SeekableInputStream*> handles;
 };
 
 // ScanContext method implementations
@@ -1033,7 +1081,29 @@ Status SegmentIterator::_init() {
     return st;
 }
 
+Status SegmentIterator::prepare_for_read() {
+    if (_prepared) {
+        return _prepare_status;
+    }
+
+    // Initializing future legacy segments would only move their serial index reads earlier and
+    // delay the current segment. Lookahead is useful only when initialization can launch the
+    // tail-layout data-page prefetch and return while those exact cache fills remain in flight.
+    if (config::segment_iterator_lookahead <= 0 || !config::enable_segment_data_page_concurrent_prefetch ||
+        _segment == nullptr || _segment->small_index_region_size() == 0 || !_opts.lake_io_opts.fill_data_cache) {
+        return Status::OK();
+    }
+
+    _prepared = true;
+    _prepare_status = _init();
+    if (_prepare_status.ok()) {
+        _inited = true;
+    }
+    return _prepare_status;
+}
+
 Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
+    _wait_for_data_page_prefetch();
     _opts.pred_tree = options.pred_tree;
     _opts.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     _opts.runtime_filter_preds = options.runtime_filter_preds;
@@ -1061,6 +1131,8 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
+    _prepared = false;
+    _prepare_status = Status::OK();
     return Status::OK();
 }
 
@@ -1171,7 +1243,204 @@ Status SegmentIterator::_init_scan_range_and_context() {
     for (auto column_index : _io_coalesce_column_index) {
         RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
     }
+    // Last, so it sees the final _scan_range: everything above only ever shrinks it, and
+    // prefetching pages that pruning already dropped would read bytes the scan never asks for.
+    RETURN_IF_ERROR(_prefetch_data_pages_concurrently());
     return Status::OK();
+}
+
+namespace {
+
+// Runs the block fills of _prefetch_data_pages_concurrently. Built on first use -- a node that
+// leaves the prefetch off never creates it -- and never torn down, so it cannot be destroyed
+// out from under a scan during shutdown. It is deliberately not one of the shared pools: its
+// threads sit blocked on a remote read for tens of milliseconds at a time, which is exactly the
+// occupancy pattern that starves a pool shared with short CPU-bound work.
+ThreadPool* data_page_prefetch_pool() {
+    static ThreadPool* pool = [] {
+        std::unique_ptr<ThreadPool> built;
+        Status st = ThreadPoolBuilder("seg_page_prefetch")
+                            .set_min_threads(0)
+                            .set_max_threads(std::max(1, config::segment_data_page_prefetch_thread_num))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .set_idle_timeout(MonoDelta::FromSeconds(60))
+                            .build(&built);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to build the segment data page prefetch pool: " << st;
+            return static_cast<ThreadPool*>(nullptr);
+        }
+        return built.release();
+    }();
+    return pool;
+}
+
+} // namespace
+
+// Fetch the cache blocks holding this segment's data pages several at a time, before the read
+// loop asks for the first one.
+//
+// On the tail layout the plan is free: parsing the footer already brought in the ordinal index
+// of every accessed column, so the absolute byte range of every page the (fully pruned)
+// _scan_range will read is known here, without a single data page having been read. Folded onto
+// cache blocks that is the exact block set the read loop is about to fetch -- the same set, not
+// a guess -- so fetching it up front cannot read a byte the scan did not need.
+//
+// What it changes is the shape of the wait. Left alone, the read loop meets those blocks one at
+// a time and a cachefs miss is one whole remote round trip, so a segment's blocks cost their
+// count times that round trip, serially. Here they cost ceil(count / fanout) of it.
+//
+// The fan-out is bounded by the file handles the scan already holds on this segment, one per
+// non-DCG column: a cachefs handle serializes on its single persist stream, so two blocks are
+// only fetched at once if they go through two handles. Every task therefore gets its own
+// handle, and blocks are deduplicated in file space so no two tasks ever race for one block --
+// a race would miss twice and turn into a genuinely extra remote read.
+Status SegmentIterator::_prefetch_data_pages_concurrently() {
+    _wait_for_data_page_prefetch();
+    if (!config::enable_segment_data_page_concurrent_prefetch) {
+        return Status::OK();
+    }
+    // Only free on the tail layout. On the legacy layout the per-column indexes sit at N
+    // scattered offsets, so learning what to prefetch costs N serial remote round trips -- the
+    // very chain this exists to collapse.
+    if (_segment == nullptr || _segment->small_index_region_size() == 0) {
+        return Status::OK();
+    }
+    // The fills pay off only through the reads that follow hitting the block cache. With the
+    // fill disabled they would go remote and still leave every one of those reads to go remote.
+    if (!_opts.lake_io_opts.fill_data_cache) {
+        return Status::OK();
+    }
+    if (_scan_range.empty() || _segment_file_column_index.empty()) {
+        return Status::OK();
+    }
+    ThreadPool* pool = data_page_prefetch_pool();
+    if (pool == nullptr) {
+        return Status::OK();
+    }
+
+    int64_t block_size = config::starlet_fs_stream_buffer_size_bytes;
+    if (block_size <= 0) {
+        block_size = 1024 * 1024;
+    }
+    // Page offsets are relative to the segment; when it is a slice of a bundle file the cache
+    // blocks are cut in the enclosing file's address space. Plan in that space, or the block
+    // boundaries land mid-block and two tasks end up sharing one.
+    const int64_t file_base = _segment->file_info().bundle_file_offset.value_or(0);
+
+    std::vector<int64_t> blocks;
+    std::vector<io::SeekableInputStream*> handles;
+    for (ColumnId cid : _segment_file_column_index) {
+        auto file_iter = _column_files.find(cid);
+        if (file_iter == _column_files.end() || file_iter->second == nullptr) {
+            continue;
+        }
+        handles.emplace_back(file_iter->second.get());
+        // Complex-type and cast iterators answer get_io_range_vec by decoding offsets out of a
+        // destination column, which needs one and reads data pages to fill it. Their blocks stay
+        // for the read loop; the columns that can be planned still get prefetched.
+        if (cid >= _column_iterators.size() || _column_iterators[cid] == nullptr ||
+            !_column_iterators[cid]->supports_io_range_planning()) {
+            continue;
+        }
+        ASSIGN_OR_RETURN(auto ranges, _column_iterators[cid]->get_io_range_vec(_scan_range, nullptr));
+        for (const auto& [offset, size] : ranges) {
+            if (size <= 0) {
+                continue;
+            }
+            const int64_t first = (file_base + offset) / block_size;
+            const int64_t last = (file_base + offset + size - 1) / block_size;
+            for (int64_t block = first; block <= last; ++block) {
+                blocks.emplace_back(block);
+            }
+        }
+    }
+    std::sort(blocks.begin(), blocks.end());
+    blocks.erase(std::unique(blocks.begin(), blocks.end()), blocks.end());
+
+    const int configured = std::max(1, config::segment_data_page_prefetch_concurrency);
+    const size_t fanout = std::min({static_cast<size_t>(configured), handles.size(), blocks.size()});
+    if (fanout == 0 || (fanout == 1 && !_prepared)) {
+        // A single task cannot overlap work inside this segment, so the ordinary read path avoids
+        // a round trip through the pool. During lookahead preparation it can still overlap with
+        // the other prepared segments, which is the common shape for narrow small-segment scans.
+        return Status::OK();
+    }
+
+    auto state = std::make_shared<DataPagePrefetchState>(fanout);
+    state->block_size = block_size;
+    state->file_base = file_base;
+    state->per_task = (blocks.size() + fanout - 1) / fanout;
+    state->lookahead = _prepared;
+    state->file_name = _segment->file_name();
+    state->blocks = std::move(blocks);
+    state->handles = std::move(handles);
+
+    // Contiguous slices rather than round-robin, so each task walks blocks that are next to each
+    // other and any block a touch_cache call overreaches into is one its own task fetches next.
+    auto fill_slice = [](const std::shared_ptr<DataPagePrefetchState>& state, size_t task) {
+        const size_t begin = task * state->per_task;
+        const size_t end = std::min(state->blocks.size(), begin + state->per_task);
+        io::SeekableInputStream* handle = state->handles[task];
+        for (size_t i = begin; i < end; ++i) {
+            // Back to segment-relative bytes, clipped to the block so the call cannot spill into
+            // a neighbour that another task owns.
+            const int64_t start = std::max<int64_t>(0, state->blocks[i] * state->block_size - state->file_base);
+            const int64_t stop = (state->blocks[i] + 1) * state->block_size - state->file_base;
+            if (stop <= start) {
+                continue;
+            }
+            // Best effort: a block left unfetched is one the read loop fetches itself, as before.
+            if (Status st = handle->touch_cache(start, stop - start); !st.ok()) {
+                VLOG(2) << "data page prefetch failed for " << state->file_name << " at " << start << ": " << st;
+                break;
+            }
+        }
+    };
+
+    int64_t submitted = 0;
+    for (size_t task = 0; task < fanout; ++task) {
+        Status st = pool->submit_func([state, task, fill_slice]() {
+            fill_slice(state, task);
+            state->finish_task();
+        });
+        if (st.ok()) {
+            ++submitted;
+        } else {
+            // Pool saturated. Run the slice here instead of leaving its blocks to the read loop,
+            // so the block set stays whole; it just does not overlap with the rest.
+            fill_slice(state, task);
+            state->finish_task();
+        }
+    }
+    state->submitted_tasks = submitted;
+    _data_page_prefetch_state = std::move(state);
+
+    // With lookahead, UnionIterator initializes the next few children now and each child waits
+    // only when it becomes current. Without it, retain the old submit-and-wait behavior.
+    if (config::segment_iterator_lookahead <= 0) {
+        _wait_for_data_page_prefetch();
+    }
+    return Status::OK();
+}
+
+void SegmentIterator::_wait_for_data_page_prefetch() {
+    if (_data_page_prefetch_state == nullptr) {
+        return;
+    }
+    auto state = std::move(_data_page_prefetch_state);
+    const int64_t wait_start_ns = MonotonicNanos();
+    state->done.wait();
+    const int64_t wait_ns = MonotonicNanos() - wait_start_ns;
+    const int64_t finish_ns = state->finish_ns.load(std::memory_order_acquire);
+
+    _opts.stats->data_page_prefetch_ns += std::max<int64_t>(0, finish_ns - state->start_ns);
+    _opts.stats->data_page_prefetch_wait_ns += wait_ns;
+    _opts.stats->data_page_prefetch_blocks += static_cast<int64_t>(state->blocks.size());
+    _opts.stats->data_page_prefetch_tasks += state->submitted_tasks;
+    _opts.stats->data_page_prefetch_segments += 1;
+    if (state->lookahead) {
+        _opts.stats->data_page_prefetch_lookahead_segments += 1;
+    }
 }
 
 Status SegmentIterator::_init_reused_scan() {
@@ -2014,6 +2283,62 @@ Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const 
     return Status::OK();
 }
 
+// One buffered stream for every column's small index reads, so that the tail index region is
+// fetched once instead of once per column.
+//
+// This is what makes the region pay off without a block cache. prefetch_small_index_region_once()
+// warms the cache and is therefore a no-op for a scan that bypasses it, but the region is
+// contiguous either way -- so a single stream whose buffer spans it turns the first column's read
+// into the only remote one. BufferInputStream fills forward from the read position and keeps its
+// buffer across any seek that lands inside the filled extent (buffer_stream.cc), which is exactly
+// the access pattern here: ascending offsets within one region.
+//
+// Returns nullptr, leaving every column on its own file, when there is no region to exploit. In
+// the legacy layout the indexes sit behind their own column's data pages, megabytes apart, so
+// consecutive reads would fall outside the window and each pay a discard and a refill.
+//
+// Not thread safe, and neither is the stream it hands out: BufferInputStream has a single buffer
+// and no locking. Safe today because both callers walk the columns serially --
+// _init_column_iterators() and _get_row_ranges_by_zone_map(). Parallelizing either means giving
+// each worker its own stream.
+io::SeekableInputStream* SegmentIterator::_shared_small_index_stream() {
+    if (_small_index_file != nullptr) {
+        return _small_index_file.get();
+    }
+    if (_small_index_stream_unavailable) {
+        return nullptr;
+    }
+    // Decided once per segment iterator; the flag keeps a failed or declined open from being
+    // retried for every column.
+    _small_index_stream_unavailable = true;
+
+    if (!config::enable_segment_shared_small_index_stream) {
+        return nullptr;
+    }
+    const uint64_t region_size = _segment->small_index_region_size();
+    if (region_size == 0) {
+        return nullptr;
+    }
+
+    const int64_t max_buffer = config::segment_shared_small_index_stream_max_buffer_bytes;
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
+                                 .buffer_size = std::min(static_cast<int64_t>(region_size), max_buffer),
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
+    if (const auto* encryption_info = _segment->encryption_info(); encryption_info != nullptr) {
+        opts.encryption_info = *encryption_info;
+    }
+    auto res = _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info());
+    if (!res.ok()) {
+        // Not fatal: the per-column files are still there and still correct, only slower.
+        LOG(WARNING) << "failed to open shared small index stream for " << _segment->file_name() << ": "
+                     << res.status();
+        return nullptr;
+    }
+    _small_index_file = std::move(res).value();
+    _small_index_stream_unavailable = false;
+    return _small_index_file.get();
+}
+
 Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
@@ -2058,6 +2383,15 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             opts.encryption_info = *encryption_info;
         }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
+        // Warm the segment's small index region before its first per-column index load. Doing
+        // it here rather than in Segment::open() means only segments that survived
+        // segment-level zone map pruning pay for it, and the once_flag inside collapses the
+        // repeat calls this site would otherwise make -- one per column.
+        _segment->prefetch_small_index_region_once(rfile.get(), _opts.lake_io_opts.fill_data_cache);
+        // Small index reads go to the shared stream; data pages stay on this column's own file.
+        // Routing the data pages here too would evict the region from the very buffer this exists
+        // to hold.
+        iter_opts.index_read_file = _shared_small_index_stream();
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
@@ -2074,6 +2408,9 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         } else {
             iter_opts.read_file = rfile.get();
             _column_files[cid] = std::move(rfile);
+            // Only the plain handle can be prefetched through: touch_cache on the coalescing
+            // stream is a no-op, that path plans its own IO via convert_sparse_range_to_io_range.
+            _segment_file_column_index.emplace_back(cid);
         }
     } else {
         // create delta column iterator
@@ -2888,10 +3225,14 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk) {
+    if (_prepared && !_prepare_status.ok()) {
+        return _prepare_status;
+    }
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
+    _wait_for_data_page_prefetch();
 
     RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
@@ -2916,10 +3257,14 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    if (_prepared && !_prepare_status.ok()) {
+        return _prepare_status;
+    }
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
+    _wait_for_data_page_prefetch();
 
     RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
@@ -2933,10 +3278,14 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) {
+    if (_prepared && !_prepare_status.ok()) {
+        return _prepare_status;
+    }
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
+    _wait_for_data_page_prefetch();
 
     RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
@@ -4987,6 +5336,9 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
 }
 
 void SegmentIterator::close() {
+    // Future children may be closed before they become current (LIMIT, cancellation, error).
+    // Their tasks hold raw pointers to the column streams, so join them before releasing files.
+    _wait_for_data_page_prefetch();
     if (_del_vec) {
         _del_vec.reset();
     }
@@ -5006,6 +5358,10 @@ void SegmentIterator::close() {
             rfile.reset();
         }
     }
+    if (_small_index_file != nullptr) {
+        _update_stats(_small_index_file.get());
+        _small_index_file.reset();
+    }
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
@@ -5017,6 +5373,8 @@ void SegmentIterator::close() {
     }
     _one_time_setup_done = false;
     _inited = false;
+    _prepared = false;
+    _prepare_status = Status::OK();
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late

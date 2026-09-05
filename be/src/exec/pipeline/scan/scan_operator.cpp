@@ -114,6 +114,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
     _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
     _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
+    _first_chunk_latency_timer = ADD_TIMER(_unique_metrics, "TimeToFirstChunk");
+    _first_io_task_timer = ADD_TIMER(_unique_metrics, "FirstIOTaskTime");
 
     const bool fe_enable_back_pressure = _scan_node->is_enable_topn_filter_back_pressure();
     // FE suppresses back-pressure for this scan when the TopN RF only reaches it across a
@@ -403,6 +405,12 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     ChunkPtr res = get_chunk_from_buffer();
     if (res != nullptr) {
+        if (!_first_chunk_delivered) {
+            _first_chunk_delivered = true;
+            // _first_task_submit_nano is set before any task runs, so this covers the whole
+            // path: queueing, the io task, and the wait for the driver to be scheduled again.
+            COUNTER_SET(_first_chunk_latency_timer, MonotonicNanos() - _first_task_submit_nano);
+        }
         begin_pull_chunk(res);
         // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
         auto [owner_id, is_eos] = _should_emit_eos(res);
@@ -584,6 +592,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     }
 
     COUNTER_UPDATE(_submit_task_counter, 1);
+    if (_first_task_submit_nano == 0) {
+        _first_task_submit_nano = MonotonicNanos();
+    }
     _chunk_sources[chunk_source_index]->pin_chunk_token(std::move(buffer_token));
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
@@ -619,6 +630,17 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             auto notify = scan_defer_notify(this);
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
             SCOPED_TIMER(chunk_source->io_task_exec_timer());
+
+            // The first task to finish records its own duration. io_task_exec_timer is a sum over
+            // every task, which cannot say whether the first chunk was late because that one task
+            // was slow or because the operator waited to submit it.
+            const int64_t io_task_exec_start_nano = MonotonicNanos();
+            DeferOp first_io_task_defer([this, io_task_exec_start_nano]() {
+                bool expected = false;
+                if (_first_io_task_timed.compare_exchange_strong(expected, true)) {
+                    COUNTER_SET(_first_io_task_timer, MonotonicNanos() - io_task_exec_start_nano);
+                }
+            });
 
             int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
             int64_t prev_scan_rows = chunk_source->get_scan_rows();

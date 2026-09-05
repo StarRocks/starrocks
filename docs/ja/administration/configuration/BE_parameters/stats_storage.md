@@ -425,6 +425,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 生成された rowset の正確性を検証するかどうか。 有効にすると、コンパクションとスキーマ変更後に生成された rowset の正確性がチェックされます。
 - 導入バージョン: -
 
+### enable_segment_shared_small_index_stream
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether every column's small index reads in a segment -- its ordinal index and page zone map -- share a single buffered stream, so that the tail index region (see `enable_segment_tail_index_region`) is fetched once for the segment instead of once per column. This is what makes the region pay off for a query that does not use the data cache, such as one run with `skip_local_disk_cache` or against a table with `datacache.enable` set to false: `enable_segment_tail_index_prefetch` helps only by warming the cache, so it has nothing to offer such a query, which still spends one request per column on indexes that are now next to each other. Sharing one stream turns the first column's read into the only remote one and serves the rest from its buffer. Has no effect on segments written without a tail index region, where the indexes are too far apart for one buffer to span. Data pages and the large optional indexes (bloom filter, bitmap, inverted, vector) are unaffected and keep reading through their own column's file.
+- Introduced in: v4.2.0
+
+### enable_segment_tail_index_prefetch
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 末尾インデックス領域を持つ segment（`enable_segment_tail_index_region` を参照）を開く際、その領域全体を 1 回の読み取りで取得し、後続の列ごとのインデックス読み込みが個別にリクエストを発行せず Data Cache から返るようにするかどうか。末尾インデックス領域を持たない segment は影響を受けません。また、次の場合もプリフェッチはスキップされます: その読み取りが Data Cache を埋めない場合、領域が `segment_tail_index_prefetch_max_bytes` より大きい場合、そして footer の読み取りで領域全体がすでに取得済みの場合（領域の先頭がファイル末尾の cache block 内にあるときで、列数の少ないテーブルでは通常こうなります）。`false` に設定すると、データを書き換えずにプリフェッチのみを無効化できます。
+- 導入バージョン: v4.2.0
+
+### enable_segment_tail_index_region
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: segment の書き込み時に、各列の ordinal index とページ単位の zone map を short key index とともに、segment footer の直前の 1 つの連続領域に配置するかどうか（従来は各列のインデックスをその列のデータページの直後に書き込みます）。クエリはデータページを読む前にこれらのインデックスを読み込む必要があるため、まとめて配置することで 1 回の読み取りですべてを取得できます。これは主に共有データクラスタのコールドクエリのレイテンシを下げます。従来は分散した各インデックス読み取りがそれぞれオブジェクトストレージへのリクエストを必要としていました。本設定は書き込み側のみを制御します。segment footer を書き出すすべての書き込み経路がこの領域を生成し、垂直 Compaction と部分列更新の書き換えも含まれます。垂直書き込みでは、書き終えた各列のインデックスライタが列グループをまたいで保持され、最後にまとめて書き出されるため、先行する列グループのインデックスも末尾に配置されます。どちらのレイアウトも任意のバージョンの BE / CN が双方向に読み取れ、同一テーブル内に混在できるため、データを書き換えずにいつでも有効化・無効化できます。
+- 導入バージョン: v4.2.0
+
 ### enable_size_tiered_compaction_strategy
 
 - デフォルト: true
@@ -946,6 +973,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: レプリケーションに使用される最大スレッド数。`0` は、スレッド数を BE CPU コア数の 4 倍に設定することを示します。
 - 導入バージョン: v3.3.5
+
+### segment_shared_small_index_stream_max_buffer_bytes
+
+- Default: 4194304
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum buffer size for the shared small index stream enabled by `enable_segment_shared_small_index_stream`. The buffer is normally sized to the segment's tail index region so that one fill covers it; a region larger than this gets a buffer of this size instead, so it is read in a few requests rather than one per column.
+- Introduced in: v4.2.0
+
+### segment_tail_index_prefetch_max_bytes
+
+- デフォルト: 16777216
+- タイプ: Int64
+- 単位: Bytes
+- 変更可能: Yes
+- 説明: `enable_segment_tail_index_prefetch` が 1 回の読み取りで取得する segment 末尾インデックス領域の上限サイズ。列数が非常に多いテーブルでは、1 つのクエリが必要とする量をはるかに超える領域が生成されることがあり、その場合は領域全体を読むことで無駄になるバイト数が、削減できるリクエスト数を上回ります。この上限を超える領域のインデックスは、従来のレイアウトと同様に列ごとに読み取られます。
+- 導入バージョン: v4.2.0
 
 ### size_tiered_level_multiple
 

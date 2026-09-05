@@ -190,6 +190,7 @@ public:
     const std::vector<VariantTuple>& get_sort_key_samples() const { return _sort_key_samples; }
 
 private:
+    Status _write_small_index_region(uint64_t* index_size);
     Status _write_short_key_index();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
@@ -216,6 +217,22 @@ private:
     // test), so both indexes have one entry per block with matching num_items / rows-per-block.
     std::unique_ptr<ShortKeyIndexBuilder> _full_sort_key_index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
+    // Column writers whose ordinal index and page zone map have NOT been written yet,
+    // accumulated across every finalize_columns() call and flushed as one contiguous
+    // region by finalize_footer(). A vertical writer calls finalize_columns() once per
+    // column group, so an early group's indexes can only reach the tail by surviving
+    // until the last group's data is on disk. Only the ordinal-index and zone-map
+    // builders are held, which the 1 GB max_segment_file_size caps at single-digit MB
+    // per segment regardless of column count (pages are cut on uncompressed size, so a
+    // wider schema simply means fewer pages per column).
+    std::vector<std::unique_ptr<ColumnWriter>> _deferred_small_index_writers;
+    bool _small_index_region_deferred = false;
+    // Set by whichever column group carries the key columns, consumed when the region is
+    // written. _has_key cannot be used at that point: init() reassigns it per column group,
+    // so a vertical writer ends with _has_key == false (its last group holds value columns)
+    // and the short key index would silently never be written -- leaving the footer without
+    // short_key_index_page and breaking key-range pruning on read.
+    bool _short_key_index_pending = false;
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;

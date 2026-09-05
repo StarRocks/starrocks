@@ -16,6 +16,10 @@
 
 namespace starrocks {
 
+Status ChunkIterator::prepare_for_read() {
+    return Status::OK();
+}
+
 class TimedChunkIterator final : public ChunkIterator {
 public:
     TimedChunkIterator(ChunkIteratorPtr iter, RuntimeProfile::Counter* counter)
@@ -30,6 +34,11 @@ public:
     }
 
     size_t merged_rows() const override { return _iter->merged_rows(); }
+
+    Status prepare_for_read() override {
+        SCOPED_RAW_TIMER(&_cost);
+        return _iter->prepare_for_read();
+    }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
