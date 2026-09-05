@@ -115,6 +115,38 @@ public class StorageVolumeTest {
     }
 
     @Test
+    public void testSseCRejectedOnCreate() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
+        storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
+        storageParams.put(CloudConfigurationConstants.AWS_S3_SSE_TYPE, "sse-c");
+        // Even with a valid key, storage volumes must reject SSE-C.
+        storageParams.put(CloudConfigurationConstants.AWS_S3_SSE_KEY,
+                java.util.Base64.getEncoder().encodeToString(
+                        "0123456789abcdef0123456789abcdef".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        Assertions.assertThrows(DdlException.class, () ->
+                new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"), storageParams, true, ""));
+    }
+
+    @Test
+    public void testSseCRejectedOnAlter() throws AnalysisException, DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
+        storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
+        StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
+                storageParams, true, "");
+
+        Map<String, String> alterParams = new HashMap<>();
+        alterParams.put(CloudConfigurationConstants.AWS_S3_SSE_TYPE, "sse-c");
+        Assertions.assertThrows(SemanticException.class, () -> sv.setCloudConfiguration(alterParams));
+    }
+
+    @Test
     public void testAWSSimpleCredential() throws AnalysisException, DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
