@@ -345,6 +345,67 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("TSample", issues[0].container)
             self.assertEqual(2, issues[0].field_number)
 
+    def test_parquet_schema_remains_selected_and_checked(self) -> None:
+        module = _load_module()
+        self.assertTrue(module._is_schema_path("gensrc/thrift/parquet.thrift"))
+        self.assertTrue(module._is_schema_path("gensrc/thrift/Descriptors.thrift"))
+        self.assertTrue(module._is_schema_path("gensrc/thrift/parquet_extra.thrift"))
+        self.assertTrue(module._is_schema_path("gensrc/proto/parquet.proto"))
+        base = "union LogicalType {\n14: UUIDType UUID\n}\nstruct BoundingBox {\n1: required double xmin;\n}\n"
+        head = base.replace("14: UUIDType UUID", "14: UUIDType UUID\n17: GeometryType GEOMETRY\n"
+                            "18: GeographyType GEOGRAPHY")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            path = repo / "gensrc/thrift/parquet.thrift"
+            path.write_text(base)
+            self._commit_all(repo, "base")
+            self._run_git(repo, "tag", "before-geo")
+            cases = [
+                (head, []),
+                (head.replace("required double xmin", "required i64 xmin"), ["field_type_changed"]),
+                (head.replace("1: required double xmin;", ""), ["field_deleted"]),
+                (head.replace("1: required double xmin", "2: required double xmin"), ["field_renumbered"]),
+                (head.replace("14: UUIDType UUID", "14: StringType UUID"), ["unsupported_syntax"]),
+                (head.replace("17: GeometryType", "14: GeometryType"), ["unsupported_syntax"]),
+                (head.replace("18: GeographyType GEOGRAPHY", ""), ["unsupported_syntax"]),
+                (head.replace("14: UUIDType UUID", "14: StringType UUID")
+                     .replace("required double xmin", "required i64 xmin"),
+                 ["field_type_changed", "unsupported_syntax"]),
+            ]
+            for content, expected in cases:
+                path.write_text(content)
+                self._commit_all(repo, "mutation")
+                for mode in ("changed", "full"):
+                    with self.subTest(mode=mode, content=content):
+                        self.assertIn("gensrc/thrift/parquet.thrift",
+                                      module.select_schema_paths(repo, mode, "before-geo"))
+                        self.assertEqual(expected, sorted(issue.rule for issue in
+                                                         module.check_repo(repo, mode=mode, base="before-geo")))
+            path.write_text(head)
+            self._commit_all(repo, "geo")
+            # Once present, the approved alternatives cannot be removed or changed.
+            for content in (base, head.replace("17: GeometryType", "17: StringType")):
+                path.write_text(content)
+                self.assertEqual(["unsupported_syntax"],
+                                 [issue.rule for issue in module.check_repo(repo, mode="full", base="HEAD")])
+
+    def test_parquet_required_field_waivers_are_narrow(self) -> None:
+        module = _load_module()
+        waivers = module.load_waivers(MODULE_PATH.parent / "schema_compatibility_waivers.json")
+        parquet_waivers = [w for w in waivers if w.path == "gensrc/thrift/parquet.thrift"]
+        self.assertEqual(4, len(parquet_waivers))
+        for number, name in enumerate(("xmin", "xmax", "ymin", "ymax"), 1):
+            issue = module.Violation(path="gensrc/thrift/parquet.thrift", container="BoundingBox",
+                                     field_number=number, field_name=name, rule="new_field_must_be_optional",
+                                     detail="", remediation="")
+            self.assertIsNotNone(module._match_waiver(issue, parquet_waivers))
+            for rule in ("field_deleted", "field_type_changed", "field_renumbered"):
+                issue = module.Violation(path="gensrc/thrift/parquet.thrift", container="BoundingBox",
+                                         field_number=number, field_name=name, rule=rule,
+                                         detail="", remediation="")
+                self.assertIsNone(module._match_waiver(issue, parquet_waivers))
+
     def test_changed_mode_rejects_unsupported_thrift_union_change(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:
