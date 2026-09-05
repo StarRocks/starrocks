@@ -277,6 +277,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **タイプ**: Boolean
 * **導入バージョン**: `v3.2.0`
 
+### cbo_derive_predicate_null_alternative
+
+* **説明**: `IS NULL` または NULL セーフ等価（`<=>`）条件を含む `OR` 述語から、オプティマイザが追加のスキャンフィルタを導出できるかどうか。たとえば、`WHERE (v1 = 1 AND v2 = 2) OR (v1 IS NULL AND v2 = 4)` からは追加で `(v1 = 1) OR (v1 IS NULL)` が導出され、パーティションプルーニングとデータスキップのためにスキャンへプッシュダウンされます。決して真になり得ない条件（例：`v1 <=> NULL AND v1 = 3`）はデータを読み取らずに空の結果を返します。この変数はクエリ結果には影響せず、スキャンするデータ量のみに影響します。
+* **スコープ**: Session
+* **デフォルト**: `true`
+* **タイプ**: Boolean
+* **導入バージョン**: -
+
 ### cbo_disabled_rules
 
 * **説明**: 現在のセッションで無効にするオプティマイザルール名のカンマ区切りリスト。各名前は `RuleType` 列挙値に一致する必要があり、無効化できるのは名前が `TF_`（変換ルール）または `GP_`（グループ結合ルール）で始まるルールのみです。セッション変数は `SessionVariable` に格納され（`getCboDisabledRules` / `setCboDisabledRules`）、オプティマイザは `OptimizerOptions.applyDisableRuleFromSessionVariable()` を通じて適用します。同関数はリストを解析し、対応するルールスイッチをクリアしてプランニング時にそれらのルールをスキップします。SET ステートメントを通じて設定された場合、値は検証され、サーバは不明な名前や `TF_`/`GP_` で始まらない名前を明確なエラーメッセージ（例: "Unknown rule name(s): ..." や "Only TF_ ... and GP_ ... can be disabled"）で拒否します。プランナ実行時には不明なルール名は警告とともに無視されます（"Ignoring unknown rule name: ... (may be from different version)" とログに残る）。名前は列挙子識別子と正確に一致する必要があります（大文字小文字を区別）。名前の前後の空白はトリムされ、空のエントリは無視されます。

@@ -1,0 +1,75 @@
+-- name: test_null_predicate_derive
+DROP DATABASE IF EXISTS test_null_predicate_derive;
+CREATE DATABASE test_null_predicate_derive;
+USE test_null_predicate_derive;
+
+CREATE TABLE t_fact (
+    k1 int,
+    v1 int
+) ENGINE=OLAP
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_fact VALUES (1, 1), (2, 2), (3, NULL), (4, 5), (5, NULL);
+
+CREATE TABLE t_dim (
+    d1 int,
+    name varchar(10)
+) ENGINE=OLAP
+DUPLICATE KEY(d1)
+DISTRIBUTED BY HASH(d1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_dim VALUES (1, 'x'), (2, 'y'), (5, 'z');
+
+-- OR branch constrained only by IS NULL
+select k1, v1 from t_fact where (v1 = 1 and k1 = 1) or (v1 is null and k1 = 3) order by k1;
+
+-- OR branch constrained only by <=> NULL
+select k1, v1 from t_fact where (v1 <=> null and k1 = 3) or (v1 = 2 and k1 = 2) order by k1;
+
+-- <=> with a non-null constant
+select k1, v1 from t_fact where (v1 <=> 5 and k1 = 4) or (v1 = 1 and k1 = 1) order by k1;
+
+-- NULL alternative eliminated by a null-rejecting conjunct: NULL rows must not pass,
+-- the value row must stay
+select k1, v1 from t_fact where (v1 = 1 or v1 is null) and v1 <= 10 order by k1;
+
+-- pure OR: the NULL alternative must be kept
+select k1, v1 from t_fact where v1 = 2 or v1 is null order by k1;
+
+-- contradictions fold to empty
+select k1 from t_fact where v1 <=> null and v1 = 3;
+select k1 from t_fact where v1 > 0 and v1 is null;
+
+-- inner join: NULL fact rows never join, value rows survive the derived filter
+select a.k1, a.v1, b.name from t_fact a join t_dim b on a.v1 = b.d1 where (a.v1 = 1 or a.v1 is null) and a.v1 <= 10 order by a.k1;
+
+-- left join: NULL fact rows are preserved-side rows and must survive
+select a.k1, a.v1, b.name from t_fact a left join t_dim b on a.v1 = b.d1 where (a.v1 = 2 or a.v1 is null) order by a.k1;
+
+-- full outer join with a never-true ON: nothing matches, all rows from both sides are null-extended
+select a.k1, a.v1, b.d1, b.name from t_fact a full join t_dim b on a.v1 = b.d1 and b.d1 <=> null and b.d1 = 3 order by a.k1, b.d1;
+
+-- null-aware NOT IN: the subquery keeps its NULL rows, NOT IN over them returns nothing
+select k1 from t_fact where v1 not in (select v1 from t_fact where v1 <=> null) order by k1;
+
+-- constant NOT IN a subquery whose filter admits NULL: still empty because of the NULL rows
+select k1, v1 from t_fact where 4 not in (select v1 from t_fact where v1 = 2 or v1 is null) order by k1;
+
+-- NOT IN over a NULL-free subquery filtered by <=>: plain anti-join
+select k1, v1 from t_fact where v1 not in (select d1 from t_dim where d1 <=> 2) order by k1;
+
+-- the same queries with the derivation disabled must return the same rows
+set cbo_derive_predicate_null_alternative = false;
+select k1, v1 from t_fact where (v1 = 1 and k1 = 1) or (v1 is null and k1 = 3) order by k1;
+select k1, v1 from t_fact where (v1 = 1 or v1 is null) and v1 <= 10 order by k1;
+select k1, v1 from t_fact where v1 = 2 or v1 is null order by k1;
+select k1 from t_fact where v1 <=> null and v1 = 3;
+select a.k1, a.v1, b.name from t_fact a left join t_dim b on a.v1 = b.d1 where (a.v1 = 2 or a.v1 is null) order by a.k1;
+select a.k1, a.v1, b.d1, b.name from t_fact a full join t_dim b on a.v1 = b.d1 and b.d1 <=> null and b.d1 = 3 order by a.k1, b.d1;
+select k1 from t_fact where v1 not in (select v1 from t_fact where v1 <=> null) order by k1;
+select k1, v1 from t_fact where 4 not in (select v1 from t_fact where v1 = 2 or v1 is null) order by k1;
+select k1, v1 from t_fact where v1 not in (select d1 from t_dim where d1 <=> 2) order by k1;
+set cbo_derive_predicate_null_alternative = true;
