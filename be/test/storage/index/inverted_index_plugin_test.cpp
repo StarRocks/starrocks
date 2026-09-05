@@ -134,6 +134,24 @@ TEST(InvertedIndexPluginTest, option_test) {
         ASSERT_EQ(INVERTED_INDEX_PARSER_SMART, get_parser_mode_string_from_properties(props));
     }
 
+    // Test strict Tantivy analyzer resolution and fixed snapshot preference.
+    {
+        std::map<std::string, std::string> props{{INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_IK}};
+        ASSERT_EQ("ik_max_word", get_tantivy_analyzer_definition(props).value());
+
+        props[INVERTED_INDEX_PARSER_MODE_KEY] = INVERTED_INDEX_PARSER_SMART;
+        ASSERT_EQ("ik_smart", get_tantivy_analyzer_definition(props).value());
+
+        props[INVERTED_INDEX_ANALYZER_DEFINITION_KEY] =
+                "{\"tokenizer\":{\"type\":\"ngram\","
+                "\"min_gram\":2,\"max_gram\":3}}";
+        ASSERT_EQ(props[INVERTED_INDEX_ANALYZER_DEFINITION_KEY], get_tantivy_analyzer_definition(props).value());
+
+        props.erase(INVERTED_INDEX_ANALYZER_DEFINITION_KEY);
+        props[INVERTED_INDEX_PARSER_KEY] = "unknown";
+        ASSERT_FALSE(get_tantivy_analyzer_definition(props).ok());
+    }
+
     // Test get_parser_string_from_properties
     {
         std::map<std::string, std::string> props;

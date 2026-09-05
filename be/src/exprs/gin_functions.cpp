@@ -33,23 +33,16 @@ namespace {
 
 struct TokenizeState {
     bool use_tantivy = true;
-    std::string tokenizer_name;
+    TantivyAnalyzerGuard analyzer;
     std::unique_ptr<lucene::analysis::Analyzer> clucene_analyzer;
 };
 
 Status configure_tantivy_tokenizer(const Slice& method, TokenizeState* state) {
-    const std::string method_name = method.to_string();
-    if (method == "english" || method == "standard" || method == "jieba" || method == "ik" || method == "ik_smart" ||
-        method_name.rfind("ngram:", 0) == 0) {
-        state->tokenizer_name = method_name;
-    } else if (method == "chinese" || method == "cjk") {
-        state->tokenizer_name = "cjk";
-    } else {
-        return Status::NotSupported(
-                "Unknown Tantivy tokenizer '" + method.to_string() +
-                "'. Supported tokenizers are: 'english', 'standard', 'chinese', 'cjk', 'jieba', 'ik', "
-                "'ik_smart', 'ngram:<min_gram>:<max_gram>'.");
-    }
+    std::string definition = method.to_string();
+    tb::RustResult result = tb::tantivy_create_analyzer(definition.c_str(), "");
+    TantivyResultGuard result_guard(result);
+    RETURN_IF_ERROR(tantivy_status_from_error(result));
+    state->analyzer = TantivyAnalyzerGuard(result.value.ptr);
     return Status::OK();
 }
 
@@ -72,8 +65,8 @@ Status configure_clucene_tokenizer(const Slice& method, TokenizeState* state) {
 
 Status append_tantivy_tokens(const TokenizeState& state, const Slice& data, BinaryColumn* elements, uint32_t* offset) {
     tb::RustStringArray output{};
-    tb::RustResult result = tb::tantivy_tokenize(state.tokenizer_name.c_str(),
-                                                 reinterpret_cast<const uint8_t*>(data.data), data.size, &output);
+    tb::RustResult result = tb::tantivy_analyzer_tokenize(
+            state.analyzer.get(), reinterpret_cast<const uint8_t*>(data.data), data.size, &output);
     TantivyResultGuard result_guard(result);
     if (!result.success) {
         if (output.ptr != nullptr) {
@@ -124,6 +117,9 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
     }
 
     auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(tokenizer_column);
+    if (!method.empty() && method.data[0] == '{') {
+        state->use_tantivy = true;
+    }
     if (state->use_tantivy) {
         RETURN_IF_ERROR(configure_tantivy_tokenizer(method, state.get()));
     } else {

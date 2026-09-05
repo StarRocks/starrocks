@@ -98,6 +98,7 @@ import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.ApplyTuningGuideRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
+import com.starrocks.sql.optimizer.rule.tree.CountOnIndexRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.EliminateOveruseColumnAccessPathRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
@@ -919,6 +920,9 @@ public class QueryOptimizer extends Optimizer {
         // that this switch can't turned on after logical optimization, so we only determine
         // whether the PreAggregate can be turned on in the final
         result = new PreAggregateTurnOnRule().rewrite(result, rootTaskContext);
+        if (connectContext.getSessionVariable().isEnableCountStarOptimization()) {
+            result = new CountOnIndexRewriteRule().rewrite(result, rootTaskContext);
+        }
 
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result, rootTaskContext);

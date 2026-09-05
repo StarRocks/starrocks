@@ -105,6 +105,18 @@ public class TableFunction extends Function {
                 Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
         functionSet.addBuiltin(jsonEach);
 
+        List<String> tokenFields = Lists.newArrayList(
+                "term", "position", "position_length", "start_offset", "end_offset", "token_type");
+        List<Type> tokenTypes = Lists.newArrayList(
+                Type.VARCHAR, Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.VARCHAR);
+        TableFunction tokenizeDetail = new TableFunction(new FunctionName("tokenize_detail"), tokenFields,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), tokenTypes);
+        functionSet.addBuiltin(tokenizeDetail);
+        TableFunction tokenizeDetailByDefinition = new TableFunction(
+                new FunctionName("tokenize_detail_by_definition"), tokenFields,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), tokenTypes);
+        functionSet.addBuiltin(tokenizeDetailByDefinition);
+
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
             TableFunction func = new TableFunction(new FunctionName("subdivide_bitmap"), Lists.newArrayList("subdivide_bitmap"),
                     Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));

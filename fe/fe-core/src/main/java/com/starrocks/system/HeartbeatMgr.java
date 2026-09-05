@@ -309,7 +309,6 @@ public class HeartbeatMgr extends FrontendDaemon {
                     if (tBackendInfo.isSetVersion()) {
                         version = tBackendInfo.getVersion();
                     }
-
                     // Update number of hardware of cores of corresponding backend.
                     // BackendCoreStat will be updated in ComputeNode.handleHbResponse.
                     int cpuCores = tBackendInfo.isSetNum_hardware_cores() ? tBackendInfo.getNum_hardware_cores() : 0;
@@ -320,6 +319,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
                             System.currentTimeMillis(), version, cpuCores, memLimitBytes, isSetStoragePath,
                             arrowPort);
+                    backendHbResponse.setTextAnalyzerRuntimeAbi(tBackendInfo.isSetText_analyzer_runtime_abi()
+                            ? tBackendInfo.getText_analyzer_runtime_abi() : 0);
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
                     }

@@ -35,6 +35,11 @@ struct TokenizedQueryValue {
     std::vector<std::string> terms;
 };
 
+struct InvertedIndexQueryOptions {
+    bool enable_tantivy_reader_cache = true;
+    bool enable_tantivy_query_cache = true;
+};
+
 enum class InvertedImplementType {
     UNKNOWN = 0,
     CLUCENE = 1,
@@ -77,6 +82,9 @@ const std::string LIKE_FN_NAME = "like";
 const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";
 
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
+const std::string INVERTED_INDEX_ANALYZER_KEY = "analyzer";
+const std::string INVERTED_INDEX_ANALYZER_DEFINITION_KEY = "analyzer_definition";
+const std::string INVERTED_INDEX_ANALYZER_DIGEST_KEY = "analyzer_digest";
 
 enum class InvertedIndexReaderType {
     UNKNOWN = -1,

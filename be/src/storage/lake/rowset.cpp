@@ -210,6 +210,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.bm25_score_limit = options.bm25_score_limit;
     seg_options.bm25_score_min = options.bm25_score_min;
     seg_options.bm25_score_max = options.bm25_score_max;
+    seg_options.inverted_index_non_scored_limit = options.inverted_index_non_scored_limit;
+    seg_options.inverted_index_non_scored_limit_budget = options.inverted_index_non_scored_limit_budget;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
@@ -229,6 +231,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.reader_type = options.reader_type;
     seg_options.enable_gin_filter = options.enable_gin_filter;
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.count_on_index = options.count_on_index;
+    seg_options.enable_tantivy_reader_cache = options.enable_tantivy_reader_cache;
+    seg_options.enable_tantivy_query_cache = options.enable_tantivy_query_cache;
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);

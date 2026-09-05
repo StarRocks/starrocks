@@ -299,3 +299,79 @@ DROP TABLE t_tantivy_pk;
 DROP DATABASE ${uuid0};
 -- result:
 -- !result
+-- name: test_tantivy_count_on_index_semantics
+CREATE DATABASE IF NOT EXISTS `${uuid0}`;
+-- result:
+-- !result
+USE `${uuid0}`;
+-- result:
+-- !result
+CREATE TABLE t_tantivy_count_semantics (
+    id INT NOT NULL,
+    content VARCHAR(65535),
+    INDEX gin_content (content) USING GIN ("parser" = "english", "imp_lib" = "tantivy")
+) PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_tantivy_count_semantics VALUES
+    (1, 'The QUICK fox and brown dog'),
+    (2, 'quick fox jumps'),
+    (3, NULL),
+    (4, 'THE fox'),
+    (5, 'quick brown fox multi token'),
+    (6, 'delete quick fox');
+-- result:
+-- !result
+DELETE FROM t_tantivy_count_semantics WHERE id = 6;
+-- result:
+-- !result
+SET enable_count_star_optimization = true;
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_count_semantics WHERE content MATCH_ANY 'QUICK';
+-- result:
+3
+-- !result
+SELECT count(*) FROM t_tantivy_count_semantics WHERE content MATCH_ANY 'the';
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_tantivy_count_semantics WHERE content MATCH_ALL 'quick fox';
+-- result:
+3
+-- !result
+SELECT count(*) FROM t_tantivy_count_semantics WHERE content MATCH_PHRASE 'quick fox';
+-- result:
+2
+-- !result
+
+SET enable_count_star_optimization = false;
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_count_semantics WHERE content MATCH_ANY 'QUICK';
+-- result:
+3
+-- !result
+SELECT count(*) FROM t_tantivy_count_semantics WHERE content MATCH_ANY 'the';
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_tantivy_count_semantics WHERE content MATCH_ALL 'quick fox';
+-- result:
+3
+-- !result
+SELECT count(*) FROM t_tantivy_count_semantics WHERE content MATCH_PHRASE 'quick fox';
+-- result:
+2
+-- !result
+SET enable_count_star_optimization = true;
+-- result:
+-- !result
+DROP TABLE t_tantivy_count_semantics;
+-- result:
+-- !result
+DROP DATABASE `${uuid0}`;
+-- result:
+-- !result

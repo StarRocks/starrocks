@@ -96,6 +96,12 @@ public class IndexParams {
                 false, false, null, null);
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.MAX_GRAM,
                 false, false, null, null);
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.ANALYZER, false, false,
+                null, null);
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.ANALYZER_DEFINITION, false,
+                false, null, null);
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.ANALYZER_DIGEST, false,
+                false, null, null);
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.DICT_GRAM_NUM,
                 false, false, null, null);
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION,

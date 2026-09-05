@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+#include <atomic>
 #include <limits>
 #include <string>
 #include <unordered_map>
@@ -29,8 +30,8 @@ enum class InvertedIndexReaderType;
 class InvertedIndexIterator {
 public:
     InvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
-                          OlapReaderStatistics* stats)
-            : _index_meta(index_meta), _stats(stats), _reader(reader) {
+                          OlapReaderStatistics* stats, InvertedIndexQueryOptions query_options = {})
+            : _index_meta(index_meta), _stats(stats), _reader(reader), _query_options(query_options) {
         _analyser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(_index_meta->index_properties()));
     }
@@ -50,6 +51,11 @@ public:
     // here before applying the GIN predicate so the scored query only materializes
     // the best `limit` rows (0 = score every hit). Mirrors the vector ANN top-k.
     void set_bm25_topk_limit(int32_t limit) { _bm25_topk_limit = limit; }
+
+    void set_non_scored_limit(int32_t limit, std::atomic<int64_t>* global_budget) {
+        _non_scored_limit = limit;
+        _non_scored_limit_budget = global_budget;
+    }
 
     // Min/max BM25 score gate for the scored path: a `WHERE score() > c`
     // predicate is pushed here so the scored query only materializes hits whose
@@ -73,8 +79,11 @@ protected:
     const std::shared_ptr<TabletIndex> _index_meta;
     OlapReaderStatistics* _stats;
     InvertedReader* _reader;
+    InvertedIndexQueryOptions _query_options;
     InvertedIndexParserType _analyser_type;
     int32_t _bm25_topk_limit = 0;
+    int32_t _non_scored_limit = 0;
+    std::atomic<int64_t>* _non_scored_limit_budget = nullptr;
     float _bm25_score_min = -std::numeric_limits<float>::infinity();
     float _bm25_score_max = std::numeric_limits<float>::infinity();
 };

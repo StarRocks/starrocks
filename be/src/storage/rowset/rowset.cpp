@@ -816,6 +816,8 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.bm25_score_max = options.bm25_score_max;
     seg_options.sample_options = options.sample_options;
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    seg_options.inverted_index_non_scored_limit = options.inverted_index_non_scored_limit;
+    seg_options.inverted_index_non_scored_limit_budget = options.inverted_index_non_scored_limit_budget;
 
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
@@ -838,7 +840,10 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.count_on_index = options.count_on_index;
     seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.enable_tantivy_reader_cache = options.enable_tantivy_reader_cache;
+    seg_options.enable_tantivy_query_cache = options.enable_tantivy_query_cache;
     seg_options.has_preaggregation = options.has_preaggregation;
 
     auto segment_schema = schema;

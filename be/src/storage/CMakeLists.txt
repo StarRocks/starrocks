@@ -269,6 +269,8 @@ set(STORAGE_FILES
     index/inverted/tantivy/tantivy_plugin.cpp
     index/inverted/tantivy/tantivy_inverted_writer.cpp
     index/inverted/tantivy/tantivy_inverted_reader.cpp
+    index/inverted/tantivy/tantivy_cache.cpp
+    index/inverted/tantivy/tantivy_cache_key.cpp
     index/inverted/tantivy/tantivy_index_rebuilder.cpp
     index/inverted/tantivy/random_access_bridge.cpp
     index/inverted/tantivy/tantivy_ffi_pool_bridge.cpp

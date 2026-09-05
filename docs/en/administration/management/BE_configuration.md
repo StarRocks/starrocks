@@ -5440,4 +5440,99 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
 - Introduced in: 3.5.1
 
+##### enable_tantivy_reader_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether the BE or CN reuses immutable Tantivy readers, compound random-access files, and null bitmaps across queries. Disable it to make both lookup and insertion bypass the reader cache. Existing entries are retained until eviction or restart.
+- Introduced in: 3.5.14
+
+##### tantivy_reader_cache_limit
+
+- Default: 10%
+- Type: String
+- Unit: Bytes or a percentage of the process memory limit
+- Is mutable: Yes
+- Description: Sets the total charge capacity of the process-local Tantivy reader cache. Set it to `0` to prevent entries from being retained. Reducing the capacity evicts unpinned entries immediately; resources used by active queries are released after the queries finish.
+- Introduced in: 3.5.14
+
+##### tantivy_reader_cache_max_entries
+
+- Default: 8192
+- Type: Int
+- Unit: Entries
+- Is mutable: No
+- Description: Sets the maximum target number of Tantivy reader cache entries. The cache combines this limit with the byte limit by assigning each entry a minimum synthetic charge. A restart is required after changing this value.
+- Introduced in: 3.5.14
+
+##### tantivy_reader_cache_max_entry_bytes
+
+- Default: 67108864
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Sets the largest Tantivy reader resource that can be admitted to the cache. A larger reader remains usable by its current query but is not retained. A restart is required after changing this value.
+- Introduced in: 3.5.14
+
+##### enable_tantivy_query_cache
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls the process-local cache for complete, non-scored Tantivy query bitmaps. Limited, scored, and IS NULL queries always bypass this cache. The session variable with the same name can disable the cache for an individual query. Existing entries are retained when this option is disabled.
+- Introduced in: 3.5.14
+
+##### tantivy_query_cache_limit
+
+- Default: 1%
+- Type: String
+- Unit: Bytes or a percentage of the process memory limit
+- Is mutable: Yes
+- Description: Sets the total charge capacity of the process-local Tantivy query bitmap cache. Set it to `0` to prevent entries from being retained. Reducing the capacity immediately evicts unpinned entries.
+- Introduced in: 3.5.14
+
+##### tantivy_query_cache_max_entry_bytes
+
+- Default: 16777216
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Sets the largest optimized bitmap that can be admitted to the Tantivy query cache. The valid range is greater than `0`. A restart is required after changing this value.
+- Introduced in: 3.5.14
+
+##### tantivy_query_cache_max_key_bytes
+
+- Default: 8192
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Sets the largest canonical query key that can use the Tantivy query cache. The valid range is greater than `0`. Longer queries bypass both lookup and insertion. A restart is required after changing this value.
+- Introduced in: 3.5.14
+
+##### tantivy_query_cache_admission_threshold
+
+- Default: 0.70
+- Type: Double
+- Unit: Ratio
+- Is mutable: No
+- Description: Sets the cache usage ratio at which two-hit admission starts. The valid range is `[0, 1]`. Below the threshold, first-seen entries can be admitted for cold start. A restart is required after changing this value.
+- Introduced in: 3.5.14
+
+##### tantivy_query_cache_ghost_entries
+
+- Default: 65536
+- Type: Int
+- Unit: Entries
+- Is mutable: No
+- Description: Sets the maximum number of key digests retained by two-hit admission. The valid range is greater than or equal to `0`; `0` rejects new entries after the admission threshold is reached. A restart is required after changing this value.
+- Introduced in: 3.5.14
+
+Tantivy cache operational endpoints:
+
+- `GET /api/tantivy_cache/status` returns Reader Cache and Query Cache capacity, usage, entry, hit/miss/bypass, admission, and singleflight statistics.
+- `PUT /api/tantivy_cache/prune?type=query|reader|all` removes all currently unpinned entries from the selected cache. Pinned readers and bitmaps remain valid until their last query reference is released.
+
 <EditionSpecificBEItem />

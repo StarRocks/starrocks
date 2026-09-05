@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -108,7 +109,12 @@ public:
     bool asc_hint = true;
 
     bool prune_column_after_index_filter = false;
+    bool count_on_index = false;
     bool enable_gin_filter = false;
+    bool enable_tantivy_reader_cache = true;
+    bool enable_tantivy_query_cache = true;
+    int32_t inverted_index_non_scored_limit = 0;
+    std::shared_ptr<std::atomic<int64_t>> inverted_index_non_scored_limit_budget;
     bool has_preaggregation = true;
 
     bool use_vector_index = false;

@@ -459,6 +459,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
+### enable_tantivy_query_cache
+
+* 描述：控制单条查询是否可使用 BE 进程级 Tantivy 完整非评分结果位图缓存。还必须同时开启 BE 配置 `enable_tantivy_query_cache`。limited、scored 和 IS NULL 查询始终绕过该缓存。
+* 默认值：true
+* 引入版本：v3.5.14
+
+### enable_tantivy_reader_cache
+
+* 描述：控制单条查询是否可复用进程级 Tantivy reader。还必须同时开启 BE 配置 `enable_tantivy_reader_cache`。可设置为 `false` 进行关闭缓存的 A/B 测试。
+* 默认值：true
+* 引入版本：v3.5.14
+
 ### enable_group_execution
 
 * 描述：Colocate Group Execution 是一种利用物理数据分区的执行模式，其中固定数量的线程依次处理各自的数据范围，以增强局部性和吞吐量。该模式可降低内存使用量。

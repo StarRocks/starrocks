@@ -75,10 +75,12 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
+import com.starrocks.sql.ast.CreateTextAnalyzerStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
+import com.starrocks.sql.ast.DescTextAnalyzerStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -95,6 +97,7 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.DropTextAnalyzerStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -126,6 +129,7 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateTextAnalyzerStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
@@ -138,6 +142,7 @@ import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
+import com.starrocks.sql.ast.ShowTextAnalyzersStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -1122,6 +1127,37 @@ public class Analyzer {
         @Override
         public Void visitShowDictionaryStatement(ShowDictionaryStmt statement, ConnectContext context) {
             DictionaryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTextAnalyzerStatement(CreateTextAnalyzerStmt statement, ConnectContext context) {
+            TextAnalyzerAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropTextAnalyzerStatement(DropTextAnalyzerStmt statement, ConnectContext context) {
+            TextAnalyzerAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowTextAnalyzersStatement(ShowTextAnalyzersStmt statement, ConnectContext context) {
+            TextAnalyzerAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDescTextAnalyzerStatement(DescTextAnalyzerStmt statement, ConnectContext context) {
+            TextAnalyzerAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateTextAnalyzerStatement(
+                ShowCreateTextAnalyzerStmt statement, ConnectContext context) {
+            TextAnalyzerAnalyzer.analyze(statement, context);
             return null;
         }
 

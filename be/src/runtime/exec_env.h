@@ -92,6 +92,7 @@ template <class T>
 class ClientCache;
 class HeartbeatFlags;
 class DiagnoseDaemon;
+class TantivyCacheManager;
 
 namespace pipeline {
 class DriverExecutor;
@@ -143,6 +144,8 @@ public:
     MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker.get(); }
     MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker.get(); }
     MemTracker* builtin_inverted_index_mem_tracker() { return _builtin_inverted_index_mem_tracker.get(); }
+    MemTracker* tantivy_reader_cache_mem_tracker() { return _tantivy_reader_cache_mem_tracker.get(); }
+    MemTracker* tantivy_query_cache_mem_tracker() { return _tantivy_query_cache_mem_tracker.get(); }
     MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker.get(); }
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
@@ -209,6 +212,9 @@ private:
     std::shared_ptr<MemTracker> _bitmap_index_mem_tracker;
     std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
     std::shared_ptr<MemTracker> _builtin_inverted_index_mem_tracker;
+
+    std::shared_ptr<MemTracker> _tantivy_reader_cache_mem_tracker;
+    std::shared_ptr<MemTracker> _tantivy_query_cache_mem_tracker;
 
     // The memory used for compaction
     std::shared_ptr<MemTracker> _compaction_mem_tracker;
@@ -378,6 +384,7 @@ public:
     AgentServer* agent_server() const { return _agent_server; }
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
+    TantivyCacheManager* tantivy_cache_manager() const { return _tantivy_cache_manager.get(); }
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
@@ -470,6 +477,7 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
+    std::unique_ptr<TantivyCacheManager> _tantivy_cache_manager;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
 };

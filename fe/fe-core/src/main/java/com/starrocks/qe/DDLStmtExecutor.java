@@ -23,6 +23,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TextAnalyzerMgr;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -98,6 +99,7 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
+import com.starrocks.sql.ast.CreateTextAnalyzerStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
@@ -117,6 +119,7 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.DropTextAnalyzerStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -1220,6 +1223,18 @@ public class DDLStmtExecutor {
                 context.getGlobalStateMgr().getDictionaryMgr().createDictionary(stmt,
                         context.getCurrentCatalog(), context.getDatabase());
             });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateTextAnalyzerStatement(CreateTextAnalyzerStmt stmt, ConnectContext context) {
+            TextAnalyzerMgr.create(stmt, context);
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropTextAnalyzerStatement(DropTextAnalyzerStmt stmt, ConnectContext context) {
+            TextAnalyzerMgr.drop(stmt, context);
             return null;
         }
 

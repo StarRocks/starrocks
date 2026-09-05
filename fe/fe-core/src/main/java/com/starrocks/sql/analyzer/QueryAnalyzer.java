@@ -35,6 +35,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
@@ -1372,6 +1373,14 @@ public class QueryAnalyzer {
         public Scope visitTableFunction(TableFunctionRelation node, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
             List<Expr> args = node.getFunctionParams().exprs();
+            if (args.size() == 2 && args.get(0) instanceof StringLiteral) {
+                StringLiteral argument = (StringLiteral) args.get(0);
+                String value = TextAnalyzerAnalyzer.resolveAnalyzerArgument(
+                        node.getFunctionName().getFunction(), argument.getValue(), session);
+                if (!value.equals(argument.getValue())) {
+                    args.set(0, new StringLiteral(value, argument.getPos()));
+                }
+            }
             Type[] argTypes = new Type[args.size()];
             for (int i = 0; i < args.size(); ++i) {
                 analyzeExpression(args.get(i), analyzeState, scope);

@@ -1195,6 +1195,7 @@ public class ExpressionAnalyzer {
             }
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             String fnName = node.getFnName().getFunction();
+            resolveTextAnalyzerArgument(node, fnName);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
             // get function by function expression and argument types
@@ -1210,6 +1211,18 @@ public class ExpressionAnalyzer {
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
             return null;
+        }
+
+        private void resolveTextAnalyzerArgument(FunctionCallExpr node, String fnName) {
+            if (node.getChildren().size() != 2 || !(node.getChild(0) instanceof StringLiteral)) {
+                return;
+            }
+            StringLiteral argument = (StringLiteral) node.getChild(0);
+            String value = TextAnalyzerAnalyzer.resolveAnalyzerArgument(fnName, argument.getValue(), session);
+            if (value.equals(argument.getValue())) {
+                return;
+            }
+            node.setChild(0, new StringLiteral(value, argument.getPos()));
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {

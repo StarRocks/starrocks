@@ -5417,4 +5417,99 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态: 否
 - 描述: table metrics中表的最大数量, metrics/接口最多返回max_table_metrics_num个表的metrics。
 
+##### enable_tantivy_reader_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 BE 或 CN 是否跨查询复用不可变的 Tantivy reader、compound 随机访问文件和空值位图。关闭后，本查询路径同时跳过缓存查询和写入；已有缓存项保留至淘汰或进程重启。
+- 引入版本：3.5.14
+
+##### tantivy_reader_cache_limit
+
+- 默认值：10%
+- 类型：String
+- 单位：字节或进程内存上限的百分比
+- 是否动态：是
+- 描述：设置进程级 Tantivy reader 缓存的总计费容量。设置为 `0` 时不保留缓存项。缩容时会立即淘汰未被使用的条目；正在查询使用的资源会在查询结束后释放。
+- 引入版本：3.5.14
+
+##### tantivy_reader_cache_max_entries
+
+- 默认值：8192
+- 类型：Int
+- 单位：个
+- 是否动态：否
+- 描述：设置 Tantivy reader 缓存的目标最大条目数。缓存通过为每个条目设置最小合成计费，同时约束条目数和字节数。修改后需要重启生效。
+- 引入版本：3.5.14
+
+##### tantivy_reader_cache_max_entry_bytes
+
+- 默认值：67108864
+- 类型：Int
+- 单位：字节
+- 是否动态：否
+- 描述：设置允许写入缓存的单个 Tantivy reader 资源的最大大小。超过限制的 reader 仍可供当前查询使用，但不会保留在缓存中。修改后需要重启生效。
+- 引入版本：3.5.14
+
+##### enable_tantivy_query_cache
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制进程级 Tantivy 完整非评分查询位图缓存。limited、scored 和 IS NULL 查询始终绕过该缓存。同名 Session Variable 可对单条查询关闭缓存。关闭后已有缓存项继续保留。
+- 引入版本：3.5.14
+
+##### tantivy_query_cache_limit
+
+- 默认值：1%
+- 类型：String
+- 单位：字节或进程内存上限的百分比
+- 是否动态：是
+- 描述：设置进程级 Tantivy 查询位图缓存的总计费容量。设置为 `0` 时不保留缓存项。缩容时会立即淘汰未被使用的条目。
+- 引入版本：3.5.14
+
+##### tantivy_query_cache_max_entry_bytes
+
+- 默认值：16777216
+- 类型：Int
+- 单位：字节
+- 是否动态：否
+- 描述：设置允许写入 Tantivy 查询缓存的单个优化后位图最大大小。有效范围为大于 `0`。修改后需要重启生效。
+- 引入版本：3.5.14
+
+##### tantivy_query_cache_max_key_bytes
+
+- 默认值：8192
+- 类型：Int
+- 单位：字节
+- 是否动态：否
+- 描述：设置可使用 Tantivy 查询缓存的规范化查询键最大大小。有效范围为大于 `0`。更长的查询会跳过查询和写入缓存。修改后需要重启生效。
+- 引入版本：3.5.14
+
+##### tantivy_query_cache_admission_threshold
+
+- 默认值：0.70
+- 类型：Double
+- 单位：比例
+- 是否动态：否
+- 描述：设置开始 two-hit 准入的缓存使用率阈值。有效范围为 `[0, 1]`。低于阈值时允许首次出现的条目写入以便冷启动。修改后需要重启生效。
+- 引入版本：3.5.14
+
+##### tantivy_query_cache_ghost_entries
+
+- 默认值：65536
+- 类型：Int
+- 单位：个
+- 是否动态：否
+- 描述：设置 two-hit 准入保留的键摘要最大数量。有效范围为大于或等于 `0`；设置为 `0` 时，达到准入阈值后拒绝新条目。修改后需要重启生效。
+- 引入版本：3.5.14
+
+Tantivy 缓存运维接口：
+
+- `GET /api/tantivy_cache/status` 返回 Reader Cache 和 Query Cache 的容量、使用量、条目数、命中/未命中/旁路、准入和 singleflight 统计。
+- `PUT /api/tantivy_cache/prune?type=query|reader|all` 清理所选缓存中当前未被引用的条目。已被查询引用的 reader 和 bitmap 会保持有效，直到最后一个查询引用释放。
+
 <EditionSpecificBEItem />

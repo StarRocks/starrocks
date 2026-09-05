@@ -20,4 +20,6 @@ pub mod lifecycle_c;
 pub mod pool_c;
 pub mod result;
 
-pub use result::{RustResult, RustStringArray, RustU32Array, Value, ValueTag};
+pub use result::{
+    RustResult, RustStringArray, RustToken, RustTokenArray, RustU32Array, Value, ValueTag,
+};

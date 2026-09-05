@@ -15,6 +15,7 @@
 pub mod index_reader;
 pub mod index_writer;
 pub mod pull_directory;
+pub mod resident_directory;
 pub mod tokenizer;
 
 pub use index_reader::IndexReaderWrapper;

@@ -15,9 +15,8 @@
 //! Jieba dictionary-based Chinese segmentation.
 //!
 //! Streaming design: reuses a single `Token` buffer across the entire
-//! token stream, eliminating per-token `String` allocations. ASCII
-//! characters are lowercased inline so the `LowerCaser` filter is not
-//! needed.
+//! token stream, eliminating per-token `String` allocations. Case conversion
+//! is deliberately left to the analyzer pipeline's explicit lowercase filter.
 //!
 //! Constructed only via the `tokenizer::build` factory; visibility is
 //! `pub(super)` so callers cannot bypass the factory.
@@ -26,9 +25,13 @@ use std::sync::Arc;
 
 use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 
+use super::spec::JiebaMode;
+
 pub(super) struct JiebaTokenizer {
     jieba: Arc<jieba_rs::Jieba>,
     token: Token,
+    mode: JiebaMode,
+    hmm: bool,
 }
 
 impl Clone for JiebaTokenizer {
@@ -36,6 +39,8 @@ impl Clone for JiebaTokenizer {
         Self {
             jieba: self.jieba.clone(),
             token: Token::default(),
+            mode: self.mode,
+            hmm: self.hmm,
         }
     }
 }
@@ -45,6 +50,19 @@ impl Default for JiebaTokenizer {
         Self {
             jieba: Arc::new(jieba_rs::Jieba::new()),
             token: Token::default(),
+            mode: JiebaMode::Search,
+            hmm: true,
+        }
+    }
+}
+
+impl JiebaTokenizer {
+    pub(super) fn new(mode: JiebaMode, hmm: bool) -> Self {
+        Self {
+            jieba: Arc::new(jieba_rs::Jieba::new()),
+            token: Token::default(),
+            mode,
+            hmm,
         }
     }
 }
@@ -71,17 +89,9 @@ impl TokenStream for JiebaTokenStream<'_> {
             let byte_start = w.word.as_ptr() as usize - self.text.as_ptr() as usize;
             let byte_end = byte_start + w.word.len();
 
-            // Reuse the token buffer — no allocation.
+            // Reuse the token buffer.
             self.token.text.clear();
-            // Inline lowercasing: ASCII chars are lowercased, CJK chars
-            // (and other non-ASCII) pass through unchanged.
-            for c in w.word.chars() {
-                if c.is_ascii() {
-                    self.token.text.push(c.to_ascii_lowercase());
-                } else {
-                    self.token.text.push(c);
-                }
-            }
+            self.token.text.push_str(w.word);
             self.token.offset_from = byte_start;
             self.token.offset_to = byte_end;
             self.token.position = self.position;
@@ -105,7 +115,11 @@ impl Tokenizer for JiebaTokenizer {
     type TokenStream<'a> = JiebaTokenStream<'a>;
 
     fn token_stream<'a>(&'a mut self, text: &'a str) -> Self::TokenStream<'a> {
-        let words = self.jieba.tokenize(text, jieba_rs::TokenizeMode::Search, true);
+        let mode = match self.mode {
+            JiebaMode::Search => jieba_rs::TokenizeMode::Search,
+            JiebaMode::Default => jieba_rs::TokenizeMode::Default,
+        };
+        let words = self.jieba.tokenize(text, mode, self.hmm);
         self.token.reset();
         JiebaTokenStream {
             words,

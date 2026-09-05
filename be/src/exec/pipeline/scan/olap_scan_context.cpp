@@ -164,6 +164,19 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 }
 
 /// OlapScanContextFactory.
+OlapScanContextFactory::OlapScanContextFactory(OlapScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
+                                               bool shared_scan, ChunkBufferLimiterPtr chunk_buffer_limiter)
+        : _scan_node(scan_node),
+          _dop(dop),
+          _shared_morsel_queue(shared_morsel_queue),
+          _shared_scan(shared_scan),
+          _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
+                        std::move(chunk_buffer_limiter)),
+          _contexts(shared_morsel_queue ? 1 : dop),
+          _jit_rewriter(dop),
+          _non_scored_limit_budget(scan_node->limit() > 0 ? std::make_shared<std::atomic<int64_t>>(scan_node->limit())
+                                                          : nullptr) {}
+
 OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence) {
     DCHECK_LT(driver_sequence, _dop);
     // ScanOperators sharing one morsel use the same context.
@@ -172,7 +185,7 @@ OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence
 
     if (_contexts[idx] == nullptr) {
         _contexts[idx] = std::make_shared<OlapScanContext>(_scan_node, _scan_table_id, _dop, _shared_scan,
-                                                           _chunk_buffer, _jit_rewriter);
+                                                           _chunk_buffer, _jit_rewriter, _non_scored_limit_budget);
     }
     return _contexts[idx];
 }

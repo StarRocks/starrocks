@@ -52,7 +52,10 @@ impl FFISlice {
 /// Construct a `&str` from a raw `(ptr, len)` pair with UTF-8 validation.
 ///
 /// SAFETY: caller must guarantee `ptr` points to `len` readable bytes.
-pub unsafe fn raw_to_str<'a>(ptr: *const u8, len: usize) -> std::result::Result<&'a str, TantivyBindingError> {
+pub unsafe fn raw_to_str<'a>(
+    ptr: *const u8,
+    len: usize,
+) -> std::result::Result<&'a str, TantivyBindingError> {
     if ptr.is_null() {
         return Ok("");
     }
@@ -171,7 +174,10 @@ impl Value {
     };
 
     pub fn from_ptr(p: *mut c_void) -> Self {
-        Self { tag: ValueTag::Ptr, ptr: p }
+        Self {
+            tag: ValueTag::Ptr,
+            ptr: p,
+        }
     }
 }
 
@@ -182,6 +188,57 @@ impl Value {
 pub struct RustStringArray {
     pub ptr: *mut *mut c_char,
     pub len: usize,
+}
+
+/// One structured analyzer token. String pointers are owned by the containing
+/// `RustTokenArray` and released by `tantivy_free_token_array`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct RustToken {
+    pub term: *mut c_char,
+    pub position: usize,
+    pub position_length: usize,
+    pub start_offset: usize,
+    pub end_offset: usize,
+    pub token_type: *mut c_char,
+}
+
+/// Owned structured token array returned by analyzer-detail FFI calls.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct RustTokenArray {
+    pub ptr: *mut RustToken,
+    pub len: usize,
+}
+
+impl RustTokenArray {
+    pub const EMPTY: RustTokenArray = RustTokenArray {
+        ptr: std::ptr::null_mut(),
+        len: 0,
+    };
+
+    pub fn from_tokens(tokens: Vec<tantivy::tokenizer::Token>) -> Self {
+        if tokens.is_empty() {
+            return Self::EMPTY;
+        }
+        let values: Vec<RustToken> = tokens
+            .into_iter()
+            .map(|token| RustToken {
+                term: CString::new(token.text.replace('\0', "?"))
+                    .unwrap()
+                    .into_raw(),
+                position: token.position,
+                position_length: token.position_length,
+                start_offset: token.offset_from,
+                end_offset: token.offset_to,
+                token_type: CString::new("word").unwrap().into_raw(),
+            })
+            .collect();
+        let boxed = values.into_boxed_slice();
+        let len = boxed.len();
+        let ptr = Box::into_raw(boxed) as *mut RustToken;
+        Self { ptr, len }
+    }
 }
 
 impl RustStringArray {
@@ -235,11 +292,19 @@ pub struct RustResult {
 
 impl RustResult {
     pub fn ok_none() -> Self {
-        Self { success: true, value: Value::NONE, error: std::ptr::null() }
+        Self {
+            success: true,
+            value: Value::NONE,
+            error: std::ptr::null(),
+        }
     }
 
     pub fn ok_ptr(p: *mut c_void) -> Self {
-        Self { success: true, value: Value::from_ptr(p), error: std::ptr::null() }
+        Self {
+            success: true,
+            value: Value::from_ptr(p),
+            error: std::ptr::null(),
+        }
     }
 
     /// Construct a failure result. The message is leaked (CString::into_raw)
@@ -247,10 +312,13 @@ impl RustResult {
     pub fn err(msg: impl Into<String>) -> Self {
         let msg = msg.into();
         // CString::new fails if msg contains an interior NUL; sanitize.
-        let cstr = CString::new(msg.replace('\0', "?")).unwrap_or_else(|_| {
-            CString::new("error message contained interior NUL").unwrap()
-        });
+        let cstr = CString::new(msg.replace('\0', "?"))
+            .unwrap_or_else(|_| CString::new("error message contained interior NUL").unwrap());
         let raw = cstr.into_raw();
-        Self { success: false, value: Value::NONE, error: raw as *const c_char }
+        Self {
+            success: false,
+            value: Value::NONE,
+            error: raw as *const c_char,
+        }
     }
 }

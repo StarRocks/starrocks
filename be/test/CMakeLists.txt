@@ -261,6 +261,7 @@ set(EXEC_FILES
         ./storage/index/inverted/tantivy/tantivy_wildcard_test.cpp
         ./storage/index/inverted/tantivy/tantivy_plugin_test.cpp
         ./storage/index/inverted/tantivy/tantivy_compound_reader_test.cpp
+        ./storage/index/inverted/tantivy/tantivy_cache_test.cpp
         ./storage/index/inverted/tantivy/random_access_bridge_test.cpp
         ./storage/index/inverted/tantivy/tantivy_compaction_test.cpp
         ./storage/data_dir_test.cpp

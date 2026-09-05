@@ -1163,6 +1163,22 @@ public class EditLog {
                     globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
                     break;
                 }
+                case OperationType.OP_CREATE_TEXT_ANALYZER: {
+                    TextAnalyzerLog info = (TextAnalyzerLog) journal.data();
+                    Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
+                    if (db != null) {
+                        db.putTextAnalyzer(info.getAnalyzer());
+                    }
+                    break;
+                }
+                case OperationType.OP_DROP_TEXT_ANALYZER: {
+                    TextAnalyzerLog info = (TextAnalyzerLog) journal.data();
+                    Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
+                    if (db != null) {
+                        db.removeTextAnalyzer(info.getName());
+                    }
+                    break;
+                }
                 case OperationType.OP_DECOMMISSION_DISK: {
                     DecommissionDiskInfo info = (DecommissionDiskInfo) journal.data();
                     globalStateMgr.getNodeMgr().getClusterInfo().replayDecommissionDisks(info);
@@ -2174,6 +2190,14 @@ public class EditLog {
 
     public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
         logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+    }
+
+    public void logCreateTextAnalyzer(TextAnalyzerLog info) {
+        logEdit(OperationType.OP_CREATE_TEXT_ANALYZER, info);
+    }
+
+    public void logDropTextAnalyzer(TextAnalyzerLog info) {
+        logEdit(OperationType.OP_DROP_TEXT_ANALYZER, info);
     }
 
     public void logDecommissionDisk(DecommissionDiskInfo info) {

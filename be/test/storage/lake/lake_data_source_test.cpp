@@ -187,4 +187,19 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() > 1);
 }
 
+TEST_F(LakeDataSourceTest, test_tantivy_cache_query_options) {
+    TQueryOptions query_options;
+    TabletReaderParams params;
+
+    params.set_tantivy_cache_options(query_options);
+    EXPECT_TRUE(params.enable_tantivy_reader_cache);
+    EXPECT_TRUE(params.enable_tantivy_query_cache);
+
+    query_options.__set_enable_tantivy_reader_cache(false);
+    query_options.__set_enable_tantivy_query_cache(false);
+    params.set_tantivy_cache_options(query_options);
+    EXPECT_FALSE(params.enable_tantivy_reader_cache);
+    EXPECT_FALSE(params.enable_tantivy_query_cache);
+}
+
 } // namespace starrocks::lake

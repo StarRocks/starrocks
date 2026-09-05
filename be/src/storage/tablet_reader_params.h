@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <limits>
 #include <string>
 #include <unordered_map>
@@ -33,6 +34,7 @@ namespace starrocks {
 
 class RuntimeProfile;
 class RuntimeState;
+class TQueryOptions;
 
 class ColumnPredicate;
 struct RowidRangeOption;
@@ -50,6 +52,8 @@ struct TabletReaderParams {
     enum class RangeEndOperation { LT = 0, LE, EQ };
 
     TabletReaderParams();
+
+    void set_tantivy_cache_options(const TQueryOptions& query_options);
 
     ReaderType reader_type = READER_QUERY;
 
@@ -100,7 +104,17 @@ struct TabletReaderParams {
     int32_t plan_node_id;
 
     bool prune_column_after_index_filter = false;
+    bool count_on_index = false;
     bool enable_gin_filter = false;
+    bool enable_tantivy_reader_cache = true;
+    bool enable_tantivy_query_cache = true;
+
+    // Non-scored LIMIT pushdown for an index-only predicate. The shared budget
+    // belongs to the physical scan and is atomically claimed across all
+    // tablets/segments. SegmentIterator applies this only after proving there
+    // is no residual filter that could make an early result under-fill.
+    int32_t inverted_index_non_scored_limit = 0;
+    std::shared_ptr<std::atomic<int64_t>> inverted_index_non_scored_limit_budget;
 
     bool use_vector_index = false;
 

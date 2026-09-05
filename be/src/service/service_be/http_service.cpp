@@ -58,6 +58,7 @@
 #include "http/action/snapshot_action.h"
 #include "http/action/stop_be_action.h"
 #include "http/action/stream_load.h"
+#include "http/action/tantivy_cache_action.h"
 #include "http/action/transaction_stream_load.h"
 #include "http/action/update_config_action.h"
 #include "http/default_path_handlers.h"
@@ -265,6 +266,11 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/query_cache/{action}", query_cache_action);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/query_cache/{action}", query_cache_action);
     _http_handlers.emplace_back(query_cache_action);
+
+    auto* tantivy_cache_action = new TantivyCacheAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/tantivy_cache/{action}", tantivy_cache_action);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/tantivy_cache/{action}", tantivy_cache_action);
+    _http_handlers.emplace_back(tantivy_cache_action);
 
     auto* datacache_action = new DataCacheAction(_cache_env->block_cache());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);

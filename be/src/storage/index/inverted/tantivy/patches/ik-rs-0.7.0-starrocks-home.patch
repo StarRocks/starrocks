@@ -1,0 +1,80 @@
+diff --git a/src/config/default_config.rs b/src/config/default_config.rs
+--- a/src/config/default_config.rs
++++ b/src/config/default_config.rs
+@@ -0,0 +1 @@
++use std::env;
+@@ -3 +4 @@
+-use std::path::Path;
++use std::path::PathBuf;
+@@ -12,0 +14,2 @@
++const STARROCKS_HOME_ENV: &str = "STARROCKS_HOME";
++const IK_RESOURCE_RELATIVE_PATH: &str = "lib/tantivy-packages";
+@@ -25,3 +29,8 @@
+-        let root_path = env!("CARGO_MANIFEST_DIR");
+-        let conf_file_path = Path::new(root_path).join(IK_CONFIG_NAME);
+-        let file = File::open(conf_file_path).expect("open ik.yml error");
++        let conf_file_path = root_path().join(IK_CONFIG_NAME);
++        let file = File::open(&conf_file_path).unwrap_or_else(|error| {
++            panic!(
++                "open {} error: {}",
++                conf_file_path.display(),
++                error
++            )
++        });
+@@ -32,2 +41,5 @@
+-            .expect("read ik.yml error");
+-        let config: DefaultConfig = serde_yaml::from_str(yaml_str.as_str()).expect("json error");
++            .unwrap_or_else(|error| panic!("read {} error: {}", conf_file_path.display(), error));
++        let config: DefaultConfig =
++            serde_yaml::from_str(yaml_str.as_str()).unwrap_or_else(|error| {
++                panic!("parse {} error: {}", conf_file_path.display(), error)
++            });
+@@ -38,4 +49,8 @@
+-fn root_path() -> String {
+-    let mut root_path = env!("CARGO_MANIFEST_DIR").to_string();
+-    root_path.push('/');
+-    root_path
++fn root_path() -> PathBuf {
++    let starrocks_home = env::var_os(STARROCKS_HOME_ENV).unwrap_or_else(|| {
++        panic!(
++            "{} is not set; cannot locate Tantivy IK resources",
++            STARROCKS_HOME_ENV
++        )
++    });
++    PathBuf::from(starrocks_home).join(IK_RESOURCE_RELATIVE_PATH)
+@@ -46,3 +61,4 @@
+-        let mut root_path = root_path();
+-        root_path.push_str(self.main_dict.as_str());
+-        root_path
++        root_path()
++            .join(self.main_dict.as_str())
++            .to_string_lossy()
++            .into_owned()
+@@ -52,3 +68,4 @@
+-        let mut root_path = root_path();
+-        root_path.push_str(self.quantifier_dict.as_str());
+-        root_path
++        root_path()
++            .join(self.quantifier_dict.as_str())
++            .to_string_lossy()
++            .into_owned()
+@@ -59 +76 @@
+-        let dicts = self
++        self
+@@ -62,3 +79,2 @@
+-            .map(|dict| root_path.clone() + dict)
+-            .collect();
+-        dicts
++            .map(|dict| root_path.join(dict).to_string_lossy().into_owned())
++            .collect()
+@@ -68 +83,0 @@
+-        let mut dicts = Vec::new();
+@@ -70 +85,4 @@
+-        dicts.push(root_path.clone() + self.stop_word_dict.as_str());
++        let mut dicts = vec![root_path
++            .join(self.stop_word_dict.as_str())
++            .to_string_lossy()
++            .into_owned()];
+@@ -74 +92 @@
+-            .map(|dict| root_path.clone() + dict.as_str())
++            .map(|dict| root_path.join(dict).to_string_lossy().into_owned())

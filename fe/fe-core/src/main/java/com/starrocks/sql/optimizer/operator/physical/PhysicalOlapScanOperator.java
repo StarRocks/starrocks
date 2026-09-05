@@ -75,6 +75,9 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private double bm25ScoreMin = Double.NEGATIVE_INFINITY;
     private double bm25ScoreMax = Double.POSITIVE_INFINITY;
 
+    // COUNT(*) over a MATCH predicate may skip base columns fully resolved by the inverted index.
+    private boolean countOnIndex = false;
+
     private long gtid = 0;
 
     private PhysicalOlapScanOperator() {
@@ -141,6 +144,14 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public double getBm25ScoreMax() {
         return bm25ScoreMax;
+    }
+
+    public boolean isCountOnIndex() {
+        return countOnIndex;
+    }
+
+    public void setCountOnIndex(boolean countOnIndex) {
+        this.countOnIndex = countOnIndex;
     }
 
     public long getSelectedIndexId() {
@@ -352,6 +363,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.bm25ScoreLimit = operator.bm25ScoreLimit;
             builder.bm25ScoreMin = operator.bm25ScoreMin;
             builder.bm25ScoreMax = operator.bm25ScoreMax;
+            builder.countOnIndex = operator.countOnIndex;
             builder.sample = operator.getSample();
             return this;
         }

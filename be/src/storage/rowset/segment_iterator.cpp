@@ -148,6 +148,7 @@ private:
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             std::vector<size_t> pruned_cols;
             size_t pruned_col_size = 0;
+            size_t num_rows = chunk->num_rows();
             for (size_t i = 0; i < _column_iterators.size(); i++) {
                 ColumnPtr& col = chunk->get_column_by_index(i);
                 if (_prune_column_after_index_filter && _prune_cols.count(i)) {
@@ -164,7 +165,8 @@ private:
             for (size_t i : pruned_cols) {
                 ColumnPtr& col = chunk->get_column_by_index(i);
                 // make sure each pruned column has the same size as the unpruneable one.
-                col->resize(pruned_col_size);
+                // COUNT(*) over MATCH may prune every column, leaving pruned_col_size unset.
+                col->resize(pruned_col_size == 0 ? num_rows + range.span_size() : pruned_col_size);
             }
             chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
             return Status::OK();
@@ -1889,18 +1891,26 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         bool use_global_dict_code = _can_using_global_dict(f);
         bool use_dict_code = _can_using_dict_code(f);
 
-        if (delete_pred_columns.count(f->id()) || output_columns.count(f->id())) {
+        const bool prune_on_index =
+                _inverted_index_ctx && _inverted_index_ctx->prune_cols_candidate_by_inverted_index.count(f->id()) &&
+                !delete_pred_columns.count(f->id()) && (_opts.count_on_index || !output_columns.count(f->id()));
+        if (prune_on_index) {
+            if (_opts.count_on_index && output_columns.count(f->id())) {
+                // Keep the planner-visible slot in its original type. The column is filled
+                // only to carry the row count through the scan; downstream COUNT(*) never
+                // evaluates its values.
+                use_global_dict_code = false;
+                use_dict_code = false;
+            }
+            ctx->_skip_dict_decode_indexes.push_back(true);
+            // COUNT(*) does not consume scan values. Once an inverted-index predicate has
+            // fully evaluated a column, skip its data pages even if the planner kept that
+            // predicate column in the scan output schema.
+            ctx->_prune_cols.insert(i);
+        } else if (delete_pred_columns.count(f->id()) || output_columns.count(f->id())) {
             ctx->_skip_dict_decode_indexes.push_back(false);
         } else {
             ctx->_skip_dict_decode_indexes.push_back(true);
-            if (_inverted_index_ctx && _inverted_index_ctx->prune_cols_candidate_by_inverted_index.count(f->id())) {
-                // The column is pruneable if and only if:
-                // 1. column in prune_cols_candidate_by_inverted_index
-                // 2. column not in output schema
-                // 3. column is not one of the delete predicate columns
-                // 4. column must not be dict decoded when the read is finished
-                ctx->_prune_cols.insert(i);
-            }
         }
 
         if (use_dict_code || use_global_dict_code) {
@@ -1997,8 +2007,10 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     std::unordered_map<ColumnId, size_t> read_indexes;   // fid -> read schema index
     std::unordered_map<ColumnId, size_t> output_indexes; // fid -> output schema index
     for (size_t i = 0; i < build_read_index_size; i++) {
-        if (!ctx->_skip_dict_decode_indexes[i]) {
-            read_indexes[ctx->_read_schema.field(i)->id()] = i;
+        const ColumnId cid = ctx->_read_schema.field(i)->id();
+        const bool count_row_carrier = _opts.count_on_index && ctx->_prune_cols.count(i) && output_columns.count(cid);
+        if (!ctx->_skip_dict_decode_indexes[i] || count_row_carrier) {
+            read_indexes[cid] = i;
         }
     }
 
@@ -2404,6 +2416,8 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         index_opts.read_file = _column_files[cid].get();
         index_opts.stats = _opts.stats;
         index_opts.segment_rows = num_rows();
+        index_opts.enable_tantivy_reader_cache = _opts.enable_tantivy_reader_cache;
+        index_opts.enable_tantivy_query_cache = _opts.enable_tantivy_query_cache;
 
         if (inverted_index_iterators[cid] == nullptr) {
             RETURN_IF_ERROR(
@@ -2433,8 +2447,21 @@ Status SegmentIterator::_apply_inverted_index() {
         cid_2_fid.emplace(_schema.field(i)->id(), i);
     }
 
-    for (const auto& [cid, pred_list] : _opts.pred_tree.get_immediate_column_predicate_map()) {
-        InvertedIndexIterator* inverted_iter = inverted_index_iterators[cid];
+    const auto& immediate_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
+    const bool can_pushdown_non_scored_limit =
+            _opts.inverted_index_non_scored_limit > 0 && _opts.inverted_index_non_scored_limit_budget != nullptr &&
+            _opts.inverted_index_non_scored_limit_budget->load(std::memory_order_relaxed) > 0 &&
+            !_opts.use_bm25_score && !_opts.is_primary_keys && !_opts.has_preaggregation &&
+            _opts.delete_predicates.empty() && _opts.runtime_filter_preds.empty() &&
+            !_opts.runtime_range_pruner.has_runtime_filters() && !_opts.sample_options.enable_sampling &&
+            _scan_range.span_size() == num_rows() && _opts.pred_tree.size() == 1 && immediate_predicates.size() == 1 &&
+            immediate_predicates.begin()->second.size() == 1 &&
+            immediate_predicates.begin()->second[0]->type() == PredicateType::kExpr &&
+            down_cast<const ColumnExprPredicate*>(immediate_predicates.begin()->second[0])
+                    ->can_pushdown_non_scored_limit();
+
+    for (const auto& [cid, pred_list] : immediate_predicates) {
+        InvertedIndexIterator* inverted_iter = _inverted_index_ctx->inverted_index_iterators[cid];
         if (inverted_iter == nullptr) {
             continue;
         }
@@ -2442,6 +2469,10 @@ Status SegmentIterator::_apply_inverted_index() {
         RETURN_IF(it == cid_2_fid.end(),
                   Status::InternalError(strings::Substitute("No fid can be mapped by cid $0", cid)));
         std::string column_name(_schema.field(it->second)->name());
+        if (can_pushdown_non_scored_limit) {
+            inverted_iter->set_non_scored_limit(_opts.inverted_index_non_scored_limit,
+                                                _opts.inverted_index_non_scored_limit_budget.get());
+        }
         if (_inverted_index_ctx->bm25_score_requested) {
             // Push the SQL LIMIT into the scored GIN query so tantivy returns only
             // the top-k rows (see InvertedIndexIterator::set_bm25_topk_limit).

@@ -132,6 +132,45 @@ StatusOr<std::string> get_tantivy_ngram_tokenizer_name(const std::map<std::strin
     }
 }
 
+StatusOr<std::string> get_tantivy_analyzer_definition(const std::map<std::string, std::string>& properties) {
+    if (const auto it = properties.find(INVERTED_INDEX_ANALYZER_DEFINITION_KEY); it != properties.end()) {
+        if (it->second.empty()) {
+            return Status::InvalidArgument("tantivy analyzer_definition must not be empty");
+        }
+        return it->second;
+    }
+
+    const auto parser = boost::algorithm::to_lower_copy(get_parser_string_from_properties(properties));
+    if (parser == INVERTED_INDEX_PARSER_NONE) {
+        return std::string("raw");
+    }
+    if (parser == INVERTED_INDEX_PARSER_ENGLISH || parser == INVERTED_INDEX_PARSER_STANDARD) {
+        return parser;
+    }
+    if (parser == INVERTED_INDEX_PARSER_CHINESE || parser == "cjk") {
+        return std::string("cjk");
+    }
+    if (parser == INVERTED_INDEX_PARSER_JIEBA) {
+        return std::string("jieba");
+    }
+    if (parser == INVERTED_INDEX_PARSER_IK) {
+        return get_parser_mode_string_from_properties(properties) == INVERTED_INDEX_PARSER_SMART
+                       ? std::string("ik_smart")
+                       : std::string("ik_max_word");
+    }
+    if (parser == INVERTED_INDEX_PARSER_NGRAM) {
+        return get_tantivy_ngram_tokenizer_name(properties);
+    }
+    return Status::NotSupported("tantivy: unsupported parser '" + parser + "'");
+}
+
+std::string get_tantivy_analyzer_digest(const std::map<std::string, std::string>& properties) {
+    if (const auto it = properties.find(INVERTED_INDEX_ANALYZER_DIGEST_KEY); it != properties.end()) {
+        return it->second;
+    }
+    return "";
+}
+
 int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties) {
     if (const auto it = properties.find(INVERTED_INDEX_DICT_GRAM_NUM_KEY); it != properties.end()) {
         const std::string& gram_num = it->second;

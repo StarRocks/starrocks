@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use tantivy::directory::RamDirectory;
-use tantivy::schema::{FAST, IndexRecordOption, Schema, TextFieldIndexing, TextOptions};
+use tantivy::schema::{IndexRecordOption, Schema, TextFieldIndexing, TextOptions, FAST};
 use tantivy::{Index, ReloadPolicy, TantivyDocument};
 use tempfile::TempDir;
 
@@ -22,7 +22,8 @@ use crate::safe::{IndexReaderWrapper, IndexWriterWrapper};
 
 fn build(values: &[&str]) -> TempDir {
     let tmp = TempDir::new().expect("tempdir");
-    let mut w = IndexWriterWrapper::create(tmp.path(), "f", "english", true, true, 0, 0, "default").expect("create");
+    let mut w = IndexWriterWrapper::create(tmp.path(), "f", "english", true, true, 0, 0, "default")
+        .expect("create");
     w.add_strings_batch(values).expect("add");
     w.commit().expect("commit");
     drop(w);
@@ -33,10 +34,17 @@ fn build(values: &[&str]) -> TempDir {
 // a thread-local so a test can compare against the Vec-returning query.
 thread_local! {
     static SINK_IDS: std::cell::RefCell<Vec<u32>> = std::cell::RefCell::new(Vec::new());
+    static SINK_BUDGET: std::cell::Cell<usize> = const { std::cell::Cell::new(usize::MAX) };
 }
-extern "C" fn test_sink(_ctx: *mut std::ffi::c_void, ids: *const u32, len: usize) {
-    let s = unsafe { std::slice::from_raw_parts(ids, len) };
+extern "C" fn test_sink(_ctx: *mut std::ffi::c_void, ids: *const u32, len: usize) -> usize {
+    let accepted = SINK_BUDGET.with(|budget| {
+        let accepted = len.min(budget.get());
+        budget.set(budget.get() - accepted);
+        accepted
+    });
+    let s = unsafe { std::slice::from_raw_parts(ids, accepted) };
     SINK_IDS.with(|b| b.borrow_mut().extend_from_slice(s));
+    accepted
 }
 fn drain_sink() -> Vec<u32> {
     SINK_IDS.with(|b| {
@@ -48,7 +56,20 @@ fn drain_sink() -> Vec<u32> {
 }
 fn test_bitmap_sink() -> BitmapSink {
     SINK_IDS.with(|b| b.borrow_mut().clear());
-    BitmapSink { ctx: std::ptr::null_mut(), append: test_sink }
+    SINK_BUDGET.with(|b| b.set(usize::MAX));
+    BitmapSink {
+        ctx: std::ptr::null_mut(),
+        append: test_sink,
+    }
+}
+
+fn limited_bitmap_sink(budget: usize) -> BitmapSink {
+    SINK_IDS.with(|b| b.borrow_mut().clear());
+    SINK_BUDGET.with(|b| b.set(budget));
+    BitmapSink {
+        ctx: std::ptr::null_mut(),
+        append: test_sink,
+    }
 }
 
 #[test]
@@ -61,6 +82,17 @@ fn match_any() {
 }
 
 #[test]
+fn reader_resource_estimate_is_stable_and_nonzero() {
+    let tmp = build(&["alpha beta", "gamma"]);
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+    let first = r.estimated_bytes();
+    let second = r.estimated_bytes();
+    assert!(first >= std::mem::size_of::<IndexReaderWrapper>() as u64);
+    assert_eq!(first, second);
+    assert_eq!(r.fd_charge(), 0);
+}
+
+#[test]
 fn match_all() {
     let tmp = build(&["alpha beta gamma", "alpha gamma", "alpha beta"]);
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
@@ -70,53 +102,101 @@ fn match_all() {
 
 #[test]
 fn bitmap_variants_match_vec_variants() {
-    let tmp = build(&["alpha beta gamma", "alpha gamma", "alpha beta", "beta delta"]);
+    let tmp = build(&[
+        "alpha beta gamma",
+        "alpha gamma",
+        "alpha beta",
+        "beta delta",
+    ]);
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
 
     // MATCH_ALL
     let mut want = r.match_all_query(&["alpha", "beta"]).expect("all");
     want.sort_unstable();
     // ratio 0.5 → bitmap-AND path (alpha/beta both high-freq in this tiny index)
-    r.match_all_query_bitmap(&["alpha", "beta"], 0.5, test_bitmap_sink()).expect("all bitmap");
+    r.match_all_query_bitmap(&["alpha", "beta"], 0.5, 0, test_bitmap_sink())
+        .expect("all bitmap");
     assert_eq!(drain_sink(), want, "match_all bitmap-AND == vec");
     // ratio 1.0 → leapfrog fallback (general collector)
-    r.match_all_query_bitmap(&["alpha", "beta"], 1.0, test_bitmap_sink()).expect("all leapfrog");
+    r.match_all_query_bitmap(&["alpha", "beta"], 1.0, 0, test_bitmap_sink())
+        .expect("all leapfrog");
     assert_eq!(drain_sink(), want, "match_all leapfrog == vec");
     // absent MUST term → empty
-    r.match_all_query_bitmap(&["alpha", "zzz"], 0.5, test_bitmap_sink()).expect("all absent");
-    assert_eq!(drain_sink(), Vec::<u32>::new(), "match_all absent term → empty");
+    r.match_all_query_bitmap(&["alpha", "zzz"], 0.5, 0, test_bitmap_sink())
+        .expect("all absent");
+    assert_eq!(
+        drain_sink(),
+        Vec::<u32>::new(),
+        "match_all absent term → empty"
+    );
 
     // MATCH_ANY
     let mut want = r.match_any_query(&["beta", "delta"]).expect("any");
     want.sort_unstable();
-    r.match_any_query_bitmap(&["beta", "delta"], test_bitmap_sink()).expect("any bitmap");
+    r.match_any_query_bitmap(&["beta", "delta"], 0, test_bitmap_sink())
+        .expect("any bitmap");
     assert_eq!(drain_sink(), want, "match_any bitmap == vec");
 
     // EQUAL / term
     let mut want = r.term_query("gamma").expect("term");
     want.sort_unstable();
-    r.term_query_bitmap("gamma", test_bitmap_sink()).expect("term bitmap");
+    r.term_query_bitmap("gamma", 0, test_bitmap_sink())
+        .expect("term bitmap");
     assert_eq!(drain_sink(), want, "term bitmap == vec");
 
     // absent term → empty
-    r.term_query_bitmap("zzz", test_bitmap_sink()).expect("absent bitmap");
-    assert_eq!(drain_sink(), Vec::<u32>::new(), "absent term → empty bitmap");
+    r.term_query_bitmap("zzz", 0, test_bitmap_sink())
+        .expect("absent bitmap");
+    assert_eq!(
+        drain_sink(),
+        Vec::<u32>::new(),
+        "absent term → empty bitmap"
+    );
+}
+
+#[test]
+fn bitmap_limit_stops_on_shared_sink_budget() {
+    let tmp = build(&["alpha", "alpha", "alpha", "alpha", "alpha"]);
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+
+    r.term_query_bitmap("alpha", 5, limited_bitmap_sink(2))
+        .expect("limited term");
+    assert_eq!(drain_sink().len(), 2);
+
+    // The local limit is also enforced when the caller accepts every row.
+    r.term_query_bitmap("alpha", 3, test_bitmap_sink())
+        .expect("local limit");
+    assert_eq!(drain_sink().len(), 3);
 }
 
 #[test]
 fn phrase_with_slop() {
     let tmp = build(&[
-        "the quick brown fox",        // 0
-        "the lazy brown dog",         // 1
-        "quick fox jumps over",       // 2
+        "the quick brown fox",  // 0
+        "the lazy brown dog",   // 1
+        "quick fox jumps over", // 2
     ]);
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
     // exact phrase
-    assert_eq!(r.phrase_query(&["quick", "brown"], 0).expect("q"), vec![0u32]);
+    assert_eq!(
+        r.phrase_query(&["quick", "brown"], 0).expect("q"),
+        vec![0u32]
+    );
     // slop=1 lets "quick fox" match "quick brown fox" (gap of 1 between quick and fox)
     let mut hits = r.phrase_query(&["quick", "fox"], 1).expect("q");
     hits.sort_unstable();
     assert_eq!(hits, vec![0u32, 2u32]);
+}
+
+#[test]
+fn phrase_query_preserves_analyzer_position_gaps() {
+    let tmp = build(&["red and blue", "red x blue", "red blue"]);
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+    let mut hits = r
+        .phrase_query_with_positions(&["red", "blue"], Some(&[0, 2]), 0)
+        .expect("phrase with stopword gap");
+    hits.sort_unstable();
+    assert_eq!(hits, vec![0, 1]);
 }
 
 /// Round-trips through `open` with an in-memory `RamDirectory`. Validates
@@ -139,8 +219,8 @@ fn open_works_with_ram_directory() {
     let schema = schema_builder.build();
 
     let ram_dir = RamDirectory::create();
-    let index = Index::create(ram_dir.clone(), schema.clone(), Default::default())
-        .expect("create in ram");
+    let index =
+        Index::create(ram_dir.clone(), schema.clone(), Default::default()).expect("create in ram");
     let analyzer = crate::safe::tokenizer::build("english").expect("english analyzer");
     index
         .tokenizers()
@@ -158,8 +238,9 @@ fn open_works_with_ram_directory() {
 
     // Open via the unified core constructor with Manual reload (matches
     // compound-reader semantics; RamDirectory is read-only post-commit).
-    let r = IndexReaderWrapper::open(ram_dir, "f", "english", ReloadPolicy::Manual)
-        .expect("open ram");
+    let r =
+        IndexReaderWrapper::open(ram_dir, "f", "english", ReloadPolicy::Manual).expect("open ram");
+    r.prepare_for_search().expect("prepare immutable readers");
     let mut hits = r.term_query("alpha").expect("query");
     hits.sort_unstable();
     assert_eq!(hits, vec![0u32, 2u32], "alpha appears in rows 0 and 2");
@@ -191,23 +272,32 @@ mod wildcard {
         assert_eq!(like_pattern_to_regex("%foo%"), Some(".*foo.*".to_string()));
 
         // % and * are equivalent.
-        assert_eq!(like_pattern_to_regex("*foo*"), like_pattern_to_regex("%foo%"));
+        assert_eq!(
+            like_pattern_to_regex("*foo*"),
+            like_pattern_to_regex("%foo%")
+        );
         assert_eq!(like_pattern_to_regex("foo*"), like_pattern_to_regex("foo%"));
 
         // Consecutive wildcards collapse.
-        assert_eq!(like_pattern_to_regex("%%foo%%"), Some(".*foo.*".to_string()));
-        assert_eq!(like_pattern_to_regex("%*foo*%"), Some(".*foo.*".to_string()));
+        assert_eq!(
+            like_pattern_to_regex("%%foo%%"),
+            Some(".*foo.*".to_string())
+        );
+        assert_eq!(
+            like_pattern_to_regex("%*foo*%"),
+            Some(".*foo.*".to_string())
+        );
 
         // Multiple literal segments joined by `.*`.
-        assert_eq!(like_pattern_to_regex("foo%bar"), Some("foo.*bar".to_string()));
+        assert_eq!(
+            like_pattern_to_regex("foo%bar"),
+            Some("foo.*bar".to_string())
+        );
         assert_eq!(
             like_pattern_to_regex("%foo%bar%"),
             Some(".*foo.*bar.*".to_string())
         );
-        assert_eq!(
-            like_pattern_to_regex("a%b*c"),
-            Some("a.*b.*c".to_string())
-        );
+        assert_eq!(like_pattern_to_regex("a%b*c"), Some("a.*b.*c".to_string()));
 
         // Regex metacharacters in literal segments must be escaped.
         let r = like_pattern_to_regex("a.b%").unwrap();
@@ -223,7 +313,8 @@ mod wildcard {
     /// gives wildcard the parser=none semantics.
     fn build_raw(values: &[&str]) -> TempDir {
         let tmp = TempDir::new().expect("tempdir");
-        let mut w = IndexWriterWrapper::create(tmp.path(), "f", "raw", true, true, 0, 0, "default").expect("create");
+        let mut w = IndexWriterWrapper::create(tmp.path(), "f", "raw", true, true, 0, 0, "default")
+            .expect("create");
         w.add_strings_batch(values).expect("add");
         w.commit().expect("commit");
         drop(w);
@@ -234,12 +325,12 @@ mod wildcard {
     fn wildcard_substring_prefix_suffix() {
         // doc 0..6 covers literal substring / prefix / suffix variants.
         let tmp = build_raw(&[
-            "foo",      // 0
-            "foobar",   // 1
-            "barfoo",   // 2
-            "baz",      // 3
-            "afoob",    // 4
-            "FOO",      // 5 — different case, parser=none keeps it as-is
+            "foo",    // 0
+            "foobar", // 1
+            "barfoo", // 2
+            "baz",    // 3
+            "afoob",  // 4
+            "FOO",    // 5 — different case, parser=none keeps it as-is
         ]);
         let r = IndexReaderWrapper::load(tmp.path(), "f", "raw").expect("load");
 
@@ -310,10 +401,16 @@ fn score_ranks_by_tf_and_length() {
         "gif",               // 3: TF=1, shortest
     ]);
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
-    let mut hits = r.match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, f32::INFINITY).expect("scored query");
+    let mut hits = r
+        .match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, f32::INFINITY)
+        .expect("scored query");
     // only the 3 docs containing 'gif' come back
     let rows: std::collections::BTreeSet<u32> = hits.iter().map(|(rid, _)| *rid).collect();
-    assert_eq!(rows, [0u32, 1, 3].into_iter().collect(), "matched rows: {hits:?}");
+    assert_eq!(
+        rows,
+        [0u32, 1, 3].into_iter().collect(),
+        "matched rows: {hits:?}"
+    );
     // every BM25 score is positive
     assert!(hits.iter().all(|(_, s)| *s > 0.0), "scores: {hits:?}");
     // rank by score desc → doc 0 (TF=4) is the top hit
@@ -321,7 +418,10 @@ fn score_ranks_by_tf_and_length() {
     assert_eq!(hits[0].0, 0u32, "highest TF ranks first: {hits:?}");
     let s = |rid: u32| hits.iter().find(|(r, _)| *r == rid).unwrap().1;
     assert!(s(0) > s(1), "TF=4 outranks TF=1: {hits:?}");
-    assert!(s(3) > s(1), "shorter doc outranks longer for same TF: {hits:?}");
+    assert!(
+        s(3) > s(1),
+        "shorter doc outranks longer for same TF: {hits:?}"
+    );
 }
 
 #[test]
@@ -332,8 +432,12 @@ fn score_rarer_term_scores_higher_idf() {
     // hits). This isolates IDF: same doc length, only term rarity differs.
     let tmp = build(&["gif", "gif", "gif", "png"]);
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
-    let common = r.match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, f32::INFINITY).expect("q");
-    let rare = r.match_any_query_scored(&["png"], 0, f32::NEG_INFINITY, f32::INFINITY).expect("q");
+    let common = r
+        .match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, f32::INFINITY)
+        .expect("q");
+    let rare = r
+        .match_any_query_scored(&["png"], 0, f32::NEG_INFINITY, f32::INFINITY)
+        .expect("q");
     assert_eq!(common.len(), 3, "gif in 3 docs: {common:?}");
     assert_eq!(rare.len(), 1, "png in 1 doc: {rare:?}");
     // rarer term → higher IDF → higher BM25
@@ -349,18 +453,26 @@ fn score_topk_pushdown_limits_hits() {
     // the 2 highest-scoring rows (doc 0 then doc 1), not the full posting list.
     let tmp = build(&[
         "gif gif gif gif", // 0: TF=4
-        "gif gif gif",      // 1: TF=3
-        "gif gif",          // 2: TF=2
-        "gif",              // 3: TF=1
+        "gif gif gif",     // 1: TF=3
+        "gif gif",         // 2: TF=2
+        "gif",             // 3: TF=1
     ]);
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
-    let mut top = r.match_any_query_scored(&["gif"], 2, f32::NEG_INFINITY, f32::INFINITY).expect("top-k query");
+    let mut top = r
+        .match_any_query_scored(&["gif"], 2, f32::NEG_INFINITY, f32::INFINITY)
+        .expect("top-k query");
     assert_eq!(top.len(), 2, "limit=2 returns exactly 2 rows: {top:?}");
     top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     let rows: Vec<u32> = top.iter().map(|(rid, _)| *rid).collect();
-    assert_eq!(rows, vec![0u32, 1], "top-2 by score are the two highest-TF docs: {top:?}");
+    assert_eq!(
+        rows,
+        vec![0u32, 1],
+        "top-2 by score are the two highest-TF docs: {top:?}"
+    );
     // limit=0 still returns the full posting list (all 4 hits).
-    let full = r.match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, f32::INFINITY).expect("full query");
+    let full = r
+        .match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, f32::INFINITY)
+        .expect("full query");
     assert_eq!(full.len(), 4, "limit=0 keeps every hit: {full:?}");
 }
 
@@ -370,26 +482,47 @@ fn score_min_max_gate_filters_hits() {
     // A min/max score gate must keep only hits whose score is in [min, max].
     let tmp = build(&[
         "gif gif gif gif", // 0: TF=4, highest score
-        "gif gif gif",      // 1: TF=3
-        "gif gif",          // 2: TF=2
-        "gif",              // 3: TF=1, lowest score
+        "gif gif gif",     // 1: TF=3
+        "gif gif",         // 2: TF=2
+        "gif",             // 3: TF=1, lowest score
     ]);
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
-    let mut all = r.match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, f32::INFINITY).expect("all");
+    let mut all = r
+        .match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, f32::INFINITY)
+        .expect("all");
     all.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap()); // score desc: doc0..doc3
-    // Pick a threshold strictly between doc 1's and doc 2's score.
+                                                        // Pick a threshold strictly between doc 1's and doc 2's score.
     let cut = (all[1].1 + all[2].1) / 2.0;
     // min gate (collector path, limit=0): only docs 0 and 1 survive.
-    let hi = r.match_any_query_scored(&["gif"], 0, cut, f32::INFINITY).expect("min gate");
+    let hi = r
+        .match_any_query_scored(&["gif"], 0, cut, f32::INFINITY)
+        .expect("min gate");
     let hi_rows: std::collections::BTreeSet<u32> = hi.iter().map(|(rid, _)| *rid).collect();
-    assert_eq!(hi_rows, [0u32, 1].into_iter().collect(), "min gate keeps top-2: {hi:?}");
+    assert_eq!(
+        hi_rows,
+        [0u32, 1].into_iter().collect(),
+        "min gate keeps top-2: {hi:?}"
+    );
     assert!(hi.iter().all(|(_, s)| *s >= cut), "all >= min: {hi:?}");
     // max gate: only docs 2 and 3 survive.
-    let lo = r.match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, cut).expect("max gate");
+    let lo = r
+        .match_any_query_scored(&["gif"], 0, f32::NEG_INFINITY, cut)
+        .expect("max gate");
     let lo_rows: std::collections::BTreeSet<u32> = lo.iter().map(|(rid, _)| *rid).collect();
-    assert_eq!(lo_rows, [2u32, 3].into_iter().collect(), "max gate keeps bottom-2: {lo:?}");
+    assert_eq!(
+        lo_rows,
+        [2u32, 3].into_iter().collect(),
+        "max gate keeps bottom-2: {lo:?}"
+    );
     // min gate on the top-k path (limit>0) prunes the same way.
-    let hi_topk = r.match_any_query_scored(&["gif"], 10, cut, f32::INFINITY).expect("topk min gate");
-    let hi_topk_rows: std::collections::BTreeSet<u32> = hi_topk.iter().map(|(rid, _)| *rid).collect();
-    assert_eq!(hi_topk_rows, [0u32, 1].into_iter().collect(), "top-k min gate keeps top-2: {hi_topk:?}");
+    let hi_topk = r
+        .match_any_query_scored(&["gif"], 10, cut, f32::INFINITY)
+        .expect("topk min gate");
+    let hi_topk_rows: std::collections::BTreeSet<u32> =
+        hi_topk.iter().map(|(rid, _)| *rid).collect();
+    assert_eq!(
+        hi_topk_rows,
+        [0u32, 1].into_iter().collect(),
+        "top-k min gate keeps top-2: {hi_topk:?}"
+    );
 }

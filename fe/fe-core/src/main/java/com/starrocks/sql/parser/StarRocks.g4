@@ -43,6 +43,11 @@ statement
     | recoverDbStmt
     | showDataStmt
     | showDataDistributionStmt
+    | createTextAnalyzerStatement
+    | dropTextAnalyzerStatement
+    | showTextAnalyzersStatement
+    | descTextAnalyzerStatement
+    | showCreateTextAnalyzerStatement
 
     // Table Statement
     | createTableStatement
@@ -869,6 +874,28 @@ showFailPointStatement
     ;
 
 // ------------------------------------------- Dictionary Statement -----------------------------------------------------
+
+// ------------------------------------------- Text Analyzer Statement --------------------------------------------------
+
+createTextAnalyzerStatement
+    : CREATE TEXT ANALYZER qualifiedName properties
+    ;
+
+dropTextAnalyzerStatement
+    : DROP TEXT ANALYZER (IF EXISTS)? qualifiedName RESTRICT?
+    ;
+
+showTextAnalyzersStatement
+    : SHOW TEXT ANALYZERS (FROM identifierOrString)?
+    ;
+
+descTextAnalyzerStatement
+    : (DESC | DESCRIBE) TEXT ANALYZER qualifiedName
+    ;
+
+showCreateTextAnalyzerStatement
+    : SHOW CREATE TEXT ANALYZER qualifiedName
+    ;
 
 createDictionaryStatement
     : CREATE DICTIONARY dictionaryName USING qualifiedName
@@ -3079,14 +3106,14 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | ANALYZER | ANALYZERS | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DEFINITION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
@@ -3104,7 +3131,7 @@ nonReserved
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
-    | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
+    | RESOURCE | RESOURCES | RESTORE | RESTRICT | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME

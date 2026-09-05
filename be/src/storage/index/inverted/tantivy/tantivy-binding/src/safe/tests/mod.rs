@@ -16,4 +16,5 @@ mod ffi_result_tests;
 mod index_reader_tests;
 mod index_writer_tests;
 mod pull_directory_tests;
+mod resident_directory_tests;
 mod tokenizer_tests;

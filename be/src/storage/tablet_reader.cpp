@@ -380,6 +380,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.bm25_score_max = params.bm25_score_max;
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.inverted_index_non_scored_limit = params.inverted_index_non_scored_limit;
+    rs_opts.inverted_index_non_scored_limit_budget = params.inverted_index_non_scored_limit_budget;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -391,7 +393,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.asc_hint = _is_asc_hint;
     }
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.count_on_index = params.count_on_index;
     rs_opts.enable_gin_filter = params.enable_gin_filter;
+    rs_opts.enable_tantivy_reader_cache = params.enable_tantivy_reader_cache;
+    rs_opts.enable_tantivy_query_cache = params.enable_tantivy_query_cache;
     rs_opts.has_preaggregation = true;
     if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
         rs_opts.has_preaggregation = true;

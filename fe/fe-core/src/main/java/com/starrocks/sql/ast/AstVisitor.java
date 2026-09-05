@@ -1643,4 +1643,26 @@ public interface AstVisitor<R, C> {
     default R visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
+
+    // ------------------------------------------- Text Analyzer ----------------------------------------------------
+
+    default R visitCreateTextAnalyzerStatement(CreateTextAnalyzerStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropTextAnalyzerStatement(DropTextAnalyzerStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowTextAnalyzersStatement(ShowTextAnalyzersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitDescTextAnalyzerStatement(DescTextAnalyzerStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCreateTextAnalyzerStatement(ShowCreateTextAnalyzerStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
 }

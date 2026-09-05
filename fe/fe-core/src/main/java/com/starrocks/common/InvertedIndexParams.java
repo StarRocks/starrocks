@@ -49,6 +49,11 @@ public class InvertedIndexParams {
          */
         PARSER("none", true),
 
+        /** Database-scoped TEXT ANALYZER reference and its immutable snapshot. */
+        ANALYZER,
+        ANALYZER_DEFINITION,
+        ANALYZER_DIGEST,
+
         /**
          * Segmentation mode for parsers that expose multiple granularities.
          */
@@ -84,6 +89,10 @@ public class InvertedIndexParams {
 
         IndexParamsKey(String defaultValue) {
             this.defaultValue = defaultValue;
+        }
+
+        IndexParamsKey() {
+            this.defaultValue = null;
         }
     }
 

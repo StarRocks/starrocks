@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <unordered_map>
 #include <utility>
 
@@ -43,7 +44,16 @@ public:
                                 const IndexReadOptions& index_opt) = 0;
 
     virtual Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
-                         InvertedIndexQueryType query_type, roaring::Roaring* bit_map) = 0;
+                         InvertedIndexQueryType query_type, roaring::Roaring* bit_map,
+                         const InvertedIndexQueryOptions& options = {}) = 0;
+
+    // Non-scored query with an index-side row limit. Implementations that do
+    // not support scorer early termination fall back to the complete query.
+    virtual Status query_limited(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
+                                 InvertedIndexQueryType query_type, int32_t limit, std::atomic<int64_t>* global_budget,
+                                 roaring::Roaring* bit_map, const InvertedIndexQueryOptions& options = {}) {
+        return query(stats, column_name, query_value, query_type, bit_map, options);
+    }
 
     // Like query(), but also emits a BM25 relevance score per matched row into
     // `row_to_score` (segment-local row id -> score), to back a SQL score()
@@ -54,12 +64,13 @@ public:
     // inside the index (backing `WHERE score() > c`); -/+INFINITY = unbounded.
     virtual Status query_scored(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
                                 InvertedIndexQueryType query_type, int32_t limit, float min_score, float max_score,
-                                roaring::Roaring* bit_map, std::unordered_map<uint32_t, float>* row_to_score) {
+                                roaring::Roaring* bit_map, std::unordered_map<uint32_t, float>* row_to_score,
+                                const InvertedIndexQueryOptions& options = {}) {
         return Status::NotSupported("scored inverted-index query not supported by this implementation");
     }
 
-    virtual Status query_null(OlapReaderStatistics* stats, const std::string& column_name,
-                              roaring::Roaring* bit_map) = 0;
+    virtual Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map,
+                              const InvertedIndexQueryOptions& options = {}) = 0;
 
     virtual InvertedIndexReaderType get_inverted_index_reader_type() = 0;
 

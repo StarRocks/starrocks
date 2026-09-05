@@ -14,15 +14,24 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.TextAnalyzer;
+import com.starrocks.catalog.TextAnalyzerMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import org.apache.commons.lang3.StringUtils;
@@ -47,6 +56,9 @@ public class InvertedIndexUtil {
     public static String INVERTED_INDEX_IMP_LIB_KEY = IMP_LIB.name().toLowerCase(Locale.ROOT);
 
     public static String INVERTED_INDEX_PARSER_KEY = PARSER.name().toLowerCase(Locale.ROOT);
+    public static String INVERTED_INDEX_ANALYZER_KEY = "analyzer";
+    public static String INVERTED_INDEX_ANALYZER_DEFINITION_KEY = "analyzer_definition";
+    public static String INVERTED_INDEX_ANALYZER_DIGEST_KEY = "analyzer_digest";
 
     /**
      * Do not parse value, index and match with the whole value
@@ -121,6 +133,8 @@ public class InvertedIndexUtil {
             throw new SemanticException("The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
+        resolveTextAnalyzer(properties);
+
         if (properties.containsKey(INVERTED_INDEX_IMP_LIB_KEY)) {
             String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
             boolean isClucene = CLUCENE.name().equalsIgnoreCase(impValue);
@@ -172,21 +186,26 @@ public class InvertedIndexUtil {
 
     private static void addDefaultProperties(Map<String, String> properties) {
         IndexParams.getInstance().getKeySetByIndexTypeWithDefaultValue(IndexType.GIN).entrySet()
-                .stream().filter(entry -> !properties.containsKey(entry.getKey().toLowerCase(Locale.ROOT)))
+                .stream().filter(entry -> !(entry.getKey().equalsIgnoreCase(INVERTED_INDEX_PARSER_KEY)
+                        && properties.containsKey(INVERTED_INDEX_ANALYZER_KEY)))
+                .filter(entry -> !properties.containsKey(entry.getKey().toLowerCase(Locale.ROOT)))
                 .forEach(entry -> properties.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue().getDefaultValue()));
     }
 
     public static void checkInvertedIndexParser(
             String indexColName, PrimitiveType colType, Map<String, String> properties) throws SemanticException {
         String parser = getInvertedIndexParser(properties);
+        if (properties.containsKey(INVERTED_INDEX_ANALYZER_DEFINITION_KEY)) {
+            return;
+        }
         if (colType.isStringType()) {
             boolean isCommonParser = parser.equals(INVERTED_INDEX_PARSER_NONE)
                     || parser.equals(INVERTED_INDEX_PARSER_STANDARD)
                     || parser.equals(INVERTED_INDEX_PARSER_ENGLISH)
                     || parser.equals(INVERTED_INDEX_PARSER_CHINESE);
             boolean isJieba = parser.equals(INVERTED_INDEX_PARSER_JIEBA);
-            boolean isCjk = parser.equals(INVERTED_INDEX_PARSER_CJK);
             boolean isIk = parser.equals(INVERTED_INDEX_PARSER_IK);
+            boolean isCjk = parser.equals(INVERTED_INDEX_PARSER_CJK);
             boolean isNgram = parser.equals(INVERTED_INDEX_PARSER_NGRAM);
             if (!isCommonParser && !isJieba && !isCjk && !isIk && !isNgram) {
                 throw new SemanticException("INVERTED index parser: " + parser
@@ -262,6 +281,68 @@ public class InvertedIndexUtil {
             throw new SemanticException("Invalid parser_mode '" + parserMode
                     + "' for parser 'ik'; expected ik_max_word or ik_smart");
         }
+    }
+
+    private static void resolveTextAnalyzer(Map<String, String> properties) {
+        boolean hasAnalyzer = properties.containsKey(INVERTED_INDEX_ANALYZER_KEY);
+        boolean hasSnapshot = properties.containsKey(INVERTED_INDEX_ANALYZER_DEFINITION_KEY)
+                || properties.containsKey(INVERTED_INDEX_ANALYZER_DIGEST_KEY);
+        if (!hasAnalyzer) {
+            if (hasSnapshot) {
+                throw new SemanticException("analyzer_definition and analyzer_digest are internal "
+                        + "properties; specify analyzer instead");
+            }
+            return;
+        }
+        TextAnalyzerMgr.checkClusterCapability();
+        if (properties.containsKey(INVERTED_INDEX_PARSER_KEY)) {
+            throw new SemanticException("parser and analyzer are mutually exclusive");
+        }
+        String impLib = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
+        if (impLib != null && !TANTIVY.name().equalsIgnoreCase(impLib)) {
+            throw new SemanticException("TEXT ANALYZER is only supported by imp_lib=tantivy");
+        }
+        properties.put(INVERTED_INDEX_IMP_LIB_KEY, TANTIVY.name().toLowerCase(Locale.ROOT));
+
+        String reference = properties.get(INVERTED_INDEX_ANALYZER_KEY);
+        if (StringUtils.isBlank(reference)) {
+            throw new SemanticException("analyzer must not be empty");
+        }
+        int separator = reference.lastIndexOf('.');
+        String dbName;
+        String analyzerName;
+        if (separator > 0 && separator + 1 < reference.length()) {
+            dbName = reference.substring(0, separator);
+            analyzerName = reference.substring(separator + 1);
+        } else {
+            ConnectContext context = ConnectContext.get();
+            dbName = context == null ? null : context.getDatabase();
+            analyzerName = reference;
+        }
+        if (StringUtils.isBlank(dbName)) {
+            throw new SemanticException("No database selected for TEXT ANALYZER " + reference);
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new SemanticException("Unknown database " + dbName + " for TEXT ANALYZER " + reference);
+        }
+        TextAnalyzer analyzer = db.getTextAnalyzer(analyzerName);
+        if (analyzer == null) {
+            throw new SemanticException("Unknown TEXT ANALYZER " + reference);
+        }
+        ConnectContext context = ConnectContext.get();
+        if (context != null) {
+            try {
+                Authorizer.checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), db.getOriginName());
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(), context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(), PrivilegeType.ANY.name(), ObjectType.DATABASE.name(),
+                        db.getOriginName());
+            }
+        }
+        properties.put(INVERTED_INDEX_ANALYZER_KEY, db.getOriginName() + "." + analyzer.getName());
+        properties.put(INVERTED_INDEX_ANALYZER_DEFINITION_KEY, analyzer.getCanonicalDefinition());
+        properties.put(INVERTED_INDEX_ANALYZER_DIGEST_KEY, analyzer.getDigest());
     }
 
     /**

@@ -24,10 +24,11 @@
 use std::path::Path;
 
 use tantivy::indexer::NoMergePolicy;
-use tantivy::schema::{FAST, IndexRecordOption, Field, Schema, TextFieldIndexing, TextOptions};
+use tantivy::schema::{Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, FAST};
 use tantivy::{Index, IndexWriter, TantivyDocument};
 
 use crate::error::{Result, TantivyBindingError};
+use crate::safe::tokenizer::pipeline::PipelineTokenizer;
 use crate::safe::tokenizer::{self, TOKENIZER_NAME};
 
 /// Memory budget handed to tantivy's IndexWriter for one BE segment. tantivy
@@ -65,6 +66,7 @@ pub struct IndexWriterWrapper {
     // row id must be stored, not inferred from segment offsets.
     row_id_field: Field,
     next_row_id: u64,
+    analyzer_validator: PipelineTokenizer,
 }
 
 impl IndexWriterWrapper {
@@ -102,9 +104,34 @@ impl IndexWriterWrapper {
         num_threads: usize,
         merge_policy: &str,
     ) -> Result<Self> {
+        Self::create_with_digest(
+            path,
+            field_name,
+            tokenizer_name,
+            None,
+            support_phrase,
+            support_bm25,
+            memory_budget_bytes,
+            num_threads,
+            merge_policy,
+        )
+    }
+
+    pub fn create_with_digest(
+        path: &Path,
+        field_name: &str,
+        analyzer_definition: &str,
+        expected_digest: Option<&str>,
+        support_phrase: bool,
+        support_bm25: bool,
+        memory_budget_bytes: usize,
+        num_threads: usize,
+        merge_policy: &str,
+    ) -> Result<Self> {
         std::fs::create_dir_all(path)?;
 
-        let analyzer = tokenizer::build(tokenizer_name)?;
+        let resolved = tokenizer::resolve(analyzer_definition, expected_digest)?;
+        let analyzer = resolved.analyzer;
 
         let record_option = if support_phrase {
             IndexRecordOption::WithFreqsAndPositions
@@ -135,15 +162,20 @@ impl IndexWriterWrapper {
         } else {
             DEFAULT_WRITER_NUM_THREADS
         };
-        let writer: IndexWriter =
-            index.writer_with_num_threads(num_threads, budget)?;
+        let writer: IndexWriter = index.writer_with_num_threads(num_threads, budget)?;
 
         if merge_policy == MERGE_POLICY_NO_MERGE {
             writer.set_merge_policy(Box::new(NoMergePolicy));
         }
         // else: keep tantivy's default LogMergePolicy
 
-        Ok(Self { writer: Some(writer), text_field, row_id_field, next_row_id: 0 })
+        Ok(Self {
+            writer: Some(writer),
+            text_field,
+            row_id_field,
+            next_row_id: 0,
+            analyzer_validator: resolved.pipeline,
+        })
     }
 
     /// Append `values.len()` documents in order. Use `""` (empty string) for rows that are null on the BE side;
@@ -155,6 +187,10 @@ impl IndexWriterWrapper {
             .as_mut()
             .ok_or_else(|| TantivyBindingError::Internal("writer already committed".to_string()))?;
         for v in values {
+            // Tantivy's Tokenizer trait cannot return a Status. Validate the
+            // resource limits before handing the same text to its indexing
+            // pipeline so oversized input/token streams fail closed.
+            self.analyzer_validator.analyze(v)?;
             let mut doc = TantivyDocument::default();
             doc.add_text(self.text_field, v);
             doc.add_u64(self.row_id_field, self.next_row_id);

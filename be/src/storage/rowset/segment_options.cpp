@@ -69,6 +69,8 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->rowid_range_option = rowid_range_option;
     dst->short_key_ranges = short_key_ranges;
     dst->is_first_split_of_segment = is_first_split_of_segment;
+    dst->enable_tantivy_reader_cache = enable_tantivy_reader_cache;
+    dst->enable_tantivy_query_cache = enable_tantivy_query_cache;
 
     return Status::OK();
 }

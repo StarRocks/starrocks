@@ -202,6 +202,7 @@ public class OlapScanNode extends ScanNode {
     // BM25 score(): inclusive [min, max] gate for `WHERE score() > c`; +/-Inf = unbounded.
     private double bm25ScoreMin = Double.NEGATIVE_INFINITY;
     private double bm25ScoreMax = Double.POSITIVE_INFINITY;
+    private boolean countOnIndex = false;
 
     private boolean calcaulatedScanRange = false;
 
@@ -251,6 +252,10 @@ public class OlapScanNode extends ScanNode {
 
     public void setBm25ScoreMax(double bm25ScoreMax) {
         this.bm25ScoreMax = bm25ScoreMax;
+    }
+
+    public void setCountOnIndex(boolean countOnIndex) {
+        this.countOnIndex = countOnIndex;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -856,6 +861,9 @@ public class OlapScanNode extends ScanNode {
         if (bm25ScoreSlotId >= 0) {
             output.append(prefix).append("BM25SCORE: ON, topk=").append(bm25ScoreLimit).append("\n");
         }
+        if (countOnIndex) {
+            output.append(prefix).append("COUNT ON INDEX: ON").append("\n");
+        }
 
         if (detailLevel != TExplainLevel.VERBOSE) {
             if (isPreAggregation) {
@@ -1107,6 +1115,9 @@ public class OlapScanNode extends ScanNode {
             if (bm25ScoreMax != Double.POSITIVE_INFINITY) {
                 msg.lake_scan_node.setBm25_score_max(bm25ScoreMax);
             }
+            if (countOnIndex) {
+                msg.lake_scan_node.setCount_on_index(true);
+            }
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -1175,6 +1186,9 @@ public class OlapScanNode extends ScanNode {
             }
             if (bm25ScoreMax != Double.POSITIVE_INFINITY) {
                 msg.olap_scan_node.setBm25_score_max(bm25ScoreMax);
+            }
+            if (countOnIndex) {
+                msg.olap_scan_node.setCount_on_index(true);
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);

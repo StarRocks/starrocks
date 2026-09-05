@@ -12,35 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Tokenizer factory and shared API.
-//!
-//! Each custom `tantivy::Tokenizer` impl lives in its own submodule
-//! (`cjk_bigram`, `ik`, `jieba`). Tantivy's bundled tokenizers (`SimpleTokenizer`,
-//! `RawTokenizer`) are assembled inline below — they have no custom code,
-//! so a separate file would only add jump cost.
-//!
-//! All string → `TextAnalyzer` resolution happens in a single match in
-//! `build()`; do not duplicate this dispatch elsewhere.
+//! Single factory for legacy tokenizer names and schema-versioned AnalyzerSpec JSON.
 
 mod cjk_bigram;
 mod ik;
 mod jieba;
+pub(crate) mod pipeline;
+pub mod spec;
 mod standard;
 
-use ik_rs::core::ik_segmenter::TokenMode;
-use tantivy::tokenizer::{
-    Language, LowerCaser, NgramTokenizer, RawTokenizer, RemoveLongFilter, SimpleTokenizer,
-    StopWordFilter, TextAnalyzer,
-};
-// Note: LowerCaser is still imported for english_analyzer().
-// CJK and jieba handle lowercasing inline to avoid the overhead of
-// Unicode case-mapping on CJK characters that have no case.
+use std::collections::HashMap;
+use std::sync::{OnceLock, RwLock};
+
+use sha2::{Digest, Sha256};
+use tantivy::tokenizer::{TextAnalyzer, Token};
 
 use crate::error::{Result, TantivyBindingError};
-use cjk_bigram::CjkBigramTokenizer;
-use ik::IkTokenizer;
-use jieba::JiebaTokenizer;
-use standard::StandardTokenizer;
+use pipeline::PipelineTokenizer;
+use spec::AnalyzerSpec;
 
 pub const TOKENIZER_ENGLISH: &str = "english";
 pub const TOKENIZER_JIEBA: &str = "jieba";
@@ -50,97 +39,98 @@ pub const TOKENIZER_IK_SMART: &str = "ik_smart";
 pub const TOKENIZER_NGRAM: &str = "ngram";
 pub const TOKENIZER_RAW: &str = "raw";
 pub const TOKENIZER_STANDARD: &str = "standard";
-
 pub const TOKENIZER_NAME: &str = "sr_default";
+const MAX_CACHED_ANALYZERS: usize = 1024;
 
-pub fn build(name: &str) -> Result<TextAnalyzer> {
-    if name.starts_with(TOKENIZER_NGRAM) {
-        return ngram_analyzer(name);
-    }
-
-    match name {
-        TOKENIZER_ENGLISH => Ok(english_analyzer()),
-        TOKENIZER_CJK => Ok(TextAnalyzer::builder(CjkBigramTokenizer::default())
-            .build()),
-        TOKENIZER_JIEBA => Ok(TextAnalyzer::builder(JiebaTokenizer::default())
-            .build()),
-        TOKENIZER_IK => Ok(TextAnalyzer::builder(IkTokenizer::default()).build()),
-        TOKENIZER_IK_SMART => Ok(TextAnalyzer::builder(IkTokenizer::new(TokenMode::SEARCH))
-            .build()),
-        TOKENIZER_STANDARD => Ok(standard_analyzer()),
-        TOKENIZER_RAW => Ok(TextAnalyzer::builder(RawTokenizer::default()).build()),
-        other => Err(TantivyBindingError::InvalidArgument(format!(
-            "unsupported tokenizer '{other}'; supported: '{TOKENIZER_ENGLISH}', '{TOKENIZER_CJK}', '{TOKENIZER_JIEBA}', '{TOKENIZER_IK}', '{TOKENIZER_IK_SMART}', '{TOKENIZER_NGRAM}:<min_gram>:<max_gram>', '{TOKENIZER_STANDARD}', '{TOKENIZER_RAW}'"
-        ))),
-    }
+#[derive(Clone)]
+pub struct ResolvedAnalyzer {
+    pub analyzer: TextAnalyzer,
+    pub canonical_json: String,
+    pub digest: String,
+    pub(crate) pipeline: PipelineTokenizer,
 }
 
-pub fn tokenize(tokenizer_name: &str, text: &str) -> Result<Vec<String>> {
-    let mut analyzer = build(tokenizer_name)?;
-    let mut stream = analyzer.token_stream(text);
-    let mut tokens = Vec::new();
-    while stream.advance() {
-        let t = &stream.token().text;
-        if !t.trim().is_empty() {
-            tokens.push(t.clone());
+fn cache() -> &'static RwLock<HashMap<String, ResolvedAnalyzer>> {
+    static CACHE: OnceLock<RwLock<HashMap<String, ResolvedAnalyzer>>> = OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+pub fn build(definition_or_legacy_name: &str) -> Result<TextAnalyzer> {
+    Ok(resolve(definition_or_legacy_name, None)?.analyzer)
+}
+
+pub fn resolve(
+    definition_or_legacy_name: &str,
+    expected_digest: Option<&str>,
+) -> Result<ResolvedAnalyzer> {
+    let spec = if definition_or_legacy_name.trim_start().starts_with('{') {
+        AnalyzerSpec::parse(definition_or_legacy_name)?
+    } else {
+        AnalyzerSpec::legacy(definition_or_legacy_name)?
+    };
+    let canonical_json = spec.canonical_json()?;
+    let digest = hex_sha256(canonical_json.as_bytes());
+    if let Some(expected) = expected_digest.filter(|value| !value.is_empty()) {
+        if expected != digest {
+            return Err(TantivyBindingError::InvalidArgument(format!(
+                "analyzer digest mismatch: expected {expected}, computed {digest}"
+            )));
         }
     }
-    Ok(tokens)
-}
-
-fn english_analyzer() -> TextAnalyzer {
-    TextAnalyzer::builder(SimpleTokenizer::default())
-        .filter(RemoveLongFilter::limit(40))
-        .filter(LowerCaser)
-        .filter(
-            StopWordFilter::new(Language::English)
-                .expect("english stopwords are bundled in the tantivy crate"),
-        )
-        .build()
-}
-
-fn standard_analyzer() -> TextAnalyzer {
-    TextAnalyzer::builder(StandardTokenizer)
-        .filter(LowerCaser)
-        .filter(
-            StopWordFilter::new(Language::English)
-                .expect("english stopwords are bundled in the tantivy crate"),
-        )
-        .build()
-}
-
-fn ngram_analyzer(name: &str) -> Result<TextAnalyzer> {
-    let mut parts = name.split(':');
-    if parts.next() != Some(TOKENIZER_NGRAM) {
-        return Err(TantivyBindingError::InvalidArgument(format!(
-            "invalid ngram tokenizer '{name}'"
-        )));
+    if let Some(cached) = cache()
+        .read()
+        .map_err(|_| TantivyBindingError::Internal("analyzer cache lock poisoned".to_string()))?
+        .get(&digest)
+        .cloned()
+    {
+        return Ok(cached);
     }
-    let min_gram = parse_ngram_size(parts.next(), "min_gram", name)?;
-    let max_gram = parse_ngram_size(parts.next(), "max_gram", name)?;
-    if parts.next().is_some() {
-        return Err(TantivyBindingError::InvalidArgument(format!(
-            "invalid ngram tokenizer '{name}'; expected 'ngram:<min_gram>:<max_gram>'"
-        )));
+    let pipeline = PipelineTokenizer::new(spec);
+    let resolved = ResolvedAnalyzer {
+        analyzer: TextAnalyzer::builder(pipeline.clone()).build(),
+        canonical_json,
+        digest: digest.clone(),
+        pipeline,
+    };
+    let mut cache = cache()
+        .write()
+        .map_err(|_| TantivyBindingError::Internal("analyzer cache lock poisoned".to_string()))?;
+    if cache.len() >= MAX_CACHED_ANALYZERS {
+        if let Some(key) = cache.keys().next().cloned() {
+            cache.remove(&key);
+        }
     }
-
-    let tokenizer = NgramTokenizer::new(min_gram, max_gram, false).map_err(|err| {
-        TantivyBindingError::InvalidArgument(format!("invalid ngram tokenizer '{name}': {err}"))
-    })?;
-    Ok(TextAnalyzer::builder(tokenizer).filter(LowerCaser).build())
+    cache.insert(digest, resolved.clone());
+    Ok(resolved)
 }
 
-fn parse_ngram_size(value: Option<&str>, key: &str, name: &str) -> Result<usize> {
-    value
-        .ok_or_else(|| {
-            TantivyBindingError::InvalidArgument(format!(
-                "invalid ngram tokenizer '{name}'; missing {key}"
-            ))
-        })?
-        .parse::<usize>()
-        .map_err(|_| {
-            TantivyBindingError::InvalidArgument(format!(
-                "invalid ngram tokenizer '{name}'; {key} must be a positive integer"
-            ))
-        })
+pub fn tokenize(definition_or_legacy_name: &str, text: &str) -> Result<Vec<String>> {
+    Ok(tokenize_detail(definition_or_legacy_name, text)?
+        .into_iter()
+        .map(|token| token.text)
+        .collect())
+}
+
+pub fn tokenize_detail(definition_or_legacy_name: &str, text: &str) -> Result<Vec<Token>> {
+    let spec = if definition_or_legacy_name.trim_start().starts_with('{') {
+        AnalyzerSpec::parse(definition_or_legacy_name)?
+    } else {
+        AnalyzerSpec::legacy(definition_or_legacy_name)?
+    };
+    PipelineTokenizer::new(spec).analyze(text)
+}
+
+pub fn canonicalize(definition_or_legacy_name: &str) -> Result<(String, String)> {
+    let resolved = resolve(definition_or_legacy_name, None)?;
+    Ok((resolved.canonical_json, resolved.digest))
+}
+
+fn hex_sha256(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut output = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write;
+        let _ = write!(output, "{byte:02x}");
+    }
+    output
 }

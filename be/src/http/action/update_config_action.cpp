@@ -76,6 +76,8 @@
 #include "service/staros_worker.h"
 #endif // USE_STAROS
 
+#include "storage/index/inverted/tantivy/tantivy_cache.h"
+
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
@@ -93,6 +95,36 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
             cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
+            return Status::OK();
+        });
+        _config_callback.emplace("tantivy_reader_cache_limit", [&]() -> Status {
+            int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+            if (process_mem_limit <= 0) {
+                process_mem_limit = MemInfo::physical_mem();
+            }
+            int64_t cache_limit = ParseUtil::parse_mem_spec(config::tantivy_reader_cache_limit, process_mem_limit);
+            if (cache_limit < 0) {
+                return Status::InvalidArgument("invalid tantivy_reader_cache_limit");
+            }
+            auto* manager = _exec_env->tantivy_cache_manager();
+            if (manager != nullptr) {
+                manager->reader_cache()->set_capacity(static_cast<size_t>(cache_limit));
+            }
+            return Status::OK();
+        });
+        _config_callback.emplace("tantivy_query_cache_limit", [&]() -> Status {
+            int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+            if (process_mem_limit <= 0) {
+                process_mem_limit = MemInfo::physical_mem();
+            }
+            int64_t cache_limit = ParseUtil::parse_mem_spec(config::tantivy_query_cache_limit, process_mem_limit);
+            if (cache_limit < 0) {
+                return Status::InvalidArgument("invalid tantivy_query_cache_limit");
+            }
+            auto* manager = _exec_env->tantivy_cache_manager();
+            if (manager != nullptr) {
+                manager->query_cache()->set_capacity(static_cast<size_t>(cache_limit));
+            }
             return Status::OK();
         });
         _config_callback.emplace("disable_storage_page_cache", [&]() -> Status {

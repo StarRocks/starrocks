@@ -29,10 +29,12 @@ namespace starrocks {
 namespace tb = ::starrocks::tantivy_binding;
 
 TantivyInvertedWriter::TantivyInvertedWriter(std::string field_name, std::string temp_dir, std::string tokenizer,
-                                             int64_t index_id, bool support_phrase, bool support_bm25)
+                                             std::string analyzer_digest, int64_t index_id, bool support_phrase,
+                                             bool support_bm25)
         : _field_name(std::move(field_name)),
           _temp_dir(std::move(temp_dir)),
-          _tokenizer(std::move(tokenizer)),
+          _analyzer_definition(std::move(tokenizer)),
+          _analyzer_digest(std::move(analyzer_digest)),
           _index_id(index_id),
           _support_phrase(support_phrase),
           _support_bm25(support_bm25) {}
@@ -40,28 +42,8 @@ TantivyInvertedWriter::TantivyInvertedWriter(std::string field_name, std::string
 Status TantivyInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::string& field_name,
                                      const std::string& path, TabletIndex* tablet_index,
                                      std::unique_ptr<InvertedWriter>* res) {
-    auto parser_str = get_parser_string_from_properties(tablet_index->index_properties());
-    std::string tokenizer;
-    if (parser_str == INVERTED_INDEX_PARSER_ENGLISH) {
-        tokenizer = "english";
-    } else if (parser_str == INVERTED_INDEX_PARSER_STANDARD) {
-        tokenizer = "standard";
-    } else if (parser_str == INVERTED_INDEX_PARSER_CHINESE) {
-        tokenizer = "cjk";
-    } else if (parser_str == INVERTED_INDEX_PARSER_JIEBA) {
-        tokenizer = "jieba";
-    } else if (parser_str == INVERTED_INDEX_PARSER_IK) {
-        tokenizer =
-                get_parser_mode_string_from_properties(tablet_index->index_properties()) == INVERTED_INDEX_PARSER_SMART
-                        ? "ik_smart"
-                        : "ik";
-    } else if (parser_str == INVERTED_INDEX_PARSER_NGRAM) {
-        ASSIGN_OR_RETURN(tokenizer, get_tantivy_ngram_tokenizer_name(tablet_index->index_properties()));
-    } else if (parser_str == INVERTED_INDEX_PARSER_NONE) {
-        tokenizer = "raw";
-    } else {
-        return Status::NotSupported("tantivy: unsupported parser '" + parser_str + "'");
-    }
+    ASSIGN_OR_RETURN(auto analyzer_definition, get_tantivy_analyzer_definition(tablet_index->index_properties()));
+    auto analyzer_digest = get_tantivy_analyzer_digest(tablet_index->index_properties());
 
     // Read support_phrase / support_bm25 from search properties to control the
     // tantivy schema: positions (for phrase queries) and fieldnorms (for BM25).
@@ -77,7 +59,8 @@ Status TantivyInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::str
 
     int64_t index_id = tablet_index->index_id();
     auto writer = std::unique_ptr<TantivyInvertedWriter>(
-            new TantivyInvertedWriter(field_name, path, std::move(tokenizer), index_id, support_phrase, support_bm25));
+            new TantivyInvertedWriter(field_name, path, std::move(analyzer_definition), std::move(analyzer_digest),
+                                      index_id, support_phrase, support_bm25));
     *res = std::move(writer);
     return Status::OK();
 }
@@ -93,8 +76,8 @@ Status TantivyInvertedWriter::init() {
     }
 
     tb::RustResult r = tb::tantivy_create_index_writer(
-            _temp_dir.c_str(), _field_name.c_str(), _tokenizer.c_str(), _support_phrase, _support_bm25,
-            static_cast<uintptr_t>(config::tantivy_writer_memory_budget_bytes),
+            _temp_dir.c_str(), _field_name.c_str(), _analyzer_definition.c_str(), _analyzer_digest.c_str(),
+            _support_phrase, _support_bm25, static_cast<uintptr_t>(config::tantivy_writer_memory_budget_bytes),
             static_cast<uintptr_t>(config::tantivy_writer_num_threads),
             config::tantivy_writer_merge_policy.value().c_str());
     TantivyResultGuard guard(r);
@@ -170,6 +153,16 @@ StatusOr<CompoundIndexEntry> TantivyInvertedWriter::finish_compound(ColumnMetaPB
         RETURN_IF_ERROR(tantivy_status_from_error(r));
     }
     _writer.reset();
+
+    if (!_analyzer_digest.empty()) {
+        std::string manifest_path = _temp_dir + "/_starrocks_analyzer_manifest";
+        std::ofstream manifest(manifest_path, std::ios::binary);
+        if (!manifest.good()) {
+            return Status::IOError("tantivy: failed to create analyzer manifest");
+        }
+        manifest << _analyzer_digest << "\n";
+        manifest.close();
+    }
 
     // Serialize null bitmap to a file in the temp dir.
     if (!_null_bitmap.isEmpty()) {

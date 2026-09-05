@@ -15,8 +15,8 @@
 //! CJK bigram tokenizer (Lucene-style overlapping pairs).
 //!
 //! Streaming design: reuses a single `Token` buffer across the entire
-//! token stream, eliminating per-token heap allocations. ASCII tokens
-//! are lowercased inline so the `LowerCaser` filter is not needed.
+//! token stream, eliminating per-token heap allocations. Case conversion is
+//! deliberately left to the analyzer pipeline's explicit lowercase filter.
 //!
 //! Constructed only via the `tokenizer::build` factory; visibility is
 //! `pub(super)` so callers cannot bypass the factory.
@@ -93,21 +93,11 @@ impl<'a> CjkBigramTokenStream<'a> {
         self.position += 1;
     }
 
-    /// Emit an ASCII/Latin word token with inline lowercasing.
+    /// Emit an ASCII/Latin word token without implicit case conversion.
     #[inline]
-    fn emit_word_lowered(&mut self, from: usize, to: usize) {
+    fn emit_word(&mut self, from: usize, to: usize) {
         self.token.text.clear();
-        for c in self.text[from..to].chars() {
-            if c.is_ascii() {
-                self.token.text.push(c.to_ascii_lowercase());
-            } else {
-                // Non-ASCII, non-CJK alphanumeric (e.g. accented Latin):
-                // use full Unicode lowercase for correctness.
-                for lc in c.to_lowercase() {
-                    self.token.text.push(lc);
-                }
-            }
-        }
+        self.token.text.push_str(&self.text[from..to]);
         self.token.offset_from = from;
         self.token.offset_to = to;
         self.token.position = self.position;
@@ -174,7 +164,7 @@ impl TokenStream for CjkBigramTokenStream<'_> {
                     }
                 }
                 let word_end = self.next_byte_offset();
-                self.emit_word_lowered(word_start, word_end);
+                self.emit_word(word_start, word_end);
                 return true;
             }
             // Punctuation, whitespace, etc.: skip.

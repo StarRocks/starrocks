@@ -79,6 +79,7 @@
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
+#include "util/hash_util.hpp"
 #include "util/rle_encoding.h"
 
 namespace starrocks {
@@ -558,11 +559,17 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                bin_path = IndexDescriptor::compound_index_file_path_from_segment(_segment->file_name());
                                fs_ptr = _segment->file_system();
                            }
+                           uint64_t encryption_meta_hash = 0;
+                           const auto& encryption_meta = _segment->file_info().encryption_meta;
+                           if (!encryption_meta.empty()) {
+                               encryption_meta_hash = HashUtil::xx_hash64(
+                                       encryption_meta.data(), static_cast<int32_t>(encryption_meta.size()), 0);
+                           }
                            // open_compound returns NotFound when the .idx file is
                            // absent — that's the legacy local-directory path; any
                            // other failure must propagate.
-                           auto st = TantivyInvertedReader::open_compound(tantivy_rdr, fs_ptr, bin_path,
-                                                                          index_meta->index_id(), _name);
+                           auto st = TantivyInvertedReader::open_compound(
+                                   tantivy_rdr, fs_ptr, bin_path, index_meta->index_id(), _name, encryption_meta_hash);
                            if (st.ok()) {
                                return Status::OK();
                            }

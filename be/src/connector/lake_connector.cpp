@@ -312,9 +312,15 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     if (thrift_lake_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_lake_scan_node.enable_prune_column_after_index_filter;
     }
+    if (thrift_lake_scan_node.__isset.count_on_index && thrift_lake_scan_node.count_on_index) {
+        _params.prune_column_after_index_filter = true;
+        _params.count_on_index = true;
+        _runtime_profile->add_info_string("CountOnIndex", "true");
+    }
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
     }
+    _params.set_tantivy_cache_options(_runtime_state->query_options());
     // BM25 score(): run the scored seek when a score slot (materialize score()) OR
     // a min/max gate (WHERE score()>c, no score output) is present. slot_id < 0
     // means gate-only: narrow the bitmap, do not materialize a score column.
