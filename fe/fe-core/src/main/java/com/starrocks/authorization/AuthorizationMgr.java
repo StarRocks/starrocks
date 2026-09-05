@@ -1881,6 +1881,51 @@ public class AuthorizationMgr {
         return new HashSet<>(getRoleNamesByRoleIds(resultSetIds));
     }
 
+    /**
+     * The role ids actually in effect for a session: the roles the user still owns, narrowed to the
+     * ones activated by `SET ROLE`, plus the roles mapped from `groups`, expanded over the role
+     * inheritance graph.
+     * <p>
+     * `activatedRoleIds` is what the session recorded when the roles were activated, and a role
+     * revoked since then is still listed there -- so it is re-checked against what the user owns
+     * right now. This mirrors steps 1 and 2 of {@link #loadPrivilegeCollection}; keep the two in
+     * sync.
+     */
+    public Set<Long> getEffectiveRoleIds(UserIdentity userIdentity, Set<String> groups, Set<Long> activatedRoleIds)
+            throws PrivilegeException {
+        // the user lock is held across the ownership snapshot and the expansion below: dropping it in
+        // between would let the two read incompatible states, so that a role revoked from the user and
+        // then granted `db_admin` still counts as inherited
+        userReadLock();
+        try {
+            Set<Long> validRoleIds;
+            if (userIdentity.isEphemeral()) {
+                // an ephemeral user owns no role of its own, so the activated set is all there is
+                validRoleIds = activatedRoleIds == null ? new HashSet<>() : new HashSet<>(activatedRoleIds);
+            } else {
+                validRoleIds = new HashSet<>(getUserPrivilegeCollectionUnlocked(userIdentity).getAllRoles());
+                if (activatedRoleIds != null) {
+                    validRoleIds.retainAll(activatedRoleIds);
+                }
+            }
+
+            if (groups != null) {
+                for (String group : groups) {
+                    validRoleIds.addAll(getRoleIdListByGroup(group));
+                }
+            }
+
+            roleReadLock();
+            try {
+                return getAllPredecessorRoleIdsUnlocked(validRoleIds);
+            } finally {
+                roleReadUnlock();
+            }
+        } finally {
+            userReadUnlock();
+        }
+    }
+
     public Set<String> getAllPredecessorRoleNamesByUser(UserIdentity userIdentity) throws PrivilegeException {
         Set<String> resultSet = new HashSet<>();
         getRoleIdsByUser(userIdentity).forEach(roleId -> resultSet.addAll(getAllPredecessorRoleNames(roleId)));

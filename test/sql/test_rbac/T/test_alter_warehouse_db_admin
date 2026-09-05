@@ -1,0 +1,57 @@
+-- name: test_alter_warehouse_db_admin @native
+drop user if exists u_wh_db_admin;
+create user u_wh_db_admin;
+grant db_admin to user u_wh_db_admin;
+grant impersonate on user root to u_wh_db_admin;
+
+drop user if exists u_wh_nested;
+create user u_wh_nested;
+drop role if exists r_wh_inner;
+create role r_wh_inner;
+drop role if exists r_wh_outer;
+create role r_wh_outer;
+grant db_admin to role r_wh_inner;
+grant r_wh_inner to role r_wh_outer;
+grant r_wh_outer to user u_wh_nested;
+grant impersonate on user root to u_wh_nested;
+
+drop user if exists u_wh_plain;
+create user u_wh_plain;
+grant impersonate on user root to u_wh_plain;
+
+-- with db_admin activated the ALTER-on-warehouse check is skipped, so the statement gets all the
+-- way to the shared-data-only guard instead of being rejected as access denied
+execute as u_wh_db_admin with no revert;
+set role all;
+alter warehouse default_warehouse set ("compute_replica" = "2");
+alter warehouse default_warehouse set ("session.query_timeout" = "600");
+alter warehouse default_warehouse set ("enable_query_queue" = "true", "session.pipeline_dop" = "8");
+
+-- the exemption is scoped to ALTER ... SET: every other warehouse statement still needs its own
+-- privilege, including the ones that ask for the very same ALTER on the warehouse
+suspend warehouse default_warehouse;
+resume warehouse default_warehouse;
+
+-- owning db_admin is not enough, the session has to have it activated
+execute as root with no revert;
+execute as u_wh_db_admin with no revert;
+alter warehouse default_warehouse set ("compute_replica" = "2");
+
+-- db_admin reached through a chain of roles counts as well
+execute as root with no revert;
+execute as u_wh_nested with no revert;
+set role all;
+alter warehouse default_warehouse set ("compute_replica" = "2");
+
+-- a user without db_admin is still rejected
+execute as root with no revert;
+execute as u_wh_plain with no revert;
+set role all;
+alter warehouse default_warehouse set ("compute_replica" = "2");
+
+execute as root with no revert;
+drop user u_wh_db_admin;
+drop user u_wh_nested;
+drop user u_wh_plain;
+drop role r_wh_outer;
+drop role r_wh_inner;
