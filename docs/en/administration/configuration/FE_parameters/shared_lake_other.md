@@ -147,6 +147,15 @@ This topic introduces the following types of FE configurations:
 - Description: The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`.
 - Introduced in: v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth 2.0 token endpoint of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. Before v3.5.19, v4.0.12, and v4.1.2, this item was named `azure_adls2_oauth2_oauth2_client_endpoint`. The former name is still accepted as an alias.
+- Introduced in: v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - Default: Empty string

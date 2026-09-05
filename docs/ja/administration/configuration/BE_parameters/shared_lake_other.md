@@ -165,6 +165,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
+### lake_vacuum_enable_task_timeout
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Vacuum タスクがリクエストに含まれるタイムアウト (`VacuumRequest.timeout_ms`) に従い、経過した時点で自身を中止するかどうか。`false` に設定すると、FE 呼び出し側がどれだけ待つかに関係なく、Vacuum タスクは常に完了まで実行されます。
+
 ### lake_vacuum_min_batch_delete_size
 
 - デフォルト: 200
