@@ -511,7 +511,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意:
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
-2. 重複キーテーブルのような非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。
+2. キー列を追加する場合、`KEY` キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列は曖昧であるため拒否されます。キー列を作成するとテーブルの集計キーが変わり、既存データが書き換えられるためです。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `true` に設定すると、その列をキー列として作成する従来の動作に戻ります。
 3. 基本インデックスに既に存在する列をロールアップに追加することはできません。（必要に応じてロールアップを再作成できます。）
 4. 共有データクラスタの Range 分散テーブルでは、Range ソートキーに加わるキー列の追加が、重複キー（Duplicate Key）テーブル、集計（Aggregate）テーブル、およびユニークキー（Unique Key）テーブルで v4.2 以降サポートされます。この操作はオンラインの書き換えをトリガーし、追加するキー列には定数の `DEFAULT` 値を指定する必要があります。主キー（Primary Key）テーブル、またはロールアップや同期マテリアライズドビューを持つテーブルではサポートされません。
 
@@ -543,7 +543,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
 
-2. 非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。
+2. キー列を追加する場合、`KEY` キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列は曖昧であるため拒否されます。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `true` に設定すると、従来の動作に戻ります。
 
 3. 基本インデックスに既に存在する列をロールアップに追加することはできません。（必要に応じて別のロールアップを作成できます。）
 
@@ -1097,7 +1097,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 

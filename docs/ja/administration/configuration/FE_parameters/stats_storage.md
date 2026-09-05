@@ -155,6 +155,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## ストレージ
 
+### `allow_implicit_key_column_in_agg_add_column`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：集計テーブルに対する `ALTER TABLE ... ADD COLUMN` で、新しいカラムに集計関数も `KEY` キーワードも指定されていない場合に、そのカラムをキーカラムとして作成するかどうか。このような文は曖昧であり、キーカラムを作成するとテーブルの集計キーが変わり、既存データが書き換えられます。`false` の場合、この文は拒否され、エラーメッセージに両方の指定方法が示されます。`true` に設定すると、キーカラムを暗黙的に作成する従来の動作に戻ります。この項目は動的に変更できますが、`WITH PERSISTENT` を指定しない限り再起動後は保持されません。
+- 導入時期：v4.2.0
+
 ### `alter_table_timeout_second`
 
 - デフォルト：86400

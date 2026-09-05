@@ -192,6 +192,62 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     }
 
     @Test
+    public void testAggAddColumnWithoutAggTypeOrKeyIsRejected() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg");
+
+        // Neither an agg function nor KEY: ambiguous, so it must be rejected rather than silently
+        // promoted to a key column.
+        AlterTableStmt ambiguous = (AlterTableStmt) parseAndAnalyzeStmt(
+                "alter table test.sc_agg add column amb_col int default '0'");
+        DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                new SchemaChangeHandler().process(ambiguous.getAlterClauseList(), db, tbl));
+        Assertions.assertTrue(exception.getMessage().contains("must specify either an aggregate function"),
+                exception.getMessage());
+        Assertions.assertTrue(exception.getMessage().contains("allow_implicit_key_column_in_agg_add_column"),
+                exception.getMessage());
+
+        // A type that cannot be a key column keeps its own pre-existing message, because KEY is not a
+        // legal alternative for it and the new message must not suggest one.
+        AlterTableStmt nonKeyable = (AlterTableStmt) parseAndAnalyzeStmt(
+                "alter table test.sc_agg add column amb_float float default '0'");
+        DdlException floatException = Assertions.assertThrows(DdlException.class, () ->
+                new SchemaChangeHandler().process(nonKeyable.getAlterClauseList(), db, tbl));
+        Assertions.assertTrue(floatException.getMessage().contains("type can not be key column"),
+                floatException.getMessage());
+    }
+
+    @Test
+    public void testAggAddColumnWithoutAggTypeAllowedByConfig() throws Exception {
+        // Own table, so the implicit key column this adds cannot disturb the schema assertions in
+        // the other aggregate tests, which run after this one under MethodName ordering.
+        createTable("CREATE TABLE test.sc_agg_legacy_key (\n"
+                + "user_id LARGEINT NOT NULL,\n"
+                + "dt DATE NOT NULL,\n"
+                + "cost BIGINT SUM DEFAULT '0')\n"
+                + "AGGREGATE KEY(user_id, dt)\n"
+                + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1');");
+
+        boolean saved = Config.allow_implicit_key_column_in_agg_add_column;
+        Config.allow_implicit_key_column_in_agg_add_column = true;
+        try {
+            executeAlterAndWaitDone(
+                    "alter table test.sc_agg_legacy_key add column legacy_k int default '1'");
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "sc_agg_legacy_key");
+            Column legacyCol = tbl.getColumn("legacy_k");
+            Assertions.assertNotNull(legacyCol);
+            Assertions.assertTrue(legacyCol.isKey(), "legacy config should restore the implicit key column");
+        } finally {
+            Config.allow_implicit_key_column_in_agg_add_column = saved;
+        }
+    }
+
+    @Test
     public void testAggAddOrDropColumn() throws Exception {
         LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames(new ConnectContext()));
 
@@ -229,7 +285,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         }
 
         //process agg add  key column schema change
-        String addKeyColStmtStr = "alter table test.sc_agg add column new_k1 int default '1'";
+        String addKeyColStmtStr = "alter table test.sc_agg add column new_k1 int key default '1'";
         AlterTableStmt addKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addKeyColStmtStr);
         DDLStmtExecutor.execute(addKeyColStmt, connectContext);
 
