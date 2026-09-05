@@ -262,10 +262,8 @@ def compare_schema_path(repo_root: Path, repo_path: str, base: str | None) -> li
         ]
 
     unsupported_issues = _compare_unsupported_constructs(repo_path, base_schema, head_schema)
-    if unsupported_issues:
-        return unsupported_issues
-
-    return compare_schemas(repo_path, base_schema, head_schema)
+    # Unsupported constructs must not hide violations in independently parsed structs.
+    return unsupported_issues + compare_schemas(repo_path, base_schema, head_schema)
 
 
 def _compare_unsupported_constructs(
@@ -291,6 +289,17 @@ def _compare_unsupported_constructs(
         head_constructs = Counter(item.construct for item in head_items)
         if base_constructs == head_constructs:
             continue
+
+        # Narrow upstream exception, not general union parsing: only append these two
+        # exact alternatives to Parquet's existing LogicalType. All other edits fail closed.
+        if (repo_path == "gensrc/thrift/parquet.thrift" and key == ("thrift_union", "LogicalType")
+                and len(base_items) == len(head_items) == 1):
+            before = [" ".join(line.split()) for line in base_items[0].construct.splitlines()]
+            after = [" ".join(line.split()) for line in head_items[0].construct.splitlines()]
+            additions = ["17: GeometryType GEOMETRY", "18: GeographyType GEOGRAPHY"]
+            if (before and before[-1] == "}" and after == before[:-1] + additions + ["}"]
+                    and not any(re.match(r"(?:17|18)\s*:", line) for line in before)):
+                continue
 
         changed_items = _select_unsupported_constructs(head_items, head_constructs - base_constructs)
         if not changed_items:
@@ -955,9 +964,6 @@ def _is_proto_aggregate_option_line(line: str) -> bool:
 
 
 def _is_schema_path(path: str) -> bool:
-    # External Apache Parquet wire definitions follow upstream, not our RPC schema rules.
-    if path == "gensrc/thrift/parquet.thrift":
-        return False
     if not any(path.startswith(prefix) for prefix in SCHEMA_PREFIXES):
         return False
     return path.endswith(".proto") or path.endswith(".thrift")
