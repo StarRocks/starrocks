@@ -561,6 +561,7 @@ jobs:
           echo ${GITHUB_SHA} > head_sha.txt
 
       - name: Upload the PR number
+        timeout-minutes: 5
         uses: actions/upload-artifact@v6
         with:
           name: pr_num
@@ -569,6 +570,7 @@ jobs:
           overwrite: true
 
       - name: Upload the PR HEAD REF
+        timeout-minutes: 5
         uses: actions/upload-artifact@v6
         with:
           name: head_sha
