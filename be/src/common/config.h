@@ -431,6 +431,16 @@ CONF_Int32(data_page_size, "65536");
 // this config; default false.
 CONF_mBool(enable_binary_plain_delta_offset, "false");
 
+// When true, newly written FLOAT/DOUBLE columns use the ALP_ENCODING column encoding
+// (Adaptive Lossless floating-Point, vendored from cwida/ALP) instead of BIT_SHUFFLE.
+// ALP compresses decimal-like floats far better than bitshuffle and decodes faster.
+// The format is identified by the column encoding recorded in the segment metadata,
+// so a BE that does not know the encoding fails to open the segment instead of
+// misreading it. Only the write side is gated by this config; default false.
+// IMPORTANT: enable only after ALL BEs are upgraded to a version that understands
+// ALP_ENCODING, otherwise older BEs cannot read newly written segments.
+CONF_mBool(enable_alp_float_encoding, "false");
+
 CONF_mBool(enable_zero_copy_from_page_cache, "true");
 
 // Page cache is the cache for the decompressed or decoded page of data file.

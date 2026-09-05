@@ -314,6 +314,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：高基数 string/varchar 列在回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此请在整个集群升级完成后再开启；并注意：用该编码写入的 segment 在降级到不支持的版本后将无法读取。
 - 引入版本：v4.2.0
 
+### enable_alp_float_encoding
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：新写入的 FLOAT/DOUBLE 列是否使用 ALP（Adaptive Lossless floating-Point）列编码替代 BIT_SHUFFLE。ALP 将类十进制的浮点值（传感器读数、监控指标、价格等）编码为定标整数并做 frame-of-reference 位打包，压缩率远优于 bitshuffle（例如保留两位小数的 double 约小 3 倍），解码也更快；对 ALP 不占优的向量会自动回退为原值存储，因此不可压缩数据不会膨胀。开启后，此类列会以独立的列编码 `ALP_ENCODING` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此请在整个集群升级完成后再开启；并注意：用该编码写入的 segment 在降级到不支持的版本后将无法读取。
+- 引入版本：v4.2.0
+
 ### default_num_rows_per_column_file_block
 
 - 默认值：1024

@@ -76,6 +76,7 @@ starrocks_set_default_packages() {
         pulsar
         s2
         bitshuffle
+        alp
         croaringbitmap
         cctz
         fmt

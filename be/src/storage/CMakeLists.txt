@@ -88,6 +88,7 @@ set(STORAGE_FILES
     update_manager.cpp
     utils.cpp
     compaction_utils.cpp
+    rowset/alp_page.cpp
     rowset/array_column_iterator.cpp
     rowset/array_column_writer.cpp
     rowset/binary_plain_page.cpp
@@ -325,3 +326,9 @@ ADD_BE_LIB(Storage
 
 target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)
 target_link_libraries(Storage PRIVATE Runtime)
+
+# Thirdparty cwida/ALP headers (built into ${THIRDPARTY_DIR}/lib/libalp.a by
+# thirdparty/build-thirdparty.sh), used by rowset/alp_page.cpp. SYSTEM
+# silences third-party header warnings.
+target_include_directories(Storage SYSTEM PRIVATE ${THIRDPARTY_DIR}/include/alp)
+set_source_files_properties(rowset/alp_page.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)

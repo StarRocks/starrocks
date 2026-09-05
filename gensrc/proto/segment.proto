@@ -60,6 +60,12 @@ enum EncodingTypePB {
     // encoding so that a BE which does not understand it fails to open the segment (via
     // EncodingInfo::get) rather than silently misreading the offsets.
     PLAIN_ENCODING_DELTA_OFFSET = 8;
+    // ALP (Adaptive Lossless floating-Point) encoding for FLOAT/DOUBLE data
+    // pages. Recorded as a distinct column encoding so that a BE which does
+    // not understand it fails to open the segment (via EncodingInfo::get)
+    // rather than silently misreading the data. Write side is gated by
+    // config::enable_alp_float_encoding (default off).
+    ALP_ENCODING = 9;
 }
 
 enum PageTypePB {

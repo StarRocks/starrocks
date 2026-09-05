@@ -1098,6 +1098,13 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
             CppType value = numerical_col->immutable_data()[i];
             hash_set.insert(value);
             if (hash_set.size() > max_card) {
+                // High cardinality: fall back to the non-dictionary default for
+                // this type, honoring the ALP float-encoding gate.
+                if constexpr (Type == TYPE_FLOAT || Type == TYPE_DOUBLE) {
+                    if (config::enable_alp_float_encoding) {
+                        return ALP_ENCODING;
+                    }
+                }
                 return BIT_SHUFFLE;
             }
         }
