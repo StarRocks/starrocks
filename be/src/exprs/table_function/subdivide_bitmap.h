@@ -145,8 +145,18 @@ public:
             subdivide_state->set_offset(0);
         };
 
-        // Reused across pieces and across rows: one piece is at most `batch_size` values, and the
-        // fast path below means the general path only runs when batch_size < cardinality.
+        // Reused across pieces and across rows. Capped rather than sized by the piece: a piece holds
+        // `batch_size` values and `batch_size` is the caller's, so sizing the buffer by it would make
+        // subdivide_bitmap(b, 50000000) ask for 400MB of uint64 scratch to build a piece whose Roaring
+        // representation is a fraction of that - an allocation the value-at-a-time iterator this
+        // replaced never made, and one that counts against the query's memory limit. next_batch() can
+        // be called repeatedly against the same cursor, so a larger piece is filled in several passes.
+        //
+        // Deliberately its own constant rather than `chunk_size`, which happens to have the same
+        // default: chunk_size bounds output *rows* per call and is a session variable, so tying the
+        // buffer to it would make `SET chunk_size = 2` - which the sibling batching case does set -
+        // fill a piece two values at a time.
+        constexpr uint64_t kValueBatchSize = 4096;
         std::vector<uint64_t> values;
         uint32_t emitted = 0;
         while (emitted < chunk_size && cur_row < rows) {
@@ -200,12 +210,23 @@ public:
             const auto pieces = static_cast<uint32_t>(std::min<uint64_t>(pieces_left, chunk_size - emitted));
 
             if (required) {
-                values.resize(std::min<uint64_t>(split_size, remain));
+                values.resize(std::min({split_size, remain, kValueBatchSize}));
                 for (uint32_t k = 0; k < pieces; ++k) {
-                    const uint64_t taken = subdivide_state->iter.next_batch(values.data(), values.size());
+                    // A piece is a full split_size, except for the row's last one, which is whatever
+                    // the iterator still holds - the same truncation next_batch() applied when it was
+                    // asked for a whole piece at once.
+                    uint64_t left = std::min<uint64_t>(split_size, subdivide_state->iter.remain_rows());
                     BitmapValue sub_bitmap;
-                    for (uint64_t j = 0; j < taken; ++j) {
-                        sub_bitmap.add(values[j]);
+                    while (left > 0) {
+                        const uint64_t taken = subdivide_state->iter.next_batch(
+                                values.data(), std::min<uint64_t>(left, values.size()));
+                        if (taken == 0) {
+                            break;
+                        }
+                        for (uint64_t j = 0; j < taken; ++j) {
+                            sub_bitmap.add(values[j]);
+                        }
+                        left -= taken;
                     }
                     // append() copies the value into the column's pool, so the temporary above is the
                     // only extra materialization - one piece at a time, against the whole row's worth
