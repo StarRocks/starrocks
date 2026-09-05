@@ -529,6 +529,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE_V2 = "cbo_cte_reuse_rate_v2";
     public static final String PREFER_CTE_REWRITE = "prefer_cte_rewrite";
     public static final String CBO_CTE_FORCE_REUSE_NODE_COUNT = "cbo_cte_force_reuse_node_count";
+    public static final String CBO_CTE_FORCE_REUSE_INLINED_NODE_COUNT = "cbo_cte_force_reuse_inlined_node_count";
     public static final String CBO_CTE_FORCE_REUSE_LIMIT_WITHOUT_ORDER_BY =
             "cbo_cte_force_reuse_limit_without_order_by";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
@@ -1604,6 +1605,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // When the value is 0, disable the force reuse optimization.
     @VarAttr(name = CBO_CTE_FORCE_REUSE_NODE_COUNT)
     private int cboCTEForceReuseNodeCount = 2000;
+
+    // If inlining a CTE would expand its output expression to more than this many scalar nodes
+    // (counting the cascaded expansion of every un-materialized CTE it references), force
+    // materialization of that CTE instead. This is a Calcite-bloat-style node-count cap that turns
+    // the "Expression too complex" blow-up of nested CTE chains into a bounded materialization.
+    // Should be set below max_scalar_operator_flat_children. When 0, this optimization is disabled.
+    @VarAttr(name = CBO_CTE_FORCE_REUSE_INLINED_NODE_COUNT)
+    private int cboCTEForceReuseInlinedNodeCount = 0;
 
     // If true, force CTE reuse when CTE contains LIMIT without ORDER BY to avoid unstable results.
     // When false, allow inline even if CTE has LIMIT without ORDER BY (may cause inconsistent results).
@@ -3853,6 +3862,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getCboCTEForceReuseNodeCount() {
         return cboCTEForceReuseNodeCount;
+    }
+
+    public int getCboCTEForceReuseInlinedNodeCount() {
+        return cboCTEForceReuseInlinedNodeCount;
+    }
+
+    public void setCboCTEForceReuseInlinedNodeCount(int cboCTEForceReuseInlinedNodeCount) {
+        this.cboCTEForceReuseInlinedNodeCount = cboCTEForceReuseInlinedNodeCount;
     }
 
     public void setCboCTEForceReuseNodeCount(int cboCTEForceReuseNodeCount) {
