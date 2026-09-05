@@ -16,6 +16,7 @@ set(FORMAT_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     delta/deletion_vector_test.cpp
     disk_range_test.cpp
+    parquet/geo_annotation_wire_test.cpp
     file_input_stream_test.cpp
     io/async_flush_output_stream_test.cpp
     io/async_flush_stream_poller_test.cpp
