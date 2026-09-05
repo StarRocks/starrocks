@@ -1889,7 +1889,7 @@ showAuthenticationStatement
     ;
 
 executeAsStatement
-    : EXECUTE AS user (WITH NO REVERT)?
+    : EXECUTE AS EXTERNAL? user (WITH NO REVERT)?
     ;
 
 createRoleStatement

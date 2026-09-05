@@ -42,7 +42,8 @@ public class ExecuteAsStmt extends StatementBase {
 
     @Override
     public String toString() {
-        String s = String.format("EXECUTE AS %s", this.toUser.toString());
+        String userPart = toUser.isExternal() ? "EXTERNAL " + toUser : toUser.toString();
+        String s = String.format("EXECUTE AS %s", userPart);
         if (allowRevert) {
             return s;
         } else {
