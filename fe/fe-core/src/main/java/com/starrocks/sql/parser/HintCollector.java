@@ -85,6 +85,8 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
             visit(context.createTableAsSelectStatement());
         } else if (context.insertStatement() != null) {
             visit(context.insertStatement());
+        } else if (context.updateStatement() != null) {
+            visit(context.updateStatement());
         }
         return null;
     }

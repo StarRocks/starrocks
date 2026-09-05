@@ -395,6 +395,10 @@ public class Analyzer {
                 InsertStmt insertStmt = statement.getInsertStmt();
                 Analyzer.analyze(insertStmt, context);
                 taskStmt = insertStmt;
+            } else if (statement.getUpdateStmt() != null) {
+                UpdateStmt updateStmt = statement.getUpdateStmt();
+                Analyzer.analyze(updateStmt, context);
+                taskStmt = updateStmt;
             } else if (statement.getDataCacheSelectStmt() != null) {
                 DataCacheStmtAnalyzer.analyze(statement.getDataCacheSelectStmt(), context);
                 taskStmt = statement.getDataCacheSelectStmt();
