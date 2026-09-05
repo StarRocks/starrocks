@@ -219,6 +219,17 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     public TransactionState registerExplicitTransactionState(long txnId, long dbId) throws StarRocksException {
+        return registerExplicitTransactionState(txnId, dbId, null);
+    }
+
+    /**
+     * Same as {@link #registerExplicitTransactionState(long, long)}, but admits the registration against
+     * {@code admissionTableIds} instead of the transaction's own table list. An explicit BEGIN...COMMIT is
+     * registered before any table is attached, so its table list is still empty at this point and the caller
+     * has to name the statement's target table for the per-table running-txn limit to see it.
+     */
+    public TransactionState registerExplicitTransactionState(long txnId, long dbId, List<Long> admissionTableIds)
+            throws StarRocksException {
         synchronized (explicitTxnStateLock) {
             ExplicitTxnState explicit = explicitTxnStateMap.get(txnId);
             if (explicit == null || explicit.getTransactionState() == null) {
@@ -234,7 +245,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 long originalDbId = state.getDbId();
                 state.setDbId(dbId);
                 try {
-                    dbTxnMgr.upsertTransactionState(state);
+                    // Keep the single-argument call for the default case, so the admission set is still
+                    // derived inside DatabaseTransactionMgr exactly as it always was.
+                    if (admissionTableIds == null) {
+                        dbTxnMgr.upsertTransactionState(state);
+                    } else {
+                        dbTxnMgr.upsertTransactionState(state, admissionTableIds);
+                    }
                 } catch (StarRocksException | RuntimeException e) {
                     state.setDbId(originalDbId);
                     throw e;

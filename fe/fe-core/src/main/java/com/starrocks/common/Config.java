@@ -1554,6 +1554,30 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_running_txn_num_per_db = 1000;
 
+    /**
+     * The maximum number of concurrent running (non-final) load transactions that touch a single table,
+     * within one database. This isolates a stalled table: when one table's transactions stop finishing
+     * (e.g. a publish stall), they no longer consume the whole database's `max_running_txn_num_per_db`
+     * budget and block loads to other tables in the same database.
+     *
+     * 0 (default) disables the per-table limit — behavior is identical to before this option existed
+     * (only `max_running_txn_num_per_db` applies). When > 0 it is checked in addition to, and should be
+     * set no larger than, `max_running_txn_num_per_db`.
+     *
+     * The limit is evaluated when a load transaction begins, against the tables it declares at that point.
+     * An explicit multi-statement transaction (BEGIN ... INSERT ... COMMIT) does not declare its tables at
+     * begin: its first target table is checked when that first statement runs, while tables added by later
+     * statements are not admission-checked (they still count toward the per-table total that gates other
+     * transactions on those tables).
+     *
+     * Routine-load and lake-compaction transactions are excluded from this check, exactly as they are from
+     * the per-database check. This exempts them from the check only: lake-compaction transactions still
+     * count toward the `max_running_txn_num_per_db` budget, so a compaction backlog can exhaust the
+     * per-database limit on its own, which the per-table limit does not change.
+     */
+    @ConfField(mutable = true)
+    public static int max_running_txn_num_per_table = 0;
+
     @ConfField(mutable = true, comment = "A comma-separated list of transaction latency metric groups to report. " +
             "Load job source types (see TransactionState.LoadJobSourceType) are categorized into logical groups " +
             "for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. " +

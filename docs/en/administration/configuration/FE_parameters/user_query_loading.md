@@ -1292,6 +1292,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `1000`. From v3.1 onwards, the default value is changed to `1000` from `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
 - Introduced in: -
 
+### `max_running_txn_num_per_table`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of load transactions allowed to be running for each table within a database. `0` (default) disables this per-table limit, in which case only `max_running_txn_num_per_db` applies and behavior is identical to before this parameter existed. When set to a value greater than `0`, it is enforced in addition to `max_running_txn_num_per_db` and should be set no larger than `max_running_txn_num_per_db`. This isolates a stalled table: when one table's load transactions stop finishing (for example, a publish stall), they no longer consume the whole database's running-transaction budget and block loads to other tables in the same database. Routine Load and cloud-native compaction transactions are exempt from this limit, the same as for `max_running_txn_num_per_db`. The limit is checked when a load transaction begins. An explicit multi-statement transaction (`BEGIN ... INSERT ... COMMIT`) does not declare its target tables at begin: its first target table is checked when that first statement runs, while tables added by later statements are not admission-checked. Being exempt from this per-table check does not remove cloud-native compaction transactions from the `max_running_txn_num_per_db` budget, which they still consume.
+- Introduced in: -
+
 ### `max_stream_load_timeout_second`
 
 - Default: 259200
