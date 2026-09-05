@@ -1,0 +1,41 @@
+-- name: test_iceberg_equality_delete_partition_scope
+create external catalog iceberg_eqpart_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0};
+-- result:
+-- !result
+call iceberg_eqpart_${uuid0}.system.register_table("eq_delete_db_${uuid0}", "eq_del_part", "oss://${oss_bucket}/iceberg_ci_db/eq_del_part/metadata/v3.metadata.json");
+-- result:
+-- !result
+call iceberg_eqpart_${uuid0}.system.register_table("eq_delete_db_${uuid0}", "eq_del_evolve", "oss://${oss_bucket}/iceberg_ci_db/eq_del_evolve/metadata/v6.metadata.json");
+-- result:
+-- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
+select * from iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0}.eq_del_part order by id, p;
+-- result:
+1	b1	b
+2	a2	a
+2	b2	b
+-- !result
+select * from iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0}.eq_del_evolve order by id, p;
+-- result:
+10	u1	a
+12	u3	b
+20	p3	b
+21	p2	a
+-- !result
+drop table iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0}.eq_del_part;
+-- result:
+-- !result
+drop table iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0}.eq_del_evolve;
+-- result:
+-- !result
+drop database iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_eqpart_${uuid0};
+-- result:
+-- !result
