@@ -1030,6 +1030,19 @@ public class PaimonMetadataTest {
         CallOperator createDateCoalesce = new CallOperator("coalesce", VarcharType.VARCHAR,
                 List.of(createDateColumn, ConstantOperator.createVarchar("unknown")), coalesce);
 
+        ScalarOperator unconvertedPartitionPredicate = new BinaryPredicateOperator(BinaryType.EQ, createDateColumn,
+                createDateCoalesce);
+
+        // unconverted partition predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(unconvertedPartitionPredicate)
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        assertEquals(1, result.size());
+        assertEquals(1, result.get(0).getFiles().size());
+        assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
         ScalarOperator createDateCoalescePredicate = new BinaryPredicateOperator(BinaryType.EQ, createDateCoalesce,
                 ConstantOperator.createVarchar(dateFormatter.format(now)));
 

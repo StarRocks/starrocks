@@ -340,7 +340,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
             } else if (dataType instanceof DecimalType) {
                 res = operator.castTo(com.starrocks.type.DecimalType.DEFAULT_DECIMAL128);
             }
-            return res.orElse(operator);
+            return res.orElse(null);
         }
     }
 

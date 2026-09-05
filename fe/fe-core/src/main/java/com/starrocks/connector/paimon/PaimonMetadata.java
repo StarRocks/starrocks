@@ -637,8 +637,10 @@ public class PaimonMetadata implements ConnectorMetadata {
             ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
-            List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
+            List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
+            List<Predicate> predicates = extractPredicates(paimonTable, scalarOperators);
             boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
+                    && predicates.size() == scalarOperators.size()
                     && onlyHasPartitionPredicate(table, params.getPredicate());
             readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
 
@@ -846,8 +848,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         return rowCount;
     }
 
-    private List<Predicate> extractPredicates(PaimonTable paimonTable, ScalarOperator predicate) {
-        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+    private List<Predicate> extractPredicates(PaimonTable paimonTable, List<ScalarOperator> scalarOperators) {
         List<Predicate> predicates = new ArrayList<>(scalarOperators.size());
 
         PaimonPredicateConverter converter = new PaimonPredicateConverter(paimonTable.getNativeTable().rowType());
