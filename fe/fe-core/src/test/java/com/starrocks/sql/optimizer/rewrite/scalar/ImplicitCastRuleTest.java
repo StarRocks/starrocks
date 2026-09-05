@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -184,6 +185,49 @@ public class ImplicitCastRuleTest {
             assertEquals(PrimitiveType.DATE, result.getChild(0).getType().getPrimitiveType());
             assertEquals(PrimitiveType.DATE, result.getChild(1).getType().getPrimitiveType());
         }
+    }
+
+    @Test
+    public void testDateIntegerBinaryPredicateOnlyCastsIntegerLiteralToDate() {
+        ImplicitCastRule rule = new ImplicitCastRule();
+        ColumnRefOperator dateColumn = new ColumnRefOperator(1, DateType.DATE, "date_col", true);
+        ColumnRefOperator intColumn = new ColumnRefOperator(2, IntegerType.INT, "int_col", true);
+
+        BinaryPredicateOperator dateLiteral = new BinaryPredicateOperator(BinaryType.GE,
+                dateColumn, ConstantOperator.createInt(20220111));
+        ScalarOperator dateLiteralResult = rule.apply(dateLiteral, null);
+        assertEquals(PrimitiveType.DATE, dateLiteralResult.getChild(0).getType().getPrimitiveType());
+        assertEquals(PrimitiveType.DATE, dateLiteralResult.getChild(1).getType().getPrimitiveType());
+
+        BinaryPredicateOperator dateCastLiteral = new BinaryPredicateOperator(BinaryType.GE,
+                dateColumn, new CastOperator(IntegerType.BIGINT, ConstantOperator.createInt(20220111)));
+        ScalarOperator dateCastLiteralResult = rule.apply(dateCastLiteral, null);
+        assertEquals(PrimitiveType.DATE, dateCastLiteralResult.getChild(0).getType().getPrimitiveType());
+        assertEquals(PrimitiveType.DATE, dateCastLiteralResult.getChild(1).getType().getPrimitiveType());
+
+        CallOperator dateFormat = new CallOperator("date_format", VarcharType.VARCHAR,
+                Lists.newArrayList(ConstantOperator.createVarchar("2026-01-01"),
+                        ConstantOperator.createVarchar("%Y%m%d")));
+        BinaryPredicateOperator dateCastStringCall = new BinaryPredicateOperator(BinaryType.GE,
+                dateColumn, new CastOperator(IntegerType.INT, dateFormat));
+        ScalarOperator dateCastStringCallResult = rule.apply(dateCastStringCall, null);
+        assertEquals(PrimitiveType.DATE, dateCastStringCallResult.getChild(0).getType().getPrimitiveType());
+        assertEquals(PrimitiveType.DATE, dateCastStringCallResult.getChild(1).getType().getPrimitiveType());
+
+        CallOperator arithmeticConstant = new CallOperator(FunctionSet.SUBTRACT, IntegerType.INT,
+                Lists.newArrayList(new CallOperator(FunctionSet.SUBTRACT, IntegerType.INT,
+                                Lists.newArrayList(ConstantOperator.createInt(2011), ConstantOperator.createInt(12))),
+                        ConstantOperator.createInt(1)));
+        BinaryPredicateOperator dateArithmeticConstant = new BinaryPredicateOperator(BinaryType.EQ,
+                arithmeticConstant, dateColumn);
+        ScalarOperator dateArithmeticConstantResult = rule.apply(dateArithmeticConstant, null);
+        assertEquals(FloatType.DOUBLE, dateArithmeticConstantResult.getChild(0).getType());
+        assertEquals(FloatType.DOUBLE, dateArithmeticConstantResult.getChild(1).getType());
+
+        BinaryPredicateOperator columnCompare = new BinaryPredicateOperator(BinaryType.GE, dateColumn, intColumn);
+        ScalarOperator columnCompareResult = rule.apply(columnCompare, null);
+        assertEquals(FloatType.DOUBLE, columnCompareResult.getChild(0).getType());
+        assertEquals(FloatType.DOUBLE, columnCompareResult.getChild(1).getType());
     }
 
     @Test
@@ -518,5 +562,70 @@ public class ImplicitCastRuleTest {
         } finally {
             ConnectContext.remove();
         }
+    }
+
+    // Regression test for `pt >= cast(20260601 as int)` leaving a residual
+    // `CAST(pt AS DOUBLE) >= 2.0260601E7` predicate. Previously
+    // TypeManager.getCompatibleTypeForBinary(DATE, INT) fell through to
+    // Type.DOUBLE. After the fix, the date column must not be wrapped in a
+    // cast; the int literal is cast to DATE instead so FoldConstantsRule can
+    // fold it on a later pass.
+    @Test
+    public void testDateColumnVsIntCast() {
+        ColumnRefOperator pt = new ColumnRefOperator(1, DateType.DATE, "pt", true);
+        ScalarOperator castIntAsInt = new CastOperator(IntegerType.INT, ConstantOperator.createInt(20260601));
+
+        BinaryPredicateOperator op = new BinaryPredicateOperator(BinaryType.GE, pt, castIntAsInt);
+
+        ImplicitCastRule rule = new ImplicitCastRule();
+        ScalarOperator result = rule.apply(op, null);
+
+        // child0 is the date column itself, NOT wrapped in CAST(... AS DOUBLE).
+        assertTrue(result.getChild(0) instanceof ColumnRefOperator);
+        assertFalse(result.getChild(0) instanceof CastOperator);
+        assertEquals(PrimitiveType.DATE, result.getChild(0).getType().getPrimitiveType());
+
+        // child1 has been cast to DATE so the int literal can be folded later.
+        assertEquals(PrimitiveType.DATE, result.getChild(1).getType().getPrimitiveType());
+    }
+
+    // The date side must be returned as-is: a DATETIME column paired with an
+    // int literal keeps its DATETIME type instead of being downcast to DATE.
+    @Test
+    public void testDatetimeColumnVsIntCast() {
+        ColumnRefOperator pt = new ColumnRefOperator(1, DateType.DATETIME, "pt", true);
+        ScalarOperator castIntAsInt = new CastOperator(IntegerType.INT, ConstantOperator.createInt(20260601));
+
+        BinaryPredicateOperator op = new BinaryPredicateOperator(BinaryType.GE, pt, castIntAsInt);
+
+        ImplicitCastRule rule = new ImplicitCastRule();
+        ScalarOperator result = rule.apply(op, null);
+
+        assertTrue(result.getChild(0) instanceof ColumnRefOperator);
+        assertFalse(result.getChild(0) instanceof CastOperator);
+        assertEquals(PrimitiveType.DATETIME, result.getChild(0).getType().getPrimitiveType());
+
+        assertEquals(PrimitiveType.DATETIME, result.getChild(1).getType().getPrimitiveType());
+    }
+
+    // The existing DATE + STRING behaviour must be preserved: pt (DATE)
+    // >= date_format(...) (VARCHAR) still goes through Type.DATETIME.
+    @Test
+    public void testDateColumnVsStringCall() {
+        ColumnRefOperator pt = new ColumnRefOperator(1, DateType.DATE, "pt", true);
+        CallOperator dateFormat = new CallOperator("date_format", VarcharType.VARCHAR,
+                Lists.newArrayList(ConstantOperator.createVarchar("2023-03-07"),
+                        ConstantOperator.createVarchar("yyyyMMdd")));
+
+        BinaryPredicateOperator op = new BinaryPredicateOperator(BinaryType.GE, pt, dateFormat);
+
+        ImplicitCastRule rule = new ImplicitCastRule();
+        ScalarOperator result = rule.apply(op, null);
+
+        // child0 must be cast to DATETIME, not DOUBLE.
+        assertTrue(result.getChild(0) instanceof CastOperator);
+        assertEquals(PrimitiveType.DATETIME, result.getChild(0).getType().getPrimitiveType());
+        assertTrue(result.getChild(1) instanceof CastOperator);
+        assertEquals(PrimitiveType.DATETIME, result.getChild(1).getType().getPrimitiveType());
     }
 }
