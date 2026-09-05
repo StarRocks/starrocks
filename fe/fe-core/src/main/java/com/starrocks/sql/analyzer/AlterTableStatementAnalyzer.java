@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS;
 
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
@@ -110,6 +111,9 @@ public class AlterTableStatementAnalyzer {
             return true;
         } else if (alterClause instanceof ModifyTablePropertiesClause
                 && ((ModifyTablePropertiesClause) alterClause).getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
+            return true;
+        } else if (alterClause instanceof ModifyTablePropertiesClause
+                && ((ModifyTablePropertiesClause) alterClause).getProperties().containsKey(PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
             return true;
         }
         return false;

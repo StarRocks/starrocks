@@ -161,6 +161,117 @@ public class PropertyAnalyzerTest {
     }
 
     @Test
+    public void testZstdCompressionColumns() throws AnalysisException {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("k1", IntegerType.INT));
+        columns.add(new Column("v1", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v2", JsonType.JSON, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v3", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.get(0).setIsKey(true);
+
+        // string and json value columns are supported
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v1,v2");
+        Set<String> zstdCompressionColumns = PropertyAnalyzer.analyzeZstdCompressionColumns(properties, columns);
+        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), zstdCompressionColumns);
+        // the property key is consumed after analysis
+        Assertions.assertFalse(properties.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
+
+        // absent property returns null
+        Assertions.assertNull(PropertyAnalyzer.analyzeZstdCompressionColumns(Maps.newHashMap(), columns));
+
+        // an empty value means "no columns", and still has to consume the key -- a leftover
+        // entry is rejected as an unknown property by the caller.
+        Map<String, String> emptyValue = Maps.newHashMap();
+        emptyValue.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "");
+        Assertions.assertTrue(PropertyAnalyzer.analyzeZstdCompressionColumns(emptyValue, columns).isEmpty());
+        Assertions.assertFalse(emptyValue.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
+
+        Map<String, String> emptyPageSizes = Maps.newHashMap();
+        emptyPageSizes.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "");
+        Assertions.assertTrue(
+                PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(emptyPageSizes, columns).isEmpty());
+        Assertions.assertFalse(emptyPageSizes.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
+
+        // A column whose own name ends in ":<number>" is resolved as a name before the spec is
+        // split, so it is not read as "column v at a 4KB page".
+        List<Column> colonColumns = Lists.newArrayList(columns);
+        colonColumns.add(new Column("v:4096", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        Map<String, String> colonProperties = Maps.newHashMap();
+        colonProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v:4096");
+        Map<String, Integer> colonPageSizes =
+                PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(colonProperties, colonColumns);
+        Assertions.assertEquals(Sets.newHashSet("v:4096"), colonPageSizes.keySet());
+        Assertions.assertEquals(Integer.valueOf(0), colonPageSizes.get("v:4096"));
+
+        // Without that column, the same text still means "column v at 4KB".
+        Map<String, String> splitProperties = Maps.newHashMap();
+        splitProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v1:4096");
+        Map<String, Integer> splitPageSizes =
+                PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(splitProperties, columns);
+        Assertions.assertEquals(Integer.valueOf(4096), splitPageSizes.get("v1"));
+
+        // And a spec whose prefix is no column at all reports that, rather than complaining about
+        // the size expression.
+        Map<String, String> missingProperties = Maps.newHashMap();
+        missingProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "nosuch:notasize");
+        try {
+            PropertyAnalyzer.analyzeZstdCompressionColumns(missingProperties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("not exists"), e.getMessage());
+        }
+    }
+
+    @Test
+    public void testZstdCompressionColumnsError() {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("k1", VarcharType.VARCHAR));
+        columns.add(new Column("v1", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v2", JsonType.JSON, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v3", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.get(0).setIsKey(true);
+
+        Map<String, String> properties = Maps.newHashMap();
+
+        // column not exist
+        properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "vx");
+        try {
+            PropertyAnalyzer.analyzeZstdCompressionColumns(properties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("Invalid zstd compression column 'vx'"), e.getMessage());
+        }
+
+        // unsupported type (BIGINT)
+        properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v3");
+        try {
+            PropertyAnalyzer.analyzeZstdCompressionColumns(properties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("unsupported type"), e.getMessage());
+        }
+
+        // key column forbidden (string key column, so it passes the type check first)
+        properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "k1");
+        try {
+            PropertyAnalyzer.analyzeZstdCompressionColumns(properties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("value columns"), e.getMessage());
+        }
+
+        // duplicate column (case-insensitive)
+        properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v1,V1");
+        try {
+            PropertyAnalyzer.analyzeZstdCompressionColumns(properties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("Duplicate zstd compression column 'V1'"), e.getMessage());
+        }
+    }
+
+    @Test
     public void testStorageMedium() throws AnalysisException {
         long tomorrowTs = System.currentTimeMillis() / 1000 + 86400;
         String tomorrowTimeStr = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(tomorrowTs * 1000);

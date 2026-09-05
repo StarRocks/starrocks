@@ -365,6 +365,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         .setStorageType(TStorageType.COLUMN)
                         .setBloomFilterColumnNames(tbl.getBfColumnIds())
                         .setBloomFilterFpp(tbl.getBfFpp())
+                        .setZstdCompressionColumns(tbl.getZstdCompressionColumnIds(), tbl.getZstdCompressionPageSizes())
                         .setIndexes(OlapTable.getIndexesBySchema(tbl.getCopiedIndexes(), rollupSchema))
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key
                         .setSortKeyUniqueIds(null)
@@ -687,7 +688,18 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     if (baseTColumn == null) {
                         baseTColumn = tbl.getIndexMetaByMetaId(baseIndexMetaId).getSchema()
                                 .stream()
-                                .map(Column::toThrift)
+                                .map(column -> {
+                                    TColumn tColumn = column.toThrift();
+                                    // BE rebuilds the base schema from these and diffs it against the
+                                    // rollup schema above, which does carry the per-column ZSTD fields.
+                                    // A base that reads as "no ZSTD" is a difference that is not there,
+                                    // and an otherwise linkable rollup rewrites all the data instead.
+                                    // Only those fields are filled in: is_bloom_filter_column and
+                                    // has_bitmap_index have the same effect here and predate this feature.
+                                    column.setIndexFlag(tColumn, List.of(), null,
+                                            tbl.getZstdCompressionColumnIds(), tbl.getZstdCompressionPageSizes());
+                                    return tColumn;
+                                })
                                 .collect(Collectors.toList());
                         indexToThriftColumns.put(baseIndexMetaId, baseTColumn);
                     }

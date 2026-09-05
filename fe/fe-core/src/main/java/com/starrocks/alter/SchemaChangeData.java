@@ -40,6 +40,9 @@ class SchemaChangeData {
     private final boolean bloomFilterColumnsChanged;
     private final Set<ColumnId> bloomFilterColumns;
     private final double bloomFilterFpp;
+    private final boolean zstdCompressionColumnsChanged;
+    private final Set<ColumnId> zstdCompressionColumns;
+    private final Map<ColumnId, Integer> zstdCompressionPageSizes;
     private final boolean hasIndexChanged;
     private final Map<Long, Short> newIndexMetaIdToShortKeyCount;
     private final boolean shortKeyChanged;
@@ -90,6 +93,19 @@ class SchemaChangeData {
         return bloomFilterFpp;
     }
 
+    boolean isZstdCompressionColumnsChanged() {
+        return zstdCompressionColumnsChanged;
+    }
+
+    @Nullable
+    Map<ColumnId, Integer> getZstdCompressionPageSizes() {
+        return zstdCompressionPageSizes;
+    }
+
+    Set<ColumnId> getZstdCompressionColumns() {
+        return zstdCompressionColumns;
+    }
+
     boolean isHasIndexChanged() {
         return hasIndexChanged;
     }
@@ -132,6 +148,9 @@ class SchemaChangeData {
         this.bloomFilterColumnsChanged = builder.bloomFilterColumnsChanged;
         this.bloomFilterColumns = builder.bloomFilterColumns;
         this.bloomFilterFpp = builder.bloomFilterFpp;
+        this.zstdCompressionColumnsChanged = builder.zstdCompressionColumnsChanged;
+        this.zstdCompressionColumns = builder.zstdCompressionColumns;
+        this.zstdCompressionPageSizes = builder.zstdCompressionPageSizes;
         this.hasIndexChanged = builder.hasIndexChanged;
         this.newIndexMetaIdToShortKeyCount =
                 Objects.requireNonNull(builder.newIndexMetaIdToShortKeyCount, "newIndexShortKeyCount is null");
@@ -152,6 +171,9 @@ class SchemaChangeData {
         private boolean bloomFilterColumnsChanged = false;
         private Set<ColumnId> bloomFilterColumns;
         private double bloomFilterFpp;
+        private boolean zstdCompressionColumnsChanged = false;
+        private Set<ColumnId> zstdCompressionColumns;
+        Map<ColumnId, Integer> zstdCompressionPageSizes;
         private boolean hasIndexChanged = false;
         private Map<Long, Short> newIndexMetaIdToShortKeyCount = new HashMap<>();
         private boolean shortKeyChanged = false;
@@ -187,6 +209,21 @@ class SchemaChangeData {
         Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
             this.bloomFilterColumns = bfColumns;
             this.bloomFilterFpp = bfFpp;
+            return this;
+        }
+
+        Builder withZstdCompressionColumnsChanged(boolean changed) {
+            this.zstdCompressionColumnsChanged = changed;
+            return this;
+        }
+
+        Builder withZstdCompressionPageSizes(@Nullable Map<ColumnId, Integer> zstdCompressionPageSizes) {
+            this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+            return this;
+        }
+
+        Builder withZstdCompressionColumns(@Nullable Set<ColumnId> zstdCompressionColumns) {
+            this.zstdCompressionColumns = zstdCompressionColumns;
             return this;
         }
 

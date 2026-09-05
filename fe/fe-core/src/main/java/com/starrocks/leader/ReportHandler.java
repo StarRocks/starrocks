@@ -1387,6 +1387,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(index.getMetaId());
                                     Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
                                     double bfFpp = olapTable.getBfFpp();
+                                    Set<ColumnId> zstdCompressionColumns = olapTable.getZstdCompressionColumnIds();
                                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                                             .setId(indexMeta.getSchemaId())
                                             .setKeysType(indexMeta.getKeysType())
@@ -1397,6 +1398,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                             .addColumns(indexMeta.getSchema())
                                             .setBloomFilterColumnNames(bfColumns)
                                             .setBloomFilterFpp(bfFpp)
+                                            .setZstdCompressionColumns(zstdCompressionColumns,
+                                                    olapTable.getZstdCompressionPageSizes())
                                             .setIndexes(index.getMetaId() == olapTable.getBaseIndexMetaId() ?
                                                         olapTable.getCopiedIndexes() :
                                                         OlapTable.getIndexesBySchema(
@@ -2113,7 +2116,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                     for (Column column : indexMeta.getSchema()) {
                         TColumn tColumn = column.toThrift();
                         tColumn.setColumn_name(column.getColumnId().getId());
-                        column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
+                        column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds(),
+                                olapTable.getZstdCompressionColumnIds(), olapTable.getZstdCompressionPageSizes());
                         columnsDesc.add(tColumn);
                     }
                     if (indexMeta.getSortKeyUniqueIds() != null) {

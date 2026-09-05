@@ -34,6 +34,7 @@
 
 #include "storage/rowset/column_writer.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 
@@ -55,6 +56,7 @@
 #endif
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
+#include "base/compression/zstd_dict.h"
 #include "base/string/faststring.h"
 #include "base/utility/alignment.h"
 #include "common/bloom_filter.h"
@@ -71,11 +73,22 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
+#include "storage/storage_metrics.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
-ColumnWriterOptions::ColumnWriterOptions() : data_page_size(config::data_page_size) {}
+ColumnWriterOptions::ColumnWriterOptions()
+        : data_page_size(config::data_page_size),
+          // Signed config into an unsigned field: a negative value would wrap to 4G and turn the
+          // cap into "no cap", making the dictionary the whole of the first eligible page -- up to
+          // the 1MB a per-column page size allows, or a single oversized row.
+          zstd_compression_dict_sample_bytes(static_cast<uint32_t>(
+                  std::clamp<int64_t>(config::zstd_compression_dict_sample_bytes, 0, 1024 * 1024))),
+          // Clamped, because a negative value would mean "keep the dictionary
+          // whatever it measures". Tests reach that on purpose by setting the field
+          // directly; an operator should not reach it by mis-typing a config.
+          zstd_compression_dict_min_gain(std::max(0.0, config::zstd_compression_dict_min_gain)) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -488,6 +501,11 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
         size += _inverted_index_builder->size();
     }
 #endif
+    // The retained dictionary sample is pending output like everything above: write_data()
+    // persists it as the dictionary page (whose size the sample bounds). Leaving it out lets a
+    // wide table pass the flush checks and then overshoot max_segment_file_size by roughly one
+    // dictionary page per nominated column.
+    size += _zstd_compression_dict_sample.size();
     return size;
 }
 
@@ -529,6 +547,29 @@ Status ScalarColumnWriter::write_data() {
         dict_pp.to_proto(_opts.meta->mutable_dict_page());
     }
     _opts.meta->set_all_dict_encoded(_page_builder->all_dict_encoded());
+
+    // persist the per-column compression dictionary page. It is a no-dict,
+    // self-decodable DICTIONARY_PAGE holding the raw sample bytes, read back on
+    // the read path to build the DDict. Gated on _cdict_used so a column that
+    // built a dict but never actually dict-compressed any page writes nothing.
+    // A PLAIN compression dict column never enters the DICT_ENCODING branch above, so the two
+    // dict pages never coexist.
+    if (_cdict_used) {
+        DCHECK(!_zstd_compression_dict_sample.empty());
+        PageFooterPB zstd_compression_dict_footer;
+        zstd_compression_dict_footer.set_type(DICTIONARY_PAGE);
+        zstd_compression_dict_footer.set_uncompressed_size(_zstd_compression_dict_sample.size());
+        zstd_compression_dict_footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+
+        PagePointer zstd_compression_dict_pp;
+        std::vector<Slice> zstd_compression_dict_body{Slice(_zstd_compression_dict_sample)};
+        RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _opts.compression_min_space_saving, _wfile,
+                                                        zstd_compression_dict_body, zstd_compression_dict_footer,
+                                                        &zstd_compression_dict_pp));
+        zstd_compression_dict_pp.to_proto(_opts.meta->mutable_zstd_compression_dict_page());
+        StorageMetrics::instance()->zstd_compression_dict_pages_written.increment(1);
+        StorageMetrics::instance()->zstd_compression_dict_bytes.increment(zstd_compression_dict_pp.size);
+    }
 
     Page* page = _pages.head;
     while (page != nullptr) {
@@ -613,6 +654,12 @@ Status ScalarColumnWriter::_write_data_page(Page* page) {
     return Status::OK();
 }
 
+int ScalarColumnWriter::_effective_compression_level() const {
+    return (_opts.meta != nullptr && _opts.meta->has_compression_level() && _opts.meta->compression_level() > 0)
+                   ? _opts.meta->compression_level()
+                   : -1;
+}
+
 Status ScalarColumnWriter::finish_current_page() {
     if (_zone_map_index_builder != nullptr) {
         RETURN_IF_ERROR(_zone_map_index_builder->flush());
@@ -659,10 +706,109 @@ Status ScalarColumnWriter::finish_current_page() {
         // for page format v2 or above, use the encoding type of config::null_encoding
         data_page_footer->set_null_encoding(_null_map_builder_v2->null_encoding());
     }
+    // lazily build the per-column compression dictionary from the first eligible
+    // page's encoded values, BEFORE compressing this page, so page 0 itself is
+    // dict-compressed. Building it is best-effort: a build failure leaves the column
+    // without a dictionary and the flush goes on. Compressing against one is not --
+    // once a dictionary exists, a failure to compress a page with it, or to write the
+    // dictionary page in write_data(), fails the flush like any other write error.
+    if (_opts.use_zstd_compression && !_zstd_compression_dict_ready && !_zstd_compression_dict_abandoned &&
+        _compress_codec != nullptr && _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
+        _encoding_info->encoding() == PLAIN_ENCODING && _page_builder->count() > 0 &&
+        _opts.zstd_compression_dict_sample_bytes > 0 &&
+        encoded_values->size() >= static_cast<size_t>(config::zstd_compression_dict_min_sample_bytes)) {
+        // The first data page is always format v2 -- the format only drops to v1 when the
+        // PREVIOUS page was mostly nulls -- so even an all-null first page arrives here with
+        // non-empty encoded values to sample, because v2 puts null rows into the page builder.
+        // This says nothing about frames: the sampling page and every trial page after it are
+        // written without the dictionary, so a dictionary-compressed page is always preceded by
+        // plain ones. That is safe for its own reason, which nodict_frame_decodes_under_ddict
+        // pins: a no-dict frame decodes identically whether or not a raw-content dictionary is
+        // referenced.
+        DCHECK(_first_rowid != 0 || _curr_page_format == 2);
+        size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.zstd_compression_dict_sample_bytes);
+        _zstd_compression_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);
+        auto cdict_or =
+                compression::ZstdCDict::create(Slice(_zstd_compression_dict_sample), _effective_compression_level());
+        if (cdict_or.ok()) {
+            _compression_cdict = std::move(cdict_or.value());
+            _zstd_compression_dict_ready = true;
+            // This page is the sample; compressing it against itself would be both
+            // free and meaningless; it goes out plain and the NEXT page decides
+            // whether the dictionary is worth keeping.
+            _sampling_page = true;
+        } else {
+            // Degrade for the whole column, not just this page: retrying on every later page
+            // would rebuild a dictionary that just failed and would count the fallback once per
+            // page, where the metric is documented as once per column per segment.
+            _zstd_compression_dict_sample.clear();
+            _zstd_compression_dict_abandoned = true;
+            StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
+        }
+    }
+    const compression::ZstdCDict* cdict = _zstd_compression_dict_ready ? _compression_cdict.get() : nullptr;
+    if (_sampling_page) {
+        // The dictionary was sampled from this very page. Compressing it against
+        // itself would collapse it to almost nothing and would prove nothing about
+        // the rest of the column, so this page goes out plain. That is safe: the
+        // reader decodes a no-dict frame identically whether or not a raw-content
+        // dictionary is referenced.
+        _sampling_page = false;
+        cdict = nullptr;
+    }
+
     // trying to compress page body
     faststring compressed_body;
-    RETURN_IF_ERROR(
-            PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body, &compressed_body));
+    if (cdict != nullptr && !_zstd_compression_dict_proven) {
+        // Trial. Compress both ways, keep the PLAIN result so the decision stays
+        // reversible, and accumulate over several pages before deciding. Whether a
+        // dictionary pays is a property of the data, so it is measured rather than
+        // guessed from row length or page size.
+        faststring dict_body;
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &compressed_body, nullptr));
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &dict_body, cdict));
+        // compress_page_body returns an empty body when compressing did not save
+        // enough to be worth it; that case means "the uncompressed size".
+        const uint64_t raw_size = Slice::compute_total_size(body);
+        _zstd_compression_dict_trial_with += dict_body.size() == 0 ? raw_size : dict_body.size();
+        _zstd_compression_dict_trial_without += compressed_body.size() == 0 ? raw_size : compressed_body.size();
+        cdict = nullptr; // this page goes out plain whichever way the trial lands
+
+        if (++_zstd_compression_dict_trial_pages >= kZstdDictTrialPages) {
+            _zstd_compression_dict_proven = true;
+            // Signed on purpose: a dictionary that made the pages BIGGER has to be able to fail
+            // this test, and a saving floored at zero cannot express that -- it would pass any
+            // margin of zero or less.
+            const int64_t saved = static_cast<int64_t>(_zstd_compression_dict_trial_without) -
+                                  static_cast<int64_t>(_zstd_compression_dict_trial_with);
+            // One condition: the saving has to be large, not merely real, and it has to exist at
+            // all -- a dictionary that broke even is pure cost, a page of its own plus a load per
+            // segment on every read. A negative margin is the one exception: it is not reachable
+            // from config (the value is floored at zero there) and means "keep the dictionary
+            // whatever the measurement says", which is how the roundtrip test gets the dictionary
+            // path to run on data that would rightly decline one.
+            // The other half of the rule is structural rather than arithmetic -- a column too
+            // short to finish the trial never gets a dictionary at all, which is the
+            // right answer for it, because the dictionary page is roughly a page in
+            // size and cannot pay for itself over a handful.
+            const double min_gain = _opts.zstd_compression_dict_min_gain;
+            const bool worth_the_margin =
+                    (min_gain < 0.0 || saved > 0) &&
+                    static_cast<double>(saved) >= static_cast<double>(_zstd_compression_dict_trial_without) * min_gain;
+            if (!worth_the_margin) {
+                _compression_cdict.reset();
+                _zstd_compression_dict_sample.clear();
+                _zstd_compression_dict_ready = false;
+                _zstd_compression_dict_abandoned = true;
+                StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
+            }
+        }
+    } else {
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &compressed_body, cdict));
+    }
     if (compressed_body.size() == 0) {
         // page body is uncompressed
         double space_saving =
@@ -685,6 +831,11 @@ Status ScalarColumnWriter::finish_current_page() {
     } else {
         // page body is compressed
         page->data.emplace_back(compressed_body.build());
+        if (cdict != nullptr) {
+            // This page was actually compressed referencing the compression dict, so
+            // the dict page must be persisted (gate for write_data()).
+            _cdict_used = true;
+        }
     }
 
     _push_back_page(page.release());
