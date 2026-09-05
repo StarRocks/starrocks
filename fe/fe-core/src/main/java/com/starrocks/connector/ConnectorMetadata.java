@@ -123,6 +123,15 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Return partition names matching a native metastore filter.
+     *
+     * <p>An empty optional means this connector does not support server-side filter pruning.
+     */
+    default Optional<List<String>> listPartitionNamesByFilter(String databaseName, String tableName, String filter) {
+        return Optional.empty();
+    }
+
+    /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
      * @param dbName  - the string represents the database name

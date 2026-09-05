@@ -17,11 +17,16 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.DdlException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.server.MetadataMgr;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @BeforeEach
@@ -70,6 +75,28 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
                 "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +
                 "     partitions=1/3");
+    }
+
+    @Test
+    public void testHivePartitionRangeFilterPushdown() throws Exception {
+        AtomicReference<String> pushedFilter = new AtomicReference<>();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<List<String>> listPartitionNamesByFilter(
+                    String catalogName, String dbName, String tableName, String filter) {
+                pushedFilter.set(filter);
+                return Optional.of(List.of("par_col=1", "par_col=2"));
+            }
+        };
+
+        String plan = getFragmentPlan("select * from t1 where par_col >= 1 and par_col <= 2");
+
+        Assertions.assertNotNull(pushedFilter.get());
+        Assertions.assertTrue(pushedFilter.get().contains("par_col >= 1"));
+        Assertions.assertTrue(pushedFilter.get().contains("par_col <= 2"));
+        assertContains(plan, "4: par_col >= 1");
+        assertContains(plan, "4: par_col <= 2");
+        assertContains(plan, "partitions=2/2");
     }
 
     @Test

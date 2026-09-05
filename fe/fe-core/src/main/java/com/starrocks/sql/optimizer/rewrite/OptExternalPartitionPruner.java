@@ -340,7 +340,26 @@ public class OptExternalPartitionPruner {
                 // check if the partition predicate could be used for filter partition names
                 List<Optional<ScalarOperator>> effectivePartitionPredicate =
                         getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
-                if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
+                boolean hasEffectivePartitionPredicate =
+                        effectivePartitionPredicate.stream().anyMatch(Optional::isPresent);
+                Optional<List<String>> filteredPartitionNames = Optional.empty();
+                Optional<HivePartitionFilterConverter.Result> metastoreFilter =
+                        HivePartitionFilterConverter.convert(operator, partitionColumns, operator.getPredicate());
+                if (metastoreFilter.isPresent() && metastoreFilter.get().requiresFilterApi()) {
+                    filteredPartitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNamesByFilter(table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), metastoreFilter.get().getFilter());
+                    if (filteredPartitionNames.isPresent()) {
+                        LOG.debug("Use HMS partition filter [{}] for table {}.{}.{}",
+                                metastoreFilter.get().getFilter(), table.getCatalogName(), table.getCatalogDBName(),
+                                table.getCatalogTableName());
+                    }
+                }
+                boolean partitionNamesFiltered = filteredPartitionNames.isPresent()
+                        || hasEffectivePartitionPredicate;
+                if (filteredPartitionNames.isPresent()) {
+                    partitionNames = filteredPartitionNames.get();
+                } else if (hasEffectivePartitionPredicate) {
                     List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNamesByValue(table.getCatalogName(), table.getCatalogDBName(),
@@ -355,12 +374,11 @@ public class OptExternalPartitionPruner {
                 // reproduce the true denominator in partitions=X/Y. The list used for pruning above may
                 // already be value-filtered, which would collapse the denominator to the pruned count.
                 if (context.getDumpInfo() != null) {
-                    List<String> allPartitionNames =
-                            effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)
-                                    ? GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                                            table.getCatalogName(), table.getCatalogDBName(),
-                                            table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT)
-                                    : partitionNames;
+                    List<String> allPartitionNames = partitionNamesFiltered
+                            ? GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                                    table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT)
+                            : partitionNames;
                     context.getDumpInfo().getHMSTable(table.getResourceName(), table.getCatalogDBName(),
                             table.getCatalogTableName()).setPartitionNames(allPartitionNames);
                 }
