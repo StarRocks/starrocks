@@ -491,6 +491,13 @@ void StructColumn::check_or_die() const {
     // fields and field_names must have the same size.
     DCHECK(_fields.size() == _field_names.size());
 
+    // every field must hold the same number of rows: size() reports _fields[0]->size(), so a field
+    // that was never materialized is invisible to every size-based check and only surfaces as an
+    // out-of-bounds read once something appends this column.
+    for (const auto& column : _fields) {
+        DCHECK_EQ(_fields[0]->size(), column->size());
+    }
+
     for (const auto& column : _fields) {
         column->check_or_die();
     }

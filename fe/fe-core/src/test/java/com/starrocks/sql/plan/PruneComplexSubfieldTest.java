@@ -182,6 +182,19 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testPredicateExprReuseKeepsAccessPathCoveringScanProjection() throws Exception {
+        // `st6.a3[1].s5` appears in both the predicate and the output list. PullUpScanPredicateRule used to
+        // project the intermediate `st6.a3` - the whole ARRAY<STRUCT<s5, s6>> - out of the scan even though
+        // nothing referenced that slot, while the access path only delivered /st6/a3/INDEX/s5. The scan then
+        // emitted an array whose `s6` field held no rows, which read out of bounds downstream.
+        String sql = "select st6.a3[1].s5 from sc0 where v1 = st6.a3[1].s5 order by v1 limit 2";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/a3/INDEX/s5]");
+        // no slot holds the bare `st6.a3`, which would need /st6/a3 as a whole
+        assertNotContains(plan, "].a3[true]\n");
+    }
+
+    @Test
     public void testJoinPruneColumn() throws Exception {
         String sql = "select sc0.st1.s1, st1.s2 from t0 join sc0 on sc0.v1 = t0.v1";
         String plan = getVerboseExplain(sql);
