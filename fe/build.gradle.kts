@@ -131,8 +131,9 @@ subprojects {
             implementation("com.opencsv:opencsv:5.7.1")
             implementation("com.oracle.database.jdbc:ojdbc10:19.18.0.0")
             implementation("com.oracle.database.nls:orai18n:19.18.0.0")
-            implementation("com.qcloud.cos:hadoop-cos:3.3.0-8.3.2")
-            implementation("com.qcloud:chdfs_hadoop_plugin_network:3.2")
+            // transitively supplies cos_api-bundle, chdfs_hadoop_plugin_network,
+            // cos-sts-java and ofs-sdk-definition; do not redeclare them
+            implementation("com.qcloud.cos:hadoop-cos:3.4.1-8.3.31")
             implementation("com.squareup.okhttp3:okhttp:4.10.0")
             // keep on the same train as okhttp (tencentcloud-sdk declares 3.12.x)
             implementation("com.squareup.okhttp3:logging-interceptor:4.10.0")

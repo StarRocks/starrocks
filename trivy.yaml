@@ -19,7 +19,7 @@ scan:
     # spark core
     - "**/spark-core_2.12-3.5.7.jar"
     # tencent cos_api
-    - "**/cos_api-bundle-5.6.137.2.jar"
+    - "**/cos_api-bundle-5.6.244.4.jar"
     # gcs connector hadoop3
     - "**/gcs-connector-hadoop3-2.2.26-shaded.jar"
     # parquet hadoop bundle
