@@ -32,6 +32,7 @@
 #include "formats/utils.h"
 #include "testutil/assert.h"
 #include "util/await.h"
+#include "util/defer_op.h"
 
 namespace starrocks::connector {
 namespace {
@@ -52,6 +53,9 @@ protected:
     }
 
     void TearDown() override {}
+
+    // Defined below, once the mock writer/helper types it needs are declared
+    void test_sorted_spill_with_null(bool is_asc, bool is_null_first, const std::vector<std::string>& expected);
 
     ObjectPool _pool;
     std::shared_ptr<pipeline::FragmentContext> _fragment_context;
@@ -1244,6 +1248,104 @@ TEST_F(PartitionChunkWriterTest, test_buffer_partition_writer_profile_metrics) {
     }
 
     std::filesystem::remove_all(fs_base_path);
+}
+
+// An Iceberg sort order may sort a column descending (IcebergTable.java fills TSortOrder.is_ascs from the
+// table's sort fields), and the sorted write spills one sorted run per block and merges them back with a heap
+// merge iterator. The run sort and the merge must agree on which end the NULLs go to, otherwise the merged
+// file is not sorted at all.
+void PartitionChunkWriterTest::test_sorted_spill_with_null(bool is_asc, bool is_null_first,
+                                                           const std::vector<std::string>& expected) {
+    std::string fs_base_path = "base_path";
+    std::filesystem::create_directories(fs_base_path + "/c1");
+    DeferOp cleanup([&]() { std::filesystem::remove_all(fs_base_path); });
+
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+
+    auto writer_helper = WriterHelper::instance();
+    writer_helper->reset();
+    bool commited = false;
+    Status status;
+
+    auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+    auto location_provider = std::make_shared<LocationProvider>(fs_base_path, "ffffff", 0, 0, "parquet");
+    EXPECT_CALL(*mock_writer_factory, create(::testing::_)).WillRepeatedly([](const std::string&) {
+        WriterAndStream ws;
+        ws.writer = std::make_unique<MockWriter>();
+        ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        return ws;
+    });
+
+    auto sort_ordering = std::make_shared<SortOrdering>();
+    sort_ordering->sort_key_idxes = {0};
+    sort_ordering->sort_descs.descs.emplace_back(is_asc, is_null_first);
+    const size_t max_file_size = 1073741824; // 1GB
+    auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
+            SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
+                                             nullptr,
+                                             _fragment_context.get(),
+                                             tuple_desc,
+                                             nullptr,
+                                             sort_ordering});
+    auto partition_chunk_writer_factory =
+            std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    std::vector<int8_t> partition_field_null_list;
+    auto partition_writer = std::dynamic_pointer_cast<SpillPartitionChunkWriter>(
+            partition_chunk_writer_factory->create("c1", partition_field_null_list));
+    auto commit_callback = [&commited](const CommitResult& r) { commited = true; };
+    auto error_handler = [&status](const Status& s) { status = s; };
+    auto poller = MockPoller();
+    partition_writer->set_io_poller(&poller);
+    partition_writer->set_commit_callback(commit_callback);
+    partition_writer->set_error_handler(error_handler);
+    EXPECT_OK(partition_writer->init());
+
+    // One spilled block per chunk, each holding both NULL and non-NULL rows
+    for (size_t i = 0; i < 3; ++i) {
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+        std::string suffix = std::to_string(3 - i);
+        auto& column = chunk->get_column_by_index(0);
+        column->append_datum(Slice("ccc" + suffix));
+        column->append_nulls(1);
+        column->append_datum(Slice("aaa" + suffix));
+
+        EXPECT_OK(partition_writer->write(chunk));
+        EXPECT_OK(partition_writer->flush());
+        EXPECT_OK(partition_writer->wait_flush());
+        Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([partition_writer]() {
+            return partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed) == 0;
+        });
+        EXPECT_OK(status);
+    }
+
+    // Merge the spilled blocks
+    EXPECT_OK(partition_writer->finish());
+    Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([&]() { return partition_writer->is_finished(); });
+    EXPECT_EQ(commited, true);
+    EXPECT_OK(status);
+    ASSERT_EQ(writer_helper->result_chunks().size(), 1);
+
+    auto result_chunk = writer_helper->result_chunks()[0];
+    auto column = result_chunk->get_column_by_index(0);
+    std::vector<std::string> actual;
+    for (size_t i = 0; i < column->size(); ++i) {
+        auto datum = column->get(i);
+        actual.emplace_back(datum.is_null() ? "NULL" : datum.get_slice().to_string());
+    }
+    EXPECT_EQ(expected, actual);
+}
+
+TEST_F(PartitionChunkWriterTest, sorted_spill_desc_null_last) {
+    test_sorted_spill_with_null(false, false, {"ccc3", "ccc2", "ccc1", "aaa3", "aaa2", "aaa1", "NULL", "NULL", "NULL"});
+}
+
+TEST_F(PartitionChunkWriterTest, sorted_spill_desc_null_first) {
+    test_sorted_spill_with_null(false, true, {"NULL", "NULL", "NULL", "ccc3", "ccc2", "ccc1", "aaa3", "aaa2", "aaa1"});
+}
+
+TEST_F(PartitionChunkWriterTest, sorted_spill_asc_null_first) {
+    test_sorted_spill_with_null(true, true, {"NULL", "NULL", "NULL", "aaa1", "aaa2", "aaa3", "ccc1", "ccc2", "ccc3"});
 }
 
 } // namespace
