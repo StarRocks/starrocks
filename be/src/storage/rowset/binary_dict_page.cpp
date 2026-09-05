@@ -298,10 +298,22 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         auto temp_data_column = temp_nullable_column->data_column_raw_ptr();
         auto& temp_null_column = temp_nullable_column->null_column_ref();
 
-        // Read data column and null column
-        ContainerResource container(_page_handle, null_data, num_rows);
-        int n = temp_null_column.append_numbers(container);
-        DCHECK_EQ(n, num_rows);
+        // Read data column and null column. null_data is indexed by the in-page ordinal (see
+        // PageDecoder::next_batch_with_filter): a contiguous range can alias the page's null flags directly, a sparse
+        // range has to pick the flags of each sub-range, otherwise the rows after the first gap would take the
+        // null flags of the skipped rows.
+        if (range.size() == 1) {
+            ContainerResource container(_page_handle, null_data + range.begin(), num_rows);
+            int n = temp_null_column.append_numbers(container);
+            DCHECK_EQ(n, num_rows);
+        } else {
+            temp_null_column.reserve(num_rows);
+            SparseRangeIterator<> iter = range.new_iterator();
+            while (iter.has_more()) {
+                Range<> r = iter.next(num_rows);
+                temp_null_column.append_numbers(null_data + r.begin(), r.span_size());
+            }
+        }
         RETURN_IF_ERROR(next_batch(range, temp_data_column));
         DCHECK(temp_null_column.size() == num_rows);
         DCHECK(temp_data_column->size() == num_rows);
