@@ -77,6 +77,7 @@ From v3.5.0 onwards, StarRocks native tables support Common Partition Expression
 - During data loading, StarRocks automatically creates some partitions based on the loaded data, but if the load job fails for some reason, the partitions that are automatically created by StarRocks cannot be automatically deleted.
 - StarRocks sets the default maximum number of automatically created partitions for one load to 4096, which can be configured by the FE parameter `auto_partition_max_creation_number_per_load`. This parameter can prevent you from accidentally creating too many partitions.
 - The naming rule for partitions is consistent with the naming rule for dynamic partitioning.
+- Partition granularities other than `hour`, `day`, `month`, and `year`, such as `week`, are implemented by materializing the partition value into an internal column. On Aggregate Key and Unique Key tables the partition expression may therefore only reference key columns, because the value of a non-key column is only decided after aggregation.
 
 ### Examples
 

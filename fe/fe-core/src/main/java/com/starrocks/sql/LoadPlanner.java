@@ -634,6 +634,12 @@ public class LoadPlanner {
             for (Map.Entry<Long, List<Column>> entry : olapDestTable.getIndexMetaIdToSchema().entrySet()) {
                 List<Column> schema = entry.getValue();
                 for (Column column : schema) {
+                    // The generated partition column is REPLACE on aggregate tables but is functionally
+                    // determined by the key columns, so replicas cannot diverge on it and it does not
+                    // require a shuffle.
+                    if (column.isGeneratedPartitionColumn()) {
+                        continue;
+                    }
                     if (column.getAggregationType() == AggregateType.REPLACE
                             || column.getAggregationType() == AggregateType.REPLACE_IF_NOT_NULL) {
                         return true;
