@@ -704,6 +704,10 @@ public class InsertPlanner {
         ValuesRelation values = (ValuesRelation) insertStatement.getQueryStatement().getQueryRelation();
         RelationFields fields = insertStatement.getQueryStatement().getQueryRelation().getRelationFields();
 
+        // The values rows do not contain the columns skipped by needToSkip() (e.g. partition columns of
+        // a static partition insert, which may be at any position for Iceberg tables) nor generated
+        // columns, so the source rows are indexed separately from the target schema.
+        int sourceIdx = 0;
         for (int columnIdx = 0; columnIdx < outputBaseSchema.size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
                 continue;
@@ -713,24 +717,25 @@ public class InsertPlanner {
             if (targetColumn.isGeneratedColumn()) {
                 continue;
             }
+            int valueIdx = sourceIdx++;
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
-                    if (isAutoIncrement && row.get(columnIdx).getType() == NullType.NULL) {
+                    if (isAutoIncrement && row.get(valueIdx).getType() == NullType.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
                                 targetColumn.getName() + " You can use `default` for an" +
                                 " AUTO INCREMENT column");
                     }
-                    if (row.get(columnIdx) instanceof DefaultValueExpr) {
+                    if (row.get(valueIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
-                            row.set(columnIdx, new NullLiteral());
+                            row.set(valueIdx, new NullLiteral());
                         } else {
-                            row.set(columnIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
+                            row.set(valueIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                         }
                     }
-                    row.set(columnIdx, TypeManager.addCastExpr(row.get(columnIdx), targetColumn.getType()));
+                    row.set(valueIdx, TypeManager.addCastExpr(row.get(valueIdx), targetColumn.getType()));
                 }
-                fields.getFieldByIndex(columnIdx).setType(targetColumn.getType());
+                fields.getFieldByIndex(valueIdx).setType(targetColumn.getType());
             } else {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
@@ -760,6 +765,9 @@ public class InsertPlanner {
                                             InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
+        // Same as castLiteralToTargetColumnsType(): the query output does not contain skipped
+        // partition columns nor generated columns, so it is indexed separately.
+        int sourceIdx = 0;
         for (int columnIdx = 0; columnIdx < outputBaseSchema.size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
                 continue;
@@ -769,10 +777,11 @@ public class InsertPlanner {
             if (targetColumn.isGeneratedColumn()) {
                 continue;
             }
+            int outputIdx = sourceIdx++;
             if (insertStatement.getTargetColumnNames() == null) {
-                outputColumns.add(logicalPlan.getOutputColumn().get(columnIdx));
-                columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
-                        logicalPlan.getOutputColumn().get(columnIdx));
+                outputColumns.add(logicalPlan.getOutputColumn().get(outputIdx));
+                columnRefMap.put(logicalPlan.getOutputColumn().get(outputIdx),
+                        logicalPlan.getOutputColumn().get(outputIdx));
             } else {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx == -1) {
@@ -1165,7 +1174,8 @@ public class InsertPlanner {
         List<Expr> partitionColValues = insertStatement.getTargetPartitionNames().getPartitionColValues();
         List<String> tablePartitionColumnNames = targetTable.getPartitionColumnNames();
 
-        for (Column column : targetTable.getFullSchema()) {
+        for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
+            Column column = outputFullSchema.get(columnIdx);
             String columnName = column.getName();
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);
@@ -1175,7 +1185,7 @@ public class InsertPlanner {
                         ConstantOperator.createObject(expr.getRealObjectValue(), type);
                 ColumnRefOperator col = columnRefFactory
                         .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
-                outputColumns.add(col);
+                outputColumns.add(columnIdx, col);
                 columnRefMap.put(col, scalarOperator);
             }
         }
