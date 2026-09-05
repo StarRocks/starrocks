@@ -251,6 +251,11 @@ public class PlannerMetaLocker implements AutoCloseable {
             return null;
         }
 
+        // Judged on the catalog *name*, because that is what the database is about to be resolved through:
+        // any other catalog, resource-mapping included, routes getDb to the connector and yields a
+        // connector-minted id that must never be locked. Returning early also keeps lock collection off the
+        // network. The check below re-asks the same question of the resolved table object, where the answer
+        // for resource-mapping is the opposite one -- see Table#isMetaLockTarget.
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
@@ -266,6 +271,15 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         Table table = metadataMgr.getTable(session, catalogName, dbName, tbName);
         if (table == null) {
+            return null;
+        }
+
+        // Only lock what the lock can protect. Same predicate AnalyzerUtils.CopyUnsafeTablesCollector uses to
+        // decide who may extend the lock's lifetime, so who gets locked and who decides for how long cannot
+        // drift apart. A no-op in practice -- a table reached through the internal catalog always lives in an
+        // internal database -- so this is here as the one named statement of the invariant, and as the anchor
+        // for asserting it inside Locker later.
+        if (!table.isMetaLockTarget()) {
             return null;
         }
 
