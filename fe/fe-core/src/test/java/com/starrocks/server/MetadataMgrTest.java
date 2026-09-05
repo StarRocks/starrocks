@@ -15,6 +15,8 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -33,6 +35,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -49,6 +55,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -287,6 +294,98 @@ public class MetadataMgrTest {
         } finally {
             dropCatalogIfExists(catalogName);
         }
+    }
+
+    @Test
+    public void testCreateTableHonorsConnectorAlreadyExists(@Mocked ConnectorMetadata connectorMetadata) throws Exception {
+        String catalogName = "iceberg_catalog_metadata_mgr_already_exists";
+        ConnectContext context = AnalyzeTestUtil.getConnectContext();
+        MetadataMgr metadataMgr = context.getGlobalStateMgr().getMetadataMgr();
+
+        CreateTableStmt createTableStmt = new CreateTableStmt(false, true,
+                new TableRef(QualifiedName.of(Lists.newArrayList(catalogName, "iceberg_db", "iceberg_table")),
+                        null, NodePosition.ZERO),
+                Collections.emptyList(), "iceberg", null, null, null, null, null, null);
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getOptionalMetadata(catalogName);
+                result = Optional.of(connectorMetadata);
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, catalogName, "iceberg_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+
+                metadataMgr.tableExists((ConnectContext) any, catalogName, "iceberg_db", "iceberg_table");
+                result = false;
+                minTimes = 0;
+            }
+        };
+        new Expectations() {
+            {
+                connectorMetadata.createTable((ConnectContext) any, (CreateTableStmt) any);
+                result = new AlreadyExistsException("Table Already Exists: iceberg_table");
+                minTimes = 0;
+            }
+        };
+
+        // Without IF NOT EXISTS, the connector-level AlreadyExistsException surfaces as ERR_TABLE_EXISTS_ERROR.
+        DdlException e = assertThrows(DdlException.class, () -> metadataMgr.createTable(context, createTableStmt));
+        Assertions.assertTrue(e.getMessage().contains("iceberg_table"));
+
+        // With IF NOT EXISTS, the create becomes a no-op that returns false.
+        createTableStmt.setIfNotExists();
+        Assertions.assertFalse(metadataMgr.createTable(context, createTableStmt));
+    }
+
+    @Test
+    public void testCreateTemporaryTableHonorsConnectorAlreadyExists(
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked LocalMetastore localMetastore,
+            @Mocked TemporaryTableMgr temporaryTableMgr) throws Exception {
+        ConnectContext context = AnalyzeTestUtil.getConnectContext();
+        MetadataMgr metadataMgr = context.getGlobalStateMgr().getMetadataMgr();
+
+        CreateTemporaryTableStmt stmt = new CreateTemporaryTableStmt(false, false,
+                new TableRef(QualifiedName.of(
+                        Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "test_db", "test_tbl")),
+                        null, NodePosition.ZERO),
+                Collections.emptyList(), null, null, null, null, null, null,
+                Collections.emptyMap(), Collections.emptyMap(), null,
+                Collections.emptyList(), Collections.emptyList(), NodePosition.ZERO);
+        stmt.setSessionId(UUIDUtil.genUUID());
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getOptionalMetadata(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                result = Optional.of(connectorMetadata);
+                minTimes = 0;
+            }
+        };
+        new Expectations() {
+            {
+                localMetastore.getDb("test_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+
+                temporaryTableMgr.tableExists((UUID) any, anyLong, "test_tbl");
+                result = false;
+                minTimes = 0;
+
+                connectorMetadata.createTable((ConnectContext) any, (CreateTableStmt) any);
+                result = new AlreadyExistsException("Table Already Exists: test_tbl");
+                minTimes = 0;
+            }
+        };
+
+        // Without IF NOT EXISTS, the connector-level AlreadyExistsException surfaces as ERR_TABLE_EXISTS_ERROR.
+        DdlException e = assertThrows(DdlException.class, () -> metadataMgr.createTemporaryTable(context, stmt));
+        Assertions.assertTrue(e.getMessage().contains("test_tbl"));
+
+        // With IF NOT EXISTS, the create becomes a no-op that returns false.
+        stmt.setIfNotExists();
+        Assertions.assertFalse(metadataMgr.createTemporaryTable(context, stmt));
     }
 
     @Test
