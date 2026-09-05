@@ -165,15 +165,58 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
             column = getColumnName(exprWithoutCast(node.getChild(1)));
             value = (String) valueFor(node.getChild(0));
         }
+        String wildcard = (node.getOp() == LikePredicate.Operator.LIKE)
+                ? likePatternToWildcard(value)
+                : regexpPatternToWildcard(value);
+        return QueryBuilders.wildcardQuery(column, wildcard);
+    }
+
+    private static final char ESCAPE_CHAR = '\\';
+
+    // Convert a SQL LIKE pattern to an Elasticsearch wildcard pattern. `%`/`_` become the wildcards
+    // `*`/`?`, while a `%`/`_` preceded by an (odd number of) escape char is emitted as its literal
+    // self. The escape char is consumed and only re-emitted once per escaped pair so that a literal
+    // backslash survives. Tracking the escape count's parity is what lets consecutive escapes
+    // (e.g. `\\%`) be interpreted correctly instead of relying only on the immediately preceding char.
+    private static String likePatternToWildcard(String value) {
+        StringBuilder sb = new StringBuilder(value.length());
+        int escapeCount = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == ESCAPE_CHAR) {
+                escapeCount++;
+                if (escapeCount % 2 == 0) {
+                    sb.append(ESCAPE_CHAR);
+                }
+                continue;
+            }
+            if (c == '%' || c == '_') {
+                boolean escaped = escapeCount % 2 == 1;
+                sb.append(escaped ? c : mapWildcard(c));
+            } else {
+                sb.append(c);
+            }
+            escapeCount = 0;
+        }
+        return sb.toString();
+    }
+
+    private static char mapWildcard(char c) {
+        return c == '%' ? '*' : '?';
+    }
+
+    // Legacy behavior for REGEXP: only translate `%`/`_` unless directly preceded by a backslash,
+    // and leave backslashes untouched so regex escapes (e.g. `\d`) are preserved.
+    private static String regexpPatternToWildcard(String value) {
         char[] chars = value.toCharArray();
         for (int i = 0; i < chars.length; i++) {
             if (chars[i] == '_' || chars[i] == '%') {
-                if (i == 0 || chars[i - 1] != '\\') {
+                if (i == 0 || chars[i - 1] != ESCAPE_CHAR) {
                     chars[i] = (chars[i] == '_') ? '?' : '*';
                 }
             }
         }
-        return QueryBuilders.wildcardQuery(column, new String(chars));
+        return new String(chars);
     }
 
     @Override
