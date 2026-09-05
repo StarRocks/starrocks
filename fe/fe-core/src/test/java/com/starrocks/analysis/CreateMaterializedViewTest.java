@@ -4896,7 +4896,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "   `person_id` varchar(36)\n" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`id`,`location_id`,`location_id_hash`)\n" +
-                "PARTITION BY (`location_id_hash`)\n" +
+                "PARTITION BY `location_id_hash`\n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "   \"replication_num\" = \"1\"\n" +
@@ -5659,7 +5659,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
             String result = mv.getMaterializedViewDdlStmt(false, false);
             String expect = "CREATE MATERIALIZED VIEW `list_partition_mv1` (`dt`, `province`, `avg(age)`)\n" +
-                    "PARTITION BY (`province`)\n" +
+                    "PARTITION BY `province`\n" +
                     "DISTRIBUTED BY HASH(`dt`, `province`) BUCKETS 10 \n" +
                     "REFRESH MANUAL\n" +
                     "PROPERTIES (\n" +
@@ -6006,7 +6006,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") ENGINE=OLAP \n" +
                 "DUPLICATE KEY(`user_id`, `event_ts`, `event_name`)\n" +
                 "COMMENT \"OLAP\"\n" +
-                "PARTITION BY (`dt`)\n" +
+                "PARTITION BY `dt`\n" +
                 "DISTRIBUTED BY HASH(`user_id`) BUCKETS 10 \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
