@@ -1,0 +1,6 @@
+extends: script
+message: "Use a relative Markdown link instead of '%s' — e.g. [System variables](../sql-reference/System_variable.md). Docusaurus treats an absolute docs.starrocks.io URL as an external link, so onBrokenLinks never checks it and it rots silently when the page moves."
+level: error
+scope: raw
+link: https://docusaurus.io/docs/api/docusaurus-config#onBrokenLinks
+script: AbsoluteDocsLink.tengo
