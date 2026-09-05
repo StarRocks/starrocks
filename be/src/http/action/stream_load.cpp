@@ -197,7 +197,9 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
         // then execute_plan_fragment here
         // this will close file
         ctx->body_sink.reset();
-        RETURN_IF_ERROR(_stream_load_orchestrator->execute_plan_fragment(ctx));
+        // on_header admitted this load; do not recheck after body upload.
+        // The context gauge keeps it visible during drain.
+        RETURN_IF_ERROR(_stream_load_orchestrator->execute_plan_fragment(ctx, true));
     } else {
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
             ctx->buffer->flip_to_read();
@@ -228,10 +230,19 @@ Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, S
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {
-    auto* ctx = new StreamLoadContext(_exec_env->load_stream_mgr(),
-                                      &StreamLoadMetrics::instance()->streaming_load_current_processing);
-    ctx->ref();
-    req->set_handler_ctx(ctx);
+    StreamLoadContext* ctx;
+    {
+        RequestAdmissionGuard request_admission;
+        if (!request_admission.accepted()) {
+            HttpChannel::send_reply(req, HttpStatus::SERVICE_UNAVAILABLE,
+                                    "Service is shutting down, please retry later!");
+            return -1;
+        }
+        ctx = new StreamLoadContext(_exec_env->load_stream_mgr(),
+                                    &StreamLoadMetrics::instance()->streaming_load_current_processing);
+        ctx->ref();
+        req->set_handler_ctx(ctx);
+    }
 
     ctx->load_type = TLoadType::MANUAL_LOAD;
     ctx->load_src_type = TLoadSourceType::RAW;
@@ -271,6 +282,16 @@ int StreamLoadAction::on_header(HttpRequest* req) {
 
     if (config::enable_stream_load_verbose_log) {
         LOG(INFO) << "streaming load request: " << req->debug_string();
+    }
+
+    // The context gauge covers this request through execution.
+    if (!should_accept_new_request()) {
+        LOG(INFO) << "[reject] stream load received after graceful shutdown admission window, uri=" << req->uri()
+                  << ", label=" << ctx->label;
+        ctx->status = Status::ServiceUnavailable("Service is shutting down, please retry later!");
+        auto str = ctx->to_json();
+        _send_reply(req, str);
+        return -1;
     }
 
     auto st = _on_header(req, ctx);
@@ -372,12 +393,6 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
     if (ctx->enable_batch_write) {
         return Status::OK();
-    }
-
-    // Check if the process is going to quit before beginning the transaction, to avoid
-    // creating a dangling transaction on FE side.
-    if (process_exit_in_progress()) {
-        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
     }
 
     // begin transaction
@@ -695,7 +710,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
-    return _stream_load_orchestrator->execute_plan_fragment(ctx);
+    return _stream_load_orchestrator->execute_plan_fragment(ctx, true);
 }
 
 Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,

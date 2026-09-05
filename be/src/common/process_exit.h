@@ -15,6 +15,8 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
+#include <string>
 
 namespace starrocks {
 
@@ -42,20 +44,59 @@ bool process_exit_in_progress();
 //  - false: process is not in quick exit
 bool process_quick_exit_in_progress();
 
-// set the flag of FE leader awareness of the shutdown
+// Mark that the heartbeat ack advanced: the FE processed a heartbeat response this BE sent
+// after shutdown began (it reports SHUTDOWN), so the node is marked SHUTDOWN/not-alive globally.
 void set_frontend_aware_of_exit();
 
 // whether the FE leader is aware of the shutdown
 // returns:
-//  - true: at least one response is marked as shutdown to FE's heartbeat request
-//  - false: no response is marked as shutdown to FE's heartbeat request
+//  - true: the heartbeat ack advanced at least once during shutdown
+//  - false: the ack has not advanced yet
 bool is_frontend_aware_of_exit();
+
+// Tracks the FE's last-seen heartbeat time (the shutdown ack). `ack_source` identifies the FE
+// that sent it (its heartbeat network address + leader epoch): a change of source (leader
+// handover) re-anchors the baseline instead of comparing unsynchronized wall clocks, disables
+// BEGIN redirect for the rest of this shutdown (conservative failover downgrade), and only
+// advances within the current source return true. The first value of a source is the baseline
+// and returns false.
+bool advance_heartbeat_ack(const std::string& ack_source, int64_t ack);
+
+// Whether a cutoff BEGIN may still be redirected to the FE leader: the FE has acknowledged the
+// shutdown (a delay window was opened), no leader/term handover was observed, and this is not a
+// legacy FE that omitted last_heartbeat_time_ms. Callers reply with ServiceUnavailable JSON when
+// it returns false.
+bool may_redirect_to_fe_leader();
+
+// Disable BEGIN 307 for the rest of this shutdown (legacy FE missing ack field, or leader
+// handover). Delay/admission is unchanged. Reset by clear_frontend_aware_of_exit().
+void disable_begin_redirect();
 
 // clear the flag of frontend awareness of the shutdown.
 void clear_frontend_aware_of_exit();
 
-void set_process_is_crashing();
+// Whether a new request may be accepted during graceful shutdown.
+bool should_accept_new_request();
 
+class RequestAdmissionGuard {
+public:
+    RequestAdmissionGuard();
+    ~RequestAdmissionGuard();
+    RequestAdmissionGuard(const RequestAdmissionGuard&) = delete;
+    RequestAdmissionGuard& operator=(const RequestAdmissionGuard&) = delete;
+
+    bool accepted() const { return _accepted; }
+
+private:
+    bool _accepted = false;
+};
+
+size_t request_admissions_inflight();
+
+// Force the BE to reject new fragments immediately before teardown.
+void force_reject_exec_plan_fragment();
+
+void set_process_is_crashing();
 bool is_process_crashing();
 
 } // namespace starrocks

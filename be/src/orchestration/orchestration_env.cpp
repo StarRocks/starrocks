@@ -19,12 +19,16 @@
 #include <memory>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
+#include "common/status.h"
 #include "common/system/master_info.h"
 #include "compute_env/compute_env.h"
+#include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/profile_report_worker.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/pipeline_fragment_reporter.h"
 #include "exec/runtime/query_context_manager.h"
@@ -44,11 +48,12 @@ OrchestrationEnv::~OrchestrationEnv() {
     destroy();
 }
 
-Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, StreamLoadExecutor* stream_load_executor) {
+Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, StreamLoadExecutor* stream_load_executor,
+                              LoadChannelMgr* load_channel_mgr) {
     DCHECK(exec_env != nullptr);
     DCHECK(stream_load_executor != nullptr);
     _exec_env = exec_env;
-
+    _load_channel_mgr = load_channel_mgr;
     _fragment_mgr = std::make_unique<FragmentMgr>(exec_env, metrics);
 
     ProfileReportWorkerOptions profile_report_worker_options;
@@ -91,30 +96,74 @@ Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, Stream
 }
 
 void OrchestrationEnv::wait_for_finish() {
-    if (config::loop_count_wait_fragments_finish < 0) {
-        LOG(WARNING) << "'config::loop_count_wait_fragments_finish' is set to a negative integer, ignore it.";
+    // New-request admission is handled by should_accept_new_request().
+    if (config::loop_count_wait_fragments_finish <= 0) {
+        if (config::loop_count_wait_fragments_finish < 0) {
+            LOG(WARNING) << "'config::loop_count_wait_fragments_finish' is set to a negative integer, ignore it.";
+        }
+        force_reject_exec_plan_fragment();
         return;
     }
 
     size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
-    if (max_loop_secs == 0) {
-        return;
+    const int64_t drain_budget_ms = static_cast<int64_t>(max_loop_secs) * 1000;
+    if (config::graceful_exit_reject_delay_ms >= drain_budget_ms ||
+        config::graceful_exit_reject_fallback_ms >= drain_budget_ms) {
+        LOG(WARNING) << "Graceful exit admission cutoff is not before the drain budget: delay_ms="
+                     << config::graceful_exit_reject_delay_ms
+                     << ", fallback_ms=" << config::graceful_exit_reject_fallback_ms
+                     << ", drain_budget_ms=" << drain_budget_ms;
     }
 
-    size_t running_fragments = _get_running_fragments_count();
     size_t loop_secs = 0;
-
-    // TODO: decouple the heartbeat with the graceful exit
-    // only wait for frontend's heartbeat when the node is ever received heartbeats from the frontend
-    bool need_wait_frontend_hb = config::graceful_exit_wait_for_frontend_heartbeat && get_backend_id().has_value();
-
-    while ((running_fragments > 0 || (need_wait_frontend_hb && !is_frontend_aware_of_exit())) &&
-           loop_secs < max_loop_secs) {
-        LOG(INFO) << "Frontend is aware of exit: " << is_frontend_aware_of_exit() << ", " << running_fragments
+    size_t running_fragments = 0;
+    // Separate reads may miss an RPC admitted while count is zero.
+    // Force-reject, then re-sample; seq_cst orders guards with the re-sample.
+    //
+    // Linearization proof (RPC admission in internal_service.cpp): the RPC's
+    // inc_rpc_prep_inflight() (seq_cst RMW), its should_accept_new_request() force read
+    // (seq_cst), force_reject_exec_plan_fragment()'s store(true) (seq_cst), and this
+    // re-sample load (seq_cst) all share one seq_cst total order. Suppose an RPC read
+    // force==false and was admitted, its paired dec has NOT yet run, and this loop already
+    // broke. Its force read happened-before the force store, its inc happened-before that
+    // read (inc precedes the check in the caller), and the breaking re-sample
+    // happened-after the force store. Chaining: inc < force-read < force-store < re-sample,
+    // so the re-sample must observe the still-outstanding inc (count >= 1), contradicting
+    // count==0. Hence a zero-count break is only reached when every admitted request has
+    // already run its paired dec (its work completed). An admitted-but-unfinished request
+    // (dec not yet run) keeps this loop draining. The one path that may exit with admitted
+    // work still in flight is the hard budget expiry below, not this zero-count break.
+    while (loop_secs < max_loop_secs) {
+        running_fragments = _get_running_fragments_count();
+        if (running_fragments == 0 && (!process_exit_in_progress() || !should_accept_new_request())) {
+            if (process_exit_in_progress()) {
+                force_reject_exec_plan_fragment();
+                running_fragments = _get_running_fragments_count();
+                if (running_fragments != 0) {
+                    LOG(INFO) << "Fragment admitted while closing admissions; " << running_fragments
+                              << " fragment(s) still running, keep draining...";
+                    sleep(1);
+                    loop_secs++;
+                    continue;
+                }
+            }
+            break;
+        }
+        LOG(INFO) << "Frontend is aware of exit: " << is_frontend_aware_of_exit()
+                  << ", reject new fragment: " << !should_accept_new_request() << ", " << running_fragments
                   << " fragment(s) are still running...";
         sleep(1);
-        running_fragments = _get_running_fragments_count();
         loop_secs++;
+    }
+
+    // Force rejection at budget expiry; report remaining admitted work.
+    if (process_exit_in_progress()) {
+        force_reject_exec_plan_fragment();
+        running_fragments = _get_running_fragments_count();
+        if (running_fragments != 0) {
+            LOG(WARNING) << "Drain wait budget exhausted; " << running_fragments
+                         << " admitted fragment(s) still running, proceed with shutdown.";
+        }
     }
 }
 
@@ -152,11 +201,31 @@ void OrchestrationEnv::destroy() {
 }
 
 size_t OrchestrationEnv::_get_running_fragments_count() const {
+    // Sample in predecessor -> successor order using independent statements (the C++ `+`
+    // operand evaluation order is unspecified, so it cannot express the sampling order).
+    // Entry counters (admission / RPC prepare) are read first; their release happens only
+    // after the successor state (query/fragment registry, load-execution context) has been
+    // published, so a zero entry count followed by the successor read observes either the
+    // published state or its real completion. Read order per plan §8.1 (2026-09-05).
+    const auto request_admissions = request_admissions_inflight();
+    const auto rpc_prep = _rpc_prep_inflight.load(std::memory_order_seq_cst);
+    const auto short_circuit = _short_circuit_inflight.load(std::memory_order_seq_cst);
+    const auto stream_load_orchestrator_inflight =
+            (_stream_load_orchestrator == nullptr ? 0 : _stream_load_orchestrator->load_inflight());
+    const auto stream_loads = StreamLoadMetrics::instance()->streaming_load_current_processing.value();
+    const auto transaction_stream_loads =
+            StreamLoadMetrics::instance()->transaction_streaming_load_current_processing.value();
+    const auto load_channel_work = (_load_channel_mgr == nullptr ? 0 : _load_channel_mgr->pending_work_count());
     const auto non_pipeline_fragments = _fragment_mgr == nullptr ? 0 : _fragment_mgr->running_fragment_count();
+    // Test hook: lets a regression test publish a successor state (register an active query)
+    // after the predecessor counts are read but before the successor registry is read, to
+    // verify the handoff is not collapsed to a false zero (plan §8.1, 2026-09-05).
+    TEST_SYNC_POINT("OrchestrationEnv::_get_running_fragments_count:before_query_read");
     const auto pipeline_fragments = (_exec_env == nullptr || _exec_env->query_context_mgr() == nullptr)
                                             ? 0
                                             : _exec_env->query_context_mgr()->size();
-    return non_pipeline_fragments + pipeline_fragments;
+    return request_admissions + rpc_prep + short_circuit + stream_load_orchestrator_inflight + stream_loads +
+           transaction_stream_loads + load_channel_work + non_pipeline_fragments + pipeline_fragments;
 }
 
 } // namespace starrocks::orchestration

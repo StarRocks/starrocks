@@ -117,8 +117,12 @@ StreamLoadOrchestrator::StreamLoadOrchestrator(ExecEnv* exec_env, FragmentMgr* f
     DCHECK(_exec_env != nullptr);
 }
 
-Status StreamLoadOrchestrator::execute_plan_fragment(StreamLoadContext* ctx) {
-    if (process_exit_in_progress()) {
+Status StreamLoadOrchestrator::execute_plan_fragment(StreamLoadContext* ctx, bool admission_already_granted) {
+    // Count before rejection so drain covers the check-to-register gap.
+    // seq_cst orders the count with the final re-sample; RAII releases it.
+    StreamLoadOrchestrator::LoadInflightGuard load_guard(this);
+    // New fragments reject after cutoff; already admitted loads may continue.
+    if (!admission_already_granted && !should_accept_new_request()) {
         return Status::ServiceUnavailable("Service is shutting down, please retry later!");
     }
 

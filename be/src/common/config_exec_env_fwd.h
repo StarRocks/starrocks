@@ -197,14 +197,25 @@ CONF_String(starlet_cache_dir, "");
 #endif
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 
-// max loop count when be waiting its fragments to finish. It has no effect if the var is configured with value <= 0.
-CONF_mInt64(loop_count_wait_fragments_finish, "2");
+// Maximum drain wait in seconds is this value * 10; each drain-loop iteration sleeps 1 second.
+CONF_mInt64(loop_count_wait_fragments_finish, "6");
 
-// Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit.
-//
-// When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC,
-// ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
-CONF_mBool(graceful_exit_wait_for_frontend_heartbeat, "false");
+// Wait for FE shutdown acknowledgement before rejecting requests.
+// New FE: acknowledgement is a growing LastHeartbeat; the first value from that FE is only a
+// baseline. Legacy FE (field absent): optimistic compatibility (delay opens when the SHUTDOWN
+// heartbeat response is constructed). When false, reject new requests immediately on shutdown.
+CONF_Bool(graceful_exit_wait_for_frontend_heartbeat, "true");
+
+// Delay (ms) to keep admitting new work (new BEGINs, new loads, new fragments) after the FE
+// acknowledged the shutdown via a growing LastHeartbeat. The first value from a given FE is
+// only a baseline. The window closes early when the fallback budget expires. Not tied to
+// BEGIN retry idempotency: retries keep the everyday LABEL_ALREADY_EXISTS behavior.
+// After a leader switch, BEGIN redirect is disabled for the rest of this shutdown.
+CONF_mInt64(graceful_exit_reject_delay_ms, "10000");
+
+// Fallback budget (ms) from shutdown start: after it expires new work is rejected even if no
+// FE acknowledgement was observed. Also caps the admission window opened by an acknowledgement.
+CONF_mInt64(graceful_exit_reject_fallback_ms, "15000");
 
 // spill dirs
 CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");

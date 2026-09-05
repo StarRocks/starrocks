@@ -309,6 +309,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: UpdateManager の "get_pindex" スレッドプールのワーカースレッド数を設定します。このプールは永続インデックスデータをロード／取得するために使用され（主キー表の rowset 適用時に使用）、実行時の設定更新はプールの最大スレッド数を調整します：`>0` の場合はその値が適用され、0 の場合はランタイムコールバックが CPU コア数（`CpuInfo::num_cores()`）を使用します。初期化時にはプールの最大スレッド数は max(get_pindex_worker_count, max_apply_thread_cnt * 2) として計算され、ここで max_apply_thread_cnt は apply-thread プールの最大値です。pindex ロードの並列度を上げるには増やし、同時実行性とメモリ／CPU 使用量を減らすには減らしてください。
 - 導入バージョン: v3.2.0
 
+### graceful_exit_reject_delay_ms
+
+- デフォルト: 10000
+- タイプ: Int64
+- 単位: ms
+- 変更可能: はい
+- 説明: 新しい FE がハートビートリクエストで返される `LastHeartbeat` 値の増加によってシャットダウンを確認した後、BE が新しいリクエスト（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）の拒否を開始するまでの、新しい処理を受け入れ続ける遅延（ミリ秒）。ある FE からの最初の値は baseline に過ぎず、このウィンドウは開きません。ウィンドウは `graceful_exit_reject_fallback_ms` の期限でも閉じます。この期間中、BE は正常なノードとして新しいリクエスト（新しい BEGIN を含む）を受け入れて実行し続けます。すでに BEGIN が成功したラベルの繰り返し BEGIN は冪等に成功することは保証されません（通常のラベル重複エラー）。リーダー切り替え後、今回のシャットダウンの残りの間 BEGIN のリダイレクトは無効化されます。
+- 導入バージョン: -
+
+### graceful_exit_reject_fallback_ms
+
+- デフォルト: 15000
+- タイプ: Int64
+- 単位: ms
+- 変更可能: はい
+- 説明: グレースフルシャットダウン開始から、FE の確認（`LastHeartbeat` の増加）がない場合でも BE が新しいリクエスト（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）を拒否するまでの絶対上限（ミリ秒）。確認に基づく admission ウィンドウも制限し、無制限な受け入れを避けます。排空待機予算（`loop_count_wait_fragments_finish` × 10 秒）より前に発動する必要があります。
+- 導入バージョン: -
+
 ### heartbeat_service_port
 
 - デフォルト: 9050

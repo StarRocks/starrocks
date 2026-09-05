@@ -384,6 +384,24 @@ This topic introduces the following types of BE configurations:
 - Description: Sets the number of worker threads for the "get_pindex" thread pool in UpdateManager, which is used to load / fetch persistent index data (used when applying rowsets for primary-key tables). At runtime, a config update will adjust the pool's maximum threads: if `>0` that value is applied; if 0 the runtime callback uses the number of CPU cores (CpuInfo::num_cores()). On initialization the pool's max threads is computed as max(get_pindex_worker_count, max_apply_thread_cnt * 2) where max_apply_thread_cnt is the apply-thread pool maximum. Increase to raise parallelism for pindex loading; lowering reduces concurrency and memory/CPU usage.
 - Introduced in: v3.2.0
 
+### graceful_exit_reject_delay_ms
+
+- Default: 10000
+- Type: Int64
+- Unit: ms
+- Is mutable: Yes
+- Description: Delay (in milliseconds) during which the BE keeps accepting new work (new BEGINs, new loads, new fragments, routine load tasks, and short-circuit queries) after a new FE has acknowledged the shutdown, before the BE starts rejecting new requests. A new FE acknowledges shutdown when the `LastHeartbeat` value echoed in the next heartbeat request grows; the first value from that FE is only a baseline and does not open this window. The window also closes when `graceful_exit_reject_fallback_ms` expires. During this window the BE keeps accepting and running new requests as a healthy node, including new transaction BEGINs; a repeated BEGIN for a label that already started is not guaranteed to succeed idempotently (everyday label-already-exists). After an FE leader switch, BEGIN redirect is disabled for the rest of this shutdown.
+- Introduced in: -
+
+### graceful_exit_reject_fallback_ms
+
+- Default: 15000
+- Type: Int64
+- Unit: ms
+- Is mutable: Yes
+- Description: The absolute upper bound (in milliseconds) from the start of a graceful exit before the BE rejects new requests (query fragments, stream loads, transaction BEGINs, routine load tasks, and short-circuit queries), even if no FE acknowledgement (growing `LastHeartbeat`) was observed. It also caps the acknowledgement-based admission window. This avoids unbounded acceptance and must fire before the drain wait budget (`loop_count_wait_fragments_finish` x 10s).
+- Introduced in: -
+
 ### heartbeat_service_port
 
 - Default: 9050

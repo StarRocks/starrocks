@@ -224,6 +224,8 @@
         "dictionary_cache_refresh_threadpool_size",
         "enable_resource_group_bind_cpus",
         "enable_resource_group_cpu_borrowing",
+        "graceful_exit_reject_delay_ms",
+        "graceful_exit_reject_fallback_ms",
         "graceful_exit_wait_for_frontend_heartbeat",
         "hdfs_client_enable_hedged_read",
         "hdfs_client_hedged_read_threadpool_size",

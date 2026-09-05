@@ -20,18 +20,24 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include <atomic>
 #include <cstring>
 #include <string>
 #include <utility>
 
 #include "base/metrics.h"
+#include "base/network/network_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load/http_load_params.h"
 #include "compute_env/load/stream_context_mgr.h"
@@ -47,6 +53,7 @@
 #include "http/download_action.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
 #include "platform/http/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
@@ -54,12 +61,16 @@
 class mg_connection;
 
 namespace starrocks {
-
 extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view);
-
+extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<int64_t> k_starrocks_exit_start_ms;
+extern std::atomic<int64_t> k_starrocks_fe_aware_shutdown_ms;
 namespace {
+
 static std::string k_response_str;
+static HttpStatus k_response_status = HttpStatus::OK;
 static void inject_send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
+    k_response_status = status;
     k_response_str = content;
 }
 
@@ -107,6 +118,9 @@ public:
     static void SetUpTestSuite() { s_injected_send_reply = inject_send_reply; }
     static void TearDownTestSuite() { s_injected_send_reply = nullptr; }
     void SetUp() override {
+        k_starrocks_exit.store(false);
+        k_starrocks_exit_start_ms.store(0);
+        clear_frontend_aware_of_exit();
         k_stream_load_begin_result = TLoadTxnBeginResult();
         k_stream_load_commit_result = TLoadTxnCommitResult();
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
@@ -140,6 +154,9 @@ public:
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
         }
+        k_starrocks_exit.store(false);
+        k_starrocks_exit_start_ms.store(0);
+        clear_frontend_aware_of_exit();
     }
 
 protected:
@@ -227,6 +244,256 @@ TEST_F(TransactionStreamLoadActionTest, txn_begin_normal) {
     auto* val = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), "Content-Type");
     ASSERT_NE(val, nullptr);
     ASSERT_STREQ("application/json", val);
+}
+TEST_F(TransactionStreamLoadActionTest, txn_begin_accepts_until_shutdown_delay) {
+    ASSERT_TRUE(set_process_exit());
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_duplicate_label_within_delay) {
+    ASSERT_TRUE(set_process_exit());
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin(_evhttp_req);
+    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin._headers.emplace(HTTP_LABEL_KEY, "123");
+    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+
+    // A duplicate BEGIN while admission is still open takes the everyday label conflict:
+    // the delay window does not make a retry idempotent.
+    k_response_str.clear();
+    HttpRequest retry(_evhttp_req);
+    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    retry._headers.emplace(HTTP_LABEL_KEY, "123");
+    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&retry);
+
+    rapidjson::Document retry_doc;
+    retry_doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("LABEL_ALREADY_EXISTS", retry_doc["Status"].GetString());
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_redirects_after_shutdown_delay) {
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    k_response_str.clear();
+    k_starrocks_exit.store(true);
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    // Redirected (307) to the FE leader: no JSON body, a Location header instead.
+    ASSERT_EQ(k_response_status, HttpStatus::TEMPORARY_REDIRECT);
+    ASSERT_TRUE(k_response_str.empty());
+    auto* location = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION);
+    ASSERT_NE(location, nullptr);
+    ASSERT_NE(std::strstr(location, "http://127.0.0.1:8030"), nullptr);
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_retry_redirected_after_shutdown_delay) {
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin(_evhttp_req);
+    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin._headers.emplace(HTTP_LABEL_KEY, "123");
+    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin);
+
+    k_response_str.clear();
+    k_starrocks_exit.store(true);
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    // The admission gate does not inspect the label: even a retry whose transaction already
+    // began here is redirected like any other BEGIN (no idempotent pass-through).
+    HttpRequest retry(_evhttp_req);
+    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    retry._headers.emplace(HTTP_LABEL_KEY, "123");
+    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&retry);
+
+    ASSERT_EQ(k_response_status, HttpStatus::TEMPORARY_REDIRECT);
+    ASSERT_TRUE(k_response_str.empty());
+    auto* location = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION);
+    ASSERT_NE(location, nullptr);
+    ASSERT_NE(std::strstr(location, "http://127.0.0.1:8030"), nullptr);
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_after_shutdown_fallback) {
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin(_evhttp_req);
+    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin._headers.emplace(HTTP_LABEL_KEY, "123");
+    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+
+    // Fallback cutoff without an FE ack: ServiceUnavailable, and no redirect (an unaware FE
+    // could route the retry straight back to this BE).
+    k_response_str.clear();
+    k_starrocks_exit.store(true);
+    k_starrocks_exit_start_ms.store(MonotonicMillis() - config::graceful_exit_reject_fallback_ms - 1);
+
+    HttpRequest retry(_evhttp_req);
+    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    retry._headers.emplace(HTTP_LABEL_KEY, "123");
+    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&retry);
+
+    rapidjson::Document retry_doc;
+    retry_doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("SERVICE_UNAVAILABLE", retry_doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_no_redirect_after_leader_handover) {
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    // Redirect is only possible once the FE has observed the shutdown heartbeat; the
+    // leader-handover scenario below starts from that state.
+    k_starrocks_exit.store(true);
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    // The first FE acknowledges and opens the delay window.
+    ASSERT_FALSE(advance_heartbeat_ack("127.0.0.1:8030:1", 100));
+    ASSERT_TRUE(advance_heartbeat_ack("127.0.0.1:8030:1", 101));
+    ASSERT_TRUE(may_redirect_to_fe_leader());
+
+    // A different leader starts acking (epoch changed): redirect is disabled for the rest of
+    // this shutdown, so the cutoff reply is ServiceUnavailable without a Location header.
+    ASSERT_FALSE(advance_heartbeat_ack("127.0.0.1:8030:2", 900));
+    ASSERT_TRUE(advance_heartbeat_ack("127.0.0.1:8030:2", 901));
+    ASSERT_FALSE(may_redirect_to_fe_leader());
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("SERVICE_UNAVAILABLE", doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_no_redirect_on_legacy_fe) {
+    // Legacy FE omits last_heartbeat_time_ms: delay still opens, but BEGIN 307 is off so the
+    // old FE cannot bounce the client back to this BE.
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    k_starrocks_exit.store(true);
+    set_frontend_aware_of_exit();
+    disable_begin_redirect();
+    ASSERT_TRUE(should_accept_new_request());
+    ASSERT_FALSE(may_redirect_to_fe_leader());
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin(_evhttp_req);
+    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin._headers.emplace(HTTP_LABEL_KEY, "legacy");
+    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_EQ(k_response_status, HttpStatus::OK);
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
+
+    k_response_str.clear();
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
+
+    HttpRequest retry(_evhttp_req);
+    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    retry._headers.emplace(HTTP_LABEL_KEY, "legacy");
+    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&retry);
+
+    rapidjson::Document retry_doc;
+    retry_doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("SERVICE_UNAVAILABLE", retry_doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
+}
+TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_after_fallback_without_heartbeat) {
+    // The fallback deadline can close admission before the FE has observed the shutdown heartbeat.
+    // A redirect would let the unaware FE pick this BE again, so reply ServiceUnavailable instead.
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    k_response_str.clear();
+    k_starrocks_exit.store(true);
+    k_starrocks_exit_start_ms.store(MonotonicMillis() - config::graceful_exit_reject_fallback_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
+    ASSERT_FALSE(is_frontend_aware_of_exit());
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("SERVICE_UNAVAILABLE", doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_commit_fail) {
@@ -358,7 +625,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_rollback) {
     }
 }
 
-TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
+TEST_F(TransactionStreamLoadActionTest, txn_commit_success_after_shutdown_cutoff) {
     TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
 
     {
@@ -373,6 +640,9 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
         doc.Parse(k_response_str.c_str());
         ASSERT_STREQ("OK", doc["Status"].GetString());
     }
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
 
     {
         TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
@@ -784,6 +1054,19 @@ TEST_F(TransactionStreamLoadActionTest, txn_list) {
         ASSERT_STREQ("OK", doc["Status"].GetString());
         ASSERT_STREQ("123", doc["Label"].GetString());
     }
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_list_allowed_after_shutdown_cutoff) {
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_TXN_OP_KEY, TXN_LIST);
+    txn_action.handle(&request);
+
+    // LIST is read-only and remains available while new writes are rejected.
+    ASSERT_TRUE(k_response_str.empty());
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_idle_timeout) {

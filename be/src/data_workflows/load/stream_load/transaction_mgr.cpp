@@ -167,16 +167,21 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
         ctx = new StreamLoadContext(_exec_env->load_stream_mgr(),
                                     &StreamLoadMetrics::instance()->transaction_streaming_load_current_processing);
         ctx->ref();
-        std::lock_guard<std::mutex> l(ctx->lock);
-        st = _begin_transaction(req, ctx);
-        if (!st.ok()) {
-            ctx->status = st;
-            if (ctx->need_rollback()) {
-                (void)_rollback_transaction(ctx);
+        {
+            std::lock_guard<std::mutex> l(ctx->lock);
+            st = _begin_transaction(req, ctx);
+            if (!st.ok()) {
+                ctx->status = st;
+                if (ctx->need_rollback()) {
+                    (void)_rollback_transaction(ctx);
+                }
             }
+            LOG(INFO) << "new transaction manage request. " << ctx->brief() << ", tbl=" << ctx->table << " op=begin";
+            *resp = _build_reply(TXN_BEGIN, ctx);
         }
-        LOG(INFO) << "new transaction manage request. " << ctx->brief() << ", tbl=" << ctx->table << " op=begin";
-        *resp = _build_reply(TXN_BEGIN, ctx);
+        // Drop the last reference only after the ctx lock is released: deleting the context
+        // while holding its own mutex would destroy a lock that concurrent lookups may still
+        // be waiting on.
         if (ctx->unref()) {
             delete ctx;
         }

@@ -36,6 +36,7 @@ struct TMasterInfo {
     13: optional bool encrypted;
     14: optional bool stop_regular_tablet_report; // used for upgrade/downgrade compatibility, can be removed after 3.5
     15: optional Types.TNodeType node_type
+    16: optional i64 last_heartbeat_time_ms  // the LastHeartbeat time recorded by the FE, echoed back as the shutdown ack
 }
 
 struct TBackendInfo {
@@ -55,7 +56,7 @@ struct TBackendInfo {
 }
 
 struct THeartbeatResult {
-    1: required Status.TStatus status 
+    1: required Status.TStatus status
     2: required TBackendInfo backend_info
 }
 

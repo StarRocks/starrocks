@@ -405,6 +405,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：为 UpdateManager 中的 "get_pindex" 线程池设置工作线程数，该线程池用于加载/获取持久化索引数据（在为主键表应用 rowset 时使用）。如果设置为大于 0 则系统应用该值；如果设置为 0 则运行时回调使用 CPU 核心数。在初始化时，改线程池的最大线程数计算为 `max(get_pindex_worker_count, max_apply_thread_cnt * 2)`，其中 `max_apply_thread_cnt` 是 apply-thread 池的最大值。增大此值可提高 pindex 加载的并行度；降低则减少并发和内存/CPU 使用。
 - 引入版本：v3.2.0
 
+### graceful_exit_reject_delay_ms
+
+- 默认值：10000
+- 类型：Int64
+- 单位：ms
+- 是否动态：是
+- 描述：新 FE 通过心跳请求中回传的 `LastHeartbeat` 增长确认 shutdown 后，BE 在开始拒绝新请求（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询）之前继续接受新工作的延迟（毫秒）。某个 FE 的首次 `LastHeartbeat` 值仅作为 baseline，不会打开该窗口。窗口也会在 `graceful_exit_reject_fallback_ms` 到期时关闭。该窗口内 BE 继续作为健康节点接受并运行新请求，包括新的事务 BEGIN；对已成功 BEGIN 的 label，重复 BEGIN 不保证幂等成功（日常 label 已存在错误）。leader 切换后，本次退出剩余时间内禁用 BEGIN redirect。
+- 引入版本：-
+
+### graceful_exit_reject_fallback_ms
+
+- 默认值：15000
+- 类型：Int64
+- 单位：ms
+- 是否动态：是
+- 描述：从优雅退出开始起的绝对上限（毫秒），即使从未观察到 FE 确认（`LastHeartbeat` 增长），BE 也会在该时间点后拒绝新请求（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询）。该上限同时截断基于确认的准入窗口，避免无限期接受新请求，且必须早于排空等待预算（`loop_count_wait_fragments_finish` x 10s）触发。
+- 引入版本：-
+
 ### heartbeat_service_port
 
 - 默认值：9050

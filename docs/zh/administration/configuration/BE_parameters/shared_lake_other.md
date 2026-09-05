@@ -67,11 +67,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### graceful_exit_wait_for_frontend_heartbeat
 
-- 默认值：false
-- 类型： Boolean
+- 默认值：true
+- 类型：Boolean
 - 单位：-
-- 是否动态：是
-- 描述： 确定是否在完成优雅退出前等待至少一个指示SHUTDOWN状态的FE心跳响应。启用后，优雅关闭进程将持续运行直至通过心跳RPC返回给FE SHUTDOWN状态变化，确保FE在两次常规心跳探测间隔期间有足够时间感知终止状态。
+- 是否动态：否
+- 描述：如果为 true，BE 等待新 FE 通过心跳请求中回传的 `LastHeartbeat` 增长确认 shutdown（某个 FE 的首次值仅作为 baseline），然后在 `graceful_exit_reject_delay_ms` 窗口内继续接受新请求，之后开始拒绝。不带该字段的旧版本 FE 沿用乐观兼容行为（shutdown 心跳响应构造时即打开 delay）。如果为 false，BE 在 graceful shutdown 开始时立即拒绝新请求，不等待 FE 确认。已成功 BEGIN 的事务在排空窗口内继续被接受，不受此设置影响。delay 内新 BEGIN 仍被接受；重复 BEGIN 不保证幂等成功。leader 切换后，本次退出禁用 BEGIN redirect。
 - 引入版本：v3.4.5
 
 ### lake_compaction_stream_buffer_size_bytes
@@ -279,11 +279,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### loop_count_wait_fragments_finish
 
-- 默认值：2
-- 类型：Int
+- 默认值：6
+- 类型：Int64
 - 单位：-
 - 是否动态：是
-- 描述：BE/CN 退出时需要等待正在执行的查询完成的轮次，一轮次固定 10 秒。设置为 `0` 表示禁用轮询等待，立即退出。自 v3.4 起，该参数变为动态参数，且默认值由 `0` 变为 `2`。
+- 描述：BE/CN 退出时需要等待正在执行的查询完成的轮次，一轮次固定 10 秒。设置为 `0` 表示禁用轮询等待。
 - 引入版本：v2.5
 
 ### max_client_cache_size_per_host

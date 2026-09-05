@@ -104,6 +104,14 @@ using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
 static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params);
 static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params);
+// Count RPC prep before rejection; the guard covers rejection and completion.
+struct RpcPrepInflightGuard {
+    orchestration::OrchestrationEnv* env;
+    explicit RpcPrepInflightGuard(orchestration::OrchestrationEnv* e) : env(e) { env->inc_rpc_prep_inflight(); }
+    ~RpcPrepInflightGuard() { env->dec_rpc_prep_inflight(); }
+    RpcPrepInflightGuard(const RpcPrepInflightGuard&) = delete;
+    RpcPrepInflightGuard& operator=(const RpcPrepInflightGuard&) = delete;
+};
 
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env,
@@ -297,14 +305,30 @@ void PInternalServiceImplBase<T>::tablet_writer_open(google::protobuf::RpcContro
     ClosureGuard closure_guard(done);
     response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
 }
-
 template <typename T>
 void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcController* cntl_base,
                                                      const PExecPlanFragmentRequest* request,
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
-    auto task = [=]() { this->_exec_plan_fragment(cntl_base, request, response, done); };
+    // Admit before queueing with a paired inc/dec: drain sees the queued work immediately, a
+    // task queued before the cutoff keeps executing after it (no re-check in the worker), and
+    // an offer failure restores the count. Linearization vs force_reject is by the seq_cst
+    // total order shared with wait_for_finish's re-sample (see that comment); try_offer
+    // returns true only when enqueued on a non-shutdown pool, so the task's dec always runs.
+    _orchestration_env->inc_rpc_prep_inflight();
+    if (!should_accept_new_request()) {
+        _orchestration_env->dec_rpc_prep_inflight();
+        ClosureGuard closure_guard(done);
+        static_cast<brpc::Controller*>(cntl_base)->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec plan fragment because of exit";
+        return;
+    }
+    auto task = [=]() {
+        this->_exec_plan_fragment(cntl_base, request, response, done);
+        this->_orchestration_env->dec_rpc_prep_inflight();
+    };
     if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
+        _orchestration_env->dec_rpc_prep_inflight();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_plan_fragment task failed").to_protobuf(response->mutable_status());
     }
@@ -317,12 +341,9 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (process_exit_in_progress()) {
-        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
-        LOG(WARNING) << "reject exec plan fragment because of exit";
-        return;
-    }
 
+    // Admission was decided before this task was queued; re-checking here would reject work
+    // that was already admitted and counted when it queued past the cutoff.
     auto st = _exec_plan_fragment(cntl, request, response);
     if (!st.ok()) {
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.message();
@@ -335,8 +356,22 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             const PExecBatchPlanFragmentsRequest* request,
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
-    auto task = [=]() { this->_exec_batch_plan_fragments(cntl_base, request, response, done); };
+    // Same paired admission as exec_plan_fragment: visible to drain while queued, no re-check
+    // in the worker, count restored on an offer failure.
+    _orchestration_env->inc_rpc_prep_inflight();
+    if (!should_accept_new_request()) {
+        _orchestration_env->dec_rpc_prep_inflight();
+        ClosureGuard closure_guard(done);
+        static_cast<brpc::Controller*>(cntl_base)->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec batch plan fragments because of exit";
+        return;
+    }
+    auto task = [=]() {
+        this->_exec_batch_plan_fragments(cntl_base, request, response, done);
+        this->_orchestration_env->dec_rpc_prep_inflight();
+    };
     if (!_exec_env->execution_services().pipeline_prepare_pool->try_offer(std::move(task))) {
+        _orchestration_env->dec_rpc_prep_inflight();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(response->mutable_status());
     }
@@ -349,11 +384,9 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (process_exit_in_progress()) {
-        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
-        LOG(WARNING) << "reject exec plan fragment because of exit";
-        return;
-    }
+
+    // Admission was decided before this task was queued; re-checking here would reject work
+    // that was already admitted and counted when it queued past the cutoff.
 
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
@@ -1355,7 +1388,16 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     watch.start();
 
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (process_exit_in_progress()) {
+    // Track short-circuit RPCs before rejection; drain otherwise misses them.
+    struct ShortCircuitInflightGuard {
+        orchestration::OrchestrationEnv* env;
+        explicit ShortCircuitInflightGuard(orchestration::OrchestrationEnv* e) : env(e) {
+            env->inc_short_circuit_inflight();
+        }
+        ~ShortCircuitInflightGuard() { env->dec_short_circuit_inflight(); }
+    } inflight_guard(_orchestration_env);
+
+    if (!should_accept_new_request()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         return;
     }
@@ -1372,6 +1414,15 @@ void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* c
                                               google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    // A forwarded merge-commit load is new work for this node: count it before the rejection
+    // check (drain must see accepted RPCs) and refuse it once admission closes, the same
+    // policy fragment and short-circuit RPCs follow. The sending coordinator turns this
+    // failure into a load error the client can retry elsewhere.
+    RpcPrepInflightGuard rpc_prep_guard(_orchestration_env);
+    if (!should_accept_new_request()) {
+        response->set_json_result(R"({"Status":"Fail","Message":"Service is shutting down, please retry later"})");
+        return;
+    }
     if (_batch_write_mgr == nullptr) {
         response->set_json_result(R"({"Status":"Fail","Message":"Batch write manager is unavailable"})");
         return;

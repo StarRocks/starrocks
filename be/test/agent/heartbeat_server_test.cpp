@@ -25,6 +25,7 @@ namespace starrocks {
 extern std::atomic<bool> k_starrocks_exit;
 
 TEST(HeartbeatServerTest, test_shutdown_heartbeat) {
+    clear_frontend_aware_of_exit();
     HeartbeatServer server;
     THeartbeatResult result;
     TMasterInfo info;
@@ -35,6 +36,7 @@ TEST(HeartbeatServerTest, test_shutdown_heartbeat) {
     Status status(result.status);
     EXPECT_TRUE(status.is_shutdown());
     k_starrocks_exit = false;
+    clear_frontend_aware_of_exit();
 }
 
 TEST(HeartbeatServerTest, test_print_master_info_with_token_null) {
@@ -52,7 +54,8 @@ TEST(HeartbeatServerTest, test_print_master_info_with_token_null) {
             "cluster_id=12345, epoch=100, token=<null>, backend_ip=192.168.1.1, "
             "http_port=<null>, heartbeat_flags=<null>, backend_id=<null>, "
             "min_active_txn_id=0, run_mode=<null>, disabled_disks=<null>, "
-            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>, node_type=<null>)";
+            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>, node_type=<null>, "
+            "last_heartbeat_time_ms=<null>)";
 
     EXPECT_EQ(server.print_master_info(master_info), expected_output);
 }
@@ -73,7 +76,8 @@ TEST(HeartbeatServerTest, test_print_master_info_with_token_hidden) {
             "cluster_id=12345, epoch=100, token=<hidden>, backend_ip=192.168.1.1, "
             "http_port=<null>, heartbeat_flags=<null>, backend_id=<null>, "
             "min_active_txn_id=0, run_mode=<null>, disabled_disks=<null>, "
-            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>, node_type=<null>)";
+            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>, node_type=<null>, "
+            "last_heartbeat_time_ms=<null>)";
 
     EXPECT_EQ(server.print_master_info(master_info), expected_output);
 }
@@ -133,10 +137,40 @@ TEST(HeartbeatServerTest, test_frontend_aware_of_exit) {
         EXPECT_EQ(TStatusCode::SHUTDOWN, result.status.status_code);
         Status status(result.status);
         EXPECT_TRUE(status.is_shutdown());
-        // service is in shutdown, the shutdown response is replied to the frontend
+        // Legacy FE (no ack field): delay opens, BEGIN 307 stays off.
         ASSERT_TRUE(is_frontend_aware_of_exit());
+        ASSERT_FALSE(may_redirect_to_fe_leader());
+        ASSERT_TRUE(should_accept_new_request());
     }
     k_starrocks_exit = false;
+    clear_frontend_aware_of_exit();
+}
+
+TEST(HeartbeatServerTest, test_acked_heartbeat_allows_redirect) {
+    // New FE: last_heartbeat_time_ms is set. First value is baseline; growth opens delay
+    // and BEGIN 307. This is not the missing-field legacy path.
+    clear_frontend_aware_of_exit();
+    k_starrocks_exit = true;
+    HeartbeatServer server;
+    THeartbeatResult result;
+    TMasterInfo info;
+    info.network_address.__set_hostname("127.0.0.1");
+    info.network_address.__set_port(9010);
+    info.__set_epoch(1);
+    info.__set_last_heartbeat_time_ms(100);
+    server.heartbeat(result, info);
+    EXPECT_EQ(TStatusCode::SHUTDOWN, result.status.status_code);
+    ASSERT_FALSE(is_frontend_aware_of_exit());
+    ASSERT_FALSE(may_redirect_to_fe_leader());
+
+    info.__set_last_heartbeat_time_ms(101);
+    server.heartbeat(result, info);
+    ASSERT_TRUE(is_frontend_aware_of_exit());
+    ASSERT_TRUE(may_redirect_to_fe_leader());
+    ASSERT_TRUE(should_accept_new_request());
+
+    k_starrocks_exit = false;
+    clear_frontend_aware_of_exit();
 }
 
 } // namespace starrocks

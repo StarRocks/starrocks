@@ -262,7 +262,14 @@ public class HeartbeatMgr extends LeaderDaemon {
                         // invalid all connections cached in ClientPool
                         ThriftConnectionPool.backendPool.clearPool(
                                 new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
-                        if (!isReplay && !computeNode.isAlive()) {
+                        // A graceful shutdown keeps answering heartbeats while it drains in-flight
+                        // loads, so its coordinator transactions must not be aborted here; they
+                        // still commit or abort through their normal path. A BE is only declared
+                        // down after it stops answering for more than heartbeat_retry_times
+                        // (status DISCONNECTED), and only that state gates the abort: a single
+                        // transient heartbeat loss must not kill an actively draining load.
+                        if (!isReplay && !computeNode.isAlive()
+                                && computeNode.getStatus() == ComputeNode.Status.DISCONNECTED) {
                             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
@@ -322,6 +329,9 @@ public class HeartbeatMgr extends LeaderDaemon {
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
                 long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
+                // Always carry the LastHeartbeat time: it doubles as the shutdown ack, telling
+                // the BE whether the FE processed heartbeat responses sent after shutdown began.
+                copiedMasterInfo.setLast_heartbeat_time_ms(computeNode.getLastUpdateMs());
                 copiedMasterInfo.setBackend_id(computeNodeId);
                 copiedMasterInfo.setMin_active_txn_id(
                         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());

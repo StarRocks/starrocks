@@ -35,7 +35,9 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -56,6 +58,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRunMode;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -245,6 +248,136 @@ public class HeartbeatMgrTest {
                 // verify the runMode is set in the masterInfo request
                 Assertions.assertNotNull(masterInfo);
                 Assertions.assertEquals(TRunMode.SHARED_DATA, masterInfo.getRun_mode());
+            }
+        };
+    }
+
+    @Test
+    public void testBackendHandlerCarriesLastHeartbeatTime(@Mocked HeartbeatService.Client client) throws Exception {
+        TStatus shutdownStatus = new TStatus(TStatusCode.SHUTDOWN);
+        shutdownStatus.setError_msgs(Collections.singletonList("BE is shutting down"));
+        THeartbeatResult res = new THeartbeatResult();
+        res.setStatus(shutdownStatus);
+
+        new MockUp<ThriftConnectionPool<HeartbeatService.Client>>() {
+            @Mock
+            public HeartbeatService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
+                return client;
+            }
+
+            @Mock
+            public void returnObject(TNetworkAddress address, HeartbeatService.Client object) {
+            }
+
+            @Mock
+            public void invalidateObject(TNetworkAddress address, HeartbeatService.Client object) {
+            }
+        };
+
+        new MockUp<HeartbeatMgr>() {
+            @Mock
+            public long computeMinActiveTxnId() {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                client.heartbeat((TMasterInfo) any);
+                minTimes = 1;
+                result = res;
+            }
+        };
+
+        // call setLeader() to init the MASTER_INFO
+        new HeartbeatMgr(false).setLeader(1, "123", 1);
+
+        ComputeNode cn = new ComputeNode(1, "192.168.1.1", 8111);
+        cn.setLastUpdateMs(777777L);
+        HeartbeatMgr.BackendHeartbeatHandler handler = new HeartbeatMgr.BackendHeartbeatHandler(cn, true);
+
+        handler.call();
+        new Verifications() {
+            {
+                TMasterInfo masterInfo;
+                client.heartbeat(masterInfo = withCapture());
+                Assertions.assertNotNull(masterInfo);
+                // The request always carries the FE's LastHeartbeat time for this BE; the BE uses
+                // its advance as the shutdown ack.
+                Assertions.assertTrue(masterInfo.isSetLast_heartbeat_time_ms());
+                Assertions.assertEquals(777777L, masterInfo.getLast_heartbeat_time_ms());
+            }
+        };
+    }
+
+    @Test
+    public void testShutdownHeartbeatDoesNotAbortCoordinatorTxns(@Mocked SystemInfoService clusterInfo,
+                                                                 @Mocked GlobalTransactionMgr txnMgr) {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        new Expectations() {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
+
+                clusterInfo.getBackend(1);
+                minTimes = 0;
+                result = cn;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = txnMgr;
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        BackendHbResponse hbResponse = new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down");
+        Deencapsulation.invoke(mgr, "handleHbResponse", hbResponse, false);
+
+        // The shutdown BE keeps draining its coordinator loads; they must commit or abort normally.
+        new Verifications() {
+            {
+                txnMgr.abortTxnWhenCoordinateBeDown(anyString, anyInt);
+                times = 0;
+            }
+        };
+        Assertions.assertFalse(cn.isAlive(), "SHUTDOWN must still mark the node not alive");
+    }
+
+    @Test
+    public void testNonShutdownHeartbeatFailureAbortsCoordinatorTxns(@Mocked SystemInfoService clusterInfo,
+                                                                     @Mocked GlobalTransactionMgr txnMgr) {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        cn.setAlive(false); // already marked not alive, e.g. by a previous SHUTDOWN heartbeat
+        new Expectations() {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
+
+                clusterInfo.getBackend(1);
+                minTimes = 0;
+                result = cn;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = txnMgr;
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        BackendHbResponse hbResponse = new BackendHbResponse(1, TStatusCode.INTERNAL_ERROR, "connection refused");
+        // Transient losses while the status is still SHUTDOWN/CONNECTING must not abort; the
+        // node only turns DISCONNECTED (and aborts) after heartbeat_retry_times failures.
+        for (int i = 0; i <= Config.heartbeat_retry_times; i++) {
+            Deencapsulation.invoke(mgr, "handleHbResponse", hbResponse, false);
+        }
+
+        Assertions.assertEquals(ComputeNode.Status.DISCONNECTED, cn.getStatus());
+        new Verifications() {
+            {
+                txnMgr.abortTxnWhenCoordinateBeDown(cn.getHost(), 100);
+                times = 1;
             }
         };
     }
