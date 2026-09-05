@@ -306,7 +306,7 @@ SELECT * FROM t;
 -- result:
 1	2	400	400
 -- !result
-DROP DATABASE test_update;
+DROP DATABASE test_update FORCE;
 -- result:
 -- !result
 -- name: test_schema_change_for_after @native

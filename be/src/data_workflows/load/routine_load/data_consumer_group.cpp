@@ -234,8 +234,9 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     std::map<int32_t, int64_t> cmt_offset_timestamp;
 
     // JSON/Avro: one message per buffer (with source metadata). CSV: rows separated by row_delimiter.
-    const bool append_as_message =
-            ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO;
+    const bool append_as_message = ctx->format == TFileFormatType::FORMAT_JSON ||
+                                   ctx->format == TFileFormatType::FORMAT_AVRO ||
+                                   ctx->format == TFileFormatType::FORMAT_ARROW;
     char row_delimiter = '\n';
     if (!append_as_message) {
         auto& per_node_scan_ranges = ctx->put_result.params.params.per_node_scan_ranges;
@@ -464,10 +465,10 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     // copy one
     std::map<std::string, pulsar::MessageId> ack_offset = ctx->pulsar_info->ack_offset;
 
-    // JSON: one message per buffer, carrying source metadata. CSV: rows separated by row_delimiter.
-    // The Pulsar path only ever sees JSON or CSV: PulsarTaskInfo maps every non-json format (including
-    // avro) to CSV_PLAIN, so the avro scanner never runs for Pulsar.
-    const bool append_as_message = ctx->format == TFileFormatType::FORMAT_JSON;
+    // JSON/Avro/Arrow: one message per buffer, carrying source metadata. CSV: rows separated by row_delimiter.
+    const bool append_as_message = ctx->format == TFileFormatType::FORMAT_JSON ||
+                                   ctx->format == TFileFormatType::FORMAT_AVRO ||
+                                   ctx->format == TFileFormatType::FORMAT_ARROW;
     char row_delimiter = '\n';
     if (!append_as_message) {
         auto& per_node_scan_ranges = ctx->put_result.params.params.per_node_scan_ranges;
