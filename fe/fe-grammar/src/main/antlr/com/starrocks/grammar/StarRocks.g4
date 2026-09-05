@@ -400,7 +400,7 @@ useCatalogStatement
     ;
 
 setCatalogStatement
-    : SET CATALOG identifierOrString
+    : SET CATALOG EQ? identifierOrString
     ;
 
 showDatabasesStatement
