@@ -825,6 +825,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: DML 操作（INSERT INTO 和 INSERT OVERWRITE 语句）期间半同步统计信息收集的最大等待时间。Stream Load 和 Broker Load 使用异步模式，不受此配置影响。如果统计信息收集时间超过此值，加载操作将继续，而不等待收集完成。此配置与 `enable_statistic_collect_on_first_load` 协同工作。
 - 引入版本: v3.1
 
+### `slot_manager_error_retry_interval_ms`
+
+- 默认值: 100
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Leader FE 的 slot manager 请求工作线程在发生意外错误后、重试其循环之前的暂停时间。该线程是唯一负责将查询接纳进查询队列并回收过期 slot 的线程，因此暂停期间不会处理任何 slot 请求，该暂停时间会叠加到每个排队查询的等待延迟上。设置该暂停是为了避免持续失败时无等待重试而占满 CPU。建议保持较小的值，仅当 FE 日志中反复出现 slot manager 错误时才调大。
+
 ### `slow_query_analyze_threshold`
 
 - 默认值: 5

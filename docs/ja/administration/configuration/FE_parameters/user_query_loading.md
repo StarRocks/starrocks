@@ -807,6 +807,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：DML 操作 (INSERT INTO および INSERT OVERWRITE ステートメント) 中の半同期統計収集の最大待機時間。ストリームロードおよびブローカーロードは非同期モードを使用するため、この設定の影響を受けません。統計収集時間がこの値を超えると、ロード操作は収集完了を待たずに続行します。この設定は `enable_statistic_collect_on_first_load` と連携して機能します。
 - 導入時期：v3.1
 
+### `slot_manager_error_retry_interval_ms`
+
+- デフォルト：100
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：Leader FE の slot manager リクエストワーカーが予期しないエラーの後、ループを再試行するまでの待機時間。このワーカーはクエリをクエリキューに受け入れ、期限切れの slot を回収する唯一のスレッドであるため、待機中は slot リクエストが一切処理されず、この待機時間はキューに入っているすべてのクエリの待機レイテンシーに加算されます。継続的な失敗が待機なしで再試行され CPU を占有することを防ぐために存在します。小さい値を保ち、FE ログに slot manager のエラーが繰り返し出力される場合にのみ大きくしてください。
+
 ### `slow_query_analyze_threshold`
 
 - デフォルト：5
