@@ -329,6 +329,121 @@ public class RangerInterfaceTest {
     }
 
     @Test
+    public void testCheckAnyActionOnAnyViewAndMvCatalogAware() throws Exception {
+        // Ranger allows everything
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        starRocksAssert.withView("CREATE VIEW db.v_ranger AS SELECT v4 FROM db.t1");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW db.mv_ranger " +
+                "DISTRIBUTED BY HASH(v4) REFRESH MANUAL AS SELECT v4 FROM db.t1");
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(new UserIdentity("alice", "%"));
+
+        RangerStarRocksAccessController controller = new RangerStarRocksAccessController();
+
+        // The catalog-aware overloads must be honored by Ranger rather than falling
+        // through to the AccessController default (which always throws). Otherwise a
+        // user whose only privilege in a db is on a view/MV loses db visibility.
+        Assertions.assertDoesNotThrow(() -> controller.checkAnyActionOnAnyView(
+                ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "db"));
+        Assertions.assertDoesNotThrow(() -> controller.checkAnyActionOnAnyMaterializedView(
+                ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "db"));
+    }
+
+    @Test
+    public void testRangerStarRocksViewCheckIsCatalogAware() {
+        Map<String, Object> captured = new HashMap<>();
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                captured.put("catalog", request.getResource().getValue("catalog"));
+                captured.put("view", request.getResource().getValue("view"));
+                captured.put("materialized_view", request.getResource().getValue("materialized_view"));
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        RangerStarRocksAccessController controller = new RangerStarRocksAccessController();
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(new UserIdentity("alice", "%"));
+
+        // A view in an external catalog must be checked under its own catalog, not default_catalog,
+        // otherwise existing Ranger policies for external views stop matching.
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkViewAction(ctx, new TableName("iceberg_cat", "db", "v1"), PrivilegeType.SELECT));
+        Assertions.assertEquals("iceberg_cat", captured.get("catalog"));
+        Assertions.assertEquals("v1", captured.get("view"));
+
+        captured.clear();
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkAnyActionOnView(ctx, new TableName("iceberg_cat", "db", "v1")));
+        Assertions.assertEquals("iceberg_cat", captured.get("catalog"));
+        Assertions.assertEquals("v1", captured.get("view"));
+
+        captured.clear();
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkMaterializedViewAction(ctx, new TableName("iceberg_cat", "db", "mv1"),
+                        PrivilegeType.SELECT));
+        Assertions.assertEquals("iceberg_cat", captured.get("catalog"));
+        Assertions.assertEquals("mv1", captured.get("materialized_view"));
+
+        // A view without an explicit catalog still resolves to the internal catalog.
+        captured.clear();
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkViewAction(ctx, new TableName(null, "db", "v1"), PrivilegeType.SELECT));
+        Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, captured.get("catalog"));
+    }
+
+    @Test
+    public void testRangerHiveViewChecksDelegateToTablePath() {
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "hive",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(new UserIdentity("alice", "%"));
+        TableName hiveView = new TableName("hive_catalog", "db", "hive_view");
+
+        // Hive Ranger has no view resource; before these overrides the checks fell through to the
+        // throwing default. They must now succeed via the table path when the policy allows access.
+        Assertions.assertDoesNotThrow(() -> controller.checkViewAction(ctx, hiveView, PrivilegeType.SELECT));
+        Assertions.assertDoesNotThrow(() -> controller.checkAnyActionOnView(ctx, hiveView));
+
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "hive",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> controller.checkViewAction(ctx, hiveView, PrivilegeType.SELECT));
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> controller.checkAnyActionOnView(ctx, hiveView));
+    }
+
+    @Test
     public void testHiveConvertToAccessTypeCreate() {
         RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
         Assertions.assertEquals("select", controller.convertToAccessType(PrivilegeType.SELECT));
