@@ -66,6 +66,7 @@ import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -73,6 +74,7 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
+import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -89,15 +91,19 @@ import com.starrocks.qe.scheduler.dag.PhasedExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.SingleNodeSchedule;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.InternalServiceVersion;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
@@ -113,6 +119,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -124,9 +131,13 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -531,6 +542,8 @@ public class DefaultCoordinator extends Coordinator {
         // if all the instance are in the same worker, we can send them all in once
         // but only after prepareExec() we can know the worker number
         maybeChangeScheduler();
+
+        maybeStartVendedCredentialRefreshTask();
     }
 
     @Override
@@ -543,6 +556,7 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void onFinished() {
+        cancelVendedCredentialRefreshTask();
         onReleaseSlots();
         // for async profile, if Be doesn't report profile in time, we upload the most complete profile
         // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
@@ -772,6 +786,7 @@ public class DefaultCoordinator extends Coordinator {
                 }
                 if (hasMoreScanRanges) {
                     coordinatorPreprocessor.assignIncrementalScanRangesToFragmentInstances(fragment);
+                    maybeRefreshVendedCredentials(fragment);
                     updatedPlanFragmentIds.add(fragmentId);
                 }
             }
@@ -798,6 +813,194 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
         return updatedStates;
+    }
+
+    // ponytail: fixed 60s tick; the per-scan-node re-vend cooldown does the real rate limiting.
+    private static final long VENDED_REFRESH_TICK_SECONDS = 60;
+    // The scheduler only dispatches; tick work (catalog reload, RPC waits) runs on the elastic
+    // pool so one slow query cannot delay other queries' refreshes.
+    private static final ScheduledExecutorService VENDED_REFRESH_SCHEDULER =
+            ThreadPoolManager.newDaemonScheduledThreadPool(1, "vended-cred-refresh-timer", true);
+    // SynchronousQueue overload: thread-per-tick up to 32 (the bounded-queue overload has zero
+    // core threads and serves one task at a time until its queue fills). Overflow is discarded
+    // and logged; the skipped tick retries next minute.
+    private static final ExecutorService VENDED_REFRESH_EXECUTOR =
+            ThreadPoolManager.newDaemonCacheThreadPool(32, "vended-cred-refresh", false);
+    private final AtomicReference<ScheduledFuture<?>> vendedCredentialRefreshTask = new AtomicReference<>();
+    private volatile boolean vendedRefreshStopped = false;
+    private final AtomicBoolean vendedRefreshTickRunning = new AtomicBoolean(false);
+    // Set when a refresh push fails; the next tick re-pushes the current credential.
+    private volatile boolean vendedRefreshResendNeeded = false;
+
+    /**
+     * Incremental delivery ends early in the query while the scan can run much longer, so poll for
+     * the query's lifetime and push each genuinely new credential to every instance with a
+     * refresh-only request (no scan ranges).
+     */
+    private void maybeStartVendedCredentialRefreshTask() {
+        boolean hasVendedIcebergScan = executionDAG.getScanNodes().stream()
+                .anyMatch(scanNode -> scanNode instanceof IcebergScanNode
+                        && ((IcebergScanNode) scanNode).getCloudConfiguration() != null);
+        if (!hasVendedIcebergScan || !jobSpec.isEnablePipeline() || vendedRefreshStopped) {
+            return;
+        }
+        vendedCredentialRefreshTask.set(VENDED_REFRESH_SCHEDULER.scheduleWithFixedDelay(
+                this::submitVendedRefreshTick, VENDED_REFRESH_TICK_SECONDS, VENDED_REFRESH_TICK_SECONDS,
+                TimeUnit.SECONDS));
+    }
+
+    private void cancelVendedCredentialRefreshTask() {
+        vendedRefreshStopped = true;
+        ScheduledFuture<?> task = vendedCredentialRefreshTask.getAndSet(null);
+        if (task != null) {
+            task.cancel(false);
+        }
+    }
+
+    private void submitVendedRefreshTick() {
+        try {
+            // The in-flight CAS lives in the task, so a dropped submission can never strand it.
+            VENDED_REFRESH_EXECUTOR.execute(this::runVendedRefreshTick);
+        } catch (RejectedExecutionException e) {
+            LOG.warn("vended credential refresh rejected for query {}", DebugUtil.printId(jobSpec.getQueryId()), e);
+        }
+    }
+
+    // A tick that outlives its 60s slot is skipped, not stacked.
+    private void runVendedRefreshTick() {
+        if (!vendedRefreshTickRunning.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            refreshVendedCredentialsTick();
+        } finally {
+            vendedRefreshTickRunning.set(false);
+        }
+    }
+
+    private void refreshVendedCredentialsTick() {
+        if (vendedRefreshStopped || isDone()) {
+            // Backstop for lifecycle paths that miss cancel: stop the periodic task with the query.
+            cancelVendedCredentialRefreshTask();
+            return;
+        }
+        try {
+            boolean resend = vendedRefreshResendNeeded;
+            boolean anyFailure = false;
+            for (ExecutionFragment fragment : executionDAG.getFragmentsInPostorder()) {
+                if (vendedRefreshStopped) {
+                    return;
+                }
+                Map<Integer, TCloudConfiguration> refreshed = null;
+                for (ScanNode scanNode : fragment.getScanNodes()) {
+                    if (!(scanNode instanceof IcebergScanNode)) {
+                        continue;
+                    }
+                    IcebergScanNode icebergScanNode = (IcebergScanNode) scanNode;
+                    TCloudConfiguration cc = icebergScanNode.refreshVendedCloudConfigurationIfNearExpiry(
+                            Config.vended_credential_refresh_window_sec * 1000L);
+                    if (cc == null && resend) {
+                        // A previous push failed after the FE already swapped its credential, so the
+                        // near-expiry/unchanged gates would never resend it. Push the current one.
+                        cc = icebergScanNode.currentVendedCloudConfiguration();
+                    }
+                    if (cc != null) {
+                        if (refreshed == null) {
+                            refreshed = new HashMap<>();
+                        }
+                        refreshed.put(scanNode.getId().asInt(), cc);
+                    }
+                }
+                if (refreshed == null) {
+                    continue;
+                }
+                List<Future<PExecPlanFragmentResult>> pushes = new ArrayList<>();
+                for (FragmentInstance instance : fragment.getInstances()) {
+                    FragmentInstanceExecState execState = executionDAG.getExecution(instance.getIndexInJob());
+                    if (execState == null) {
+                        continue;
+                    }
+                    FragmentInstanceExecState.State state = execState.getState();
+                    if (state == FragmentInstanceExecState.State.CREATED
+                            || state == FragmentInstanceExecState.State.DEPLOYING) {
+                        // The BE hasn't registered the fragment yet and would drop the push as OK;
+                        // retry next tick.
+                        anyFailure = true;
+                        continue;
+                    }
+                    if (state != FragmentInstanceExecState.State.EXECUTING) {
+                        continue;
+                    }
+                    TExecPlanFragmentParams request = new TExecPlanFragmentParams();
+                    request.setProtocol_version(InternalServiceVersion.V1);
+                    request.setParams(new TPlanFragmentExecParams());
+                    request.params.setQuery_id(jobSpec.getQueryId());
+                    request.params.setFragment_instance_id(instance.getInstanceId());
+                    request.params.setPer_node_scan_ranges(new HashMap<>());
+                    request.params.setPer_exch_num_senders(new HashMap<>());
+                    request.params.setNode_to_cloud_configuration(refreshed);
+                    // Independent RPC: the deployer owns the exec state's requestToDeploy/deployFuture.
+                    try {
+                        pushes.add(BackendServiceClient.getInstance().execPlanFragmentAsync(
+                                execState.getWorker().getBrpcAddress(), request, jobSpec.getPlanProtocol()));
+                    } catch (TException | RpcException e) {
+                        anyFailure = true;
+                        LOG.warn("failed to push refreshed vended credential to instance {} of query {}",
+                                DebugUtil.printId(instance.getInstanceId()),
+                                DebugUtil.printId(jobSpec.getQueryId()), e);
+                    }
+                }
+                // Await the responses: a lost push must be retried on the next tick, because the FE
+                // already carries the new credential and would otherwise never resend it.
+                for (Future<PExecPlanFragmentResult> push : pushes) {
+                    try {
+                        PExecPlanFragmentResult result = push.get(10, TimeUnit.SECONDS);
+                        if (result.status.statusCode != TStatusCode.OK.getValue()) {
+                            anyFailure = true;
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        anyFailure = true;
+                    } catch (Exception e) {
+                        anyFailure = true;
+                    }
+                }
+                LOG.info("pushed refreshed vended credential to {} instances of fragment {} for query {}",
+                        fragment.getInstances().size(), fragment.getFragmentId(),
+                        DebugUtil.printId(jobSpec.getQueryId()));
+            }
+            vendedRefreshResendNeeded = anyFailure;
+        } catch (Throwable t) {
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            // Never let the worker thread die on one bad tick; retry the push next tick.
+            vendedRefreshResendNeeded = true;
+            LOG.warn("vended credential refresh tick failed for query {}",
+                    DebugUtil.printId(jobSpec.getQueryId()), t);
+        }
+    }
+
+    /**
+     * Re-vend near-expiry cloud credentials for a fragment still delivering scan ranges and stash
+     * them so the next incremental batch carries them to the BE.
+     */
+    private void maybeRefreshVendedCredentials(ExecutionFragment fragment) {
+        Map<Integer, TCloudConfiguration> refreshed = null;
+        for (ScanNode scanNode : fragment.getScanNodes()) {
+            if (!(scanNode instanceof IcebergScanNode)) {
+                continue;
+            }
+            TCloudConfiguration cc = ((IcebergScanNode) scanNode)
+                    .refreshVendedCloudConfigurationIfNearExpiry(Config.vended_credential_refresh_window_sec * 1000L);
+            if (cc != null) {
+                if (refreshed == null) {
+                    refreshed = new HashMap<>();
+                }
+                refreshed.put(scanNode.getId().asInt(), cc);
+            }
+        }
+        fragment.setRefreshedNodeCloudConfigs(refreshed);
     }
 
     private boolean isInternalCancelError(String errMsg) {
@@ -1111,6 +1314,7 @@ public class DefaultCoordinator extends Coordinator {
      */
     @Override
     public void cancel(PPlanFragmentCancelReason reason, String message) {
+        cancelVendedCredentialRefreshTask();
         lock();
         try {
             // All results have been obtained. The query has ended. Ignore this error.
