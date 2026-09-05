@@ -1055,6 +1055,16 @@ vectorized_functions = [
     [120014, "ST_Contains", False, False, "BOOLEAN", ["VARCHAR", "VARCHAR"], "GeoFunctions::st_contains",
      "GeoFunctions::st_contains_prepare", "GeoFunctions::st_contains_close"],
 
+    # MGRS functions
+    [120015, "geoToMGRS", False, False, "VARCHAR", ["DOUBLE", "DOUBLE"],
+     "MgrsFunctions::geo_to_mgrs"],
+    [120016, "geoToMGRS", False, False, "VARCHAR", ["DOUBLE", "DOUBLE", "INT"],
+     "MgrsFunctions::geo_to_mgrs"],
+    [120017, "MGRSToLat", False, False, "DOUBLE",  ["VARCHAR"],
+     "MgrsFunctions::mgrs_to_lat"],
+    [120018, "MGRSToLng", False, False, "DOUBLE",  ["VARCHAR"],
+     "MgrsFunctions::mgrs_to_lng"],
+
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
     [130001, 'percentile_empty', True, False, 'PERCENTILE', [], 'PercentileFunctions::percentile_empty'],
