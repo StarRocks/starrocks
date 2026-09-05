@@ -86,6 +86,38 @@ SELECT dict_mapping("dict", col_1, col_2) FROM t;
 
 DROP DATABASE test_dictmapping_null_column;
 
+-- name: test_dictmapping_nested_null_key @native
+CREATE DATABASE test_dictmapping_nested_null_key;
+use test_dictmapping_nested_null_key;
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO dict VALUES (1, "abc", default, 0);
+
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO t VALUES (1, NULL);
+
+-- dict_mapping() fails on the NULL key. When that failure was the input of another
+-- expression it used to be unwrapped by the unchecked Expr::evaluate(), which throws
+-- BadStatusOrAccess instead of returning the Status and took the whole BE down.
+SELECT dict_mapping("dict", col_1, dict_mapping("dict", col_1, col_2)) FROM t;
+SELECT bit_shift_left(1, dict_mapping("dict", col_1, col_2)) FROM t;
+
+-- The BE must still be serving queries.
+SELECT count(*) FROM t;
+
+DROP DATABASE test_dictmapping_nested_null_key;
+
 -- name: test_dictmapping_DictQueryOperator_bug @native
 CREATE DATABASE test_dictmapping_DictQueryOperator_bug;
 USE test_dictmapping_DictQueryOperator_bug;

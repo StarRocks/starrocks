@@ -32,7 +32,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     // calculate all child expression which used to construct keys
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;
     for (int i = 0; i < _children.size(); ++i) {
-        columns[i] = _children[i]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, ptr));
     }
 
     for (auto& column : columns) {
