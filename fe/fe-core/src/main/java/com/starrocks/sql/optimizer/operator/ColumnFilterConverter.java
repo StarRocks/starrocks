@@ -181,6 +181,13 @@ public class ColumnFilterConverter {
         if (predicate == null) {
             return;
         }
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        if (conjuncts.size() > 1) {
+            for (ScalarOperator conjunct : conjuncts) {
+                convertColumnFilterWithoutExpr(conjunct, result, table);
+            }
+            return;
+        }
         if (predicate.getChildren().size() <= 0) {
             return;
         }
