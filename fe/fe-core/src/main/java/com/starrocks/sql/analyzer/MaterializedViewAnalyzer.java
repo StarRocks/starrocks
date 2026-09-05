@@ -255,8 +255,12 @@ public class MaterializedViewAnalyzer {
             if (!allowIcebergPartitionEvolution && table instanceof IcebergTable) {
                 IcebergTable icebergTable = (IcebergTable) table;
                 if (icebergTable.getNativeTable().specs().size() > 1) {
-                    throw new SemanticException("Do not support create materialized view when base iceberg table " +
-                            table.getName() + " has done partition evolution", tableName.getPos());
+                    boolean allowByConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution
+                            && icebergTable.isCurrentSnapshotAllOnCurrentSpec();
+                    if (!allowByConfig) {
+                        throw new SemanticException("Do not support create materialized view when base iceberg table " +
+                                table.getName() + " has done partition evolution", tableName.getPos());
+                    }
                 }
             }
             if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {

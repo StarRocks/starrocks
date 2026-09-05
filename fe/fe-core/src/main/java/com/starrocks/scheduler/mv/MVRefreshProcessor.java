@@ -43,6 +43,8 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.mv.refresh.pct.MVPCTRefreshPlanner;
 import com.starrocks.mv.refresh.pct.MVPCTRefreshSynchronizer;
@@ -68,6 +70,8 @@ import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -755,11 +759,22 @@ public abstract class MVRefreshProcessor {
                 // Non-partitioned MVs do full refresh without base partition mapping.
                 if (table instanceof IcebergTable && !mv.getPartitionInfo().isUnPartitioned()) {
                     IcebergTable icebergTable = (IcebergTable) table;
-                    if (icebergTable.getNativeTable().specs().size() > 1) {
-                        throw new DmlException("Materialized view %s.%s refresh failed: base Iceberg table %s " +
-                                        "has undergone partition evolution (%d partition specs), which is not supported",
-                                db.getFullName(), mv.getName(), table.getName(),
-                                icebergTable.getNativeTable().specs().size());
+                    org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+                    if (nativeTable.specs().size() > 1) {
+                        // Only fail the refresh when either the user has NOT opted in, or the current snapshot's
+                        // live manifests still reference non-current partition specs (i.e. old-spec data is still
+                        // visible). If old-spec data has been fully rewritten to the current spec, the refresh is
+                        // safe to proceed even though historical specs remain in metadata.
+                        boolean allowByConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution
+                                && icebergTable.isCurrentSnapshotAllOnCurrentSpec();
+                        if (!allowByConfig) {
+                            throw new DmlException("Materialized view %s.%s refresh failed: base Iceberg table %s " +
+                                            "has undergone partition evolution (%d partition specs), which is not supported",
+                                    db.getFullName(), mv.getName(), table.getName(),
+                                    nativeTable.specs().size());
+                        }
+
+                        checkIcebergPartitionTransformStillCompatible(icebergTable);
                     }
                 }
 
@@ -785,6 +800,39 @@ public abstract class MVRefreshProcessor {
         }
         logger.info("collect base table snapshot infos cost: {} ms", stopwatch.elapsed(TimeUnit.MILLISECONDS));
         return tables;
+    }
+
+    private void checkIcebergPartitionTransformStillCompatible(IcebergTable icebergTable) {
+        Map<Table, List<Expr>> refBaseTableExprs = mv.getRefBaseTablePartitionExprs(false);
+        Map<Table, List<SlotRef>> refBaseTableSlots = mv.getRefBaseTablePartitionSlots();
+        if (refBaseTableExprs == null || refBaseTableExprs.isEmpty()
+                || refBaseTableSlots == null || refBaseTableSlots.isEmpty()) {
+            return;
+        }
+
+        List<Expr> exprs = refBaseTableExprs.get(icebergTable);
+        List<SlotRef> slots = refBaseTableSlots.get(icebergTable);
+        if (exprs == null || exprs.isEmpty() || slots == null || slots.isEmpty()) {
+            return;
+        }
+
+        if (exprs.size() != slots.size()) {
+            throw new DmlException("Materialized view %s.%s refresh failed: base Iceberg table %s partition "
+                            + "expressions and slots are inconsistent, expr size: %d, slot size: %d",
+                    db.getFullName(), mv.getName(), icebergTable.getName(), exprs.size(), slots.size());
+        }
+
+        try {
+            for (int i = 0; i < exprs.size(); i++) {
+                IcebergPartitionUtils.checkPartitionTransformCompatibleWithSpec(
+                        icebergTable, exprs.get(i), slots.get(i));
+            }
+        } catch (StarRocksConnectorException e) {
+            throw new DmlException("Materialized view %s.%s refresh failed: base Iceberg table %s partition "
+                            + "transform has evolved and is no longer compatible with the materialized view's "
+                            + "partition expression: %s",
+                    db.getFullName(), mv.getName(), icebergTable.getName(), e.getMessage());
+        }
     }
 
     public void updatePCTMVToRefreshInfoIntoTaskRun(PCellSortedSet finalMvToRefreshedPartitions,

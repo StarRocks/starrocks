@@ -409,6 +409,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: When this item is set to `true`, StarRocks will attempt to automatically repair materialized view base-table metadata when a base external table is dropped and recreated or its table identifier changes. The repair flow can update the materialized view's base table information, collect partition-level repair information for external table partitions, and drive partition refresh decisions for async auto-refresh materialized views while honoring `autoRefreshPartitionsLimit`. Currently the automated repair supports Hive external tables; unsupported table types will cause the materialized view to be set inactive and a repair exception. Partition information collection is non-blocking and failures are logged.
 - Introduced in: v3.3.19, v3.4.8, v3.5.6
 
+### `enable_mv_on_iceberg_table_with_partition_evolution`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow creating and refreshing materialized views on Iceberg base tables that have undergone partition evolution (i.e. keep multiple partition specs in the table metadata). By default, StarRocks rejects both `CREATE MATERIALIZED VIEW` and MV refresh whenever the base Iceberg table has more than one partition spec, throwing `Do not support create materialized view when base iceberg table ... has done partition evolution`. When this switch is set to `true`, the restriction is relaxed: as long as every **live manifest** under the current snapshot of the Iceberg table is already aligned with the current partition spec (typically after `REWRITE DATA` / `REWRITE MANIFESTS` has rewritten all historical-spec data to the latest spec), StarRocks will allow the MV to be created and refreshed. If any live manifest still references a non-current partition spec, both CREATE and refresh still fail with the partition-evolution error to prevent silently reading inconsistent data.
+- Introduced in: -
+
 ### `enable_predicate_columns_collection`
 
 - Default: true

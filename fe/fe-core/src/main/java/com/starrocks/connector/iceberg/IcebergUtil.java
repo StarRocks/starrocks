@@ -46,6 +46,7 @@ import org.apache.iceberg.util.LocationUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -75,6 +76,8 @@ public final class IcebergUtil {
                     "content",
                     "partition_spec_id",
                     "added_snapshot_id",
+                    "added_files_count",
+                    "existing_files_count",
                     "deleted_data_files_count");
 
     /**
@@ -93,6 +96,22 @@ public final class IcebergUtil {
                     .build();
         } else {
             return CloseableIterable.withNoopClose(snapshot.allManifests(fileIO));
+        }
+    }
+
+    public static boolean isSnapshotAllOnSpec(Snapshot snapshot, FileIO fileIO, int specId) {
+        try (CloseableIterable<ManifestFile> manifests = readManifests(snapshot, fileIO)) {
+            for (ManifestFile manifest : manifests) {
+                if (manifest.partitionSpecId() != specId
+                        && (manifest.hasAddedFiles() || manifest.hasExistingFiles())) {
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (IOException e) {
+            throw new StarRocksConnectorException("Unable to read manifests for snapshot " +
+                    snapshot.snapshotId(), e);
         }
     }
 

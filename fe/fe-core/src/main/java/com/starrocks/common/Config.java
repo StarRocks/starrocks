@@ -4301,6 +4301,12 @@ public class Config extends ConfigBase {
             "all external table partition types")
     public static boolean enable_mv_list_partition_for_external_table = false;
 
+    @ConfField(mutable = true, comment = "Whether to allow creating/refreshing materialized view on iceberg base " +
+            "table that has undergone partition evolution (i.e. has multiple partition specs in history). " +
+            "When enabled, create-mv analyze phase will skip the spec-size check, and mv refresh phase will only " +
+            "fail when there is any live manifest whose partition spec id is not equal to the current spec id.")
+    public static boolean enable_mv_on_iceberg_table_with_partition_evolution = false;
+
     /**
      * The refresh partition number when refreshing materialized view at once by default.
      */
