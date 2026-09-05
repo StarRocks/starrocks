@@ -11,7 +11,7 @@ Formats TIME-type values in the specified format.
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR TIME_FORMAT(TIME time, VARCHAR format)
 ```
 

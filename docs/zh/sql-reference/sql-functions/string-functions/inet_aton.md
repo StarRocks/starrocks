@@ -12,7 +12,7 @@ description: "获取包含IPv4地址的字符串并返回相应的大端BIGINT�
 
 ## 语法
 
-```Haskell
+```plaintext
 inet_aton(VARCHAR ipv4)
 ```
 

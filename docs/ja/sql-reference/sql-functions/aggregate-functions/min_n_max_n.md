@@ -11,7 +11,7 @@ description: "式から n 個の最小値または最大値を配列として返
 
 ## 構文
 
-```Haskell
+```plaintext
 MIN_N(<expr>, <n>)
 MAX_N(<expr>, <n>)
 ```

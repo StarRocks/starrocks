@@ -9,7 +9,7 @@ description: "x をそのままの値として返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 POSITIVE(x);
 ```
 

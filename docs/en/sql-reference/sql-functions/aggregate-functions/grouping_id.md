@@ -12,7 +12,7 @@ grouping_id is used to distinguish the grouping statistics results of the same g
 
 ## Syntax
 
-```Haskell
+```plaintext
 GROUPING_ID(expr)
 ```
 

@@ -9,7 +9,7 @@ description: "ARRAY_CUM_SUM関数は配列内の要素の累積和を返しま�
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_cum_sum(array(bigint))
 array_cum_sum(array(double))
 ```

@@ -13,7 +13,7 @@ description: "返回 Map 中所有 Value 组成的数组。"
 
 ## 语法
 
-```Haskell
+```plaintext
 map_values(any_map)
 ```
 

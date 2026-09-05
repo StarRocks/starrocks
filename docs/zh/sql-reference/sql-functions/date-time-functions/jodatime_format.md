@@ -11,7 +11,7 @@ description: "将日期转换为指定 Joda DateTimeFormat 格式的字符串。
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR JODATIME_FORMAT(DATETIME | DATE date, VARCHAR format)
 ```
 

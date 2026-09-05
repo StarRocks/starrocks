@@ -9,7 +9,7 @@ description: "カンマ区切りリスト内の文字列の1から始まる位�
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT find_in_set(VARCHAR str, VARCHAR strlist)
 ```
 

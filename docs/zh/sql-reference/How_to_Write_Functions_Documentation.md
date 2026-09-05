@@ -21,7 +21,7 @@ unlisted: true
 
 ## 语法
 
-```Haskell
+```plaintext
 CONVERT_TZ(dt, from_tz, to_tz)
 ```
 

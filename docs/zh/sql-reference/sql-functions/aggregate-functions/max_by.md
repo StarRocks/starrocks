@@ -11,7 +11,7 @@ description: "max_by 返回与 y 的最大值关联的 x 值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 max_by(x,y)
 ```
 

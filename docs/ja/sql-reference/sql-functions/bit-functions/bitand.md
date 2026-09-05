@@ -9,7 +9,7 @@ description: "2つの数値式のビット単位のANDを返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITAND(x,y);
 ```
 

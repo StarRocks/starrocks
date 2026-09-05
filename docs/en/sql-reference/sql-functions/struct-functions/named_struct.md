@@ -13,7 +13,7 @@ This function is supported from v3.1 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 STRUCT named_struct({STRING name1, ANY val1} [, ...] )
 ```
 

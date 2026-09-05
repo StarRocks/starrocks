@@ -11,13 +11,13 @@ description: "Lambda式を使用してマップ内の値を変換し、各エン
 
 ## 構文
 
-```Haskell
+```plaintext
 MAP transform_values(lambda_func, any_map)
 ```
 
 `lambda_func` は `any_map` の後に置くこともできます:
 
-```Haskell
+```plaintext
 MAP transform_values(any_map, lambda_func)
 ```
 

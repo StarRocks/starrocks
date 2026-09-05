@@ -11,7 +11,7 @@ description: "根据分隔符拆分字符串，返回指定位置的部分。"
 
 ## 语法
 
-```Haskell
+```plaintext
 split_part(content, delimiter, field)
 ```
 

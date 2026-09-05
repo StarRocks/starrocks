@@ -9,7 +9,7 @@ description: "入力値をビットマップ値から削除し、結果セット
 
 ## Syntax
 
-```Haskell
+```plaintext
 bitmap_remove(BITMAP lhs, BIGINT input)
 ```
 

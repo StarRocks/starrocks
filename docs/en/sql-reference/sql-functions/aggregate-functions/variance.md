@@ -11,7 +11,7 @@ Returns the population variance of an expression. Since v2.5.10, this function c
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARIANCE(expr)
 ```
 

@@ -16,7 +16,7 @@ This function is supported from v2.0.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 

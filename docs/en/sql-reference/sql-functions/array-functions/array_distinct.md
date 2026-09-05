@@ -11,7 +11,7 @@ Removes duplicate elements from an array.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_distinct(array)
 ```
 

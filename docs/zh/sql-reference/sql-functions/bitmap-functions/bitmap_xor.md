@@ -11,7 +11,7 @@ description: "计算两个 Bitmap 中不重复元素所构成的集合。"
 
 ## 语法
 
-```Haskell
+```plaintext
 bitmap_xor(lhs, rhs)
 ```
 

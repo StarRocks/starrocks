@@ -11,7 +11,7 @@ description: "開始日と終了日の時間差をミリ秒で返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT milliseconds_diff(DATETIME expr1, DATETIME expr2);
 ```
 

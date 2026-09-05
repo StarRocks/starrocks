@@ -11,7 +11,7 @@ description: "根据ISO标准计算日期对应一年内的周数，返回1到53
 
 ## 语法
 
-```Haskell
+```plaintext
 INT WEEK_ISO(DATETIME date)
 ```
 

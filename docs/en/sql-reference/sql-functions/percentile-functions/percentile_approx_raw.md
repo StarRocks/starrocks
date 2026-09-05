@@ -13,7 +13,7 @@ If `x` is a column, this function first sorts values in `x` in ascending order a
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_APPROX_RAW(x, y);
 ```
 

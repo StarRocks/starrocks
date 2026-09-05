@@ -9,7 +9,7 @@ description: "x を y 乗した結果を返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 POW(x,y);POWER(x,y);
 ```
 

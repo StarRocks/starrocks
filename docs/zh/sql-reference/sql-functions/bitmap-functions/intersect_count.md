@@ -11,7 +11,7 @@ description: "计算两个 Bitmap 之间相同元素的个数，支持通过维�
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT INTERSECT_COUNT(bitmap_column, column_to_filter, filter_values)
 ```
 

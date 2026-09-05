@@ -15,7 +15,7 @@ description: "根据指定的起始值从 BITMAP 中截取指定个数的元素�
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP bitmap_subset_limit(BITMAP src, BIGINT start_range, BIGINT limit)
 ```
 

@@ -11,7 +11,7 @@ Converts `x` from an angle to a radian.
 
 ## Syntax
 
-```Haskell
+```plaintext
 REDIANS(x);
 ```
 

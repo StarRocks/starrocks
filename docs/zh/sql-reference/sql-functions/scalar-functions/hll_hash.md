@@ -11,7 +11,7 @@ description: "将数值转换为 HLL 类型，通常用于导入时映射源数�
 
 ## 语法
 
-```Haskell
+```plaintext
 HLL_HASH(column_name)
 ```
 

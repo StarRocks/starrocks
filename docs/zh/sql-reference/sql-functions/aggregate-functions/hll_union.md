@@ -12,7 +12,7 @@ description: "hll_union 返回一组 HLL 值的并集。"
 
 ## 语法
 
-```Haskell
+```plaintext
 hll_union(hll)
 ```
 

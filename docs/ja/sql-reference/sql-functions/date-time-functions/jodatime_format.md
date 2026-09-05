@@ -9,7 +9,7 @@ description: "指定された日付をJoda DateTimeFormatパターン形式の�
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR JODATIME_FORMAT(DATETIME | DATE date, VARCHAR format)
 ```
 

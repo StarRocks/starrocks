@@ -9,7 +9,7 @@ description: "値がNULLでないかどうかを確認し、結果を1または0
 
 ## Syntax
 
-```Haskell
+```plaintext
 ISNOTNULL(v)
 ```
 

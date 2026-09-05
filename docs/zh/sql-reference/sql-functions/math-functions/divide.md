@@ -11,7 +11,7 @@ description: "返回x除以y的商，y为0时返回NULL。"
 
 ## 语法
 
-```Haskell
+```plaintext
 divide(x, y);
 ```
 

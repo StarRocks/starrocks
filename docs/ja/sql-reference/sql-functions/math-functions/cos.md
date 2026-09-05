@@ -9,7 +9,7 @@ description: "引数のコサインを計算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE cos(DOUBLE arg)
 ```
 

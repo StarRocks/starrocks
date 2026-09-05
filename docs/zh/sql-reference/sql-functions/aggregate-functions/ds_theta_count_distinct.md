@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "使用 DataSketches Theta 草图返回近似去重计数。比 COUNT DISTINCT 更快，处理高基数列时内存占用更少。"
+---
+
 # ds_theta_count_distinct
 
 返回类似于 `COUNT(DISTINCT col)` 结果的聚合函数的近似值。`ds_theta_count_distinct` 比 `COUNT(DISTINCT col)` 更快，并且在处理高基数列时使用更少的内存。
@@ -8,7 +13,7 @@
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT ds_theta_count_distinct(expr)
 ```
 

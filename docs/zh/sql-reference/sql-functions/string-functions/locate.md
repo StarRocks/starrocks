@@ -11,7 +11,7 @@ description: "返回子字符串在字符串中出现的位置，支持从指定
 
 ## 语法
 
-```Haskell
+```plaintext
 locate(substr, str[, pos])
 ```
 

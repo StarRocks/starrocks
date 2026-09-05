@@ -13,7 +13,7 @@ This function is supported from v3.3 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE cbrt(DOUBLE arg)
 ```
 

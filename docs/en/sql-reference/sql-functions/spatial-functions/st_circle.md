@@ -11,7 +11,7 @@ Converts a WKT (WEll Known Text) to a circle on the sphere of the earth.
 
 ## Syntax
 
-```Haskell
+```plaintext
 GEOMETRY ST_Circle(DOUBLE center_lng, DOUBLE center_lat, DOUBLE radius)
 ```
 

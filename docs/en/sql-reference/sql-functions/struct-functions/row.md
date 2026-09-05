@@ -15,7 +15,7 @@ struct() is the alias of row().
 
 ## Syntax
 
-```Haskell
+```plaintext
 STRUCT row(ANY val, ...)
 ```
 

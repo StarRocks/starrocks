@@ -15,7 +15,7 @@ description: "获取 Map 中指定键对应的值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 element_at(any_map, any_key)
 ```
 

@@ -9,7 +9,7 @@ description: "データ挿入またはロード時にデフォルト値を補完
 
 ## 構文
 
-```Haskell
+```plaintext
 HLL_EMPTY()
 ```
 

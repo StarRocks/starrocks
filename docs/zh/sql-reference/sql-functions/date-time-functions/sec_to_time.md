@@ -11,7 +11,7 @@ SEC_TO_TIME 函数将一个以秒为单位的值转换为 TIME 类型，返回�
 
 ## 语法
 
-```Haskell
+```plaintext
 TIME sec_to_time(BIGINT sec)
 ```
 

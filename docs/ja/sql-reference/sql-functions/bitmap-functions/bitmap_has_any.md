@@ -9,7 +9,7 @@ description: "2つのビットマップ列の間に交差する要素がある�
 
 ## Syntax
 
-```Haskell
+```plaintext
 B00LEAN BITMAP_HAS_ANY(BITMAP lhs, BITMAP rhs)
 ```
 

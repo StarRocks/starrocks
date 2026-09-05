@@ -13,7 +13,7 @@ This function is non-deterministic. Two calls to this function generate two diff
 
 ## Syntax
 
-```Haskell
+```plaintext
 uuid_v7_numeric()
 ```
 

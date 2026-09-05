@@ -11,7 +11,7 @@ description: "如果字符串非空且末尾不包含指定字符，则将该字
 
 ## 语法
 
-```Haskell
+```plaintext
 append_trailing_char_if_absent(str, trailing_char)
 ```
 

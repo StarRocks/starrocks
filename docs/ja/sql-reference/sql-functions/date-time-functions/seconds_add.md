@@ -9,7 +9,7 @@ description: "指定された秒数を日付に加算します。"
 
 ### 構文
 
-```Haskell
+```plaintext
 DATETIME SECONDS_ADD(DATETIME expr1,INT expr2)
 ```
 

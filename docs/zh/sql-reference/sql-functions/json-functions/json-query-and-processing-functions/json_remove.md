@@ -13,7 +13,7 @@ description: "从 JSON 文档中删除一个或多个指定 JSON 路径的数据
 
 ## 语法
 
-```Haskell
+```plaintext
 json_remove(json_object_expr, json_path[, json_path] ...)
 ```
 

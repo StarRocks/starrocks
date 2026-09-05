@@ -13,7 +13,7 @@ description: "特定のフォーマットのバイナリ文字列をビットマ
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP bitmap_from_binary(VARBINARY str)
 ```
 

@@ -9,7 +9,7 @@ description: "指定された分を日付から引きます。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME minutes_sub(DATETIME|DATE date, INT minutes);
 ```
 

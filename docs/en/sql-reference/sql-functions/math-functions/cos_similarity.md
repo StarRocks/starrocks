@@ -21,7 +21,7 @@ This function normalizes vectors before measuring the cosine similarity. If the 
 
 ## Syntax
 
-```Haskell
+```plaintext
 cosine_similarity(a, b)
 ```
 

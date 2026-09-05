@@ -9,7 +9,7 @@ description: "datetime値または日付値から指定された週数を減算�
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME weeks_sub(DATETIME expr1, INT expr2);
 ```
 

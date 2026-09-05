@@ -11,7 +11,7 @@ description: "计算参数的余弦值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 COS(x);
 ```
 

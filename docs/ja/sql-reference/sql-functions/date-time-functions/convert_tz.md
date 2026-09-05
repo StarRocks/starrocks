@@ -11,7 +11,7 @@ DATE または DATETIME の値をあるタイムゾーンから別のタイム�
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME CONVERT_TZ(DATETIME|DATE dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 

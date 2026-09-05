@@ -24,7 +24,7 @@ description: "将 UNIX 时间戳转换为指定格式的时间字符串。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
 ```
 

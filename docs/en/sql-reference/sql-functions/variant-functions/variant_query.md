@@ -11,7 +11,7 @@ This function is used to navigate and extract sub-elements from VARIANT data rea
 
 ## Syntax
 
-```Haskell
+```plaintext
 variant_query(variant_expr, path)
 ```
 

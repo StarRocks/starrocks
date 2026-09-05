@@ -9,7 +9,7 @@ description: "入力文字列の32ビットのXXH32ハッシュ値を返しま�
 
 ## 構文
 
-```Haskell
+```plaintext
 INT XX_HASH32(VARCHAR input, ...)
 ```
 

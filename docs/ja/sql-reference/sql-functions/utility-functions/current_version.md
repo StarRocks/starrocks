@@ -9,7 +9,7 @@ StarRocks の現在のバージョンを返します。異なるクライアン�
 
 ## Syntax
 
-```Haskell
+```plaintext
 current_version();
 
 @@version_comment;

@@ -11,7 +11,7 @@ description: "指定された日付の月名を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR MONTHNAME(date)
 ```
 

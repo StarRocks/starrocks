@@ -17,7 +17,7 @@ During loading, the [hll_hash](../scalar-functions/hll_hash.md) function is used
 
 ## Syntax
 
-```Haskell
+```plaintext
 HLL_UNION_AGG(hll)
 ```
 

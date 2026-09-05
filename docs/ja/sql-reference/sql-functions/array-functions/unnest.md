@@ -15,7 +15,7 @@ UNNEST と Lateral Join を組み合わせて、STRING、ARRAY、または BITMA
 
 ## Syntax
 
-```Haskell
+```plaintext
 unnest(array0[, array1 ...])
 ```
 

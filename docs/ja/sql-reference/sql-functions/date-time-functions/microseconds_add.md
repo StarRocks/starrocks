@@ -9,7 +9,7 @@ description: "日付値にマイクロ秒単位の時間間隔を追加します
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME microseconds_add(DATETIME expr1,INT expr2);
 ```
 

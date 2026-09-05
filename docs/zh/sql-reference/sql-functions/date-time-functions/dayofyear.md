@@ -13,7 +13,7 @@ description: "返回指定日期为对应年中的哪一天。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT DAYOFYEAR(DATETIME date)
 ```
 

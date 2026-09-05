@@ -9,7 +9,7 @@ description: "文字列または配列を逆にします。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 reverse(param)
 ```
 

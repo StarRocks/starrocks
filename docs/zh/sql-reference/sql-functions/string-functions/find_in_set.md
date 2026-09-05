@@ -11,7 +11,7 @@ description: "返回逗号分隔的字符串列表中指定字符串第一次出
 
 ## 语法
 
-```Haskell
+```plaintext
 find_in_set(str, strlist)
 ```
 

@@ -9,7 +9,7 @@ description: "指定された秒数だけクエリ実行を遅延させます。
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN sleep(INT x);
 ```
 

@@ -12,7 +12,7 @@ Returns the bitwise XOR of two numeric expressions.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITXOR(x,y);
 ```
 

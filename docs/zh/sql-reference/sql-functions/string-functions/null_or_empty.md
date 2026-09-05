@@ -11,7 +11,7 @@ description: "如果字符串为NULL或空字符串则返回true，否则返回f
 
 ## 语法
 
-```Haskell
+```plaintext
 NULL_OR_EMPTY(str)
 BOOLEAN NULL_OR_EMPTY (any_array)
 ```

@@ -11,7 +11,7 @@ description: "返回数组中元素的累加和构成的数组。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_cum_sum(array(bigint))
 array_cum_sum(array(double))
 ```

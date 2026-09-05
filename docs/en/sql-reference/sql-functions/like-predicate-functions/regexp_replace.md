@@ -11,7 +11,7 @@ This function uses repl to replace a sequence of characters in str that matches 
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR regexp_replace(VARCHAR str, VARCHAR pattern, VARCHAR repl)
 ```
 

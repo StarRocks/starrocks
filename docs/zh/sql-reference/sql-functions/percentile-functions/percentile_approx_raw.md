@@ -11,7 +11,7 @@ description: "返回给定参数对应的百分位数值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 PERCENTILE_APPROX_RAW(x, y);
 ```
 

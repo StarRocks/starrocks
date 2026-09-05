@@ -11,7 +11,7 @@ description: "计算输入值是否在 Bitmap 列中并返回布尔值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_CONTAINS(bitmap, input)
 ```
 

@@ -9,7 +9,7 @@ description: "ARRAY_INTERSECT関数は1つ以上の配列の共通部分にあ�
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_intersect(input0, input1, ...)
 ```
 

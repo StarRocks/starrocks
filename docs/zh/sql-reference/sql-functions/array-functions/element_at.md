@@ -17,7 +17,7 @@ description: "返回数组指定位置（索引）处的元素。"
 
 ## 语法
 
-```Haskell
+```plaintext
 element_at(any_array, position)
 ```
 

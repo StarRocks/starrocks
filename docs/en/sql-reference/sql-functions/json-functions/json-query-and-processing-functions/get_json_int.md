@@ -25,7 +25,7 @@ If the format of json_string or json_path is wrong, this function will return NU
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
 ```
 

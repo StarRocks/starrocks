@@ -11,7 +11,7 @@ Removes the leading spaces or specified characters from the beginning (left) of 
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR ltrim(VARCHAR str[, VARCHAR characters])
 ```
 

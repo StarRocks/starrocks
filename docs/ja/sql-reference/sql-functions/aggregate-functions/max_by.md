@@ -13,7 +13,7 @@ description: "y の最大値に関連付けられた x の値を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 max_by(x,y)
 ```
 

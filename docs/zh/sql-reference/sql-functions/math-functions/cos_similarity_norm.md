@@ -17,7 +17,7 @@ description: "通过计算两个已归一化向量间夹角的余弦值来衡量
 
 ## 语法
 
-```Haskell
+```plaintext
 cosine_similarity_norm(a, b)
 ```
 

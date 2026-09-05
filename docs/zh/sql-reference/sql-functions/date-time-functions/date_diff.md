@@ -13,7 +13,7 @@ description: "根据指定的时间单位返回两个日期的差值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT DATE_DIFF(VARCHAR unit, DATETIME expr1, DATETIME expr2)
 ```
 

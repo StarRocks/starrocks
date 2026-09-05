@@ -13,7 +13,7 @@ description: "y の最小値に関連付けられた x の値を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 min_by(x,y)
 ```
 

@@ -11,7 +11,7 @@ Takes a string containing an IPv4 address in the format A.B.C.D. Returns a BIGIN
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT inet_aton(VARCHAR ipv4)
 ```
 

@@ -11,7 +11,7 @@ description: "将 Bitmap 转换为逗号分隔的字符串。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_TO_STRING(input)
 ```
 

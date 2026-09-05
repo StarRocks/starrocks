@@ -9,7 +9,7 @@ WKT (Well Known Text) を Line 形式のメモリ表現に変換します。
 
 ## Syntax
 
-```Haskell
+```plaintext
 GEOMETRY ST_LineFromText(VARCHAR wkt)
 ```
 

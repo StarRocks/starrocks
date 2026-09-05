@@ -11,7 +11,7 @@ description: "返回自然对数的底数e。"
 
 ## 语法
 
-```Haskell
+```plaintext
 E();
 ```
 

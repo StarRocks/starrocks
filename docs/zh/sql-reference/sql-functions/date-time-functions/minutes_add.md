@@ -11,7 +11,7 @@ description: "向日期或日期时间增加指定的分钟数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME minutes_add(DATETIME|DATE date, INT minutes);
 ```
 

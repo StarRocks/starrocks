@@ -9,7 +9,7 @@ description: "配列をBITMAP値に変換します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP array_to_bitmap(array)
 ```
 

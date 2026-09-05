@@ -15,7 +15,7 @@ Nulls are processed as normal values.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_concat(input0, input1, ...)
 ```
 

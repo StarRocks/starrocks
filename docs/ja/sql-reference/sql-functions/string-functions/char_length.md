@@ -9,7 +9,7 @@ description: "文字列の文字数を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT char_length(VARCHAR str)
 ```
 

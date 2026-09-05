@@ -19,7 +19,7 @@ description: "判断数组中是否有元素匹配给定的谓词条件。"
 
 ## 语法
 
-```Haskell
+```plaintext
 any_match(lambda_function, arr1, arr2...)
 ```
 

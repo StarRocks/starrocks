@@ -13,7 +13,7 @@ description: "根据给定的字段名和字段值来构建 STRUCT。"
 
 ## 语法
 
-```Haskell
+```plaintext
 STRUCT named_struct({STRING name1, ANY val1} [, ...] )
 ```
 

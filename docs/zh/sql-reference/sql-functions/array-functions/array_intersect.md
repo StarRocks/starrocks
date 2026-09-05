@@ -11,7 +11,7 @@ description: "返回多个同类型数组的交集。"
 
 ## 语法
 
-```Haskell
+```plaintext
 output array_intersect(input0, input1, ...)
 ```
 

@@ -19,7 +19,7 @@ unlisted: True
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 

@@ -12,7 +12,7 @@ description: "grouping_id 用于区分相同分组标准的分组统计结果。
 
 ## 语法
 
-```Haskell
+```plaintext
 GROUPING_ID(expr)
 ```
 

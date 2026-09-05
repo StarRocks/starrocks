@@ -19,7 +19,7 @@ description: "通过计算两个向量间夹角的余弦值来衡量向量相似
 
 ## 语法
 
-```Haskell
+```plaintext
 cosine_similarity(a, b)
 ```
 

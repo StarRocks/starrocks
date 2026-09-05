@@ -14,7 +14,7 @@ All of the JSON functions and operators are listed in the navigation and on the 
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_contains(json_target, json_candidate)
 ```
 

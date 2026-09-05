@@ -11,7 +11,7 @@ description: "指定された日付の曜日インデックスを返します。
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT dayofweek(DATETIME date)
 ```
 

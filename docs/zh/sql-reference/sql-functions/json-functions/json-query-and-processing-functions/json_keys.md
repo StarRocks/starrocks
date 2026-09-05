@@ -15,7 +15,7 @@ description: "返回 JSON 对象的顶级键作为 JSON 数组，或指定路径
 
 ## 语法
 
-```Haskell
+```plaintext
 json_keys(json_doc[, path])
 ```
 

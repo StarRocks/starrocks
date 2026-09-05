@@ -11,7 +11,7 @@ description: "将 WKT（Well Known Text）转换为对应的内存几何形式�
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_GeometryFromText(wkt)
 ```
 

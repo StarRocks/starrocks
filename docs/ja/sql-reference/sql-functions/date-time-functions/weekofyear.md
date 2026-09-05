@@ -11,7 +11,7 @@ description: "指定された日付の年内の週番号を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT WEEKOFYEAR(DATETIME date)
 ```
 

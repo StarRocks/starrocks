@@ -9,7 +9,7 @@ Joda 形式の文字列を指定された Joda DateTime フォーマット（例
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME str_to_jodatime(VARCHAR str, VARCHAR format)
 ```
 

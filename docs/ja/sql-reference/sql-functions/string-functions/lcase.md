@@ -9,7 +9,7 @@ description: "文字列を小文字に変換します。lcase関数と同じで�
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR lcase(VARCHAR str)
 ```
 

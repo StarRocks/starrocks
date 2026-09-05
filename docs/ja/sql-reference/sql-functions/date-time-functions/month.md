@@ -11,7 +11,7 @@ description: "指定された日付の月を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT MONTH(DATETIME date)
 ```
 

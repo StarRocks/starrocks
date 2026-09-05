@@ -11,7 +11,7 @@ Parses a date or time string according to the specified format and converts the 
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE to_tera_date(VARCHAR str, VARCHAR format)
 ```
 

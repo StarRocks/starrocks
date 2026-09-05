@@ -21,7 +21,7 @@ description: "在滑动时间窗口内搜索事件链并计算最大连续事件
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, cond2, ..., condN])
 ```
 

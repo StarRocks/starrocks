@@ -15,7 +15,7 @@ description: "1つ以上のキーと値のペアをJSONオブジェクトに変�
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_object(key, value, ...)
 ```
 

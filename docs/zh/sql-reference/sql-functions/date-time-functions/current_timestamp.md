@@ -13,7 +13,7 @@ description: "获取当前时间，以 DATETIME 类型返回。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME CURRENT_TIMESTAMP()
 DATETIME CURRENT_TIMESTAMP(INT p)
 ```

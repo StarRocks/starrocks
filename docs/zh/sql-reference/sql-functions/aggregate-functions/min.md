@@ -11,7 +11,7 @@ description: "min 返回表达式的最小值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 MIN(expr)
 ```
 

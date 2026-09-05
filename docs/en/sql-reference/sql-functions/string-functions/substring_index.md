@@ -19,7 +19,7 @@ This function is supported from v3.2.
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR substring_index(VARCHAR str, VARCHAR delimiter, INT count)
 ```
 

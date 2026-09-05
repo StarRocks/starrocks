@@ -11,7 +11,7 @@ retention (留存函数）用于计算一段时间内的用户留存情况。该
 
 ## 语法
 
-```Haskell
+```plaintext
 retention(array)
 ```
 

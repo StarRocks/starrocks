@@ -9,7 +9,7 @@ description: "現在の日付を取得し、DATETIME 型の値を返します。
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR CURRENT_TIMEZONE()
 ```
 

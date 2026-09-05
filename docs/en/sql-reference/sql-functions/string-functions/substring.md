@@ -11,7 +11,7 @@ Extracts characters staring from the specified position and returns a substring 
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR substr(VARCHAR str, pos[, len])
 ```
 

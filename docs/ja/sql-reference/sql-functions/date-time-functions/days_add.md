@@ -9,7 +9,7 @@ description: "指定された日数を、与えられた日付または日時に
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME days_add(DATETIME|DATE date, INT n);
 ```
 

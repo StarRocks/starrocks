@@ -9,7 +9,7 @@ description: "グループ化後のビットマップの共通部分を計算し
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP BITMAP_INTERSECT(BITMAP value)
 ```
 

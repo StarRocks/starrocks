@@ -17,7 +17,7 @@ The difference between date_diff and [datediff](./datediff.md) lies in that date
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT DATE_DIFF(VARCHAR unit, DATETIME expr1, DATETIME expr2)
 ```
 

@@ -9,7 +9,7 @@ Returns the weekday index for a given date. For example, the index for Monday is
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT WEEKDAY(DATETIME date)
 ```
 

@@ -12,7 +12,7 @@ description: "数値を指定された桁数に丸めます。"
 
 ## 構文
 
-```Haskell
+```plaintext
 ROUND(x [,n]);
 ```
 

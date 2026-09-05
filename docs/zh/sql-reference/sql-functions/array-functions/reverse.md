@@ -11,7 +11,7 @@ description: "将字符串或数组反转。"
 
 ## 语法
 
-```Haskell
+```plaintext
 reverse(param)
 ```
 

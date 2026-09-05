@@ -9,7 +9,7 @@ description: "指定された日数を日付または日時から引いて、新
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME days_sub(DATETIME|DATE d, INT n);
 ```
 

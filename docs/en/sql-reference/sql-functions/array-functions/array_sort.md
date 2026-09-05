@@ -11,7 +11,7 @@ Sorts the elements of an array in ascending order. From v4.0, `array_sort` suppo
 
 ## Syntax
 
-```Haskell
+```plaintext
 -- Without Lambda Comparator
 array_sort(array)
 

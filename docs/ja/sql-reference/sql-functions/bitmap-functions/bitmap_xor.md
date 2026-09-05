@@ -9,7 +9,7 @@ description: "lhs と rhs に固有の要素からなる集合を計算します
 
 ## 構文
 
-```Haskell
+```plaintext
 bitmap_xor(BITMAP lhs, BITMAP rhs)
 ```
 

@@ -11,7 +11,7 @@ Converts an array into BITMAP values. This function is supported from v2.3.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP array_to_bitmap(array)
 ```
 

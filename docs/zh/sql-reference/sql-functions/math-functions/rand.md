@@ -9,7 +9,7 @@ description: "返回0（含）到1（不含）之间的随机浮点数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 RAND(x);
 ```
 

@@ -11,7 +11,7 @@ Converts a WKT (Well Known Text) to the corresponding memory geometry.
 
 ## Syntax
 
-```Haskell
+```plaintext
 GEOMETRY ST_GeometryFromText(VARCHAR wkt)
 ```
 

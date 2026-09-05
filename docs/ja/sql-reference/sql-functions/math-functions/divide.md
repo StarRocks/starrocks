@@ -9,7 +9,7 @@ x を y で割った商を返します。y が 0 の場合は null を返しま�
 
 ## Syntax
 
-```Haskell
+```plaintext
 divide(x, y)
 ```
 

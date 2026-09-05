@@ -9,7 +9,7 @@ description: "2つの入力ビットマップの交差を計算し、新しい�
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP BITMAP_AND(BITMAP lhs, BITMAP rhs)
 ```
 

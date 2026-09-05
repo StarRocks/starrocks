@@ -11,7 +11,7 @@ description: "使用指定分隔符将多个字符串连接成一个新字符串
 
 ### 语法
 
-```Haskell
+```plaintext
 VARCHAR concat_ws(VARCHAR sep, VARCHAR str,...)
 ```
 

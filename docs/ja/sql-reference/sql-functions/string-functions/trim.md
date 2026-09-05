@@ -9,7 +9,7 @@ description: "文字列の先頭と末尾から連続するスペースまたは
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR trim(VARCHAR str[, VARCHAR characters])
 ```
 

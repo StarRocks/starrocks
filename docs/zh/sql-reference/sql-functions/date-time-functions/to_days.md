@@ -13,7 +13,7 @@ description: "返回指定日期距离0000-01-01的天数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT TO_DAYS(DATETIME date)
 ```
 

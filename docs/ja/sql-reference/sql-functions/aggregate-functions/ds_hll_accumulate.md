@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "値を HyperLogLog スケッチに蓄積し、シリアライズされたスケッチを VARBINARY として返します。DataSketches HLL 関数ファミリーの一部です。"
+---
+
 # ds_hll_accumulate
 
 値を HyperLogLog スケッチに蓄積し、シリアライズされたスケッチを VARBINARY として返します。この関数は DataSketches HLL 近似重複除去カウント関数ファミリーの一部です。
@@ -8,7 +13,7 @@ Apache DataSketches に基づいており、近似重複除去カウントに高
 
 ## 構文
 
-```Haskell
+```plaintext
 sketch ds_hll_accumulate(expr)
 sketch ds_hll_accumulate(expr, log_k)
 sketch ds_hll_accumulate(expr, log_k, tgt_type)

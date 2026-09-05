@@ -15,7 +15,7 @@ CRC32 是一个用于错误检测的函数，使用 CRC32 算法来检测源数�
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT crc32(VARCHAR str)
 ```
 

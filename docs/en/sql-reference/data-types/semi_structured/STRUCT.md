@@ -17,7 +17,7 @@ From v2.5 onwards, StarRocks supports querying complex data types MAP and STRUCT
 
 ## Syntax
 
-```Haskell
+```plaintext
 STRUCT<name, type>
 ```
 

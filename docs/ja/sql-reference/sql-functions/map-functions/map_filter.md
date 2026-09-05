@@ -11,7 +11,7 @@ description: "Boolean配列またはLambda式を使用して、マップ内の�
 
 ## 構文
 
-```Haskell
+```plaintext
 MAP map_filter(any_map, array<boolean>)
 MAP map_filter(lambda_func, any_map)
 ```

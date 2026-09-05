@@ -11,7 +11,7 @@ description: "计算一组 Bitmap 值的交集并返回。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_INTERSECT(value)
 ```
 

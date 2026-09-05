@@ -9,7 +9,7 @@ description: "2つの文字列を比較し、等しい場合は0、最初が小�
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT strcmp(VARCHAR lhs, VARCHAR rhs)
 ```
 

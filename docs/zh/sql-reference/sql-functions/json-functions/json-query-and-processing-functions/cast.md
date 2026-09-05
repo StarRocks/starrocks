@@ -17,13 +17,13 @@ description: "在 JSON 类型和 SQL 类型之间转换值。"
 
 - 从 JSON 转换为 SQL
 
-```Haskell
+```plaintext
 cast(json_expr AS sql_data_type)
 ```
 
 - 从 SQL 转换为 JSON
 
-```Haskell
+```plaintext
 cast(sql_expr AS JSON)
 ```
 

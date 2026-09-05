@@ -9,7 +9,7 @@ description: "入力文字列の128ビットのxxhash3ハッシュ値を返し�
 
 ## Syntax
 
-```Haskell
+```plaintext
 LARGEINT XX_HASH3_128(VARCHAR input, ...)
 ```
 

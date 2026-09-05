@@ -11,7 +11,7 @@ description: "将数组中的所有元素连接生成一个字符串。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ARRAY_JOIN(array, sep[, null_replace_str])
 ```
 

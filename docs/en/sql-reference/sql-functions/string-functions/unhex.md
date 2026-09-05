@@ -13,7 +13,7 @@ It interprets each pair of hexadecimal digits in the input string as a number an
 
 ## Syntax
 
-```Haskell
+```plaintext
 UNHEX(str);
 ```
 

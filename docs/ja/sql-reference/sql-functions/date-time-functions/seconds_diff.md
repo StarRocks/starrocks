@@ -9,7 +9,7 @@ description: "2つの日付式の秒単位の差を返します（expr1 − expr
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT seconds_diff(DATETIME expr1,DATETIME expr2);
 ```
 

@@ -9,7 +9,7 @@ description: "複数の文字列を1つの文字列に結合します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR concat(VARCHAR,...)
 ```
 

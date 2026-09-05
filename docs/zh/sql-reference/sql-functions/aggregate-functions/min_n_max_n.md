@@ -11,7 +11,7 @@ description: "MIN_N 和 MAX_N 返回表达式中最小或最大的 n 个值，�
 
 ## 语法
 
-```Haskell
+```plaintext
 MIN_N(<expr>, <n>)
 MAX_N(<expr>, <n>)
 ```

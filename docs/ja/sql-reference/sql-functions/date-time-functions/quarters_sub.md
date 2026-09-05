@@ -9,7 +9,7 @@ description: "指定された四半期数を日付から減算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME quarters_sub(DATETIME expr1, INT expr2);
 ```
 

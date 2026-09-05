@@ -13,7 +13,7 @@ description: "将字符串分割成键值对，使用两个分隔符并返回Map
 
 ## 语法
 
-```Haskell
+```plaintext
 MAP<VARCHAR, VARCHAR> str_to_map(VARCHAR content[, VARCHAR delimiter[, VARCHAR map_delimiter]])
 ```
 

@@ -29,7 +29,7 @@ This function may return different results for different time zones. For more in
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME NOW()
 DATETIME NOW(INT p)
 ```

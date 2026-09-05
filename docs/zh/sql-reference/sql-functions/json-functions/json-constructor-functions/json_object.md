@@ -15,7 +15,7 @@ description: "将一个或多个键值对转换为由这些键值对组成的JSO
 
 ## 语法
 
-```Haskell
+```plaintext
 json_object(key, value, ...)
 ```
 

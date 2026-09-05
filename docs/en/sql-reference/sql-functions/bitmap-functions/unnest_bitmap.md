@@ -17,7 +17,7 @@ This function is supported from v3.1.
 
 ## Syntax
 
-```Haskell
+```plaintext
 unnest_bitmap(bitmap)
 ```
 

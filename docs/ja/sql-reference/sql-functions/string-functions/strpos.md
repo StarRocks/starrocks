@@ -9,7 +9,7 @@ description: "文字列内のN番目のサブストリングの位置を返し�
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT strpos(VARCHAR str, VARCHAR substr [, INT instance])
 ```
 

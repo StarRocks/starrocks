@@ -9,7 +9,7 @@ description: "角度をラジアンに変換します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 REDIANS(x);
 ```
 

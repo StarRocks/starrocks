@@ -11,7 +11,7 @@ description: "判断几何图形 shape1 是否完全包含几何图形 shape2。
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_Contains(shape1, shape2)
 ```
 

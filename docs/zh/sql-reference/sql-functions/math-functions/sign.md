@@ -13,7 +13,7 @@ description: "返回参数x的符号（负数-1、零0、正数1）。"
 
 ## 语法
 
-```Haskell
+```plaintext
 SIGN(x);
 ```
 

@@ -13,7 +13,7 @@ This function is supported from v3.2.4.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT milliseconds_diff(DATETIME expr1, DATETIME expr2);
 ```
 

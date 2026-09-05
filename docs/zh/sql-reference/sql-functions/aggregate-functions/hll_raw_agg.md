@@ -11,7 +11,7 @@ description: "hll_raw_agg 聚合 HLL 类型字段，返回 HLL 类型用于近�
 
 ## 语法
 
-```Haskell
+```plaintext
 hll_raw_agg(hll)
 ```
 

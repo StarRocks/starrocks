@@ -17,13 +17,13 @@ Accelerate your queries with [generated columns](../../../sql-statements/generat
 
 - Conversion from JSON to SQL
 
-```Haskell
+```plaintext
 cast(json_expr AS sql_data_type)
 ```
 
 - Conversion from SQL to JSON
 
-```Haskell
+```plaintext
 cast(sql_expr AS JSON)
 ```
 

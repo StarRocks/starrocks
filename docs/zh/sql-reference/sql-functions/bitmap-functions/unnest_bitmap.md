@@ -17,7 +17,7 @@ unnest_bitmap 是一种表函数 (table function)，用于将一个 bitmap 展�
 
 ## 语法
 
-```Haskell
+```plaintext
 unnest_bitmap(bitmap)
 ```
 

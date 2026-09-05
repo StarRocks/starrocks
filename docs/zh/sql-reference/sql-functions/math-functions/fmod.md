@@ -13,7 +13,7 @@ description: "返回两个数相除后的浮点余数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 fmod(dividend,devisor);
 ```
 

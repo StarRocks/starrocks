@@ -15,7 +15,7 @@ Accelerate your queries with [generated columns](../../../sql-statements/generat
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_exists(json_object_expr, json_path)
 ```
 

@@ -9,7 +9,7 @@ description: "指定された四半期数を日付に加え、四半期単位で
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME quarters_add(DATETIME expr1, INT expr2);
 ```
 

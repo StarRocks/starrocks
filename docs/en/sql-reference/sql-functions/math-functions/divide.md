@@ -11,7 +11,7 @@ Return the quotient of x divide y. If y is 0, return null.
 
 ## Syntax
 
-```Haskell
+```plaintext
 divide(x, y)
 ```
 

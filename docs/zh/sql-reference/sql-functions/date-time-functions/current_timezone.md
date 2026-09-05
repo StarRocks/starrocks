@@ -11,7 +11,7 @@ description: "获取当前时区，以 VARCHAR 类型返回。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR CURRENT_TIMEZONE()
 ```
 

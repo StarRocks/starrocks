@@ -11,7 +11,7 @@ description: "日付または日時式の日の部分を抽出し、1から31の
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT DAY(DATETIME|DATE date)
 ```
 

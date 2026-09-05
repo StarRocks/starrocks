@@ -13,7 +13,7 @@ md5()と比較して、md5sum()はより多くのパラメータを受け入れ�
 
 ## 構文
 
-```Haskell
+```plaintext
 md5sum(expr,...);
 ```
 

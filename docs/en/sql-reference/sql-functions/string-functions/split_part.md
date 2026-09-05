@@ -11,7 +11,7 @@ This function splits a given string according to the separators and returns the 
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR split_part(VARCHAR content, VARCHAR delimiter, INT field)
 ```
 

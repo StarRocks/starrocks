@@ -19,7 +19,7 @@ DATE または DATETIME 値を UNIX タイムスタンプに変換します。
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT UNIX_TIMESTAMP()
 BIGINT UNIX_TIMESTAMP(DATETIME date)
 BIGINT UNIX_TIMESTAMP(DATETIME date, STRING fmt)

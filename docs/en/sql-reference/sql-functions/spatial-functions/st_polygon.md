@@ -11,7 +11,7 @@ Converts a WKT (Well Known Text) to a corresponding polygon memory form.
 
 ## Syntax
 
-```Haskell
+```plaintext
 GEOMETRY ST_Polygon(VARCHAR wkt)
 ```
 

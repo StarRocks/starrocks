@@ -19,7 +19,7 @@ This function is supported from v3.0.6 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 any_match(lambda_function, arr1, arr2...)
 ```
 

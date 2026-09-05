@@ -13,7 +13,7 @@ description: "指定されたX座標とY座標に対応するPointを返しま�
 
 ## 構文
 
-```Haskell
+```plaintext
 POINT ST_Point(DOUBLE x, DOUBLE y)
 ```
 

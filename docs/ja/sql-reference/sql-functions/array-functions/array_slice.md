@@ -9,7 +9,7 @@ description: "ARRAY_SLICE関数は配列のスライスを返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 array_slice(input, offset, length)
 ```
 

@@ -11,7 +11,7 @@ description: "返回数值的绝对值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ABS(x);
 ```
 

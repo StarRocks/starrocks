@@ -13,7 +13,7 @@ description: "指定されたフォーマットに従って文字列をDATE値�
 
 ## 構文
 
-```Haskell
+```plaintext
 DATE str2date(VARCHAR str, VARCHAR format);
 ```
 

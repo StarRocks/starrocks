@@ -11,7 +11,7 @@ description: "日付の年の部分を1000から9999の範囲の値で返しま�
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT YEAR(DATETIME date)
 ```
 

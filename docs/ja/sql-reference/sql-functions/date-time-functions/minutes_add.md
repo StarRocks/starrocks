@@ -9,7 +9,7 @@ description: "指定された分を日付に加え、分単位で正確に計算
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME minutes_add(DATETIME|DATE date, INT minutes);
 ```
 

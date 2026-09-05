@@ -11,7 +11,7 @@ description: "从日期中减去指定的季度数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME quarters_sub(DATETIME expr1, INT expr2);
 ```
 

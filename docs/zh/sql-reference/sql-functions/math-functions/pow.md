@@ -11,7 +11,7 @@ description: "返回x的y次方。"
 
 ## 语法
 
-```Haskell
+```plaintext
 POW(x,y);
 POWER(x,y);
 ```

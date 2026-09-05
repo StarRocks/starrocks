@@ -11,7 +11,7 @@ VARIANT オブジェクト内でパス式によって特定できる要素の値
 
 ## 構文
 
-```Haskell
+```plaintext
 variant_query(variant_expr, path)
 ```
 

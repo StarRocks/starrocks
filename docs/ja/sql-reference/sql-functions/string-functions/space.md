@@ -9,7 +9,7 @@ description: "指定された数のスペースを含む文字列を返します
 
 ## Syntax
 
-```Haskell
+```plaintext
 space(x);
 ```
 

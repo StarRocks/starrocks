@@ -11,7 +11,7 @@ description: "avg 返回选中字段的平均值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 AVG([DISTINCT] expr)
 ```
 

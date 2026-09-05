@@ -11,7 +11,7 @@ description: "start_rangeとend_range（排他的）の範囲内でビットマ�
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP bitmap_subset_in_range(BITMAP src, BIGINT start_range, BIGINT end_range)
 ```
 

@@ -9,7 +9,7 @@ description: "2つの日付式の週差を返します（expr1 − expr2）。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT weeks_diff(DATETIME expr1,DATETIME expr2);
 ```
 

@@ -13,7 +13,7 @@ description: "将特定格式的 Varbinary 字符串转换为 Bitmap。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP bitmap_from_binary(VARBINARY str)
 ```
 

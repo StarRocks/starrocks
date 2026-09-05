@@ -11,7 +11,7 @@ description: "返回存在于第一个 Bitmap 中但不存在于第二个 Bitmap
 
 ## 语法
 
-```Haskell
+```plaintext
 bitmap_andnot(lhs, rhs)
 ```
 

@@ -11,7 +11,7 @@ This function converts a string to lower-case. It is analogous to the function l
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR lcase(VARCHAR str)
 ```
 

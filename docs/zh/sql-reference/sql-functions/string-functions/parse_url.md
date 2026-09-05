@@ -11,7 +11,7 @@ description: "从URL中提取指定部分，如协议、主机、路径或查询
 
 ## 语法
 
-```Haskell
+```plaintext
 parse_url(expr1,expr2);
 ```
 

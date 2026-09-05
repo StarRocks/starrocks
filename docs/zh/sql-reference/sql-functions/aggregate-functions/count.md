@@ -24,7 +24,7 @@ COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参�
 
 ## 语法
 
-```Haskell
+```plaintext
 COUNT(expr)
 COUNT(DISTINCT expr [,expr,...])
 ```

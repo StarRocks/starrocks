@@ -9,7 +9,7 @@ description: "地球上の2点間の球面距離をメートル単位で計算�
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE ST_Distance_Sphere(DOUBLE x_lng, DOUBLE x_lat, DOUBLE y_lng, DOUBLE x_lat)
 ```
 

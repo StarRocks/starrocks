@@ -11,7 +11,7 @@ description: "選択されたフィールドの平均値を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 AVG([DISTINCT] expr)
 ```
 

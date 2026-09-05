@@ -13,7 +13,7 @@ This function is supported from v3.1.4 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN is_role_in_session(VARCHAR role_name);
 ```
 

@@ -19,7 +19,7 @@ This function is supported from v3.3.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 ```
 

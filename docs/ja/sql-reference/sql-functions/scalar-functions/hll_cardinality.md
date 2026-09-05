@@ -9,7 +9,7 @@ description: "単一のHLL型の値の基数を計算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 HLL_CARDINALITY(hll)
 ```
 

@@ -11,7 +11,7 @@ description: "从指定的日期时间中减少指定的小时数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME hours_sub(DATETIME|DATE date, INT hours);
 ```
 

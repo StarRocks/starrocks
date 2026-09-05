@@ -13,7 +13,7 @@ Hour x 3600 + Minute x 60 + Second
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT time_to_sec(TIME time)
 ```
 

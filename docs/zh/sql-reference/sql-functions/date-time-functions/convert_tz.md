@@ -13,7 +13,7 @@ description: "将给定的时间从一个时区转化为另一个时区。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 

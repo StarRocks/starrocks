@@ -9,7 +9,7 @@ description: "bool_or 如果任意行的表达式结果为 true 则返回 true�
 
 ## 语法
 
-```Haskell
+```plaintext
 bool_or(expr)
 ```
 

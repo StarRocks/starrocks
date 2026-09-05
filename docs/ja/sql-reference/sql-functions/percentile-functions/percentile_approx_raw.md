@@ -11,7 +11,7 @@ description: "指定されたパーセンタイルに対応する値を返しま
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_APPROX_RAW(x, y);
 ```
 

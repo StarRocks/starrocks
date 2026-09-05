@@ -9,7 +9,7 @@ description: "RETENTION関数は指定された期間内のユーザーリテン
 
 ## Syntax
 
-```Haskell
+```plaintext
 ARRAY retention(ARRAY input)
 ```
 

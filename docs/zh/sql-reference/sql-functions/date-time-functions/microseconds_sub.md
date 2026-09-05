@@ -11,7 +11,7 @@ description: "从日期时间中减去指定的微秒数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME microseconds_sub(DATETIME expr1,INT expr2);
 ```
 

@@ -11,7 +11,7 @@ description: "从日期或日期时间中减去指定的秒数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME seconds_sub(DATETIME|DATE date, INT seconds);
 ```
 

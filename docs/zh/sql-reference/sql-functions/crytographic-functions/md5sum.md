@@ -13,7 +13,7 @@ md5sum 算法一般用于检查文件的完整性，防止文件被篡改。
 
 ## 语法
 
-```Haskell
+```plaintext
 md5sum(expr,...);
 ```
 

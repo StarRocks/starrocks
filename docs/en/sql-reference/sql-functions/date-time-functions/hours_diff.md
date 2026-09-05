@@ -11,7 +11,7 @@ Returns the hour difference between two date expressions (`expr1` − `expr2`), 
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT hours_diff(DATETIME expr1, DATETIME expr2);
 ```
 

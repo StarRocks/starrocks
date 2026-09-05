@@ -17,7 +17,7 @@ description: "提取字符串中匹配正则表达式的所有子字符串至指
 
 ## 语法
 
-```Haskell
+```plaintext
 ARRAY<VARCHAR> regexp_extract_all(VARCHAR str, VARCHAR pattern, BIGINT pos)
 ```
 

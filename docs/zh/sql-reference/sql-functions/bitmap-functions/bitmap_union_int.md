@@ -11,7 +11,7 @@ description: "计算 TINYINT、SMALLINT 和 INT 类型列中不同值的个数�
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_UNION_INT(expr)
 ```
 

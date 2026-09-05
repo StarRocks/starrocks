@@ -11,7 +11,7 @@ description: "返回输入字符串的32位murmur3哈希值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 MURMUR_HASH3_32(input, ...)
 ```
 

@@ -11,7 +11,7 @@ description: "将字符串进行 Base64 编码。"
 
 ## 语法
 
-```Haskell
+```plaintext
 to_base64(str);
 ```
 

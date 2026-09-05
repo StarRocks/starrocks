@@ -17,7 +17,7 @@ This function is supported from v3.1.10.
 
 ## Syntax
 
-```Haskell
+```plaintext
 ARRAY<VARCHAR> regexp_extract_all(VARCHAR str, VARCHAR pattern, BIGINT pos)
 ```
 

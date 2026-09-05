@@ -9,7 +9,7 @@ description: "array_repeat returns an array containing a given element repeated 
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_repeat(element, count)
 ```
 

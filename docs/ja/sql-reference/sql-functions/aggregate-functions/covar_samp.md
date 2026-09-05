@@ -9,7 +9,7 @@ description: "2 つの式の標本共分散を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 COVAR_SAMP(expr1, expr2)
 ```
 

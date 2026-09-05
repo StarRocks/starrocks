@@ -11,7 +11,7 @@ description: "引数の双曲線正接を計算します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 DOUBLE tanh(DOUBLE arg)
 ```
 

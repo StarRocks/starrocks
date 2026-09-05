@@ -11,7 +11,7 @@ Calculates the user retention rate within a specified period of time. This funct
 
 ## Syntax
 
-```Haskell
+```plaintext
 ARRAY retention(ARRAY input)
 ```
 

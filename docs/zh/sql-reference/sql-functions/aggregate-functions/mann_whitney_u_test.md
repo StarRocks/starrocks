@@ -12,7 +12,7 @@ description: "mann_whitney_u_test 对来自两个总体的样本执行 Mann-Whit
 
 ## 语法
 
-```Haskell
+```plaintext
 MANN_WHITNEY_U_TEST (sample_data, sample_treatment[, alternative[, continuity_correction]])
 ```
 

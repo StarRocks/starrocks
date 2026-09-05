@@ -15,7 +15,7 @@ bit_shift_right() and bit_shift_right_logical() return the same result for a pos
 
 ## Syntax
 
-```Haskell
+```plaintext
 bit_shift_right_logical(value, shift)
 ```
 

@@ -11,7 +11,7 @@ Extracts the date part of a date or datetime expression.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE date(DATETIME|DATE expr)
 ```
 

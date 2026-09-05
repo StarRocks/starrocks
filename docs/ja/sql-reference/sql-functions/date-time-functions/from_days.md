@@ -9,7 +9,7 @@ description: "0000-01-01からの日付を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE FROM_DAYS(INT N)
 ```
 

@@ -11,7 +11,7 @@ description: "any_value 在 GROUP BY 聚合中从每个分组中随机选择一�
 
 ## 语法
 
-```Haskell
+```plaintext
 ANY_VALUE(expr)
 ```
 

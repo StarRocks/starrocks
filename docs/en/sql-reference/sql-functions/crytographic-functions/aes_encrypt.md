@@ -11,7 +11,7 @@ Uses the specified Advanced Encryption Standard (AES) algorithm and an encryptio
 
 ## Syntax
 
-```Haskell
+```plaintext
 aes_encrypt(str, key_str[, init_vector][, encryption_mode][, aad_str]);
 ```
 

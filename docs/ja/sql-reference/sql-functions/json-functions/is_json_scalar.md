@@ -12,7 +12,7 @@ JSON値がスカラ（オブジェクトでも配列でもない）であるか�
 
 ## 構文
 
-```Haskell
+```plaintext
 BOOLEAN is_json_scalar(JSON)
 ```
 

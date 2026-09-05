@@ -11,7 +11,7 @@ description: "corr 返回两个表达式的皮尔逊相关系数，支持作为�
 
 ## 语法
 
-```Haskell
+```plaintext
 CORR(expr1, expr2)
 ```
 

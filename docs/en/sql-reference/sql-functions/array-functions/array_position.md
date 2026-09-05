@@ -11,7 +11,7 @@ Obtains the position of an element in an array.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_position(any_array, any_element)
 ```
 

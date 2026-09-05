@@ -9,7 +9,7 @@ description: "入力パラメータの中で最初に NULL でない式を返し
 
 ## Syntax
 
-```Haskell
+```plaintext
 coalesce(expr1,...);
 ```
 

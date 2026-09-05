@@ -13,7 +13,7 @@ description: "将十六进制编码的字符串解码为原始字符串值，是
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR hex_decode_string(VARCHAR str);
 ```
 

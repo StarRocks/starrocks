@@ -11,7 +11,7 @@ description: "将Joda格式字符串转换为指定Joda DateTime格式的DATETIM
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME str_to_jodatime(VARCHAR str, VARCHAR format)
 ```
 

@@ -11,7 +11,7 @@ Parses a URL and extracts a component from this URL.
 
 ## Syntax
 
-```Haskell
+```plaintext
 parse_url(expr1,expr2);
 ```
 

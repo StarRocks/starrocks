@@ -11,7 +11,7 @@ description: "将字符串重复指定次数输出。"
 
 ## 语法
 
-```Haskell
+```plaintext
 repeat(str, count)
 ```
 

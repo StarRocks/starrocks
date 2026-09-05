@@ -9,7 +9,7 @@ description: "PERCENTILE_CONT関数は線形補間によるパーセンタイル
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_CONT (expr, percentile) 
 ```
 

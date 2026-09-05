@@ -13,7 +13,7 @@ If no catalog is selected, the StarRocks internal catalog `default_catalog` is r
 
 ## Syntax
 
-```Haskell
+```plaintext
 catalog()
 ```
 

@@ -17,7 +17,7 @@ description: "ALL_MATCH関数は配列のすべての要素が指定された述
 
 ## 構文
 
-```Haskell
+```plaintext
 all_match(lambda_function, arr1, arr2...)
 ```
 

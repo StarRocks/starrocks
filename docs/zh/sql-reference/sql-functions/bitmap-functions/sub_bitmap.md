@@ -13,7 +13,7 @@ description: "从 BITMAP 类型的值中按指定偏移位置截取指定个数�
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 ```
 

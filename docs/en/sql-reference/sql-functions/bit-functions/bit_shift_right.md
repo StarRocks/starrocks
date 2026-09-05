@@ -13,7 +13,7 @@ This function performs an **arithmetic right shift**, during which the bit lengt
 
 ## Syntax
 
-```Haskell
+```plaintext
 bit_shift_right(value, shift)
 ```
 

@@ -15,7 +15,7 @@ array_map() 别名为 transform()。
 
 ## 语法
 
-```Haskell
+```plaintext
 array_map(lambda_function, arr1, arr2...)
 array_map(arr1, arr2..., lambda_function)
 ```

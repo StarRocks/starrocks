@@ -16,7 +16,7 @@ description: "计算两个日期表达式的天数差（expr1 − expr2），精
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT days_diff(DATETIME expr1,DATETIME expr2);
 ```
 

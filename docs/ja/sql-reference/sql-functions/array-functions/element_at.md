@@ -13,7 +13,7 @@ description: "指定された位置（インデックス）から配列の要素
 
 ## 構文
 
-```Haskell
+```plaintext
 element_at(any_array, position)
 ```
 

@@ -11,7 +11,7 @@ description: "返回原始日期减去指定周数后的日期。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME weeks_sub(DATETIME|DATE expr1, INT expr2)
 ```
 

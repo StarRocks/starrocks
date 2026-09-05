@@ -11,7 +11,7 @@ description: "ARRAY_REPEAT関数は指定された要素を指定された回数
 
 ## 構文
 
-```Haskell
+```plaintext
 array_repeat(element, count)
 ```
 

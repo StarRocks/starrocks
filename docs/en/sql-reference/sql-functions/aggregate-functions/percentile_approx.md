@@ -15,7 +15,7 @@ This function uses fixed size memory, so less memory can be used for columns wit
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE PERCENTILE_APPROX(expr, DOUBLE|ARRAY<DOUBLE> p[, DOUBLE compression])
 ```
 

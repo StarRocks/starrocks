@@ -11,7 +11,7 @@ Converts all strings in an argument to lower-case.
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT lower(VARCHAR str)
 ```
 

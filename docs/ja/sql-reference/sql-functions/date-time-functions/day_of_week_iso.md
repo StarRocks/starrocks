@@ -9,7 +9,7 @@ description: "指定された日付のISO標準の曜日を1から7の範囲の�
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT DAY_OF_WEEK_ISO(DATETIME date)
 ```
 

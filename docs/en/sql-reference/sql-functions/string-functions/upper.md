@@ -11,7 +11,7 @@ Converts a string to upper-case.
 
 ## Syntax
 
-```haskell
+```plaintext
 upper(str)
 ```
 

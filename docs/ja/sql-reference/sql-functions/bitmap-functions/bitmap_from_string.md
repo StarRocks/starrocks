@@ -11,7 +11,7 @@ description: "文字列をBITMAPに変換します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP BITMAP_FROM_STRING(VARCHAR input)
 ```
 

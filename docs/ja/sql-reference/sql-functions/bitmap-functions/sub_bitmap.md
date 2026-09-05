@@ -13,7 +13,7 @@ BITMAP 値 `src` から、指定された位置 `offset` から始まる `len` �
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 ```
 

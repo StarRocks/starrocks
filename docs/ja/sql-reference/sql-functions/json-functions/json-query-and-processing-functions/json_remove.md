@@ -13,7 +13,7 @@ description: "指定されたJSONパスからデータを削除し、修正さ�
 
 ## 構文
 
-```Haskell
+```plaintext
 json_remove(json_object_expr, json_path[, json_path] ...)
 ```
 

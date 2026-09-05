@@ -13,7 +13,7 @@ bit_shift_right() と bit_shift_right_logical() は、正の値に対して同�
 
 ## 構文
 
-```Haskell
+```plaintext
 bit_shift_right_logical(value, shift)
 ```
 

@@ -13,7 +13,7 @@ description: "指定されたキーに対応するマップの値を返します
 
 ## 構文
 
-```Haskell
+```plaintext
 element_at(any_map, any_key)
 ```
 

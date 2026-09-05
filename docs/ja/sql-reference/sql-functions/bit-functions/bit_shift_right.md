@@ -11,7 +11,7 @@ description: "数値式のバイナリ表現を指定されたビット数だけ
 
 ## Syntax
 
-```Haskell
+```plaintext
 bit_shift_right(value, shift)
 ```
 

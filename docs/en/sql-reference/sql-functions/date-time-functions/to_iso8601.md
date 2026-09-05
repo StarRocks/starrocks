@@ -11,7 +11,7 @@ Converts the specified date into a string in ISO 8601 format.
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR TO_ISO8601(DATETIME | DATE date)
 ```
 

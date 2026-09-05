@@ -1,0 +1,7 @@
+extends: existence
+message: "Do not use a 'Haskell' code fence. Use '```plaintext' for a function signature, a syntax synopsis, or pasted query output; use '```sql' only for SQL that actually runs."
+level: error
+scope: raw
+nonword: true
+tokens:
+  - '(?im)^[ \t]{0,3}```+[ \t]*haskell[ \t]*$'

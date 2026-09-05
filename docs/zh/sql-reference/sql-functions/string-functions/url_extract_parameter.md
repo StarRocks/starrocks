@@ -13,7 +13,7 @@ description: "从 URL 的 query 部分获取指定参数名称的取值。"
 
 ## 语法
 
-```haskell
+```plaintext
 VARCHAR url_extract_parameter(VARACHR str, VARCHAR name)
 ```
 

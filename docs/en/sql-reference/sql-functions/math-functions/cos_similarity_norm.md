@@ -17,7 +17,7 @@ The similarity is between -1 and 1. Smaller angles between vectors indicate grea
 
 ## Syntax
 
-```Haskell
+```plaintext
 cosine_similarity_norm(a, b)
 ```
 

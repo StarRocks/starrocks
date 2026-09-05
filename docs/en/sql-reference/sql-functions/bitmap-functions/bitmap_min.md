@@ -11,7 +11,7 @@ Obtains the minimum value of a bitmap. If the bitmap is `NULL`, this function re
 
 ## Syntax
 
-```Haskell
+```plaintext
 bitmap_min(bitmap)
 ```
 

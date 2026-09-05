@@ -11,7 +11,7 @@ description: "2 つの Bitmap 値の共通部分のサイズを求める関数�
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT INTERSECT_COUNT(bitmap_column, column_to_filter, filter_values)
 ```
 

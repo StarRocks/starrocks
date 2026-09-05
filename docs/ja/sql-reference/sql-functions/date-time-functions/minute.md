@@ -11,7 +11,7 @@ description: "指定された日付の分を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT MINUTE(DATETIME|DATE date)
 ```
 

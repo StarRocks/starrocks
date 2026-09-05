@@ -9,7 +9,7 @@ description: "有効なPoint型の場合、対応するY座標の値を返しま
 
 ## 構文
 
-```Haskell
+```plaintext
 DOUBLE ST_Y(POINT point)
 ```
 

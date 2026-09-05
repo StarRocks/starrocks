@@ -13,7 +13,7 @@ description: "根据指定的二进制格式将 VARCHAR 字符串转换为二进
 
 ## 语法
 
-```Haskell
+```plaintext
 to_binary(str[, binary_type])
 ```
 

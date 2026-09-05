@@ -9,7 +9,7 @@ description: "按升序对数组元素进行排序，v4.0开始支持Lambda比�
 
 ## 语法
 
-```Haskell
+```plaintext
 -- 不使用 Lambda Comparator
 array_sort(array)
 

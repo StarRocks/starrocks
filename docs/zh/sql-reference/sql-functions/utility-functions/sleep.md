@@ -11,7 +11,7 @@ description: "将当前正在执行的线程休眠指定秒数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN sleep(INT x);
 ```
 

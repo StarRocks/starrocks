@@ -15,7 +15,7 @@ This function is inverse to [date_format](./date_format.md).
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME STR_TO_DATE(VARCHAR str, VARCHAR format)
 ```
 

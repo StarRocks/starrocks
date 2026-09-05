@@ -17,7 +17,7 @@ description: "ANY_MATCH関数は配列のいずれかの要素が指定された
 
 ## Syntax
 
-```Haskell
+```plaintext
 any_match(lambda_function, arr1, arr2...)
 ```
 

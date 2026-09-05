@@ -11,7 +11,7 @@ description: "現在の日付を取得し、DATE 型の値を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME CURRENT_TIMESTAMP()
 DATETIME CURRENT_TIMESTAMP(INT p)
 ```

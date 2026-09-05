@@ -9,7 +9,7 @@ description: "文字列のバイト長を返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 INT length(VARCHAR str)
 ```
 

@@ -13,7 +13,7 @@ This function is supported from v3.0.
 
 ## Syntax
 
-```Haskell
+```plaintext
 APPROX_TOP_K(<expr> [ , <k> [ , <counter_num> ] ] )
 ```
 

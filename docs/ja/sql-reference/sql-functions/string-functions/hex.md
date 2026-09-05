@@ -11,7 +11,7 @@ description: "数値または文字列を16進数表現に変換します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 HEX(x);
 ```
 

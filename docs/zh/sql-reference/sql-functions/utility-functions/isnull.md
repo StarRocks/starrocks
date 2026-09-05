@@ -11,7 +11,7 @@ description: "判断输入值是否为 NULL；是 NULL 返回 1，否则返回 0
 
 ## 语法
 
-```Haskell
+```plaintext
 isnull(v)
 ```
 

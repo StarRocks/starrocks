@@ -11,7 +11,7 @@ Delays the execution of an operation for a specified period of time (in seconds)
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN sleep(INT x);
 ```
 

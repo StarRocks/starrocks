@@ -11,7 +11,7 @@ description: "计算以2为底的数值对数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 LOG2(x);
 ```
 

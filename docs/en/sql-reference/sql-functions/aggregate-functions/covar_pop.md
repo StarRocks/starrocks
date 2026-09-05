@@ -11,7 +11,7 @@ Returns the population covariance of two expressions. This function is supported
 
 ## Syntax
 
-```Haskell
+```plaintext
 COVAR_POP(expr1, expr2)
 ```
 

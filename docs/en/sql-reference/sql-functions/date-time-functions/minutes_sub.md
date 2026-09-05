@@ -11,7 +11,7 @@ Subtracts specified minutes from the date, accurate to the minute.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME minutes_sub(DATETIME|DATE date, INT minutes);
 ```
 

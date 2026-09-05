@@ -13,7 +13,7 @@ description: "将TIME时间值转换为秒数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT time_to_sec(TIME time)
 ```
 

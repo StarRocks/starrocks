@@ -9,7 +9,7 @@ IPv4 アドレスを A.B.C.D 形式で含む文字列を受け取り、対応す
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT inet_aton(VARCHAR ipv4)
 ```
 
