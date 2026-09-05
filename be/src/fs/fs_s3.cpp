@@ -496,8 +496,7 @@ static void apply_sse_c_from_options(io::S3InputStream* input_stream, const FSOp
         return;
     }
     auto md5_itr = properties.find(AWS_S3_SSE_KEY_MD5);
-    input_stream->set_sse_customer_key(key_itr->second,
-                                       md5_itr != properties.end() ? md5_itr->second : std::string());
+    input_stream->set_sse_customer_key(key_itr->second, md5_itr != properties.end() ? md5_itr->second : std::string());
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
