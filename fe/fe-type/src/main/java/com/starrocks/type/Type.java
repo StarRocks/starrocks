@@ -208,13 +208,13 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isValidMapKeyType() {
-        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType();
+        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isGeometryType();
     }
 
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isArrayType() && !isVariantType();
+                !isMapType() && !isArrayType() && !isVariantType() && !isGeometryType();
     }
 
     public boolean canJoinOn() {
@@ -234,7 +234,7 @@ public abstract class Type implements Cloneable {
         }
 
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isVariantType();
+                !isVariantType() && !isGeometryType();
     }
 
     public boolean canGroupBy() {
@@ -253,7 +253,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isVariantType();
+                !isVariantType() && !isGeometryType();
     }
 
     public boolean canOrderBy() {
@@ -272,7 +272,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isMapType() && !isVariantType();
+                !isMapType() && !isVariantType() && !isGeometryType();
     }
 
     public boolean canPartitionBy() {
@@ -281,7 +281,7 @@ public abstract class Type implements Cloneable {
             return ((ArrayType) this).getItemType().canPartitionBy();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isVariantType();
+                !isMapType() && !isVariantType() && !isGeometryType();
     }
 
     public boolean canDistinct() {
@@ -296,13 +296,13 @@ public abstract class Type implements Cloneable {
             return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isVariantType();
+                !isMapType() && !isVariantType() && !isGeometryType();
     }
 
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
         return !isOnlyMetricType() && !isJsonType() && !isStructType() && !isFunctionType()
-                && !isBinaryType() && !isVariantType();
+                && !isBinaryType() && !isVariantType() && !isGeometryType();
     }
 
     // Returns true if this type is VARIANT or transitively contains a VARIANT inside an
@@ -325,6 +325,23 @@ public abstract class Type implements Cloneable {
         return false;
     }
 
+    public boolean containsGeometry() {
+        if (isGeometryType()) {
+            return true;
+        }
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().containsGeometry();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().containsGeometry() ||
+                    ((MapType) this).getValueType().containsGeometry();
+        }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().anyMatch(sf -> sf.getType().containsGeometry());
+        }
+        return false;
+    }
+
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
         // Allow VARBINARY as distribution key.
@@ -333,12 +350,12 @@ public abstract class Type implements Cloneable {
         // double, not a storable/encodable column type) and would crash the BE short-key encoder, so
         // exclude it here alongside the other non-encodable types.
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType() && !isVariantType() && !isTime();
+                && !isFunctionType() && !isVariantType() && !isTime() && !isGeometryType();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {
         return !(isNull() || isChar() || isTime() || isComplexType()
-                || isPseudoType() || isFunctionType() || isBinaryType() || isVariantType());
+                || isPseudoType() || isFunctionType() || isBinaryType() || isVariantType() || isGeometryType());
     }
 
     /**
@@ -350,7 +367,7 @@ public abstract class Type implements Cloneable {
 
     public boolean supportBloomFilter() {
         return isScalarType() && !isFloatingPointType() && !isTinyint() && !isBoolean() && !isDecimalV3() &&
-                !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isBinaryType();
+                !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isBinaryType() && !isGeometryType();
     }
 
     public boolean supportZoneMap() {
@@ -383,6 +400,10 @@ public abstract class Type implements Cloneable {
 
     public boolean isVariantType() {
         return isScalarType(PrimitiveType.VARIANT);
+    }
+
+    public boolean isGeometryType() {
+        return isScalarType(PrimitiveType.GEOMETRY);
     }
 
     public boolean isPercentile() {

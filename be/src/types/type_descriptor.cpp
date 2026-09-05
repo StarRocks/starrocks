@@ -217,6 +217,8 @@ std::string TypeDescriptor::debug_string() const {
         return strings::Substitute("VARCHAR($0)", len);
     case TYPE_VARBINARY:
         return strings::Substitute("VARBINARY($0)", len);
+    case TYPE_GEOMETRY:
+        return "GEOMETRY";
     case TYPE_DECIMAL:
         return strings::Substitute("DECIMAL($0, $1)", precision, scale);
     case TYPE_DECIMALV2:
@@ -255,7 +257,7 @@ bool TypeDescriptor::support_join() const {
         return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT;
+           type != TYPE_VARIANT && type != TYPE_GEOMETRY;
 }
 
 bool TypeDescriptor::support_orderby() const {
@@ -268,7 +270,7 @@ bool TypeDescriptor::support_orderby() const {
         return all_support;
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_VARIANT;
+           type != TYPE_MAP && type != TYPE_VARIANT && type != TYPE_GEOMETRY;
 }
 
 bool TypeDescriptor::support_groupby() const {
@@ -277,7 +279,7 @@ bool TypeDescriptor::support_groupby() const {
                            [](const TypeDescriptor& t) { return t.support_groupby(); });
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT;
+           type != TYPE_VARIANT && type != TYPE_GEOMETRY;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
@@ -313,6 +315,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_JSON:
     case TYPE_VARIANT:
     case TYPE_VARBINARY:
+    case TYPE_GEOMETRY:
         return sizeof(Slice);
 
     case TYPE_NULL:
@@ -434,6 +437,9 @@ TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const 
     } else if (type1.type == TYPE_VARBINARY && type2.type == TYPE_VARBINARY) {
         auto len = type1.len > type2.len ? type1.len : type2.len;
         return TypeDescriptor::create_varbinary_type(len);
+    } else if (type1.type == TYPE_GEOMETRY && type2.type == TYPE_GEOMETRY) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_geometry_type(len);
     }
     // treat other conflicted types as varchar.
     return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);

@@ -65,6 +65,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.FunctionType;
+import com.starrocks.type.GeometryType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
@@ -443,6 +444,7 @@ public class FunctionSet {
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
+    public static final String ARRAY_TOP_N = "array_top_n";
     public static final String ANY_MATCH = "any_match";
     public static final String ALL_MATCH = "all_match";
 
@@ -1320,6 +1322,11 @@ public class FunctionSet {
         // count(*)
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), IntegerType.BIGINT, IntegerType.BIGINT, false, true, true));
+
+        // GEOMETRY supports counting non-null values, but not ordering-based aggregates such as MIN/MAX.
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
+                Lists.newArrayList(GeometryType.GEOMETRY), IntegerType.BIGINT, IntegerType.BIGINT,
+                false, true, true));
 
         // EXCHANGE_BYTES/_SPEED with various arguments
         addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,

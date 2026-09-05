@@ -83,7 +83,7 @@ struct MysqlColumnSerializer {
         } else if constexpr (lt_is_string<ltype>) {
             auto slice = typed_viewer.value(idx);
             buf->push_string(slice.data, slice.size);
-        } else if constexpr (ltype == TYPE_VARBINARY) {
+        } else if constexpr (ltype == TYPE_VARBINARY || ltype == TYPE_GEOMETRY) {
             auto slice = typed_viewer.value(idx);
             buf->push_binary(slice.data, slice.size);
         } else {

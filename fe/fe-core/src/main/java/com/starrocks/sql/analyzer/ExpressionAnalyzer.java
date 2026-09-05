@@ -140,6 +140,19 @@ import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpressi
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class ExpressionAnalyzer {
+    private static final Set<String> GEOMETRY_COMPARISON_FUNCTIONS = Set.of(
+            FunctionSet.NULLIF,
+            FunctionSet.ARRAY_CONTAINS,
+            FunctionSet.ARRAY_POSITION,
+            FunctionSet.ARRAY_REMOVE,
+            FunctionSet.ARRAY_DISTINCT,
+            FunctionSet.ARRAY_INTERSECT,
+            FunctionSet.ARRAYS_OVERLAP,
+            FunctionSet.ARRAY_CONTAINS_ALL,
+            FunctionSet.ARRAY_CONTAINS_SEQ,
+            FunctionSet.ARRAY_TOP_N,
+            FunctionSet.ENCODE_SORT_KEY);
+
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
@@ -761,6 +774,11 @@ public class ExpressionAnalyzer {
         public Void visitBinaryPredicate(BinaryPredicate node, Scope scope) {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
+            if (type1.containsGeometry() || type2.containsGeometry()) {
+                throw new SemanticException(
+                        "GEOMETRY type does not support predicate operations; use spatial predicate functions",
+                        node.getPos());
+            }
 
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
@@ -998,6 +1016,11 @@ public class ExpressionAnalyzer {
             node.setType(BooleanType.BOOLEAN);
 
             for (Expr expr : node.getChildren()) {
+                if (expr.getType().containsGeometry() && !(node instanceof IsNullPredicate)) {
+                    throw new SemanticException(
+                            "GEOMETRY type does not support predicate operations; use spatial predicate functions",
+                            node.getPos());
+                }
                 if (expr.getType().isOnlyMetricType() ||
                         (expr.getType().isComplexType() && !(node instanceof IsNullPredicate) &&
                                 !(node instanceof InPredicate))) {
@@ -1247,6 +1270,17 @@ public class ExpressionAnalyzer {
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
+            if (GEOMETRY_COMPARISON_FUNCTIONS.contains(fnName) &&
+                    Arrays.stream(argumentTypes).anyMatch(Type::containsGeometry)) {
+                throw new SemanticException(
+                        "GEOMETRY type does not support comparison function " + fnName, node.getPos());
+            }
+            if (FunctionSet.ARRAY_SORTBY.equals(fnName) &&
+                    Arrays.stream(argumentTypes).skip(1).anyMatch(Type::containsGeometry)) {
+                throw new SemanticException(
+                        "GEOMETRY type does not support comparison function " + fnName, node.getPos());
+            }
+
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
                 case FunctionSet.AES_DECRYPT:
@@ -1607,6 +1641,10 @@ public class ExpressionAnalyzer {
 
             for (int i = start; i < end; i = i + 2) {
                 whenTypes.add(node.getChild(i).getType());
+            }
+
+            if (caseExpr != null && whenTypes.stream().anyMatch(Type::containsGeometry)) {
+                throw new SemanticException("GEOMETRY type does not support CASE matching", node.getPos());
             }
 
             Type compatibleType = BooleanType.BOOLEAN;

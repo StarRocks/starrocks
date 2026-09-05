@@ -73,16 +73,17 @@ enum LogicalType {
 
     TYPE_JSON = 54,
     TYPE_VARIANT = 55,
+    TYPE_GEOMETRY = 56,
 
     // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    TYPE_MAX_VALUE = 56
+    TYPE_MAX_VALUE = 57
 };
 
 // TODO(lism): support varbinary for zone map.
 inline bool is_zone_map_key_type(LogicalType type) {
     return type != TYPE_CHAR && type != TYPE_VARCHAR && type != TYPE_JSON && type != TYPE_VARBINARY &&
-           type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
+           type != TYPE_GEOMETRY && type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
 }
 
 // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
@@ -236,6 +237,7 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     case TYPE_DATETIME: /* 12 */
     case TYPE_BINARY:
     case TYPE_VARBINARY:
+    case TYPE_GEOMETRY:
         /* 13 */          // Not implemented
     case TYPE_DECIMAL:    /* 14 */
     case TYPE_CHAR:       /* 15 */
@@ -326,6 +328,7 @@ VALUE_GUARD(LogicalType, StringLTGuard, lt_is_string, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINARY)
 VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
 VALUE_GUARD(LogicalType, VariantGuard, lt_is_variant, TYPE_VARIANT)
+VALUE_GUARD(LogicalType, GeometryGuard, lt_is_geometry, TYPE_GEOMETRY)
 VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
 VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE,
             TYPE_VARIANT)

@@ -150,6 +150,7 @@ Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::sha
         *result = arrow::utf8();
         break;
     case TYPE_VARBINARY:
+    case TYPE_GEOMETRY:
     case TYPE_HLL:
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:

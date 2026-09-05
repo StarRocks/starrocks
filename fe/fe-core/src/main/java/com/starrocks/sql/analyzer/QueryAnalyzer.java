@@ -1775,7 +1775,8 @@ public class QueryAnalyzer {
                 for (int fieldIdx = 0; fieldIdx < relation.getRelationFields().size(); ++fieldIdx) {
                     Field field = relation.getRelationFields().getAllFields().get(fieldIdx);
                     Type fieldType = field.getType();
-                    if (fieldType.isOnlyMetricType() &&
+                    if ((fieldType.isOnlyMetricType() || fieldType.containsGeometry() ||
+                            outputTypes[fieldIdx].containsGeometry()) &&
                             !((node instanceof UnionRelation) &&
                                     (node.getQualifier().equals(SetQualifier.ALL)))) {
                         throw new SemanticException("%s not support set operation", fieldType);

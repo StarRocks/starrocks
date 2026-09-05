@@ -99,7 +99,8 @@ namespace starrocks {
     M(TYPE_BOOLEAN)                     \
     APPLY_FOR_TYPE_DECIMAL(M)           \
     M(TYPE_JSON)                        \
-    M(TYPE_VARBINARY)
+    M(TYPE_VARBINARY)                   \
+    M(TYPE_GEOMETRY)
 
 #define APPLY_FOR_SUPPORTED_FIELD_TYPE(M) \
     APPLY_FOR_BASIC_LOGICAL_TYPE(M)       \
@@ -887,6 +888,12 @@ template <>
 struct ScalarTypeInfoImpl<TYPE_VARBINARY> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
     static constexpr LogicalType type = TYPE_VARBINARY;
     static constexpr int32_t size = StorageCppTypeSize<TYPE_VARBINARY>;
+};
+
+template <>
+struct ScalarTypeInfoImpl<TYPE_GEOMETRY> : ScalarTypeInfoImpl<TYPE_VARBINARY> {
+    static constexpr LogicalType type = TYPE_GEOMETRY;
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_GEOMETRY>;
 };
 
 void (*ScalarTypeInfoImpl<TYPE_CHAR>::set_to_max)(void*) = nullptr;

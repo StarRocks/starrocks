@@ -104,6 +104,7 @@ import static com.starrocks.type.DecimalType.DECIMALV2;
 import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.FloatType.FLOAT;
 import static com.starrocks.type.FunctionType.FUNCTION;
+import static com.starrocks.type.GeometryType.GEOMETRY;
 import static com.starrocks.type.HLLType.HLL;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
@@ -140,7 +141,7 @@ void __attribute__((constructor)) {module}_initialize() {{
 function_list = list()
 function_set = set()
 function_signature_set = set()
-FE_HIDDEN_FUNCTIONS = {'dict_encode'}
+FE_HIDDEN_FUNCTIONS = {'dict_encode', 'st_geom_from_text_legacy'}
 
 def add_function(fn_data):
     entry = dict()

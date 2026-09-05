@@ -30,7 +30,7 @@ public class TypeCompatibilityMatrix {
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128, PrimitiveType.DECIMAL256,
             PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.FUNCTION,
-            PrimitiveType.BINARY, PrimitiveType.VARBINARY, PrimitiveType.VARIANT);
+            PrimitiveType.BINARY, PrimitiveType.VARBINARY, PrimitiveType.VARIANT, PrimitiveType.GEOMETRY);
 
     private static final PrimitiveType[][] COMPATIBILITY_MATRIX =
             new PrimitiveType[PrimitiveType.values().length][PrimitiveType.values().length];
@@ -381,6 +381,17 @@ public class TypeCompatibilityMatrix {
         for (PrimitiveType type : PrimitiveType.BINARY_INCOMPATIBLE_TYPE_LIST) {
             ScalarType scalar = TypeFactory.createType(type);
             COMPATIBILITY_MATRIX[scalar.ordinal()][VarbinaryType.VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
+        }
+
+        // GEOMETRY supports assignment only to itself. Populate the remaining entries explicitly so
+        // generic function overload resolution treats other pairs as incompatible instead of seeing null.
+        for (PrimitiveType type : PrimitiveType.values()) {
+            if (type == PrimitiveType.GEOMETRY) {
+                continue;
+            }
+            int smallerOrdinal = Math.min(type.ordinal(), PrimitiveType.GEOMETRY.ordinal());
+            int largerOrdinal = Math.max(type.ordinal(), PrimitiveType.GEOMETRY.ordinal());
+            COMPATIBILITY_MATRIX[smallerOrdinal][largerOrdinal] = PrimitiveType.INVALID_TYPE;
         }
 
         // Check all the necessary entries that should be filled.

@@ -96,6 +96,25 @@ public class AnalyzeCreateTableTest {
     }
 
     @Test
+    public void testNativeGeometryColumn() {
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create table test.table_geometry (id bigint, shape geometry) engine=olap " +
+                        "duplicate key(id) distributed by hash(id) buckets 10");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+
+        Assertions.assertEquals(PrimitiveType.GEOMETRY, type.getPrimitiveType());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), type.getLength());
+        Assertions.assertEquals("geometry", type.toSql());
+
+        analyzeFail("create table test.geometry_key (shape geometry) engine=olap " +
+                        "duplicate key(shape) distributed by hash(shape) buckets 10",
+                "Invalid data type of key column 'shape': 'GEOMETRY'");
+        analyzeFail("create table test.geometry_default (id bigint, shape geometry default 'POINT (1 2)') " +
+                        "engine=olap duplicate key(id) distributed by hash(id) buckets 10",
+                "GEOMETRY only supports NULL as a default value");
+    }
+
+    @Test
     public void testNoDb() {
         AnalyzeTestUtil.getConnectContext().setDatabase(null);
         String sql =

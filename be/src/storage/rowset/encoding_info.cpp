@@ -323,6 +323,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_JSON, DICT_ENCODING>();
 
     _add_map<TYPE_VARBINARY, PLAIN_ENCODING>();
+    _add_map<TYPE_GEOMETRY, PLAIN_ENCODING>();
 
     // These number typs are support dict encoding, if you need to change this, please
     // change supports_dict_encoding function as same time.

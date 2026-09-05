@@ -1,35 +1,33 @@
 ---
 displayed_sidebar: docs
-description: "将 WKT（Well Known Text）转换为对应的内存几何形式。"
+description: "将二维 OGC WKT 转换为原生 GEOMETRY 值。"
 ---
 
-# ST_GeometryFromText, ST_GeomFromText
+# ST_GeomFromText
 
-
-
-将一个 WKT（Well Known Text）转化为对应的内存的几何形式。
+将二维 OGC Well-Known Text (WKT) 值转换为原生 `GEOMETRY` 值。
 
 ## 语法
 
 ```Haskell
-ST_GeometryFromText(wkt)
+GEOMETRY ST_GeomFromText(VARCHAR wkt)
 ```
 
-## 参数说明
+为保持兼容性，`ST_GeometryFromText` 继续返回旧版内存 geography 表示。
 
-`wkt`: 待转化的 WKT，支持的数据类型为 VARCHAR。
-
-## 返回值说明
-
-返回值的数据类型为 GEOMETRY。
+该函数支持 `POINT`、`LINESTRING`、`POLYGON`、`MULTIPOINT`、`MULTILINESTRING`、`MULTIPOLYGON`、`GEOMETRYCOLLECTION` 及其 `EMPTY` 形式。不支持 EWKT、SRID 和 Z/M 坐标。
 
 ## 示例
 
 ```Plain Text
-MySQL > SELECT ST_AsText(ST_GeometryFromText("LINESTRING (1 1, 2 2)"));
-+---------------------------------------------------------+
-| st_astext(st_geometryfromtext('LINESTRING (1 1, 2 2)')) |
-+---------------------------------------------------------+
-| LINESTRING (1 1, 2 2)                                   |
-+---------------------------------------------------------+
+MySQL > SELECT ST_AsText(ST_GeomFromText('GEOMETRYCOLLECTION (POINT (1 2), LINESTRING (0 0, 1 1))'));
++-----------------------------------------------------------------------------------------------+
+| st_astext(st_geomfromtext('GEOMETRYCOLLECTION (POINT (1 2), LINESTRING (0 0, 1 1))'))          |
++-----------------------------------------------------------------------------------------------+
+| GEOMETRYCOLLECTION (POINT (1 2), LINESTRING (0 0, 1 1))                                       |
++-----------------------------------------------------------------------------------------------+
 ```
+
+## 关键词
+
+ST_GEOMFROMTEXT,ST,GEOMFROMTEXT

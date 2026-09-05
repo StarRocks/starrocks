@@ -106,6 +106,7 @@ public final class ArrowUtils {
             case JSON:
                 return new ArrowType.Utf8();
             case VARBINARY:
+            case GEOMETRY:
             case HLL:
             case BITMAP:
             case PERCENTILE:

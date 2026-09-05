@@ -14,8 +14,12 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.type.GeometryType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -79,5 +83,13 @@ public class UtilTest {
         assertFalse(Util.stringToBool("invalid"));
         assertFalse(Util.stringToBool("yes"));
         assertFalse(Util.stringToBool("no"));
+    }
+
+    @Test
+    public void testGeometrySchemaHash() {
+        Column geometryColumn = new Column("geom", GeometryType.GEOMETRY);
+
+        assertTrue(Util.checkTypeSupported(GeometryType.GEOMETRY));
+        Assertions.assertDoesNotThrow(() -> Util.schemaHash(0, List.of(geometryColumn), null, 0));
     }
 }

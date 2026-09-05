@@ -76,6 +76,20 @@ public class AnalyzeSetOperationTest {
     }
 
     @Test
+    public void testGeometrySetOperations() {
+        String point = "ST_GeomFromText('POINT (0 0)')";
+        String otherPoint = "ST_GeomFromText('POINT (1 1)')";
+        String error = "GEOMETRY not support set operation";
+
+        analyzeSuccess("select " + point + " union all select " + otherPoint);
+        analyzeFail("select " + point + " union select " + otherPoint, error);
+        analyzeFail("select " + point + " intersect select " + otherPoint, error);
+        analyzeFail("select " + point + " except select " + otherPoint, error);
+        analyzeSuccess("select [" + point + "] union all select [" + otherPoint + "]");
+        analyzeFail("select [" + point + "] union select [" + otherPoint + "]", "not support set operation");
+    }
+
+    @Test
     public void testValues() {
         analyzeFail("(SELECT 1 AS c1, 2 AS c2) UNION ALL SELECT * FROM (VALUES (10, 1006), (NULL)) tmp",
                 "Values have unequal number of columns");

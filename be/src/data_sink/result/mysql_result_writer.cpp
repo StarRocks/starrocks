@@ -129,7 +129,7 @@ Status build_column_contexts(const std::vector<ExprContext*>& output_expr_ctxs, 
             physical_type = TYPE_VARCHAR;
             serializer_type.type = TYPE_VARCHAR;
         }
-        // Mark BinaryColumns that carry VARBINARY data so push_binary is used inside nested types.
+        // Mark BinaryColumns that carry binary or GEOMETRY data so push_binary is used inside nested types.
         ColumnHelper::mark_binary_columns(column, root_type);
 
         result_columns->emplace_back(std::move(column));

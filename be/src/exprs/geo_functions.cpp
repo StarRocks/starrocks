@@ -19,6 +19,7 @@
 #include "column/column_viewer.h"
 #include "common/logging.h"
 #include "geo/geo_types.h"
+#include "geo/wkb.h"
 
 namespace starrocks {
 
@@ -296,6 +297,123 @@ StatusOr<ColumnPtr> GeoFunctions::st_as_wkt(FunctionContext* context, const Colu
         result.append(Slice(wkt.data(), wkt.size()));
     }
 
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geom_from_text(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> wkt_viewer(columns[0]);
+
+    const auto size = columns[0]->size();
+    ColumnBuilder<TYPE_GEOMETRY> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (wkt_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        const Slice wkt = wkt_viewer.value(row);
+        WkbGeometry geometry;
+        Status status = WkbCodec::parse_wkt(std::string_view(wkt.data, wkt.size), &geometry);
+        if (!status.ok()) {
+            result.append_null();
+            continue;
+        }
+
+        std::string encoded;
+        status = WkbCodec::to_wkb(geometry, &encoded);
+        if (!status.ok()) {
+            result.append_null();
+            continue;
+        }
+        result.append(Slice(encoded));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geom_from_wkb(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARBINARY> wkb_viewer(columns[0]);
+
+    const auto size = columns[0]->size();
+    ColumnBuilder<TYPE_GEOMETRY> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (wkb_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        WkbGeometry geometry;
+        Status status = WkbCodec::parse_wkb(wkb_viewer.value(row), &geometry);
+        if (!status.ok()) {
+            result.append_null();
+            continue;
+        }
+
+        std::string canonical;
+        status = WkbCodec::to_wkb(geometry, &canonical);
+        if (!status.ok()) {
+            result.append_null();
+            continue;
+        }
+        result.append(Slice(canonical));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_as_text(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_GEOMETRY> geometry_viewer(columns[0]);
+
+    const auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (geometry_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        WkbGeometry geometry;
+        Status status = WkbCodec::parse_wkb(geometry_viewer.value(row), &geometry);
+        if (!status.ok()) {
+            result.append_null();
+            continue;
+        }
+
+        std::string wkt;
+        status = WkbCodec::to_wkt(geometry, &wkt);
+        if (!status.ok()) {
+            result.append_null();
+            continue;
+        }
+        result.append(Slice(wkt));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_as_wkb(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_GEOMETRY> geometry_viewer(columns[0]);
+
+    const auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARBINARY> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (geometry_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        WkbGeometry geometry;
+        Status status = WkbCodec::parse_wkb(geometry_viewer.value(row), &geometry);
+        if (!status.ok()) {
+            result.append_null();
+            continue;
+        }
+
+        std::string canonical;
+        status = WkbCodec::to_wkb(geometry, &canonical);
+        if (!status.ok()) {
+            result.append_null();
+            continue;
+        }
+        result.append(Slice(canonical));
+    }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
