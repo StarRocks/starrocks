@@ -67,6 +67,7 @@ public:
 private:
     void _derived(const Column* json_data, size_t mark_row);
 
+    bool _has_leaf_object_conflict(const JsonFlatPath* node);
     JsonFlatPath* _normalize_exists_path(const std::string_view& path, JsonFlatPath* root, uint64_t hits);
 
     void _finalize();

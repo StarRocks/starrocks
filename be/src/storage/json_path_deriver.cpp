@@ -161,6 +161,18 @@ JsonFlatPath* JsonPathDeriver::_normalize_exists_path(const std::string_view& pa
     return _normalize_exists_path(next, iter->second.get(), hits);
 }
 
+bool JsonPathDeriver::_has_leaf_object_conflict(const JsonFlatPath* node) {
+    for (const auto& [key, child] : node->children) {
+        if (child->base_type_count > 0 && !child->children.empty()) {
+            return true;
+        }
+        if (_has_leaf_object_conflict(child.get())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_readers) {
     DCHECK(_paths.empty());
     DCHECK(_types.empty());
@@ -189,7 +201,25 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
             auto leaf = _normalize_exists_path(sub->name(), _path_root.get(), 0);
             leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(sub->column_type());
             leaf->hits += reader->num_rows();
+            // a sub-column stored as a concrete base type means every row of this segment
+            // held that base type, so feed base_type_count the same way the data-mode path
+            // does; otherwise the base-type gate in _finalize() drops every leaf under the
+            // default enable_json_flat_complex_type=false
+            if (sub->column_type() != LogicalType::TYPE_JSON) {
+                leaf->base_type_count += reader->num_rows();
+            }
         }
+    }
+
+    // Segments may disagree structurally: a path stored as a concrete leaf in one
+    // segment and as an object (children paths) in another. There is no per-path read
+    // plan that is known to cover both layouts - planning the node as JSON was observed
+    // to lose the leaf segments' scalar values on a live cluster. Bail out and let
+    // compaction take the full JSON merge path, which reassembles each segment from
+    // its own layout and re-derives the merged layout from the actual values.
+    if (_has_leaf_object_conflict(_path_root.get())) {
+        _path_root.reset();
+        return;
     }
 
     _min_json_sparsity_factory = 1; // only extract common schema
@@ -222,6 +252,13 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
             auto leaf = _normalize_exists_path(paths[i], _path_root.get(), hits);
             leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(types[i]);
             leaf->hits += hits;
+            // a flat sub-column carrying a concrete base type means every hit row held
+            // that base type; feed base_type_count like _visit_json_paths does, or the
+            // base-type gate in _finalize() drops these leaves and the compactor falls
+            // back to merging flat input into raw JSON
+            if (types[i] != LogicalType::TYPE_JSON) {
+                leaf->base_type_count += hits;
+            }
         }
     }
 }
