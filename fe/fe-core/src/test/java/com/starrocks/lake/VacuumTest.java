@@ -34,6 +34,7 @@ import com.starrocks.proto.VacuumFullRequest;
 import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
+import com.starrocks.proto.VacuumStatePB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -158,6 +159,19 @@ public class VacuumTest {
         db.dropTable(olapTable7.getName());
     }
 
+    // A BE response state for a drained fresh round: the incremental coordinator advances the
+    // lastSuccVacuumVersion watermark (and clears a crossed metadataSwitchVersion) to the pass retain floor
+    // reported here, so a completed round carries floor via passStartVersion rather than the legacy
+    // vacuumedVersion field.
+    private static VacuumStatePB drainedStateAtFloor(long floor) {
+        VacuumStatePB state = new VacuumStatePB();
+        state.toDeleteLow = 0L;
+        state.toDeleteHigh = 0L;
+        state.nextProposeStartVersion = 0L;
+        state.passStartVersion = floor;
+        return state;
+    }
+
     @Test
     public void testLastSuccVacuumVersionUpdate() throws Exception {
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
@@ -177,6 +191,7 @@ public class VacuumTest {
         mockResponse.vacuumedVersion = 5L;
         mockResponse.extraFileSize = 1024L;
         mockResponse.tabletInfos = new ArrayList<>();
+        mockResponse.vacuumState = drainedStateAtFloor(5L);
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
         when(mockFuture.get()).thenReturn(mockResponse);
@@ -187,10 +202,11 @@ public class VacuumTest {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
-        
+
         Assertions.assertEquals(5L, partition.getLastSuccVacuumVersion());
 
         mockResponse.vacuumedVersion = 7L;
+        mockResponse.vacuumState = drainedStateAtFloor(7L);
         try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
@@ -409,6 +425,7 @@ public class VacuumTest {
         mockResponse.vacuumedVersion = 5L;
         mockResponse.extraFileSize = 1024L;
         mockResponse.tabletInfos = new ArrayList<>();
+        mockResponse.vacuumState = drainedStateAtFloor(5L);
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
         when(mockFuture.get()).thenReturn(mockResponse);
@@ -423,6 +440,7 @@ public class VacuumTest {
         Assertions.assertEquals(5L, partition.getLastSuccVacuumVersion());
 
         mockResponse.vacuumedVersion = 7L;
+        mockResponse.vacuumState = drainedStateAtFloor(7L);
         try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
@@ -449,6 +467,7 @@ public class VacuumTest {
         mockResponse.vacuumedVersion = 5L;
         mockResponse.extraFileSize = 1024L;
         mockResponse.tabletInfos = new ArrayList<>();
+        mockResponse.vacuumState = drainedStateAtFloor(5L);
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
         when(mockFuture.get()).thenReturn(mockResponse);
@@ -464,6 +483,7 @@ public class VacuumTest {
         Assertions.assertEquals(6L, partition.getMetadataSwitchVersion());
 
         mockResponse.vacuumedVersion = 7L;
+        mockResponse.vacuumState = drainedStateAtFloor(7L);
         try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
