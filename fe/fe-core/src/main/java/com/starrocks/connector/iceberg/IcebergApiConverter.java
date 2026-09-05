@@ -330,6 +330,7 @@ public class IcebergApiConverter {
 
     public static List<Column> toFullSchemas(Schema schema, Table table) {
         List<Column> fullSchema = toFullSchemas(schema);
+        applyIcebergNameMapping(fullSchema, schema, table.properties());
         if (table instanceof BaseTable) {
             addMetaColumns(fullSchema);
             if (((BaseTable) table).operations().current().formatVersion() >= 3) {
@@ -349,6 +350,41 @@ public class IcebergApiConverter {
             }
         }
         return fullSchema;
+    }
+
+    // Populate physicalName on each column from schema.name-mapping.default so the BE
+    // can resolve columns by their physical Parquet name when the Parquet file does not
+    // carry embedded Iceberg field-ids (e.g. Parquet files produced by a Delta-to-Iceberg
+    // metadata shim, where physical columns are named using Delta's column-mapping IDs).
+    private static void applyIcebergNameMapping(
+            List<Column> fullSchema, Schema schema, Map<String, String> tableProperties) {
+        String nameMappingJson = tableProperties.get(TableProperties.DEFAULT_NAME_MAPPING);
+        if (Strings.isNullOrEmpty(nameMappingJson)) {
+            return;
+        }
+        try {
+            org.apache.iceberg.mapping.NameMapping nameMapping =
+                    org.apache.iceberg.mapping.NameMappingParser.fromJson(nameMappingJson);
+            for (Column column : fullSchema) {
+                Types.NestedField field = schema.findField(column.getName());
+                if (field == null) {
+                    continue;
+                }
+                org.apache.iceberg.mapping.MappedField mappedField =
+                        nameMapping.asMappedFields().field(field.fieldId());
+                if (mappedField == null) {
+                    continue;
+                }
+                for (String name : mappedField.names()) {
+                    if (!name.equals(column.getName())) {
+                        column.setPhysicalName(name);
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to parse Iceberg name mapping: {}", e.getMessage());
+        }
     }
 
     public static List<Column> toFullSchemas(Schema schema) {
