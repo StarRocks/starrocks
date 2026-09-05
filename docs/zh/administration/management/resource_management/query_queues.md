@@ -164,6 +164,24 @@ Query Queue v2 将 BE 资源表示为逻辑 Slot：
 
 整个排队逻辑都在 FE 上完成，包括设置集群总 Slot 数量、估算 Query 需要的 Slot 数量，以及决定优先满足哪个 Query 的 Slot 需求。Query Queue v2 不会根据 BE 的实际资源使用情况进行调度。
 
+### 资源组粒度查询队列
+
+Query Queue v2 同样支持按资源组排队。除 Warehouse 的总 Slot 之外,只有当查询所属资源组正在运行的查询数低于该组的 `concurrency_limit` 时,查询才会被放行;否则该查询会在队列中等待,而不是被 BE 拒绝。某个资源组达到上限时,其他资源组的查询不会被阻塞。
+
+如需启用,请将全局会话变量 `enable_group_level_query_queue` 设置为 `true`,并为资源组设置 `concurrency_limit`。
+
+```sql
+SET GLOBAL enable_group_level_query_queue = true;
+```
+
+正在运行的查询数在每个 Warehouse 内单独统计,因为队列是按 Warehouse 维护的。因此 `concurrency_limit` 的含义是该资源组在**单个 Warehouse 内**可以同时运行的查询数,在集群内可以同时运行的查询总数为 Warehouse 数量乘以 `concurrency_limit`。
+
+:::note
+
+资源组的 `mem_used_pct_limit` 仅适用于 Query Queue v1,因为 Query Queue v2 不会根据 BE 的实际资源使用情况进行调度。
+
+:::
+
 ### 选择估算策略
 
 #### PBE

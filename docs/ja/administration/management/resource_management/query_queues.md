@@ -164,6 +164,24 @@ Query Queue v2 は BE リソースを論理 Slot として表現します。
 
 キューイングロジック全体は FE 上で完了します。これには、クラスタ全体の Slot 総数の設定、Query が必要とする Slot 数の見積もり、およびどの Query の Slot 要求を優先的に満たすかの決定が含まれます。Query Queue v2 は、BE の実際のリソース使用状況に基づいてスケジューリングを行いません。
 
+### リソースグループ粒度のクエリキュー
+
+Query Queue v2 もリソースグループ単位でクエリをキューイングします。Warehouse の合計 Slot に加えて、クエリが属するリソースグループの実行中クエリ数がそのグループの `concurrency_limit` を下回っている場合にのみ、クエリは実行を許可されます。そうでない場合、クエリは BE に拒否されるのではなく、キューで待機します。あるリソースグループが上限に達しても、他のリソースグループのクエリはブロックされません。
+
+有効にするには、グローバルセッション変数 `enable_group_level_query_queue` を `true` に設定し、リソースグループに `concurrency_limit` を設定します。
+
+```sql
+SET GLOBAL enable_group_level_query_queue = true;
+```
+
+キューは Warehouse ごとに管理されるため、実行中クエリ数は Warehouse ごとに個別にカウントされます。したがって `concurrency_limit` は、そのリソースグループが**単一の Warehouse 内**で同時に実行できるクエリ数を意味し、クラスタ全体で同時に実行できるクエリ数は Warehouse 数に `concurrency_limit` を掛けた値になります。
+
+:::note
+
+リソースグループの `mem_used_pct_limit` は Query Queue v1 にのみ適用されます。Query Queue v2 は BE の実際のリソース使用状況に基づいてスケジューリングを行わないためです。
+
+:::
+
 ### 推定方式を選択する
 
 #### PBE

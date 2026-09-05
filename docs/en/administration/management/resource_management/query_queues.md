@@ -163,6 +163,24 @@ When the number of slots required by a query exceeds the current number of remai
 
 The entire queuing logic is completed on FE, including setting the total number of cluster slots, estimating the number of slots required by a query, and deciding which query's slot requirement to satisfy first. Query Queue v2 does not schedule based on the actual resource usage of BEs.
 
+### Resource group-level query queue
+
+Query Queue v2 also queues queries per resource group. In addition to the total slots of the warehouse, a query is admitted only when the number of running queries of its resource group is below the group's `concurrency_limit`; otherwise it waits in the queue instead of being rejected by BE. Queries of the other resource groups are not blocked by a group which has reached its limit.
+
+To enable it, set the global session variable `enable_group_level_query_queue` to `true` and set `concurrency_limit` on the resource group.
+
+```sql
+SET GLOBAL enable_group_level_query_queue = true;
+```
+
+The running queries are counted within each warehouse, because a queue is maintained per warehouse. `concurrency_limit` therefore means the number of queries the resource group can run concurrently within one warehouse, and the total number it can run in the cluster is the number of warehouses multiplied by `concurrency_limit`.
+
+:::note
+
+`mem_used_pct_limit` of a resource group applies only to Query Queue v1, because Query Queue v2 does not schedule based on the actual resource usage of BEs.
+
+:::
+
 ### Choose an estimation strategy
 
 #### PBE

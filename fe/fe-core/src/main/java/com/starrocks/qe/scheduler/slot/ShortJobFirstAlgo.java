@@ -20,6 +20,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
@@ -58,6 +59,11 @@ class ShortJobFirstAlgo implements SlotScheduleAlgorithm {
     public void add(SlotSelectionStrategyV2.SlotContext slotContext) {
         q.add(slotContext);
         updateAgingIfNeeded();
+    }
+
+    @Override
+    public void requeue(List<SlotSelectionStrategyV2.SlotContext> slotContexts) {
+        slotContexts.forEach(this::add);
     }
 
     @Override

@@ -334,4 +334,115 @@ public class SlotSelectionStrategyV2WeightedRoundRobinQueueTest {
         }
     }
 
+    /**
+     * A slot taken out of the queue and put back keeps its place, so that a scheduling round which polls a slot
+     * without allocating it does not push that slot behind the slots it arrived before.
+     */
+    @Test
+    public void testPolledSlotKeepsItsPlaceWhenAddedBack() {
+        WeightedRoundRobinQueue queue = new WeightedRoundRobinQueue(1024, 1);
+
+        // All of them require the same number of slots, so they land in the same sub-queue.
+        SlotContext first = generateSlotContext(1);
+        SlotContext second = generateSlotContext(1);
+        SlotContext third = generateSlotContext(1);
+        queue.add(first);
+        queue.add(second);
+        queue.add(third);
+
+        assertThat(queue.poll()).isSameAs(first);
+        // Caches `second` as the peak before `first` is put back in front of it.
+        assertThat(queue.peak()).isSameAs(second);
+
+        queue.requeue(ImmutableList.of(first));
+        assertThat(queue.size()).isEqualTo(3);
+        assertThat(queue.peak()).isSameAs(first);
+        assertThat(queue.poll()).isSameAs(first);
+        assertThat(queue.poll()).isSameAs(second);
+        assertThat(queue.poll()).isSameAs(third);
+    }
+
+    /**
+     * Slots requeued together keep the order they had, both among themselves and against the slots which stayed
+     * in the queue.
+     */
+    @Test
+    public void testRequeueKeepsTheOrderOfSlotsOfTheSameSubQueue() {
+        WeightedRoundRobinQueue queue = new WeightedRoundRobinQueue(1024, 1);
+
+        SlotContext first = generateSlotContext(1);
+        SlotContext second = generateSlotContext(1);
+        SlotContext third = generateSlotContext(1);
+        SlotContext behind = generateSlotContext(1);
+        queue.add(first);
+        queue.add(second);
+        queue.add(third);
+        queue.add(behind);
+
+        assertThat(queue.poll()).isSameAs(first);
+        assertThat(queue.poll()).isSameAs(second);
+        assertThat(queue.poll()).isSameAs(third);
+
+        queue.requeue(ImmutableList.of(first, second, third));
+
+        assertThat(queue.size()).isEqualTo(4);
+        assertThat(queue.poll()).isSameAs(first);
+        assertThat(queue.poll()).isSameAs(second);
+        assertThat(queue.poll()).isSameAs(third);
+        assertThat(queue.poll()).isSameAs(behind);
+    }
+
+    /**
+     * Slots requeued together may belong to different sub-queues, and each of them has to go back in front of
+     * its own sub-queue.
+     */
+    @Test
+    public void testRequeueRestoresSlotsToTheirOwnSubQueue() {
+        WeightedRoundRobinQueue queue = new WeightedRoundRobinQueue(1024, 1);
+
+        SlotContext big = generateSlotContext(1024);
+        SlotContext bigNext = generateSlotContext(1024);
+        SlotContext small = generateSlotContext(1);
+        SlotContext smallNext = generateSlotContext(1);
+        queue.add(big);
+        queue.add(bigNext);
+        queue.add(small);
+        queue.add(smallNext);
+        assertThat(big.getSubQueueIndex()).isNotEqualTo(small.getSubQueueIndex());
+
+        assertThat(queue.remove(big)).isTrue();
+        assertThat(queue.remove(small)).isTrue();
+        assertThat(queue.size()).isEqualTo(2);
+
+        queue.requeue(ImmutableList.of(big, small));
+
+        assertThat(queue.size()).isEqualTo(4);
+        assertThat(queue.getSubQueues()[big.getSubQueueIndex()].peak()).isSameAs(big);
+        assertThat(queue.getSubQueues()[small.getSubQueueIndex()].peak()).isSameAs(small);
+    }
+
+    /**
+     * A slot already put back, as {@link SlotSelectionStrategyV2#updateOptionsPeriodically} does when it refills
+     * the queue, must not be counted twice, otherwise the queue reports slots it no longer holds and peaking
+     * never terminates.
+     */
+    @Test
+    public void testRequeueDoesNotCountAnAlreadyAddedSlotTwice() {
+        WeightedRoundRobinQueue queue = new WeightedRoundRobinQueue(1024, 1);
+
+        SlotContext first = generateSlotContext(1);
+        SlotContext second = generateSlotContext(1);
+        queue.add(first);
+        queue.add(second);
+
+        assertThat(queue.poll()).isSameAs(first);
+        queue.add(first);
+        queue.requeue(ImmutableList.of(first));
+
+        assertThat(queue.size()).isEqualTo(2);
+        assertThat(queue.poll()).isNotNull();
+        assertThat(queue.poll()).isNotNull();
+        assertThat(queue.isEmpty()).isTrue();
+    }
+
 }

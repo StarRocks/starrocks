@@ -17,8 +17,12 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.compress.utils.Lists;
@@ -29,6 +33,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The slot resource is divided into small extra slots and normal slots.
@@ -57,6 +62,11 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
     private final LinkedHashMap<TUniqueId, SlotContext> requiringSmallSlots = new LinkedHashMap<>();
     private int numAllocatedSmallSlots = 0;
+
+    /**
+     * The number of running queries of each resource group within this warehouse.
+     */
+    private final Map<Long, Integer> groupIdToNumAllocatedQueries = Maps.newHashMap();
 
     private final long warehouseId;
     private final BaseSlotManager slotManager;
@@ -98,6 +108,8 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             }
         }
         requiringQueue.remove(slotContext);
+        slotContext.allocated = true;
+        groupIdToNumAllocatedQueries.merge(slot.getGroupId(), 1, Integer::sum);
 
         String category = String.valueOf(slotContext.getSubQueueIndex());
         MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING.getMetric(category).increase((long) -slot.getNumPhysicalSlots());
@@ -117,12 +129,15 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
                 numAllocatedSmallSlots -= slot.getNumPhysicalSlots();
             }
         }
-        if (requiringQueue.remove(slotContext)) {
+        requiringQueue.remove(slotContext);
+        if (!slotContext.allocated) {
             MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING.getMetric(String.valueOf(slotContext.getSubQueueIndex()))
                     .increase((long) -slot.getNumPhysicalSlots());
         } else {
             MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_RUNNING.getMetric(String.valueOf(slotContext.getSubQueueIndex()))
                     .increase((long) -slot.getNumPhysicalSlots());
+            // Mapping to null removes the entry, so groups without running queries do not accumulate.
+            groupIdToNumAllocatedQueries.computeIfPresent(slot.getGroupId(), (id, num) -> num > 1 ? num - 1 : null);
         }
     }
 
@@ -131,6 +146,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         updateOptionsPeriodically();
 
         List<LogicalSlot> slotsToAllocate = Lists.newArrayList();
+        Map<Long, Integer> numQueriesToAllocateByGroup = Maps.newHashMap();
         // allocate small slots
         int curNumAllocatedSmallSlots = numAllocatedSmallSlots;
         for (SlotContext slotContext : requiringSmallSlots.values()) {
@@ -138,18 +154,32 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             if (!isSmallSlotAvailable(slotTracker, slot, curNumAllocatedSmallSlots)) {
                 break;
             }
+            if (!isGroupSlotAvailable(slot, numQueriesToAllocateByGroup)) {
+                continue;
+            }
 
             requiringQueue.remove(slotContext);
 
             slotsToAllocate.add(slot);
+            numQueriesToAllocateByGroup.merge(slot.getGroupId(), 1, Integer::sum);
             slotContext.setAllocateAsSmallSlot();
             curNumAllocatedSmallSlots += slot.getNumPhysicalSlots();
         }
 
         // allocate normal slots
         int numAllocatedSlots = slotTracker.getNumAllocatedSlots() - numAllocatedSmallSlots;
+        List<SlotContext> groupBlockedSlots = Lists.newArrayList();
         while (!requiringQueue.isEmpty()) {
             SlotContext slotContext = requiringQueue.peak();
+            if (!isGroupSlotAvailable(slotContext.getSlot(), numQueriesToAllocateByGroup)) {
+                requiringQueue.poll();
+                groupBlockedSlots.add(slotContext);
+                continue;
+            }
+            // Skipping a group at its concurrency limit, which lets the slots of the other groups behind it
+            // proceed, requires taking the slot out because peak() keeps returning the same head. The slots
+            // taken out are requeued once the loop ends: ShortJobFirstAlgo orders by score and only adds them,
+            // while WeightedRoundRobinQueue orders by insertion and puts them back in front.
             if (!isGlobalSlotAvailable(slotTracker, numAllocatedSlots, slotContext.getSlot())) {
                 break;
             }
@@ -157,8 +187,10 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             requiringQueue.poll();
 
             slotsToAllocate.add(slotContext.getSlot());
+            numQueriesToAllocateByGroup.merge(slotContext.getSlot().getGroupId(), 1, Integer::sum);
             numAllocatedSlots += slotContext.getSlot().getNumPhysicalSlots();
         }
+        requiringQueue.requeue(groupBlockedSlots);
 
         return slotsToAllocate;
     }
@@ -188,16 +220,26 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             } else {
                 Preconditions.checkState(false, "unknown schedule policy: " + opts.getPolicy());
             }
+            // Both the migration and the supplement below go through migratedSlotIds, so that a slot is
+            // enqueued once even if it is in the old queue more than once or is also supplemented.
+            Set<TUniqueId> migratedSlotIds = Sets.newHashSet();
             if (requiringQueue != null) {
                 while (!requiringQueue.isEmpty()) {
-                    newQueue.add(requiringQueue.poll());
+                    SlotContext slotContext = requiringQueue.poll();
+                    if (migratedSlotIds.add(slotContext.getSlotId())) {
+                        newQueue.add(slotContext);
+                    }
                 }
             }
             requiringQueue = newQueue;
 
-            slotContexts.values().stream()
-                    .filter(slotContext -> slotContext.getSlot().getState() == LogicalSlot.State.REQUIRING)
-                    .forEach(slotContext -> requiringQueue.add(slotContext));
+            // Supplement the pending slots which the migration above did not cover, in no particular order.
+            for (SlotContext slotContext : slotContexts.values()) {
+                if (slotContext.getSlot().getState() == LogicalSlot.State.REQUIRING
+                        && migratedSlotIds.add(slotContext.getSlotId())) {
+                    requiringQueue.add(slotContext);
+                }
+            }
 
             LOG.info("updated SlotSelectionStrategy to {}", newOpts.toString());
         }
@@ -237,6 +279,20 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             return true;
         }
         return slotTracker.getCurrentCurrency() < queryQueueConcurrencyLimit;
+    }
+
+    private boolean isGroupSlotAvailable(LogicalSlot slot, Map<Long, Integer> numQueriesToAllocateByGroup) {
+        if (!GlobalVariable.isEnableGroupLevelQueryQueue()) {
+            return true;
+        }
+        long groupId = slot.getGroupId();
+        ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(groupId);
+        if (group == null || !group.isConcurrencyLimitEffective()) {
+            return true;
+        }
+        int numRunningQueries = groupIdToNumAllocatedQueries.getOrDefault(groupId, 0)
+                + numQueriesToAllocateByGroup.getOrDefault(groupId, 0);
+        return numRunningQueries < group.getConcurrencyLimit();
     }
 
     private static boolean isSmallSlot(LogicalSlot slot) {
@@ -338,6 +394,40 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
                     nextSlotToPeak = slotContext;
                     subQueue.incrState(-totalWeight);
                     prevPeakSubQueue.incrState(totalWeight);
+                }
+            }
+        }
+
+        @Override
+        public void requeue(List<SlotContext> slotContexts) {
+            if (slotContexts.isEmpty()) {
+                return;
+            }
+
+            Map<Integer, List<SlotContext>> queueIndexToSlots = Maps.newLinkedHashMap();
+            for (SlotContext slotContext : slotContexts) {
+                int queueIndex = getSubQueueIndex(slotContext);
+                queueIndexToSlots.computeIfAbsent(queueIndex, k -> Lists.newArrayList()).add(slotContext);
+            }
+
+            for (Map.Entry<Integer, List<SlotContext>> entry : queueIndexToSlots.entrySet()) {
+                int queueIndex = entry.getKey();
+                SlotSubQueue subQueue = subQueues[queueIndex];
+
+                LinkedHashMap<TUniqueId, SlotContext> rebuilt = Maps.newLinkedHashMap();
+                for (SlotContext slotContext : entry.getValue()) {
+                    rebuilt.put(slotContext.getSlotId(), slotContext);
+                }
+                rebuilt.putAll(subQueue.slots);
+
+                // A slot may have been requeued already, so count the ones actually added.
+                size += rebuilt.size() - subQueue.slots.size();
+                subQueue.slots.clear();
+                subQueue.slots.putAll(rebuilt);
+
+                // Otherwise the cached peak would hide the slots put back in front of it.
+                if (nextSlotToPeak != null && nextSlotToPeak.getSubQueueIndex() == queueIndex) {
+                    nextSlotToPeak = subQueue.peak();
                 }
             }
         }
@@ -538,6 +628,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
     @VisibleForTesting
     static class SlotContext {
         private final LogicalSlot slot;
+        private boolean allocated = false;
         private boolean allocatedAsSmallSlot = false;
         private int subQueueIndex = 0;
         private long createTime;

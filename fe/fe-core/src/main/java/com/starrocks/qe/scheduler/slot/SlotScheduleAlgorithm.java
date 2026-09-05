@@ -14,6 +14,8 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import java.util.List;
+
 /**
  * The algorithm/queue for slot schedule
  */
@@ -26,6 +28,8 @@ interface SlotScheduleAlgorithm {
     }
 
     void add(SlotSelectionStrategyV2.SlotContext slotContext);
+
+    void requeue(List<SlotSelectionStrategyV2.SlotContext> slotContexts);
 
     boolean remove(SlotSelectionStrategyV2.SlotContext slotContext);
 
