@@ -15,6 +15,8 @@
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -24,10 +26,12 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -170,6 +174,32 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
             }
         }
         return -1L;
+    }
+
+    @Override
+    public List<Partition> getPartitions(Connection connection, Table table) {
+        String dbName = ((com.starrocks.catalog.JDBCTable) table).getCatalogDBName();
+        String tableName = table.getName();
+        String sql = "SELECT partition, modification_time FROM system.parts " +
+                "WHERE database = ? AND table = ? AND active";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, dbName);
+            ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Partition> partitions = Lists.newArrayList();
+                while (rs.next()) {
+                    String partitionName = rs.getString("partition");
+                    Timestamp modificationTime = rs.getTimestamp("modification_time");
+                    long modTime = modificationTime != null ? modificationTime.getTime() : 0L;
+                    partitions.add(new Partition(partitionName, modTime));
+                }
+                return partitions;
+            }
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException("Failed to get partitions for ClickHouse table " +
+                    dbName + "." + tableName, e);
+        }
     }
 
 }
