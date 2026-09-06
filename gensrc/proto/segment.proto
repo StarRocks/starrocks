@@ -279,15 +279,16 @@ message SegmentFooterPB {
     // column; with a block-granular cache in front of object storage each of those reads
     // fetches (and mostly wastes) a whole cache block, one round trip at a time.
     //
-    // Written only when config::enable_segment_tail_index_region was on at write time AND the
-    // segment was written horizontally (a single column group covering all columns). Absent
-    // otherwise, in which case the layout is exactly as before.
+    // Written whenever config::enable_segment_tail_index_region was on at write time, by every
+    // path that finalizes a footer -- vertical compaction and partial-update rewrites included.
+    // Absent otherwise, in which case the layout is exactly as before.
     //
-    // These two fields are purely a read-side prefetch hint: every index is still located
-    // through its own absolute PagePointer in `columns`, so a reader that ignores them stays
-    // correct on either layout. Offsets use the same origin as every other PagePointer in this
-    // footer -- the segment's own start, which is bundle-file relative when this segment is a
-    // slice of a bundle file.
+    // Nothing on the read path requires these fields: every index is still located through its
+    // own absolute PagePointer in `columns`, so a reader that ignores them stays correct on
+    // either layout. They record where the region is, which is what makes the layout auditable
+    // from a footer dump and what a future reader-side optimization would key off. Offsets use
+    // the same origin as every other PagePointer in this footer -- the segment's own start,
+    // which is bundle-file relative when this segment is a slice of a bundle file.
     optional uint64 small_index_region_offset = 12;
     optional uint64 small_index_region_size = 13;
 }

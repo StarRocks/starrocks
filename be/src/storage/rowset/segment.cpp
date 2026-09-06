@@ -79,16 +79,6 @@ bvar::Window<bvar::Adder<int>> g_open_segments_minute("starrocks", "open_segment
 // NOLINTNEXTLINE
 bvar::Window<bvar::Adder<int>> g_open_segments_io_minute("starrocks", "open_segments_io_minute", &g_open_segments_io,
                                                          60);
-bvar::Adder<int64_t> g_small_index_prefetch;       // NOLINT
-bvar::Adder<int64_t> g_small_index_prefetch_bytes; // NOLINT
-// How many small index regions were prefetched, and how many bytes that cost, in the last 60 seconds
-// NOLINTNEXTLINE
-bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_minute("starrocks", "segment_small_index_prefetch_minute",
-                                                                 &g_small_index_prefetch, 60);
-// NOLINTNEXTLINE
-bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_bytes_minute("starrocks",
-                                                                       "segment_small_index_prefetch_bytes_minute",
-                                                                       &g_small_index_prefetch_bytes, 60);
 
 namespace starrocks {
 
@@ -201,46 +191,6 @@ StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, Segm
     return footer_length + 12;
 }
 
-// Pull the whole small index region (see SegmentFooterPB.small_index_region_offset) into the block
-// cache in one call, so that the per-column ordinal index and page zone map loads that immediately
-// follow are served from cache instead of each going remote on its own.
-//
-// touch_cache() rather than reading into a throwaway buffer, for three reasons:
-//
-//   * Idempotence. A Segment OBJECT is opened once (guarded by _open_once), but a new object is
-//     built for the same segment FILE whenever the tablet metacache does not already hold one --
-//     eviction, a small cache limit, concurrent scans. Reading the region re-fetched and re-copied
-//     it on every one of those opens: measured on a 4-segment table whose regions total 5.4 MB,
-//     a single query performed 17.2 MB of region reads. touch_cache() refreshes an already-cached
-//     range instead of re-reading it.
-//   * No buffer. Only the cache fill is wanted here, never the bytes, so allocating and copying
-//     megabytes per open was pure waste.
-//   * Graceful degradation. The base implementation is a no-op, so with no cache in front of the
-//     filesystem this costs nothing, rather than issuing a read whose result is discarded.
-//
-// Best effort by design -- a failure must not fail the open. The per-column reads still work, they
-// just go remote one at a time as they did before.
-static void prefetch_small_index_region(RandomAccessFile* read_file, const SegmentFooterPB& footer) {
-    if (!footer.has_small_index_region_offset() || footer.small_index_region_size() == 0) {
-        // Legacy layout: the indexes are interleaved after each column's data pages, so there is
-        // no single range to fetch.
-        return;
-    }
-    const uint64_t size = footer.small_index_region_size();
-    if (size > static_cast<uint64_t>(config::segment_tail_index_prefetch_max_bytes)) {
-        // A very wide table can produce a region larger than any one query needs; fetching it
-        // whole would trade the saved round trips back for wasted bytes.
-        VLOG(2) << "skip small index region prefetch of " << size << " bytes (over cap) for " << read_file->filename();
-        return;
-    }
-    if (Status st = read_file->touch_cache(footer.small_index_region_offset(), size); !st.ok()) {
-        VLOG(2) << "small index region prefetch failed for " << read_file->filename() << ": " << st;
-        return;
-    }
-    g_small_index_prefetch << 1;
-    g_small_index_prefetch_bytes << static_cast<int64_t>(size);
-}
-
 StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
                                                size_t* footer_length_hint,
                                                const FooterPointerPB* partial_rowset_footer) {
@@ -331,12 +281,6 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
-    // Only worth doing when this read populates the block cache: the prefetch pays off through the
-    // per-column index reads that follow hitting the cache, so with the fill disabled it would read
-    // the region remotely and still leave every one of those reads to go remote too.
-    if (config::enable_segment_tail_index_prefetch && lake_io_opts.fill_data_cache) {
-        prefetch_small_index_region(read_file.get(), footer);
-    }
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
