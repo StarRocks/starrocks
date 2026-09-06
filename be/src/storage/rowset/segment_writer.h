@@ -227,6 +227,10 @@ private:
     // wider schema simply means fewer pages per column).
     std::vector<std::unique_ptr<ColumnWriter>> _deferred_small_index_writers;
     bool _small_index_region_deferred = false;
+    // MEASUREMENT ONLY. Latched at the first finalize_columns() rather than re-read in
+    // _write_small_index_region(): the config is mutable, and a flip between the two calls would
+    // write a column's zone map twice or not at all.
+    int32_t _small_index_region_layout = 0;
     // Set by whichever column group carries the key columns, consumed when the region is
     // written. _has_key cannot be used at that point: init() reassigns it per column group,
     // so a vertical writer ends with _has_key == false (its last group holds value columns)

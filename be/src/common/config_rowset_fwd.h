@@ -77,6 +77,23 @@ CONF_Int32(data_page_size, "65536");
 // would drop the layout from essentially every wide table at its first real compaction.
 CONF_mBool(enable_segment_tail_index_region, "false");
 
+// MEASUREMENT ONLY -- do not merge. What the tail index region holds and in what order, when
+// enable_segment_tail_index_region is on. The file is written start-to-end, so the LAST entry
+// listed is the one adjacent to the footer.
+//
+//   0  [c1.ord][c1.zm]...[cN.ord][cN.zm][short key]   (current)
+//   1  [short key][all zone maps][all ordinal indexes]
+//   2  [short key][all ordinal indexes], zone maps left inline after their column's data
+//
+// The order matters because parsing the footer already fetches the file's final 1 MiB cache
+// block, so whatever sits immediately before the footer rides in for free. Layout 0 spends that
+// block on the short key index, which only a scan carrying a key range ever reads, and pushes
+// the ordinal indexes -- which EVERY scan loads, for every projected column -- furthest away.
+// Layouts 1 and 2 invert that. Measured region sizes are ~1.0-1.4 MB with the zone maps in it,
+// of which the ordinal indexes are roughly a third, so ordinals alone stand a chance of fitting
+// in that free block while the whole region does not.
+CONF_mInt32(segment_tail_index_region_layout, "0");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish

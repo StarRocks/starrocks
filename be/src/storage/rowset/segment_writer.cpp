@@ -420,6 +420,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     // inline: they are read only when a predicate needs them, and they are big enough that
     // hoisting them would inflate the region past the point where reading it whole is a win.
     const bool defer_small_index = config::enable_segment_tail_index_region;
+    // MEASUREMENT ONLY. Layout 2 leaves each page zone map inline, next to the column data a
+    // predicate scan is reading anyway, so only the ordinal indexes reach the tail region.
+    const int32_t region_layout = config::segment_tail_index_region_layout;
+    const bool defer_zone_map = defer_small_index && region_layout != 2;
 
     for (size_t i = 0; i < _column_indexes.size(); ++i) {
         uint32_t column_index = _column_indexes[i];
@@ -436,6 +440,8 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         uint64_t index_offset = _wfile->size();
         if (!defer_small_index) {
             RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        }
+        if (!defer_zone_map) {
             RETURN_IF_ERROR(column_writer->write_zone_map());
         }
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
@@ -485,6 +491,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // The short key index waits too. A vertical writer only has the key columns in its
         // first group, so writing it here would bury it under every later group's data.
         _small_index_region_deferred = true;
+        _small_index_region_layout = region_layout;
         _short_key_index_pending = _short_key_index_pending || _has_key;
         return Status::OK();
     }
@@ -505,20 +512,41 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
 // which is what lets a vertical writer produce the layout at all.
 Status SegmentWriter::_write_small_index_region(uint64_t* index_size) {
     const uint64_t region_offset = _wfile->size();
-    for (auto& column_writer : _deferred_small_index_writers) {
-        RETURN_IF_ERROR(column_writer->write_ordinal_index());
-        RETURN_IF_ERROR(column_writer->write_zone_map());
-        // reset to release memory
-        column_writer.reset();
+
+    // MEASUREMENT ONLY. The file grows towards the footer, so the LAST thing written here is the
+    // one that shares the footer's cache block. Layouts 1 and 2 spend that block on the ordinal
+    // indexes, which every scan loads for every projected column; layout 0 spends it on the short
+    // key index, which only a scan carrying a key range reads at all.
+    auto write_short_key = [&]() -> Status {
+        if (_short_key_index_pending) {
+            RETURN_IF_ERROR(_write_short_key_index());
+            _index_builder.reset();
+            _full_sort_key_index_builder.reset();
+            _short_key_index_pending = false;
+        }
+        return Status::OK();
+    };
+
+    if (_small_index_region_layout == 0) {
+        for (auto& column_writer : _deferred_small_index_writers) {
+            RETURN_IF_ERROR(column_writer->write_ordinal_index());
+            RETURN_IF_ERROR(column_writer->write_zone_map());
+            column_writer.reset();
+        }
+        RETURN_IF_ERROR(write_short_key());
+    } else {
+        RETURN_IF_ERROR(write_short_key());
+        if (_small_index_region_layout == 1) {
+            for (auto& column_writer : _deferred_small_index_writers) {
+                RETURN_IF_ERROR(column_writer->write_zone_map());
+            }
+        }
+        for (auto& column_writer : _deferred_small_index_writers) {
+            RETURN_IF_ERROR(column_writer->write_ordinal_index());
+            column_writer.reset();
+        }
     }
     _deferred_small_index_writers.clear();
-
-    if (_short_key_index_pending) {
-        RETURN_IF_ERROR(_write_short_key_index());
-        _index_builder.reset();
-        _full_sort_key_index_builder.reset();
-        _short_key_index_pending = false;
-    }
 
     const uint64_t region_size = _wfile->size() - region_offset;
     if (index_size != nullptr) {
