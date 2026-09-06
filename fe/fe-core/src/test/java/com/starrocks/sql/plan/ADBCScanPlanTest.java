@@ -23,6 +23,7 @@ import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.adbc.MockedADBCMetadata;
+import com.starrocks.planner.ADBCScanNode;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -37,6 +38,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ADBCScanPlanTest extends ConnectorPlanTestBase {
 
@@ -86,6 +88,18 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN ADBC");
         assertContains(plan, "WHERE");
+    }
+
+    @Test
+    public void testPushedPredicatesDoNotBecomeLocalScanConjuncts() throws Exception {
+        String sql = "select b from adbc0.test_db0.tbl0 where b in (1, 2) and abs(c) > 1";
+        ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        ADBCScanNode scan = (ADBCScanNode) plan.getScanNodes().get(0);
+        assertContains(scan.getADBCQueryStr(), " IN (");
+        assertFalse(scan.getADBCQueryStr().contains("abs("));
+        assertTrue(scan.getConjuncts().isEmpty());
+        assertEquals(0, scan.treeToThrift().getNodes().get(0).getConjunctsSize());
+        assertContains(getFragmentPlan(sql), "abs(");
     }
 
     @Test

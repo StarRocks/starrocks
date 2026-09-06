@@ -60,6 +60,8 @@ public abstract class ConnectorPartitionTraits {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConnectorPartitionTraits.class);
 
+    // Constructor references are deferred: building this registry does not initialize its subclasses.
+    @SuppressWarnings("java:S2390")
     private static final Map<Table.TableType, Supplier<ConnectorPartitionTraits>> TRAITS_TABLE =
             ImmutableMap.<Table.TableType, Supplier<ConnectorPartitionTraits>>builder()
                     // Consider all native tables as OLAP

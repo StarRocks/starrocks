@@ -57,7 +57,6 @@ public class ADBCScanNode extends ScanNode {
 
     public void computeColumnsAndFilters() {
         columns.clear();
-        filters.clear();
         createADBCTableColumns();
         createADBCTableFilters();
     }
@@ -80,6 +79,9 @@ public class ADBCScanNode extends ScanNode {
         for (Expr predicate : conjuncts) {
             filters.add(builder.visit(predicate));
         }
+        // Pushed predicates may have implicit casts removed and cannot be evaluated by the BE.
+        // Residual predicates remain in a separate local filter node.
+        conjuncts.clear();
     }
 
     private static class ADBCSqlBuilder extends AST2StringVisitor {

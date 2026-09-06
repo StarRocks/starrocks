@@ -20,11 +20,18 @@
 #include <arrow/c/bridge.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
 #include "exec/adbc_scanner.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "types/date_value.h"
 
 namespace starrocks::connector {
@@ -32,6 +39,129 @@ namespace starrocks::connector {
 // Forward-declare the free function defined in adbc_connector.cpp for testing.
 std::string get_adbc_sql(const std::string& table, const std::vector<std::string>& columns,
                          const std::vector<std::string>& filters, int64_t limit);
+
+namespace {
+
+// Exercise the real Driver Manager with an in-process driver; no installed database driver is needed.
+class TestADBCDriver {
+public:
+    TestADBCDriver() {
+        current = this;
+        SyncPoint::GetInstance()->SetCallBack("ADBCScanner::init_driver", [](void* database) {
+            AdbcError error = ADBC_ERROR_INIT;
+            ASSERT_EQ(ADBC_STATUS_OK,
+                      AdbcDriverManagerDatabaseSetInitFunc(static_cast<AdbcDatabase*>(database), init, &error));
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    ~TestADBCDriver() {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        current = nullptr;
+    }
+
+    std::string fail_stage;
+    std::string throw_stage;
+    std::string stream_failure;
+    std::string query;
+    std::map<std::string, std::string> options;
+    std::vector<std::string> calls;
+    int errors_released = 0;
+    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("value", arrow::int32())});
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+
+private:
+    inline static thread_local TestADBCDriver* current = nullptr;
+
+    AdbcStatusCode check(const std::string& stage, AdbcError* error) {
+        calls.push_back(stage);
+        if (stage == throw_stage) {
+            throw std::runtime_error("test driver exception: " + stage);
+        }
+        if (stage != fail_stage) {
+            return ADBC_STATUS_OK;
+        }
+        error->message = strdup(stage.c_str());
+        error->release = [](AdbcError* value) {
+            ++current->errors_released;
+            free(const_cast<char*>(value->message));
+            value->message = nullptr;
+            value->release = nullptr;
+        };
+        return ADBC_STATUS_IO;
+    }
+
+    static AdbcStatusCode init(int, void* output, AdbcError*) {
+        auto* driver = static_cast<AdbcDriver*>(output);
+        driver->release = [](AdbcDriver*, AdbcError* error) { return current->check("DriverRelease", error); };
+        driver->DatabaseNew = [](AdbcDatabase* database, AdbcError* error) {
+            database->private_data = current;
+            return current->check("DatabaseNew", error);
+        };
+        driver->DatabaseSetOption = [](AdbcDatabase*, const char* key, const char* value, AdbcError* error) {
+            current->options[key] = value;
+            return current->check("DatabaseSetOption", error);
+        };
+        driver->DatabaseInit = [](AdbcDatabase*, AdbcError* error) { return current->check("DatabaseInit", error); };
+        driver->DatabaseRelease = [](AdbcDatabase* database, AdbcError* error) {
+            database->private_data = nullptr;
+            return current->check("DatabaseRelease", error);
+        };
+        driver->ConnectionNew = [](AdbcConnection* connection, AdbcError* error) {
+            connection->private_data = current;
+            return current->check("ConnectionNew", error);
+        };
+        driver->ConnectionInit = [](AdbcConnection*, AdbcDatabase*, AdbcError* error) {
+            return current->check("ConnectionInit", error);
+        };
+        driver->ConnectionRelease = [](AdbcConnection* connection, AdbcError* error) {
+            connection->private_data = nullptr;
+            return current->check("ConnectionRelease", error);
+        };
+        driver->StatementNew = [](AdbcConnection*, AdbcStatement* statement, AdbcError* error) {
+            statement->private_data = current;
+            return current->check("StatementNew", error);
+        };
+        driver->StatementSetSqlQuery = [](AdbcStatement*, const char* query, AdbcError* error) {
+            current->query = query;
+            return current->check("StatementSetSqlQuery", error);
+        };
+        driver->StatementRelease = [](AdbcStatement* statement, AdbcError* error) {
+            statement->private_data = nullptr;
+            return current->check("StatementRelease", error);
+        };
+        driver->StatementExecuteQuery = [](AdbcStatement*, ArrowArrayStream* stream, int64_t*,
+                                           AdbcError* error) -> AdbcStatusCode {
+            auto status = current->check("StatementExecuteQuery", error);
+            if (status != ADBC_STATUS_OK) {
+                return status;
+            }
+            auto reader = arrow::RecordBatchReader::Make(current->batches, current->schema).ValueOrDie();
+            if (!arrow::ExportRecordBatchReader(reader, stream).ok()) {
+                return ADBC_STATUS_INTERNAL;
+            }
+            if (!current->stream_failure.empty()) {
+                stream->get_last_error = [](ArrowArrayStream*) { return "test stream failure"; };
+            }
+            if (current->stream_failure == "schema") {
+                stream->get_schema = [](ArrowArrayStream*, ArrowSchema*) { return EIO; };
+            } else if (current->stream_failure == "read") {
+                stream->get_next = [](ArrowArrayStream*, ArrowArray*) { return EIO; };
+            } else if (current->stream_failure == "throw") {
+                stream->get_next = [](ArrowArrayStream*, ArrowArray*) -> int {
+                    throw std::runtime_error("test stream exception");
+                };
+            } else if (current->stream_failure == "unknown") {
+                stream->get_next = [](ArrowArrayStream*, ArrowArray*) -> int { throw 1; };
+            }
+            return ADBC_STATUS_OK;
+        };
+        return ADBC_STATUS_OK;
+    }
+};
+
+} // namespace
 
 class ADBCConnectorTest : public ::testing::Test {
 protected:
@@ -82,6 +212,137 @@ TEST_F(ADBCConnectorTest, DriverManagerUsesLogicalNameDiscovery) {
     }
 }
 
+TEST_F(ADBCConnectorTest, DataSourceUsesDriverManagerAndPreservesRowsAndMetrics) {
+    TestADBCDriver driver;
+    arrow::Int32Builder builder;
+    ASSERT_TRUE(builder.AppendValues({1, 2, 3}).ok());
+    auto batch = arrow::RecordBatch::Make(driver.schema, 3, {builder.Finish().ValueOrDie()});
+    driver.batches = {batch->Slice(0, 0), batch, batch->Slice(0, 0)};
+
+    TTableDescriptor thrift_table;
+    thrift_table.__set_id(1);
+    thrift_table.adbcTable.__set_driver("test_driver");
+    thrift_table.adbcTable.__set_adbc_options({{"uri", "grpc://test"},
+                                               {"username", "reader"},
+                                               {"password", "test-password"},
+                                               {"adbc.test.option", "enabled"}});
+    thrift_table.__set_adbcTable(thrift_table.adbcTable);
+    ADBCTableDescriptor table(thrift_table, std::pmr::get_default_resource());
+    TTupleDescriptor thrift_tuple;
+    thrift_tuple.id = 0;
+    TupleDescriptor tuple(thrift_tuple);
+    tuple.set_table_desc(&table);
+    SlotDescriptor slot(int_slot(0, "value", true));
+    tuple.add_slot(&slot);
+    DescriptorTbl descriptors;
+    descriptors._tuple_desc_map.emplace(0, &tuple);
+    RuntimeState state;
+    state.set_desc_tbl(&descriptors);
+    state.set_chunk_size(2);
+
+    TPlanNode plan;
+    plan.adbc_scan_node.__set_tuple_id(0);
+    plan.adbc_scan_node.__set_table_name("\"sales\".\"events\"");
+    plan.adbc_scan_node.__set_columns({"\"value\""});
+    plan.adbc_scan_node.__set_filters({"\"value\" > 0"});
+    plan.adbc_scan_node.__set_limit(3);
+    ADBCConnector connector;
+    auto provider = connector.create_data_source_provider(nullptr, plan);
+    EXPECT_EQ(&tuple, provider->tuple_descriptor(&state));
+    EXPECT_TRUE(provider->insert_local_exchange_operator());
+    EXPECT_FALSE(provider->accept_empty_scan_ranges());
+    auto source = provider->create_data_source(TScanRange{});
+    RuntimeProfile profile("ADBC source");
+    source->set_runtime_profile(&profile);
+    ASSERT_TRUE(source->open(&state).ok());
+    EXPECT_EQ("SELECT \"value\" FROM \"sales\".\"events\" WHERE (\"value\" > 0) LIMIT 3", driver.query);
+    EXPECT_EQ("grpc://test", driver.options["uri"]);
+    EXPECT_EQ("reader", driver.options["username"]);
+    EXPECT_EQ("test-password", driver.options["password"]);
+    EXPECT_EQ("enabled", driver.options["adbc.test.option"]);
+    ChunkPtr chunk;
+    ASSERT_TRUE(source->get_next(&state, &chunk).ok());
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(1, chunk->get_column_by_slot_id(0)->get(0).get_int32());
+    EXPECT_EQ(2, chunk->get_column_by_slot_id(0)->get(1).get_int32());
+    ASSERT_TRUE(source->get_next(&state, &chunk).ok());
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ(3, chunk->get_column_by_slot_id(0)->get(0).get_int32());
+    EXPECT_TRUE(source->get_next(&state, &chunk).is_end_of_file());
+    EXPECT_EQ(3, source->raw_rows_read());
+    EXPECT_EQ(3, source->num_rows_read());
+    EXPECT_GT(source->num_bytes_read(), 0);
+    EXPECT_EQ(0, source->cpu_time_spent());
+    EXPECT_EQ(3, source->_runtime_profile->get_counter("RowsRead")->value());
+    source->close(&state);
+    source->close(&state);
+    EXPECT_EQ(1, std::count(driver.calls.begin(), driver.calls.end(), "StatementRelease"));
+    EXPECT_EQ(1, std::count(driver.calls.begin(), driver.calls.end(), "ConnectionRelease"));
+    EXPECT_EQ(1, std::count(driver.calls.begin(), driver.calls.end(), "DatabaseRelease"));
+}
+
+TEST_F(ADBCConnectorTest, ScannerReportsDriverFailuresAndReleasesPartialState) {
+    for (const std::string stage : {"DatabaseSetOption", "DatabaseInit", "ConnectionInit", "StatementNew",
+                                    "StatementSetSqlQuery", "StatementExecuteQuery"}) {
+        SCOPED_TRACE(stage);
+        TestADBCDriver driver;
+        driver.fail_stage = stage;
+        ADBCScanContext context;
+        context.driver = "test_driver";
+        context.uri = "grpc://test";
+        ADBCScanner scanner(context, nullptr, nullptr);
+        auto status = scanner.open(nullptr);
+        EXPECT_FALSE(status.ok());
+        EXPECT_NE(std::string::npos, status.to_string().find(stage));
+        scanner.close(nullptr);
+        scanner.close(nullptr);
+        EXPECT_EQ(1, driver.errors_released);
+        EXPECT_EQ(1, std::count(driver.calls.begin(), driver.calls.end(), "DatabaseRelease"));
+    }
+}
+
+TEST_F(ADBCConnectorTest, ScannerCatchesDriverAndStreamExceptions) {
+    {
+        TestADBCDriver driver;
+        driver.throw_stage = "DatabaseInit";
+        ADBCScanner scanner(ADBCScanContext{}, nullptr, nullptr);
+        auto status = scanner.open(nullptr);
+        EXPECT_FALSE(status.ok());
+        EXPECT_NE(std::string::npos, status.to_string().find("test driver exception"));
+    }
+    for (const std::string failure : {"schema", "read", "throw", "unknown"}) {
+        SCOPED_TRACE(failure);
+        TestADBCDriver driver;
+        driver.stream_failure = failure;
+        RuntimeProfile profile("ADBC stream");
+        ADBCScanner scanner(ADBCScanContext{}, nullptr, &profile);
+        auto status = scanner.open(nullptr);
+        if (failure == "schema") {
+            EXPECT_FALSE(status.ok());
+        } else {
+            ASSERT_TRUE(status.ok());
+            ChunkPtr chunk;
+            bool eos = false;
+            status = scanner.get_next(nullptr, &chunk, &eos);
+            EXPECT_FALSE(status.ok());
+        }
+        EXPECT_NE(std::string::npos, status.to_string().find(failure == "unknown" ? "unknown" : "test"));
+    }
+}
+
+TEST_F(ADBCConnectorTest, CancelledScanDoesNotReadFromDriver) {
+    TestADBCDriver driver;
+    ADBCScanner scanner(ADBCScanContext{}, nullptr, nullptr);
+    RuntimeState state;
+    ASSERT_TRUE(scanner.open(&state).ok());
+    state.set_is_cancelled(true);
+    ChunkPtr chunk;
+    bool eos = false;
+    EXPECT_TRUE(scanner.get_next(&state, &chunk, &eos).is_cancelled());
+    EXPECT_FALSE(eos);
+    EXPECT_EQ(0, scanner.rows_read());
+}
+
 TEST_F(ADBCConnectorTest, ScannerPreservesRowsAndNulls) {
     TTupleDescriptor thrift_tuple;
     thrift_tuple.id = 0;
@@ -99,6 +360,47 @@ TEST_F(ADBCConnectorTest, ScannerPreservesRowsAndNulls) {
     ASSERT_EQ(2, chunk->num_rows());
     EXPECT_EQ(7, chunk->get_column_by_slot_id(0)->get(0).get_int32());
     EXPECT_TRUE(chunk->get_column_by_slot_id(0)->is_null(1));
+}
+
+TEST_F(ADBCConnectorTest, ScannerDecodesDictionaryColumns) {
+    TTupleDescriptor thrift_tuple;
+    thrift_tuple.id = 0;
+    TupleDescriptor tuple(thrift_tuple);
+    SlotDescriptor number_slot(int_slot(0, "number", true));
+    auto string_thrift = int_slot(1, "text", true);
+    string_thrift.slotType.types.clear();
+    TypeDescriptor::create_varchar_type(20).to_thrift(&string_thrift.slotType);
+    SlotDescriptor string_slot(string_thrift);
+    tuple.add_slot(&number_slot);
+    tuple.add_slot(&string_slot);
+
+    arrow::Int8Builder index_builder;
+    ASSERT_TRUE(index_builder.Append(1).ok());
+    ASSERT_TRUE(index_builder.AppendNull().ok());
+    ASSERT_TRUE(index_builder.Append(0).ok());
+    auto indices = index_builder.Finish().ValueOrDie();
+    arrow::Int32Builder number_builder;
+    ASSERT_TRUE(number_builder.AppendValues({7, 8}).ok());
+    arrow::StringBuilder string_builder;
+    ASSERT_TRUE(string_builder.AppendValues({"first", "second"}).ok());
+    auto numbers = arrow::DictionaryArray::FromArrays(arrow::dictionary(arrow::int8(), arrow::int32()), indices,
+                                                      number_builder.Finish().ValueOrDie())
+                           .ValueOrDie();
+    auto strings = arrow::DictionaryArray::FromArrays(arrow::dictionary(arrow::int8(), arrow::utf8()), indices,
+                                                      string_builder.Finish().ValueOrDie())
+                           .ValueOrDie();
+    auto batch = arrow::RecordBatch::Make(
+            arrow::schema({arrow::field("number", numbers->type()), arrow::field("text", strings->type())}), 3,
+            {numbers, strings});
+    ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
+    ChunkPtr chunk;
+    ASSERT_TRUE(scanner._convert_batch_to_chunk(batch, &chunk).ok());
+    EXPECT_EQ(8, chunk->get_column_by_slot_id(0)->get(0).get_int32());
+    EXPECT_EQ("second", chunk->get_column_by_slot_id(1)->get(0).get_slice().to_string());
+    EXPECT_TRUE(chunk->get_column_by_slot_id(0)->is_null(1));
+    EXPECT_TRUE(chunk->get_column_by_slot_id(1)->is_null(1));
+    EXPECT_EQ(7, chunk->get_column_by_slot_id(0)->get(2).get_int32());
+    EXPECT_EQ("first", chunk->get_column_by_slot_id(1)->get(2).get_slice().to_string());
 }
 
 TEST_F(ADBCConnectorTest, ScannerRejectsNullInRequiredColumn) {

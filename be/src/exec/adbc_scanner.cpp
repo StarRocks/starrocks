@@ -19,6 +19,7 @@
 
 #include <algorithm>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/arrow/arrow_type_traits.h"
@@ -100,6 +101,7 @@ Status ADBCScanner::_init_adbc() {
     // Use the Driver Manager's upstream discovery contract.
     RETURN_ADBC_NOT_OK(AdbcDatabaseNew(&_database, &error), error);
     _database_initialized = true;
+    TEST_SYNC_POINT_CALLBACK("ADBCScanner::init_driver", &_database);
     error = ADBC_ERROR_INIT;
     RETURN_ADBC_NOT_OK(AdbcDriverManagerDatabaseSetLoadFlags(&_database, ADBC_LOAD_FLAG_DEFAULT, &error), error);
 
@@ -260,6 +262,9 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
 
         auto arrow_column = batch->column(arrow_column_index);
         auto arrow_type = arrow_column->type();
+        while (arrow_type->id() == arrow::Type::DICTIONARY) {
+            arrow_type = std::static_pointer_cast<arrow::DictionaryType>(arrow_type)->value_type();
+        }
         ArrowTypeId arrow_type_id = arrow_type->id();
         LogicalType sr_type = slot->type().type;
         bool is_nullable = slot->is_nullable();
