@@ -76,6 +76,8 @@ public class IcebergRewriteDataJobTest {
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         return new IcebergRewriteDataJob(
                 "insert into t select 1",
+                "insert into t select 1",
+                false,
                 false,
                 0L,
                 10L,
@@ -122,7 +124,7 @@ public class IcebergRewriteDataJobTest {
         when(alter.getTableName()).thenReturn("t");
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, false, ctx, alter);
+                "insert into t select 1", "insert into t select 1", false, false, 0L, 10L, 1L, false, ctx, alter);
 
         IcebergScanNode scanNode = mock(IcebergScanNode.class);
         Deencapsulation.setField(job, "scanNodes", Collections.singletonList(scanNode));
@@ -171,7 +173,7 @@ public class IcebergRewriteDataJobTest {
         when(sv.clone()).thenReturn(sv);
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, false, ctx, alter);
+                "insert into t select 1", "insert into t select 1", false, false, 0L, 10L, 1L, false, ctx, alter);
 
         // ---- Prepare minimal fields required by execute() ----
         InsertStmt parsedInsert = mock(InsertStmt.class);
@@ -236,7 +238,7 @@ public class IcebergRewriteDataJobTest {
         Deencapsulation.setField(job, "parsedStmt", fakeInsertStmt);
         new mockit.Expectations() {
             {
-                new com.starrocks.sql.ast.IcebergRewriteStmt(fakeInsertStmt, anyBoolean, anyBoolean);
+                new com.starrocks.sql.ast.IcebergRewriteStmt(fakeInsertStmt, anyBoolean, anyBoolean, anyBoolean);
                 result = rewriteStmt;
                 minTimes = 0;
             }
@@ -303,7 +305,7 @@ public class IcebergRewriteDataJobTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, false, ctx, alter);
+                "insert into t select 1", "insert into t select 1", false, false, 0L, 10L, 1L, false, ctx, alter);
 
         job.prepare();
 
