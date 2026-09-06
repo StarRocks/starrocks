@@ -130,6 +130,24 @@ public class ADBCSchemaResolverTest {
         assertEquals(expected, resolver.convertArrowFieldToSRType(field));
     }
 
+    @Test
+    public void decimal256_mapsDecimal256() {
+        Field field = makeField("col", new ArrowType.Decimal(50, 2, 256));
+        assertEquals(new DecimalType(PrimitiveType.DECIMAL256, 50, 2), resolver.convertArrowFieldToSRType(field));
+    }
+
+    @Test
+    public void decimal256WithSmallPrecision_keepsDecimal256Converter() {
+        Field field = makeField("col", new ArrowType.Decimal(10, 2, 256));
+        assertEquals(new DecimalType(PrimitiveType.DECIMAL256, 10, 2), resolver.convertArrowFieldToSRType(field));
+    }
+
+    @Test
+    public void decimalNegativeScale_isExcluded() {
+        Field field = makeField("col", new ArrowType.Decimal(10, -2, 128));
+        assertNull(resolver.convertArrowFieldToSRType(field));
+    }
+
     // --- String types ---
 
     @Test

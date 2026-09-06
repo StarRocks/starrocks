@@ -15,7 +15,13 @@
 package com.starrocks.connector.adbc;
 
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.arrow.adbc.core.AdbcDriver;
+import org.apache.arrow.adbc.driver.jni.JniDriverFactory;
+import org.apache.arrow.memory.BufferAllocator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +33,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ADBCConnectorTest {
@@ -51,6 +58,26 @@ public class ADBCConnectorTest {
         properties.put("driver", "adbc_driver_flightsql");
         properties.put("uri", "grpc+tcp://localhost:32010");
         return properties;
+    }
+
+    @Test
+    public void testNativeLinkageFailureDoesNotAbortCatalogReplay() throws Exception {
+        Files.createFile(tempDir.resolve(System.mapLibraryName("adbc_driver_jni")));
+        Config.adbc_jni_library_path = tempDir.toString();
+        new MockUp<JniDriverFactory>() {
+            @Mock
+            public AdbcDriver getDriver(BufferAllocator allocator) {
+                throw new UnsatisfiedLinkError("test native dependency unavailable");
+            }
+        };
+        ADBCConnector connector = assertDoesNotThrow(() -> new ADBCConnector(
+                new ConnectorContext("adbc0", "adbc", validProperties())));
+        try {
+            StarRocksConnectorException error = assertThrows(StarRocksConnectorException.class, connector::getMetadata);
+            assertInstanceOf(UnsatisfiedLinkError.class, error.getCause());
+        } finally {
+            connector.shutdown();
+        }
     }
 
     @Test

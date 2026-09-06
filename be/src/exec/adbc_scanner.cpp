@@ -17,6 +17,8 @@
 #include <arrow/c/bridge.h>
 #include <glog/logging.h>
 
+#include <algorithm>
+
 #include "base/time/time.h"
 #include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/arrow/arrow_type_traits.h"
@@ -155,7 +157,7 @@ Status ADBCScanner::_execute_query() {
     RETURN_ADBC_NOT_OK(AdbcStatementExecuteQuery(&_statement, &_c_stream, &rows_affected, &error), error);
 
     // Get schema from the C stream
-    struct ArrowSchema c_schema{};
+    struct ArrowSchema c_schema {};
     if (_c_stream.get_schema(&_c_stream, &c_schema) != 0) {
         const char* err = _c_stream.get_last_error(&_c_stream);
         return Status::InternalError(fmt::format("Failed to get schema from ADBC stream: {}", err ? err : "unknown"));
@@ -181,6 +183,9 @@ Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
 Status ADBCScanner::_get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     *eos = false;
+    if (state != nullptr && state->is_cancelled()) {
+        return Status::Cancelled("ADBC scan cancelled");
+    }
 
     std::shared_ptr<arrow::RecordBatch> batch;
 
@@ -198,7 +203,7 @@ Status ADBCScanner::_get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* e
         // Read next batch
         SCOPED_TIMER(_profile.io_timer);
         COUNTER_UPDATE(_profile.io_counter, 1);
-        struct ArrowArray c_array{};
+        struct ArrowArray c_array {};
         int rc = _c_stream.get_next(&_c_stream, &c_array);
         if (rc != 0) {
             const char* err = _c_stream.get_last_error(&_c_stream);
@@ -272,17 +277,29 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
 
         if (num_rows > 0) {
             ConvertFuncTree converter_tree(converter);
+            ArrowConvertContext context;
+            context.set_current_column(slot->col_name(), slot->type());
+            std::string conversion_error;
+            context.report_error_message = [&](const std::string& reason, const std::string&, int64_t) {
+                if (conversion_error.empty()) {
+                    conversion_error = reason;
+                }
+            };
             RETURN_IF_ERROR(convert_arrow_array_to_column(&converter_tree, num_rows, arrow_column.get(), column.get(),
-                                                          0, 0, &chunk_filter, nullptr));
+                                                          0, 0, &chunk_filter, &context));
+            // Load converters mark rejected rows in the filter. A query must fail instead
+            // of losing rows, and a later non-nullable column can overwrite this filter.
+            if (std::find(chunk_filter.begin(), chunk_filter.end(), 0) != chunk_filter.end()) {
+                return Status::InternalError(
+                        fmt::format("ADBC: cannot convert column '{}': {}", slot->col_name(),
+                                    conversion_error.empty() ? "value is out of range" : conversion_error));
+            }
         }
 
         result->append_column(std::move(column), slot->id());
         ++arrow_column_index;
     }
 
-    if (num_rows > 0) {
-        result->filter(chunk_filter);
-    }
     *chunk = std::move(result);
     return Status::OK();
 }

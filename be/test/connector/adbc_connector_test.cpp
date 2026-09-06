@@ -16,10 +16,15 @@
 
 #include <arrow-adbc/adbc.h>
 #include <arrow-adbc/adbc_driver_manager.h>
+#include <arrow/api.h>
+#include <arrow/c/bridge.h>
 #include <gtest/gtest.h>
 
 #include <string>
 #include <vector>
+
+#include "exec/adbc_scanner.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks::connector {
 
@@ -27,7 +32,18 @@ namespace starrocks::connector {
 std::string get_adbc_sql(const std::string& table, const std::vector<std::string>& columns,
                          const std::vector<std::string>& filters, int64_t limit);
 
-class ADBCConnectorTest : public ::testing::Test {};
+class ADBCConnectorTest : public ::testing::Test {
+protected:
+    static TSlotDescriptor int_slot(int id, const std::string& name, bool nullable) {
+        TSlotDescriptor slot;
+        slot.__set_id(id);
+        slot.__set_colName(name);
+        slot.__set_isMaterialized(true);
+        slot.__set_isNullable(nullable);
+        TypeDescriptor(TYPE_INT).to_thrift(&slot.slotType);
+        return slot;
+    }
+};
 
 TEST_F(ADBCConnectorTest, ConnectorType) {
     ADBCConnector connector;
@@ -63,6 +79,84 @@ TEST_F(ADBCConnectorTest, DriverManagerUsesLogicalNameDiscovery) {
     if (error.release != nullptr) {
         error.release(&error);
     }
+}
+
+TEST_F(ADBCConnectorTest, ScannerPreservesRowsAndNulls) {
+    TTupleDescriptor thrift_tuple;
+    thrift_tuple.id = 0;
+    TupleDescriptor tuple(thrift_tuple);
+    SlotDescriptor slot(int_slot(0, "value", true));
+    tuple.add_slot(&slot);
+    arrow::Int32Builder builder;
+    ASSERT_TRUE(builder.Append(7).ok());
+    ASSERT_TRUE(builder.AppendNull().ok());
+    auto array = builder.Finish().ValueOrDie();
+    auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::int32())}), 2, {array});
+    ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
+    ChunkPtr chunk;
+    ASSERT_TRUE(scanner._convert_batch_to_chunk(batch, &chunk).ok());
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(7, chunk->get_column_by_slot_id(0)->get(0).get_int32());
+    EXPECT_TRUE(chunk->get_column_by_slot_id(0)->is_null(1));
+}
+
+TEST_F(ADBCConnectorTest, ScannerRejectsNullInRequiredColumn) {
+    TTupleDescriptor thrift_tuple;
+    thrift_tuple.id = 0;
+    TupleDescriptor tuple(thrift_tuple);
+    SlotDescriptor first(int_slot(0, "required_value", false));
+    SlotDescriptor second(int_slot(1, "other_value", false));
+    tuple.add_slot(&first);
+    tuple.add_slot(&second);
+    arrow::Int32Builder null_builder;
+    ASSERT_TRUE(null_builder.AppendNull().ok());
+    auto null_array = null_builder.Finish().ValueOrDie();
+    arrow::Int32Builder value_builder;
+    ASSERT_TRUE(value_builder.Append(7).ok());
+    auto value_array = value_builder.Finish().ValueOrDie();
+    auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("required_value", arrow::int32()),
+                                                         arrow::field("other_value", arrow::int32())}),
+                                          1, {null_array, value_array});
+    ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
+    ChunkPtr chunk;
+    auto status = scanner._convert_batch_to_chunk(batch, &chunk);
+    EXPECT_FALSE(status.ok());
+    EXPECT_NE(std::string::npos, status.to_string().find("required_value"));
+}
+
+TEST_F(ADBCConnectorTest, ScannerRechunksAndPreservesProfileCounters) {
+    TTupleDescriptor thrift_tuple;
+    thrift_tuple.id = 0;
+    TupleDescriptor tuple(thrift_tuple);
+    SlotDescriptor slot(int_slot(0, "value", true));
+    tuple.add_slot(&slot);
+    arrow::Int32Builder builder;
+    ASSERT_TRUE(builder.AppendValues({1, 2, 3, 4, 5}).ok());
+    auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::int32())}), 5,
+                                          {builder.Finish().ValueOrDie()});
+    auto reader = arrow::RecordBatchReader::Make({batch}).ValueOrDie();
+    RuntimeProfile profile("ADBC scan");
+    ADBCScanner scanner(ADBCScanContext{}, &tuple, &profile);
+    ASSERT_TRUE(arrow::ExportRecordBatchReader(reader, &scanner._c_stream).ok());
+    scanner._arrow_schema = batch->schema();
+    scanner._max_chunk_size = 2;
+    ChunkPtr chunk;
+    bool eos = false;
+    int value = 1;
+    for (int expected_size : {2, 2, 1}) {
+        ASSERT_TRUE(scanner.get_next(nullptr, &chunk, &eos).ok());
+        ASSERT_FALSE(eos);
+        ASSERT_EQ(expected_size, chunk->num_rows());
+        for (int row = 0; row < expected_size; ++row) {
+            EXPECT_EQ(value++, chunk->get_column_by_slot_id(0)->get(row).get_int32());
+        }
+    }
+    ASSERT_TRUE(scanner.get_next(nullptr, &chunk, &eos).ok());
+    EXPECT_TRUE(eos);
+    EXPECT_EQ(5, profile.get_counter("RowsRead")->value());
+    EXPECT_EQ(2, profile.get_counter("IOCounter")->value());
+    scanner.close(nullptr);
+    scanner.close(nullptr);
 }
 
 TEST_F(ADBCConnectorTest, SqlAssemblyBasic) {

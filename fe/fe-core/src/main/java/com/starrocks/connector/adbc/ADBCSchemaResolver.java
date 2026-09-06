@@ -60,7 +60,13 @@ public class ADBCSchemaResolver {
             return convertFloatingPointType((ArrowType.FloatingPoint) arrowType);
         } else if (arrowType instanceof ArrowType.Decimal) {
             ArrowType.Decimal decimalType = (ArrowType.Decimal) arrowType;
-            return new DecimalType(PrimitiveType.DECIMAL128, decimalType.getPrecision(), decimalType.getScale());
+            if (decimalType.getScale() < 0 || decimalType.getScale() > decimalType.getPrecision()) {
+                LOG.warn("Unsupported Arrow decimal scale for column '{}': {}", field.getName(), decimalType);
+                return null;
+            }
+            PrimitiveType storageType = decimalType.getBitWidth() == 256
+                    ? PrimitiveType.DECIMAL256 : PrimitiveType.DECIMAL128;
+            return new DecimalType(storageType, decimalType.getPrecision(), decimalType.getScale());
         } else if (arrowType instanceof ArrowType.Utf8 || arrowType instanceof ArrowType.LargeUtf8) {
             return new VarcharType(StringType.DEFAULT_STRING_LENGTH);
         } else if (arrowType instanceof ArrowType.Utf8View) {

@@ -361,14 +361,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            Map<String, String> adbcProps = adbcTable.getProperties();
-            if (adbcProps != null && !adbcProps.isEmpty()) {
-                List<String> propEntries = adbcProps.entrySet().stream()
-                        .sorted(Map.Entry.comparingByKey())
-                        .map(e -> "\"" + e.getKey() + "\" = \"" + e.getValue() + "\"")
-                        .collect(Collectors.toList());
-                sb.append(Joiner.on(",\n").join(propEntries)).append("\n");
-            }
+            sb.append(new PrintableMap<>(adbcTable.getDisplayProperties(hidePassword), "=", true, true));
+            sb.append("\n");
             sb.append(")");
         }
         sb.append(";");

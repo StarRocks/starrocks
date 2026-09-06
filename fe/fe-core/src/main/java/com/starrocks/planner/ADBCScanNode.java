@@ -16,13 +16,13 @@ package com.starrocks.planner;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.ADBCTable;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.formatter.AST2StringVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.thrift.TADBCScanNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -43,46 +43,31 @@ public class ADBCScanNode extends ScanNode {
     private final ADBCTable adbcTable;
     private final List<String> columns = new ArrayList<>();
     private final List<String> filters = new ArrayList<>();
-    private String tableName;
+    private final String tableName;
 
     public ADBCScanNode(PlanNodeId id, TupleDescriptor desc, ADBCTable adbcTable) {
         super(id, desc, "SCAN ADBC");
         this.adbcTable = adbcTable;
-        String identifier = getIdentifierSymbol();
-        this.tableName = buildTableName(identifier);
+        this.tableName = quoteIdentifier(adbcTable.getDbName()) + "." + quoteIdentifier(adbcTable.getName());
     }
 
-    private String buildTableName(String identifier) {
-        String schema = adbcTable.getDbName();
-        String table = adbcTable.getName();
-        if (identifier.isEmpty()) {
-            return schema + "." + table;
-        }
-        return identifier + schema + identifier + "." + identifier + table + identifier;
-    }
-
-    private String getIdentifierSymbol() {
-        // Default to double-quote (standard SQL)
-        return "\"";
+    private static String quoteIdentifier(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 
     public void computeColumnsAndFilters() {
+        columns.clear();
+        filters.clear();
         createADBCTableColumns();
         createADBCTableFilters();
     }
 
     private void createADBCTableColumns() {
-        String identifier = getIdentifierSymbol();
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
                 continue;
             }
-            String colName = slot.getColumn().getName();
-            if (identifier.isEmpty() || (colName.startsWith(identifier) && colName.endsWith(identifier))) {
-                columns.add(colName);
-            } else {
-                columns.add(identifier + colName + identifier);
-            }
+            columns.add(quoteIdentifier(slot.getColumn().getName()));
         }
         // Handle count(*) case
         if (columns.isEmpty()) {
@@ -91,24 +76,29 @@ public class ADBCScanNode extends ScanNode {
     }
 
     private void createADBCTableFilters() {
-        if (conjuncts.isEmpty()) {
-            return;
+        ADBCSqlBuilder builder = new ADBCSqlBuilder();
+        for (Expr predicate : conjuncts) {
+            filters.add(builder.visit(predicate));
         }
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        ExprUtils.collectList(conjuncts, SlotRef.class, slotRefs);
-        ExprSubstitutionMap sMap = new ExprSubstitutionMap();
-        String identifier = getIdentifierSymbol();
-        for (SlotRef slotRef : slotRefs) {
-            SlotRef tmpRef = (SlotRef) slotRef.clone();
-            tmpRef.setTblName(null);
-            tmpRef.setLabel(identifier + tmpRef.getLabel() + identifier);
-            sMap.put(slotRef, tmpRef);
+    }
+
+    private static class ADBCSqlBuilder extends AST2StringVisitor {
+        ADBCSqlBuilder() {
+            options = FormatOptions.allEnable().setEnableDigest(false);
         }
 
-        ArrayList<Expr> adbcConjuncts = ExprUtils.cloneList(conjuncts, sMap);
-        for (Expr p : adbcConjuncts) {
-            p = ExprUtils.replaceLargeStringLiteral(p);
-            filters.add(AstToStringBuilder.toString(p));
+        @Override
+        public String visitSlot(SlotRef node, Void context) {
+            return quoteIdentifier(node.getColumnName() == null ? node.getLabel() : node.getColumnName());
+        }
+
+        @Override
+        public String visitLiteral(LiteralExpr node, Void context) {
+            if (node instanceof StringLiteral) {
+                // Flight SQL uses SQL quote doubling, not StarRocks backslash escapes.
+                return "'" + node.getStringValue().replace("'", "''") + "'";
+            }
+            return super.visitLiteral(node, context);
         }
     }
 
@@ -158,18 +148,6 @@ public class ADBCScanNode extends ScanNode {
         String driver = getPropertyValue("driver");
         if (driver != null) {
             output.append(prefix).append("DRIVER: ").append(driver).append("\n");
-        }
-
-        String uri = getPropertyValue("uri");
-        if (uri != null) {
-            output.append(prefix).append("URI: ").append(uri).append("\n");
-        }
-
-        if (detailLevel == TExplainLevel.VERBOSE) {
-            // EXPLAIN ANALYZE stats from BE runtime profile
-            output.append(prefix).append("ConnectTime: ").append("{connect_time_ms}").append("ms\n");
-            output.append(prefix).append("RowsRead: ").append("{rows_read}").append("\n");
-            output.append(prefix).append("BytesRead: ").append("{bytes_read}").append("\n");
         }
 
         return output.toString();

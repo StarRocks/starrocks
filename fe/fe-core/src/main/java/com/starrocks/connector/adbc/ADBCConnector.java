@@ -50,7 +50,7 @@ public class ADBCConnector implements Connector {
     private final String catalogName;
     private BufferAllocator allocator;
     private ConnectorMetadata metadata;
-    private Exception initializationFailure;
+    private Throwable initializationFailure;
 
     public ADBCConnector(ConnectorContext context) {
         catalogName = context.getCatalogName();
@@ -123,7 +123,7 @@ public class ADBCConnector implements Connector {
             metadata = new ADBCMetadata(properties, catalogName, database);
             allocator = newAllocator;
             initializationFailure = null;
-        } catch (Exception e) {
+        } catch (Exception | LinkageError e) {
             newAllocator.close();
             metadata = null;
             allocator = null;
@@ -141,7 +141,7 @@ public class ADBCConnector implements Connector {
         if (metadata == null) {
             throw new StarRocksConnectorException(
                     "ADBC catalog '" + catalogName + "': failed to load driver '"
-                            + properties.get("driver") + "' or connect to '" + properties.get("uri") + "'",
+                            + properties.get("driver") + "' or connect to the data source",
                     initializationFailure);
         }
         return metadata;

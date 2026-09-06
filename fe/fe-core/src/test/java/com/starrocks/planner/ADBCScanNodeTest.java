@@ -16,6 +16,10 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.IntegerType;
 import com.starrocks.thrift.TADBCScanNode;
 import com.starrocks.thrift.TExplainLevel;
@@ -29,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -119,16 +124,47 @@ public class ADBCScanNodeTest {
         assertTrue(explain.contains("TABLE: \"test_schema\".\"test_table\""));
         assertTrue(explain.contains("QUERY: SELECT \"col1\" FROM \"test_schema\".\"test_table\""));
         assertTrue(explain.contains("DRIVER: adbc_driver_flightsql"));
-        assertTrue(explain.contains("URI: grpc://localhost:8815"));
+        assertFalse(explain.contains(tableProperties.get("uri")));
     }
 
     @Test
-    public void testExplainAnalyzeOutput() {
+    public void testExplainDoesNotExposeConnectionCredentialsOrPlaceholderCounters() {
+        tableProperties.put("uri", "grpc://admin:secret@localhost:8815?token=secret");
+        tableProperties.put("password", "secret");
         ADBCScanNode node = createScanNodeWithColumns("col1");
         String explain = node.getNodeExplainString("  ", TExplainLevel.VERBOSE);
-        assertTrue(explain.contains("ConnectTime:"));
-        assertTrue(explain.contains("RowsRead:"));
-        assertTrue(explain.contains("BytesRead:"));
+        assertFalse(explain.contains("secret"));
+        assertFalse(explain.contains("{connect_time_ms}"));
+        assertTrue(explain.contains("DRIVER: adbc_driver_flightsql"));
+    }
+
+    @Test
+    public void testIdentifiersEscapeEmbeddedQuotes() {
+        when(mockTable.getDbName()).thenReturn("test\"schema");
+        when(mockTable.getName()).thenReturn("test\"table");
+        ADBCScanNode node = createScanNodeWithColumns("col\"umn", "\"quoted\"");
+        assertEquals("SELECT \"col\"\"umn\", \"\"\"quoted\"\"\" FROM \"test\"\"schema\".\"test\"\"table\"",
+                node.getADBCQueryStr());
+    }
+
+    @Test
+    public void testPredicateEscapesIdentifierAndStringLiteral() {
+        ADBCScanNode node = createScanNodeWithColumns("col\"umn");
+        node.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
+                new SlotRef(null, "col\"umn"), new StringLiteral("O'Reilly\\books")));
+        node.computeColumnsAndFilters();
+        assertEquals(List.of("\"col\"\"umn\" = 'O''Reilly\\books'"), node.getFilters());
+        String query = node.getADBCQueryStr();
+        node.computeColumnsAndFilters();
+        assertEquals(query, node.getADBCQueryStr());
+    }
+
+    @Test
+    public void testRepeatedComputeDoesNotDuplicateProjection() {
+        ADBCScanNode node = createScanNodeWithColumns("col1");
+        String query = node.getADBCQueryStr();
+        node.computeColumnsAndFilters();
+        assertEquals(query, node.getADBCQueryStr());
     }
 
     @Test

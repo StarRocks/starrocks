@@ -14,14 +14,31 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.adbc.MockedADBCMetadata;
+import com.starrocks.server.GlobalStateMgr;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 public class ADBCScanPlanTest extends ConnectorPlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
+        Map<String, String> properties = Map.of(
+                "type", "adbc", "driver", "adbc_driver_flightsql", "uri", "grpc+tcp://localhost:32010");
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        state.getCatalogMgr().createCatalog("adbc", MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME, "", properties);
+        ((MockedMetadataMgr) state.getMetadataMgr()).registerMockedMetadata(
+                MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME, new MockedADBCMetadata(properties));
+    }
+
+    @AfterAll
+    public static void dropADBCCatalog() {
+        dropCatalog(MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME);
     }
 
     @Test
@@ -87,6 +104,5 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN ADBC");
         assertContains(plan, "DRIVER: adbc_driver_flightsql");
-        assertContains(plan, "URI: grpc+tcp://localhost:32010");
     }
 }

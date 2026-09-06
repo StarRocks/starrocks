@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 public class ADBCTable extends Table {
 
@@ -51,12 +52,12 @@ public class ADBCTable extends Table {
 
     @Override
     public String getCatalogDBName() {
-        return catalogName + "." + dbName;
+        return dbName;
     }
 
     @Override
     public String getCatalogTableName() {
-        return catalogName + "." + dbName + "." + name;
+        return name;
     }
 
     public String getDbName() {
@@ -66,6 +67,16 @@ public class ADBCTable extends Table {
     @Override
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public Map<String, String> getDisplayProperties(boolean hideCredentials) {
+        Map<String, String> displayProperties = new TreeMap<>();
+        if (properties != null) {
+            // Driver-specific options and URIs may contain credentials under arbitrary keys.
+            properties.forEach((key, value) -> displayProperties.put(key,
+                    hideCredentials && !key.equals("type") && !key.equals("driver") ? "***" : value));
+        }
+        return displayProperties;
     }
 
     @Override
