@@ -935,6 +935,11 @@ public class ColumnTypeConverter {
             case VARIANT:
                 return VariantType.VARIANT;
             case FIXED:
+            case GEOGRAPHY:
+            case GEOMETRY:
+                // External geo metadata is transported separately by IcebergApiConverter.
+                // Recognition must not expose WKB as ordinary SQL binary values.
+                return UnknownType.UNKNOWN_TYPE;
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
