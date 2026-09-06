@@ -223,7 +223,9 @@ jobs:
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
           contains(github.event.pull_request.title, '(backport #')
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo `gh label create`, no cascade; the sibling "add merge label"
+          # step already uses GITHUB_TOKEN. Off the shared PAT.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LABEL="${GITHUB_BASE_REF##*-}-merged"
           gh label create "${LABEL}" -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
