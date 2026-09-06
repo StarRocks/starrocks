@@ -22,6 +22,7 @@
 #include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/array_size_limit.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/mem_pool.h"
@@ -29,6 +30,7 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
+
 // Primary template: non-string-or-binary types
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>, typename = guard::Guard>
 struct ArrayAggAggregateState {
@@ -77,6 +79,15 @@ struct ArrayAggAggregateState {
             }
         }
         return &data_column;
+    }
+
+    size_t element_count() const {
+        if constexpr (is_distinct) {
+            DCHECK(data_column.size() == 0 || data_column.size() == set.size());
+            return set.size() + null_count;
+        } else {
+            return data_column.size() + null_count;
+        }
     }
 
     bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
@@ -161,6 +172,15 @@ struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT
             }
         }
         return &data_column;
+    }
+
+    size_t element_count() const {
+        if constexpr (is_distinct) {
+            DCHECK(data_column.size() == 0 || data_column.size() == set.size());
+            return set.size() + null_count;
+        } else {
+            return data_column.size() + null_count;
+        }
     }
 
     bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
@@ -282,8 +302,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        // should check overflow before append, otherwise will generate invalid result.
-        if (UNLIKELY(state_impl.check_overflow(ctx))) {
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", state_impl.element_count()) ||
+                     state_impl.check_overflow(ctx))) {
             return;
         }
 
@@ -318,7 +338,21 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
+        // get_values must always grow dst by exactly end - start rows, even when it fails. Two callers depend
+        // on that and neither can observe an error: the Analytor appends dst to an input chunk whose row count
+        // is already fixed, and the nullable wrapper appends end - start null flags alongside this call no
+        // matter what happens here. So pad dst back up on every exit path. The padding is never read: whoever
+        // set the error fails the query.
+        const size_t expected_size = dst->size() + (end - start);
+        auto defer = DeferOp([&]() {
+            if (dst->size() < expected_size) {
+                dst->append_default(expected_size - dst->size());
+            }
+        });
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", state_impl.element_count()))) {
+            return;
+        }
         const auto& data_column = state_impl.get_data_column();
         auto* array_column = down_cast<ArrayColumn*>(dst);
         for (auto i = start; i < end; i++) {
@@ -612,6 +646,9 @@ public:
             }
             index.resize(res_num);
             elem_size = res_num;
+        }
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", elem_size))) {
+            return;
         }
         auto* elements_col = array_col->elements_column_raw_ptr();
         if (index.empty()) {
