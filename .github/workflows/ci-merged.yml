@@ -11,6 +11,10 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+  # get_next_release_tag.sh (version-label steps) reads /tags and /branches with
+  # GITHUB_TOKEN; with an explicit permissions block, unlisted scopes default to
+  # none, so grant contents:read or those queries are denied.
+  contents: read
 env:
   PR_NUMBER: ${{ github.event.number }}
 
