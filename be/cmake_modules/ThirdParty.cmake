@@ -503,16 +503,17 @@ endif()
 if (${WITH_PAIMON_CPP} STREQUAL "ON")
     set(PAIMON_CPP_DIR "${THIRDPARTY_DIR}/paimon-cpp")
     find_library(PAIMON_SHARED_LIBRARY NAMES paimon
-                 PATHS ${PAIMON_CPP_DIR}/lib ${PAIMON_CPP_DIR}/lib64 NO_DEFAULT_PATH)
+                 PATHS ${PAIMON_CPP_DIR}/lib NO_DEFAULT_PATH)
     if (NOT PAIMON_SHARED_LIBRARY)
-        message(FATAL_ERROR "libpaimon.so not found under ${PAIMON_CPP_DIR}, "
+        message(FATAL_ERROR "libpaimon.so not found under ${PAIMON_CPP_DIR}/lib, "
                             "run thirdparty/build-thirdparty.sh paimon_cpp first")
     endif()
     # paimon-cpp ships its file formats, file/global indexes, and the local
     # filesystem as plugin shared libraries that register themselves into
     # libpaimon's FactoryCreator via load-time constructors. Nothing references
-    # their symbols, so they must be linked explicitly (as DT_NEEDED of
-    # starrocks_be) or FileFormatFactory finds no parquet/orc/avro at runtime.
+    # their symbols, so they must be linked explicitly (as DT_NEEDED of the
+    # libstarrocks_paimon.so shim; their constructors run when the shim is
+    # dlopen()ed) or FileFormatFactory finds no parquet/orc/avro at runtime.
     set(PAIMON_CPP_PLUGINS
         paimon_parquet_file_format
         paimon_orc_file_format
@@ -523,7 +524,7 @@ if (${WITH_PAIMON_CPP} STREQUAL "ON")
         paimon_local_file_system)
     foreach(PAIMON_PLUGIN ${PAIMON_CPP_PLUGINS})
         find_library(${PAIMON_PLUGIN}_SHARED_LIBRARY NAMES ${PAIMON_PLUGIN}
-                     PATHS ${PAIMON_CPP_DIR}/lib ${PAIMON_CPP_DIR}/lib64 NO_DEFAULT_PATH)
+                     PATHS ${PAIMON_CPP_DIR}/lib NO_DEFAULT_PATH)
         if (NOT ${PAIMON_PLUGIN}_SHARED_LIBRARY)
             message(FATAL_ERROR "lib${PAIMON_PLUGIN}.so not found under ${PAIMON_CPP_DIR}, "
                                 "run thirdparty/build-thirdparty.sh paimon_cpp first")

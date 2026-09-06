@@ -76,7 +76,7 @@ Usage: $0 <options>
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
      --without-tenann               build without tenann (vector index library); default is ON on Linux
-     --with-paimon-cpp              build with paimon-cpp library; default is OFF, not supported on macOS
+     --without-paimon-cpp           build without paimon-cpp library; default is ON on Linux, not supported on macOS
      -j                             build parallel
 
   Eg.
@@ -133,7 +133,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
   -l 'without-tenann' \
-  -l 'with-paimon-cpp' \
+  -l 'without-paimon-cpp' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -172,7 +172,7 @@ if starrocks_is_darwin; then
 else
     WITH_TENANN=ON
 fi
-WITH_PAIMON_CPP=OFF
+WITH_PAIMON_CPP=ON
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
@@ -202,7 +202,7 @@ while true; do
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
         --without-tenann) WITH_TENANN=OFF; shift ;;
-        --with-paimon-cpp) WITH_PAIMON_CPP=ON; shift ;;
+        --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;

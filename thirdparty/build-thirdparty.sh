@@ -1830,6 +1830,7 @@ build_paimon_cpp() {
     ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/paimon-cpp \
+        -DCMAKE_INSTALL_LIBDIR=lib \
         -DPAIMON_BUILD_STATIC=OFF \
         -DPAIMON_ENABLE_ORC=ON \
         -DPAIMON_ENABLE_AVRO=ON \
@@ -1844,6 +1845,11 @@ build_paimon_cpp() {
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+    # be/ resolves paimon strictly from <prefix>/lib (CMAKE_INSTALL_LIBDIR pinned above).
+    if [[ ! -f "${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so" ]]; then
+        echo "Error: ${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so not found after install; CMAKE_INSTALL_LIBDIR=lib was not honored" >&2
+        exit 1
+    fi
     restore_compile_flags
 }
 
