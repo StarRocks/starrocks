@@ -9,5 +9,46 @@
     "reason": "Reviewed compatibility exception after a multi-release deprecation window.",
     "owner": "engprod"
   },
-  "waivers": []
+  "waivers": [
+    {
+      "path": "gensrc/thrift/parquet.thrift",
+      "container_or_method": "BoundingBox",
+      "field_number": 1,
+      "field_name": "xmin",
+      "rule": "new_field_must_be_optional",
+      "base_signature": null,
+      "reason": "Apache Parquet defines this XY bound as required. Exception only for introducing this upstream field; existing-field type, deletion and ordinal checks remain active.",
+      "owner": "ViktorGo86"
+    },
+    {
+      "path": "gensrc/thrift/parquet.thrift",
+      "container_or_method": "BoundingBox",
+      "field_number": 2,
+      "field_name": "xmax",
+      "rule": "new_field_must_be_optional",
+      "base_signature": null,
+      "reason": "Apache Parquet defines this XY bound as required. Exception only for introducing this upstream field; existing-field type, deletion and ordinal checks remain active.",
+      "owner": "ViktorGo86"
+    },
+    {
+      "path": "gensrc/thrift/parquet.thrift",
+      "container_or_method": "BoundingBox",
+      "field_number": 3,
+      "field_name": "ymin",
+      "rule": "new_field_must_be_optional",
+      "base_signature": null,
+      "reason": "Apache Parquet defines this XY bound as required. Exception only for introducing this upstream field; existing-field type, deletion and ordinal checks remain active.",
+      "owner": "ViktorGo86"
+    },
+    {
+      "path": "gensrc/thrift/parquet.thrift",
+      "container_or_method": "BoundingBox",
+      "field_number": 4,
+      "field_name": "ymax",
+      "rule": "new_field_must_be_optional",
+      "base_signature": null,
+      "reason": "Apache Parquet defines this XY bound as required. Exception only for introducing this upstream field; existing-field type, deletion and ordinal checks remain active.",
+      "owner": "ViktorGo86"
+    }
+  ]
 }
