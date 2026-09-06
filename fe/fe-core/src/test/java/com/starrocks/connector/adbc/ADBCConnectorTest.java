@@ -16,9 +16,14 @@ package com.starrocks.connector.adbc;
 
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorContext;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
+import mockit.Verifications;
+import org.apache.arrow.adbc.core.AdbcDatabase;
 import org.apache.arrow.adbc.core.AdbcDriver;
 import org.apache.arrow.adbc.driver.jni.JniDriverFactory;
 import org.apache.arrow.memory.BufferAllocator;
@@ -29,15 +34,25 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ADBCConnectorTest {
     private String originalJniPath;
+    private String originalJniSystemPath;
+
+    @Mocked
+    private AdbcDriver driver;
+
+    @Mocked
+    private AdbcDatabase database;
 
     @TempDir
     private Path tempDir;
@@ -45,11 +60,17 @@ public class ADBCConnectorTest {
     @BeforeEach
     public void saveJniPath() {
         originalJniPath = Config.adbc_jni_library_path;
+        originalJniSystemPath = System.getProperty("arrow.adbc.driver.jni.library.path");
     }
 
     @AfterEach
     public void restoreJniPath() {
         Config.adbc_jni_library_path = originalJniPath;
+        if (originalJniSystemPath == null) {
+            System.clearProperty("arrow.adbc.driver.jni.library.path");
+        } else {
+            System.setProperty("arrow.adbc.driver.jni.library.path", originalJniSystemPath);
+        }
     }
 
     private static Map<String, String> validProperties() {
@@ -58,6 +79,68 @@ public class ADBCConnectorTest {
         properties.put("driver", "adbc_driver_flightsql");
         properties.put("uri", "grpc+tcp://localhost:32010");
         return properties;
+    }
+
+    @Test
+    public void testReplayRetryForwardsDriverOptionsAndClosesResources() throws Exception {
+        Files.createFile(tempDir.resolve(System.mapLibraryName("adbc_driver_jni")));
+        Config.adbc_jni_library_path = tempDir.toString();
+        List<BufferAllocator> allocators = new ArrayList<>();
+        new MockUp<JniDriverFactory>() {
+            @Mock
+            public AdbcDriver getDriver(BufferAllocator allocator) {
+                allocators.add(allocator);
+                if (allocators.size() == 1) {
+                    throw new UnsatisfiedLinkError("driver unavailable during replay");
+                }
+                return driver;
+            }
+        };
+        Map<String, String> properties = validProperties();
+        properties.put("username", "reader");
+        properties.put("password", "test-password");
+        properties.put("adbc.flight.sql.rpc.timeout_seconds", "30");
+        Map<String, Object> expectedParameters = new HashMap<>(properties);
+        expectedParameters.remove("type");
+        expectedParameters.remove("driver");
+        expectedParameters.put("jni.driver", "adbc_driver_flightsql");
+        new Expectations() {{
+                driver.open(expectedParameters);
+                result = database;
+            }};
+
+        ADBCConnector connector = new ADBCConnector(new ConnectorContext("adbc0", "adbc", properties));
+        try {
+            assertThrows(IllegalStateException.class, () -> allocators.get(0).buffer(1));
+            ConnectorMetadata metadata = connector.getMetadata();
+            assertInstanceOf(ADBCMetadata.class, metadata);
+            assertSame(metadata, connector.getMetadata());
+        } finally {
+            connector.shutdown();
+        }
+        connector.shutdown();
+        assertThrows(IllegalStateException.class, () -> allocators.get(1).buffer(1));
+        new Verifications() {{
+                driver.open(expectedParameters);
+                times = 1;
+                database.close();
+                times = 1;
+            }};
+    }
+
+    @Test
+    public void testUnknownPropertyIsRejected() {
+        Map<String, String> properties = validProperties();
+        properties.put("timeout_seconds", "30");
+        assertThrows(StarRocksConnectorException.class, () -> ADBCConnector.validateProperties(properties));
+    }
+
+    @Test
+    public void testUnsetJniPathIsRejected() {
+        Config.adbc_jni_library_path = null;
+        assertThrows(StarRocksConnectorException.class, ADBCConnector::resolveJniLibrary);
+        Config.adbc_jni_library_path = " ";
+        assertThrows(StarRocksConnectorException.class, ADBCConnector::resolveJniLibrary);
     }
 
     @Test
