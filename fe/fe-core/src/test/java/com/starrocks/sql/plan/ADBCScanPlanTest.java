@@ -14,11 +14,19 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.adbc.MockedADBCMetadata;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 public class ADBCScanPlanTest extends ConnectorPlanTestBase {
 
@@ -124,5 +133,49 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN ADBC");
         assertContains(plan, "DRIVER: adbc_driver_flightsql");
+    }
+
+    @Test
+    public void testADBCMaterializedViewRequiresFullRefresh() {
+        String mvName = "mv_adbc_unknown_freshness";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName +
+                " refresh deferred manual properties (\"force_external_table_query_rewrite\" = \"CHECKED\")" +
+                " as select c from adbc0.test_db0.tbl0", () -> {
+                    MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable("test", mvName);
+                    BaseTableInfo baseInfo = mv.getBaseTableInfos().get(0);
+                    Table baseTable = MvUtils.getTableChecked(baseInfo);
+                    // Record a previous refresh so an unchanged synthetic version cannot imply freshness.
+                    mv.getBaseTableRefreshInfo(baseInfo).put(baseTable.getName(),
+                            mv.getBaseTableLatestPartitionInfo(baseTable).get(0));
+                    long refreshTime = System.currentTimeMillis();
+                    mv.getRefreshScheme().setLastRefreshTime(refreshTime);
+                    mv.getRefreshScheme().setLastFreshnessConfirmedAt(refreshTime);
+                    assertADBCMaterializedViewNeedsRefresh(mv);
+
+                    QueryMaterializationContext previousContext = connectContext.getQueryMVContext();
+                    QueryMaterializationContext cachedContext = new QueryMaterializationContext();
+                    cachedContext.setEnableQueryContextCache(true);
+                    connectContext.setQueryMVContext(cachedContext);
+                    try {
+                        assertADBCMaterializedViewNeedsRefresh(mv);
+                    } finally {
+                        connectContext.setQueryMVContext(previousContext);
+                    }
+                    assertContains(getFragmentPlan("select c from adbc0.test_db0.tbl0"), "SCAN ADBC");
+                });
+    }
+
+    private void assertADBCMaterializedViewNeedsRefresh(MaterializedView mv) {
+        for (int staleness : new int[] {0, 3600}) {
+            mv.setMaxMVRewriteStaleness(staleness);
+            assertFalse(mv.isStalenessSatisfied());
+            for (boolean queryRewrite : new boolean[] {false, true}) {
+                MvUpdateInfo info = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv,
+                        new MVTimelinessArbiter.QueryRewriteParams(queryRewrite, null));
+                assertEquals(MvUpdateInfo.MvToRefreshType.FULL, info.getMVToRefreshType());
+                assertFalse(info.isValidRewrite());
+            }
+        }
     }
 }
