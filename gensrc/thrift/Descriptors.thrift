@@ -610,9 +610,6 @@ struct TIcebergSchemaField {
 
     4: optional TIcebergGeoMetadata geo_metadata
 
-    // Source schema identity, not a StarRocks SQL primitive. Absent on older FEs.
-    5: optional string iceberg_type
-
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
 }

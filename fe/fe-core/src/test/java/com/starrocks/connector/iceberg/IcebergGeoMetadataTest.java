@@ -69,7 +69,6 @@ public class IcebergGeoMetadataTest {
         Assertions.assertEquals("EPSG:3857", wire.getFields().get(1).getGeo_metadata().getCrs());
         Assertions.assertEquals("PLANAR", wire.getFields().get(1).getGeo_metadata().getEdge_algorithm());
         Assertions.assertFalse(wire.getFields().get(2).isSetGeo_metadata());
-        Assertions.assertEquals("BINARY", wire.getFields().get(2).getIceberg_type());
         Assertions.assertFalse(wire.getFields().get(3).isSetGeo_metadata());
         Assertions.assertTrue(ColumnTypeConverter.fromIcebergType(Types.GeometryType.crs84()).isUnknown());
         Assertions.assertEquals(VarbinaryType.VARBINARY, ColumnTypeConverter.fromIcebergType(Types.BinaryType.get()));
