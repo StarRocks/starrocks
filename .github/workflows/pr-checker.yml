@@ -79,7 +79,8 @@ jobs:
       - name: update body
         if: always() && github.base_ref != 'main' && (github.event.action == 'opened' || github.event.action == 'reopened')
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo PR-body read/edit only, no cascade. Off the shared PAT.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
           ori_body=$(cat body.txt)
