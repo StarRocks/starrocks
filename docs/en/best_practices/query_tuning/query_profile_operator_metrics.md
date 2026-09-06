@@ -263,6 +263,21 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | RuntimeFilterEvalTime | Time spent evaluating join runtime filters against decoded rows inside the Parquet reader. | 
 | RuntimeFilterInputRows | Number of rows fed into the Parquet reader's join runtime filter evaluation. | 
 | RuntimeFilterOutputRows | Number of rows surviving the Parquet reader's join runtime filter evaluation. A large gap from `RuntimeFilterInputRows` means the filter dropped rows before lazy columns were materialized. | 
+| PaimonFSAppIOCount | Number of valid read attempts received by the Paimon file-system adapter. It is the sum of sequential, positional, and asynchronous reads. |
+| PaimonFSAppIOBytes | Bytes returned successfully by reads at the Paimon file-system adapter boundary. |
+| PaimonFSAppIOTime | End-to-end time of reads at the Paimon file-system adapter boundary. |
+| PaimonFSIOCount | Number of backing file-system reads below Data Cache and Shared Buffered Input Stream. This is a StarRocks file-system call count, not necessarily the number of remote object-store RPCs. |
+| PaimonFSIOBytes | Bytes returned successfully by backing file-system reads for a Paimon native scan. |
+| PaimonFSIOTime | Time spent in backing file-system reads for a Paimon native scan. |
+| PaimonFSSequentialReadCount | Number of sequential Paimon file-system adapter read attempts. |
+| PaimonFSSequentialReadBytes | Bytes returned successfully by sequential Paimon file-system adapter reads. |
+| PaimonFSSequentialReadTime | Time spent in sequential Paimon file-system adapter reads. |
+| PaimonFSPositionalReadCount | Number of positional Paimon file-system adapter read attempts. |
+| PaimonFSPositionalReadBytes | Bytes returned successfully by positional Paimon file-system adapter reads. |
+| PaimonFSPositionalReadTime | Time spent in positional Paimon file-system adapter reads. |
+| PaimonFSAsyncReadCount | Number of asynchronous Paimon file-system adapter read attempts. |
+| PaimonFSAsyncReadBytes | Bytes returned successfully by asynchronous Paimon file-system adapter reads. |
+| PaimonFSAsyncReadTime | Time spent in asynchronous Paimon file-system adapter reads. |
 
 ### Exchange Operator
 
@@ -473,5 +488,3 @@ OlapTableSink Operator is responsible for performing the `INSERT INTO <table>` o
 | `RpcServerSideTime` | Total RPC time consumption for loading recorded by the server side. |
 | `PrepareDataTime` | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
 | `SendDataTime` | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
-
-

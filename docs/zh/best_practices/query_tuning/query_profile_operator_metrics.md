@@ -251,6 +251,21 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | RuntimeFilterEvalTime | 在 Parquet Reader 内部对已解码数据行求值 Join Runtime Filter 所花费的时间。 |
 | RuntimeFilterInputRows | 进入 Parquet Reader Join Runtime Filter 求值的行数。 |
 | RuntimeFilterOutputRows | 通过 Parquet Reader Join Runtime Filter 求值的行数。与 `RuntimeFilterInputRows` 差距越大，说明在物化 Lazy 列之前过滤掉的行越多。 |
+| PaimonFSAppIOCount | Paimon 文件系统适配层收到的有效读请求次数，为顺序读、位置读和异步读次数之和。 |
+| PaimonFSAppIOBytes | Paimon 文件系统适配层成功返回的读取字节数。 |
+| PaimonFSAppIOTime | Paimon 文件系统适配层读请求的端到端耗时。 |
+| PaimonFSIOCount | Data Cache 和 Shared Buffered Input Stream 下层的文件系统读次数。该值表示 StarRocks 文件系统调用次数，不一定等于对象存储 RPC 次数。 |
+| PaimonFSIOBytes | Paimon Native Scan 的底层文件系统成功返回的读取字节数。 |
+| PaimonFSIOTime | Paimon Native Scan 在底层文件系统读取中花费的时间。 |
+| PaimonFSSequentialReadCount | Paimon 文件系统适配层顺序读请求次数。 |
+| PaimonFSSequentialReadBytes | Paimon 文件系统适配层顺序读成功返回的字节数。 |
+| PaimonFSSequentialReadTime | Paimon 文件系统适配层顺序读耗时。 |
+| PaimonFSPositionalReadCount | Paimon 文件系统适配层位置读请求次数。 |
+| PaimonFSPositionalReadBytes | Paimon 文件系统适配层位置读成功返回的字节数。 |
+| PaimonFSPositionalReadTime | Paimon 文件系统适配层位置读耗时。 |
+| PaimonFSAsyncReadCount | Paimon 文件系统适配层异步读请求次数。 |
+| PaimonFSAsyncReadBytes | Paimon 文件系统适配层异步读成功返回的字节数。 |
+| PaimonFSAsyncReadTime | Paimon 文件系统适配层异步读耗时。 |
 
 ### Exchange Operator
 
