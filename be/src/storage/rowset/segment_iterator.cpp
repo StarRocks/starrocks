@@ -5000,6 +5000,15 @@ void SegmentIterator::close() {
             rfile.reset();
         }
     }
+    // The shared small-index handle is not in _column_files, so it needs collecting here or every
+    // byte and every request it served would be missing from the profile -- which is exactly what
+    // happened on the first measurement of this feature: the ordinal-index reads looked like they
+    // had disappeared (remote requests "down" 20%, local reads "17 -> 0") when they had only
+    // stopped being counted.
+    if (_shared_small_index_file != nullptr) {
+        _update_stats(_shared_small_index_file.get());
+        _shared_small_index_file.reset();
+    }
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
