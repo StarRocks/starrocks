@@ -159,6 +159,7 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
                     connectContext.setQueryMVContext(cachedContext);
                     try {
                         assertADBCMaterializedViewNeedsRefresh(mv);
+                        assertFalse(cachedContext.getQueryCacheStats().getCounter().isEmpty());
                     } finally {
                         connectContext.setQueryMVContext(previousContext);
                     }
