@@ -281,6 +281,9 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    // MEASUREMENT ONLY. Recorded, never acted on here: opening precedes every form of pruning.
+    _small_index_region_offset = footer.small_index_region_offset();
+    _small_index_region_size = footer.small_index_region_size();
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());

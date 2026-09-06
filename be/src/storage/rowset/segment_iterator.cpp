@@ -607,6 +607,11 @@ private:
     using ColumnDecoders = std::vector<ColumnDecoder>;
 
     std::shared_ptr<Segment> _segment;
+    // MEASUREMENT ONLY. One handle over this segment, opened on the first column that needs its
+    // ordinal index and reused by every later column, so the region is buffered once instead of
+    // once per column. Neither this nor the BufferInputStream under it is thread safe; safe here
+    // only because _init_column_iterators() walks the columns serially.
+    std::unique_ptr<RandomAccessFile> _shared_small_index_file;
     std::unordered_map<std::string, std::shared_ptr<Segment>> _dcg_segments;
     SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
@@ -2055,6 +2060,16 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             opts.encryption_info = *encryption_info;
         }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
+        // MEASUREMENT ONLY. Gated on the segment actually carrying a tail index region: on the
+        // legacy layout the per-column indexes are megabytes apart, so one stream's buffer would
+        // miss on every column and only add a handle.
+        if (config::enable_segment_shared_small_index_stream && _segment->small_index_region_size() > 0) {
+            if (_shared_small_index_file == nullptr) {
+                ASSIGN_OR_RETURN(_shared_small_index_file,
+                                 _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
+            }
+            iter_opts.index_read_file = _shared_small_index_file.get();
+        }
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());

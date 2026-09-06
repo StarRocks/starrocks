@@ -76,7 +76,8 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     index_opts.use_page_cache = !opts.temporary_data && opts.use_page_cache && !config::disable_storage_page_cache &&
                                 config::enable_ordinal_index_memory_page_cache;
     index_opts.lake_io_opts = opts.lake_io_opts;
-    index_opts.read_file = _opts.read_file;
+    // MEASUREMENT ONLY: the shared small-index stream, when the segment has a tail region.
+    index_opts.read_file = _opts.index_read_file != nullptr ? _opts.index_read_file : _opts.read_file;
     index_opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();

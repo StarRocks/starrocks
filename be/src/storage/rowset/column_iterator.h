@@ -64,6 +64,10 @@ class RandomAccessFile;
 struct ColumnIteratorOptions {
     //RandomAccessFile* read_file = nullptr;
     io::SeekableInputStream* read_file = nullptr;
+    // MEASUREMENT ONLY. When set, the ordinal-index read uses this stream instead of read_file,
+    // so every column of one segment shares a single buffer over the tail index region. Data
+    // pages stay on read_file: routing them here would evict the very buffer this exists to hold.
+    io::SeekableInputStream* index_read_file = nullptr;
     bool is_io_coalesce = false;
     // reader statistics
     OlapReaderStatistics* stats = nullptr;

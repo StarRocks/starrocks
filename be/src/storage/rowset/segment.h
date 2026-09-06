@@ -245,6 +245,9 @@ public:
     // the brute-force distance-computation fallback.
     bool skip_vector_index() const { return _skip_vector_index; }
 
+    // MEASUREMENT ONLY. Zero when this segment carries no tail index region.
+    uint64_t small_index_region_size() const { return _small_index_region_size; }
+
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status load_index(const LakeIOOptions& lake_io_opts = {});
@@ -373,6 +376,10 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
+    // MEASUREMENT ONLY. Byte range of the tail index region from the footer; zero size means the
+    // segment was written in the legacy interleaved layout and there is nothing to share.
+    uint64_t _small_index_region_offset = 0;
+    uint64_t _small_index_region_size = 0;
     // Presence + page pointer for the optional full sort key index page (footer field 11). Set at
     // open(); the page itself is loaded lazily by ensure_full_sort_key_index_usable().
     bool _has_full_sort_key_index_page = false;

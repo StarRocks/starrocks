@@ -446,6 +446,18 @@ CONF_mBool(enable_segment_tail_index_region, "false");
 // in that free block while the whole region does not.
 CONF_mInt32(segment_tail_index_region_layout, "0");
 
+// MEASUREMENT ONLY -- do not merge. Route every column's ordinal-index read of one segment
+// through a SINGLE buffered stream instead of opening the segment file once per column. With
+// the tail region in place those reads are a few KB each, contiguous, and visited once in
+// column order, so one stream's buffer can serve all of them; today each column opens its own
+// handle and re-reads the same cache block.
+//
+// Scoped to the SegmentIterator, which is what an earlier attempt did and what sank it:
+// tablet-internal parallelism gives a segment several iterators, each buffering the same bytes,
+// measured at 2.77x byte amplification. Measuring it here on purpose, with tablet-internal
+// parallelism both on and off, is how we separate the sharing benefit from that duplication.
+CONF_mBool(enable_segment_shared_small_index_stream, "false");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
