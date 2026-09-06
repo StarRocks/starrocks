@@ -2196,6 +2196,8 @@ build_adbc() {
     fi
 
     check_if_source_exist "${ADBC_SOURCE}"
+    check_if_source_exist "${MAVEN_SOURCE}"
+    local adbc_maven_path="${TP_SOURCE_DIR}/${MAVEN_SOURCE}/bin:${PATH}"
 
     safe_remove_glob \
         "${TP_INSTALL_DIR}/lib/libadbc"* \
@@ -2238,8 +2240,9 @@ build_adbc() {
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
         -DCMAKE_BUILD_TYPE=Release
-    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
-    "${CMAKE_CMD}" --install .
+    # ADBC's JNI header generation requires Maven 3.9 or newer.
+    PATH="${adbc_maven_path}" "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    PATH="${adbc_maven_path}" "${CMAKE_CMD}" --install .
 
     sync_lib64_links
 }

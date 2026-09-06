@@ -1066,7 +1066,9 @@ build_arrow() {
 # adbc
 build_adbc() {
     check_if_source_exist $ADBC_SOURCE
+    check_if_source_exist $MAVEN_SOURCE
     local adbc_install_dir="${TP_INSTALL_DIR}"
+    local adbc_maven_path="${TP_SOURCE_DIR}/${MAVEN_SOURCE}/bin:${PATH}"
 
     cd $TP_SOURCE_DIR/$ADBC_SOURCE/c
     mkdir -p build && cd build
@@ -1098,8 +1100,10 @@ build_adbc() {
         -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -static-libgcc -Wl,--no-undefined" \
         -DCMAKE_BUILD_TYPE=Release \
         -G "${CMAKE_GENERATOR}" ..
-    ${BUILD_SYSTEM} -j$PARALLEL
-    ${BUILD_SYSTEM} install
+    # The JNI CMake target invokes mvn to generate headers. Use the pinned tool
+    # because supported build images still ship Maven versions older than 3.9.
+    PATH="${adbc_maven_path}" ${BUILD_SYSTEM} -j$PARALLEL
+    PATH="${adbc_maven_path}" ${BUILD_SYSTEM} install
 }
 
 # s2
