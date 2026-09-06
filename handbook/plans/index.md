@@ -4,6 +4,7 @@ Use this directory for repo-local execution plans that agents can read, update, 
 
 ## Active Plans
 
+- [Iceberg/Parquet Geo Compatibility Foundation](active/2026-09-05-iceberg-parquet-geo-foundation.md)
 - [Harness Engineering Roadmap](active/2026-03-27-harness-engineering-roadmap.md)
 
 ## Templates

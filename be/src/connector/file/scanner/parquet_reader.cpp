@@ -272,7 +272,23 @@ Status ParquetReaderWrap::_init_parquet_reader() {
 }
 
 Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs) {
-    RETURN_IF_ERROR(_init_parquet_reader());
+    auto init_status = _init_parquet_reader();
+    // Check even empty files and explicitly supplied binary/string schemas. Arrow's
+    // WKB physical representation must not bypass the native-geo feature boundary.
+    if (_file_metadata != nullptr) {
+        const auto& root = _file_metadata->schema()->group_node();
+        for (int i = 0; i < _num_of_columns_from_file; ++i) {
+            const auto* slot = tuple_slot_descs.at(i);
+            if (slot == nullptr) continue;
+            for (int j = 0; j < root->field_count(); ++j) {
+                if (root->field(j)->name() == slot->col_name() && parquet_contains_geo(root->field(j))) {
+                    return Status::NotSupported("Native geospatial type support is disabled; cannot project column " +
+                                                std::string(slot->col_name()));
+                }
+            }
+        }
+    }
+    RETURN_IF_ERROR(init_status);
     try {
         if (_current_line_of_group == 0) { // the first read
             RETURN_IF_ERROR(column_indices(tuple_slot_descs));
@@ -326,6 +342,12 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
     for (auto i = 0; i < file_schema->group_node()->field_count(); i++) {
         const auto& field = file_schema->group_node()->field(i);
         const auto& name = field->name();
+
+        // UNKNOWN_TYPE is valid for schema recognition, but SlotDescriptor
+        // requires an executable type with a defined slot size.
+        if (parquet_contains_geo(field)) {
+            return Status::NotSupported("Native geospatial type support is disabled; cannot infer column " + name);
+        }
 
         TypeDescriptor tp;
         RETURN_IF_ERROR(get_parquet_type(field, &tp));

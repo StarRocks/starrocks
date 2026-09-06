@@ -405,6 +405,25 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
                                          detail="", remediation="")
                 self.assertIsNone(module._match_waiver(issue, waivers))
 
+    def test_synthetic_parquet_addition_waivers_do_not_cover_existing_fields(self) -> None:
+        module = _load_module()
+        # Model historical addition waivers without restoring them in the live registry.
+        waivers = [module.Waiver(
+            path="gensrc/thrift/parquet.thrift", container_or_method="BoundingBox",
+            field_number=number, field_name=name, rule="new_field_must_be_optional",
+            base_signature=None, reason="Upstream-required XY bound", owner="test")
+            for number, name in enumerate(("xmin", "xmax", "ymin", "ymax"), 1)]
+        for number, name in enumerate(("xmin", "xmax", "ymin", "ymax"), 1):
+            issue = module.Violation(path="gensrc/thrift/parquet.thrift", container="BoundingBox",
+                                     field_number=number, field_name=name, rule="new_field_must_be_optional",
+                                     detail="", remediation="")
+            self.assertIsNotNone(module._match_waiver(issue, waivers))
+            for rule in ("field_deleted", "field_type_changed", "field_renumbered"):
+                issue = module.Violation(path="gensrc/thrift/parquet.thrift", container="BoundingBox",
+                                         field_number=number, field_name=name, rule=rule,
+                                         detail="", remediation="")
+                self.assertIsNone(module._match_waiver(issue, waivers))
+
     def test_changed_mode_rejects_unsupported_thrift_union_change(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:

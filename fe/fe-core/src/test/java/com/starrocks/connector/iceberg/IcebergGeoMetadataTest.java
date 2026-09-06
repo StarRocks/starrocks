@@ -69,6 +69,10 @@ public class IcebergGeoMetadataTest {
         Assertions.assertEquals("EPSG:3857", wire.getFields().get(1).getGeo_metadata().getCrs());
         Assertions.assertEquals("PLANAR", wire.getFields().get(1).getGeo_metadata().getEdge_algorithm());
         Assertions.assertFalse(wire.getFields().get(2).isSetGeo_metadata());
+        Assertions.assertEquals("BINARY", wire.getFields().get(2).getIceberg_type());
+        Assertions.assertEquals("GEOGRAPHY", wire.getFields().get(0).getIceberg_type());
+        Assertions.assertEquals("GEOMETRY", wire.getFields().get(1).getIceberg_type());
+        Assertions.assertEquals("INTEGER", wire.getFields().get(3).getIceberg_type());
         Assertions.assertFalse(wire.getFields().get(3).isSetGeo_metadata());
         Assertions.assertTrue(ColumnTypeConverter.fromIcebergType(Types.GeometryType.crs84()).isUnknown());
         Assertions.assertEquals(VarbinaryType.VARBINARY, ColumnTypeConverter.fromIcebergType(Types.BinaryType.get()));
@@ -81,6 +85,8 @@ public class IcebergGeoMetadataTest {
                 Types.ListType.ofOptional(2, Types.GeometryType.crs84())));
         TIcebergSchema wire = IcebergApiConverter.getTIcebergSchema(schema);
         Assertions.assertFalse(wire.getFields().get(0).isSetGeo_metadata());
+        Assertions.assertEquals("LIST", wire.getFields().get(0).getIceberg_type());
+        Assertions.assertEquals("GEOMETRY", wire.getFields().get(0).getChildren().get(0).getIceberg_type());
         Assertions.assertEquals(TIcebergGeoKind.GEOMETRY,
                 wire.getFields().get(0).getChildren().get(0).getGeo_metadata().getKind());
     }

@@ -17,6 +17,7 @@
 #include "base/failpoint/fail_point.h"
 #include "column/variant_path_parser.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "formats/parquet/meta_helper.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
@@ -340,6 +341,9 @@ void VariantShreddedReadHints::clear() {
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
+    if (field->contains_geo()) {
+        return Status::NotSupported("Native geospatial column reader is disabled: " + field->name);
+    }
     // We will only set a complex type in ParquetField
     if ((field->is_complex_type() || col_type.is_complex_type()) && !field->has_same_complex_type(col_type)) {
         return Status::InternalError(
@@ -408,6 +412,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type,
                                                       const TIcebergSchemaField* lake_schema_field) {
+    if (field->contains_geo() || (lake_schema_field != nullptr && iceberg_contains_geo(*lake_schema_field))) {
+        return Status::NotSupported("Native geospatial column reader is disabled: " + field->name);
+    }
     // We will only set a complex type in ParquetField
     if ((field->is_complex_type() || col_type.is_complex_type()) && !field->has_same_complex_type(col_type)) {
         return Status::InternalError(
@@ -485,6 +492,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(const ColumnReaderOptions& opts,
                                                                             const ParquetField* variant_field,
                                                                             const VariantShreddedReadHints& hints) {
+    if (variant_field->contains_geo()) {
+        return Status::NotSupported("Native geospatial column reader is disabled: " + variant_field->name);
+    }
     DCHECK(opts.row_group_meta != nullptr);
     DCHECK(variant_field->type == ColumnType::STRUCT);
     DCHECK(variant_field->children.size() >= 2);

@@ -571,6 +571,7 @@ public class IcebergApiConverter {
         tIcebergSchemaField.setField_id(nestedField.fieldId());
         tIcebergSchemaField.setName(nestedField.name());
         tIcebergSchemaField.setIs_optional(nestedField.isOptional());
+        tIcebergSchemaField.setIceberg_type(nestedField.type().typeId().name());
         // Preserve external semantics even while SQL conversion remains UNKNOWN_TYPE.
         // Do not infer these parameters from WKB or map these fields to VARBINARY.
         if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {

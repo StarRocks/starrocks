@@ -610,6 +610,10 @@ struct TIcebergSchemaField {
 
     4: optional TIcebergGeoMetadata geo_metadata
 
+    // Source Iceberg type ID for validating file annotations (not a StarRocks SQL type).
+    // Absence means an older sender, not proof that this field is ordinary binary.
+    5: optional string iceberg_type
+
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
 }

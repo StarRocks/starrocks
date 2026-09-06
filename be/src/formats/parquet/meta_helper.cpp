@@ -72,6 +72,173 @@ std::optional<ExtendedVariantVirtualBinding> find_extended_variant_virtual_bindi
 
 } // namespace
 
+namespace {
+
+std::string_view geo_kind_name(TIcebergGeoKind::type kind) {
+    switch (kind) {
+    case TIcebergGeoKind::GEOGRAPHY:
+        return "GEOGRAPHY";
+    case TIcebergGeoKind::GEOMETRY:
+        return "GEOMETRY";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+const TIcebergSchemaField* match_lake_field(const ParquetField& field, const std::vector<TIcebergSchemaField>& fields,
+                                            bool case_sensitive) {
+    for (const auto& candidate : fields) {
+        if (field.schema_element.__isset.field_id) {
+            if (candidate.field_id == field.field_id) return &candidate;
+        } else if (Utils::format_name(candidate.name, case_sensitive) ==
+                   Utils::format_name(field.name, case_sensitive)) {
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+bool iceberg_contains_geo(const TIcebergSchemaField& field) {
+    if (field.__isset.geo_metadata ||
+        (field.__isset.iceberg_type && (field.iceberg_type == "GEOGRAPHY" || field.iceberg_type == "GEOMETRY"))) {
+        return true;
+    }
+    for (const auto& child : field.children) {
+        if (iceberg_contains_geo(child)) return true;
+    }
+    return false;
+}
+
+Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field, bool case_sensitive) {
+    const auto& logical = field.schema_element.logicalType;
+    // A legacy repeated primitive becomes an ARRAY wrapper plus a leaf. Its
+    // physical annotation describes the leaf, not the collection's logical kind.
+    const bool geography =
+            !field.is_complex_type() && field.schema_element.__isset.logicalType && logical.__isset.GEOGRAPHY;
+    const bool geometry =
+            !field.is_complex_type() && field.schema_element.__isset.logicalType && logical.__isset.GEOMETRY;
+    const bool lake_geo = lake_field != nullptr && lake_field->__isset.geo_metadata;
+    if (lake_field != nullptr && lake_field->__isset.iceberg_type) {
+        const auto& kind = lake_field->iceberg_type;
+        if (((kind == "GEOGRAPHY" || kind == "GEOMETRY") && !lake_geo) ||
+            (lake_geo && kind != geo_kind_name(lake_field->geo_metadata.kind))) {
+            return Status::InvalidArgument("Inconsistent Iceberg geo schema metadata: " + field.name);
+        }
+    }
+    if (lake_geo && (field.is_complex_type() || field.physical_type != tparquet::Type::BYTE_ARRAY)) {
+        return Status::InvalidArgument("Iceberg geo field requires Parquet BYTE_ARRAY: " + field.name);
+    }
+    if (lake_geo) {
+        const auto& geo = lake_field->geo_metadata;
+        if (!geo.__isset.kind || !geo.__isset.crs || !geo.__isset.edge_algorithm || geo.crs.empty() ||
+            (geo.kind != TIcebergGeoKind::GEOGRAPHY && geo.kind != TIcebergGeoKind::GEOMETRY) ||
+            (geo.kind == TIcebergGeoKind::GEOMETRY && geo.edge_algorithm != "PLANAR")) {
+            return Status::InvalidArgument("Invalid Iceberg geo metadata: " + field.name);
+        }
+        if (geo.kind == TIcebergGeoKind::GEOGRAPHY && geo.edge_algorithm != "SPHERICAL" &&
+            geo.edge_algorithm != "VINCENTY" && geo.edge_algorithm != "THOMAS" && geo.edge_algorithm != "ANDOYER" &&
+            geo.edge_algorithm != "KARNEY") {
+            return Status::NotSupported("Unknown Iceberg geo edge algorithm: " + field.name);
+        }
+        if ((!geography && !geometry && field.schema_element.__isset.logicalType) ||
+            field.schema_element.__isset.converted_type) {
+            return Status::InvalidArgument("Iceberg geo field has a non-geo Parquet annotation: " + field.name);
+        }
+    }
+    if (geography || geometry) {
+        const std::string kind = geography ? "GEOGRAPHY" : "GEOMETRY";
+        const std::string crs = geography ? (logical.GEOGRAPHY.__isset.crs ? logical.GEOGRAPHY.crs : "OGC:CRS84")
+                                          : (logical.GEOMETRY.__isset.crs ? logical.GEOMETRY.crs : "OGC:CRS84");
+        std::string edge = "PLANAR";
+        if (geography) {
+            const auto algorithm = logical.GEOGRAPHY.__isset.algorithm
+                                           ? logical.GEOGRAPHY.algorithm
+                                           : tparquet::EdgeInterpolationAlgorithm::SPHERICAL;
+            switch (algorithm) {
+            case tparquet::EdgeInterpolationAlgorithm::SPHERICAL:
+                edge = "SPHERICAL";
+                break;
+            case tparquet::EdgeInterpolationAlgorithm::VINCENTY:
+                edge = "VINCENTY";
+                break;
+            case tparquet::EdgeInterpolationAlgorithm::THOMAS:
+                edge = "THOMAS";
+                break;
+            case tparquet::EdgeInterpolationAlgorithm::ANDOYER:
+                edge = "ANDOYER";
+                break;
+            case tparquet::EdgeInterpolationAlgorithm::KARNEY:
+                edge = "KARNEY";
+                break;
+            default:
+                return Status::NotSupported("Unknown Parquet geo edge algorithm: " + field.name);
+            }
+        }
+        if ((lake_field != nullptr && lake_field->__isset.iceberg_type && lake_field->iceberg_type != kind) ||
+            (lake_geo && (geo_kind_name(lake_field->geo_metadata.kind) != kind || lake_field->geo_metadata.crs != crs ||
+                          lake_field->geo_metadata.edge_algorithm != edge))) {
+            return Status::InvalidArgument("Iceberg/Parquet geo schema mismatch: " + field.name);
+        }
+    }
+    for (const auto& child : field.children) {
+        const auto* lake_child =
+                lake_field == nullptr ? nullptr : match_lake_field(child, lake_field->children, case_sensitive);
+        RETURN_IF_ERROR(validate_geo_field(child, lake_child, case_sensitive));
+    }
+    return Status::OK();
+}
+
+Status validate_geo_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake_schema,
+                         const std::vector<FormatColumnInfo>& columns, bool case_sensitive) {
+    // Ordinary scans do not need cross-schema matching. In particular, avoid
+    // repeated name/ID lookups across wide Iceberg schemas without any geo fields.
+    bool has_geo = false;
+    for (const auto& field : schema.get_parquet_fields()) {
+        has_geo |= field.contains_geo();
+    }
+    if (lake_schema != nullptr) {
+        for (const auto& field : lake_schema->fields) {
+            has_geo |= iceberg_contains_geo(field);
+        }
+    }
+    if (!has_geo) return Status::OK();
+
+    for (const auto& field : schema.get_parquet_fields()) {
+        const auto* lake_field =
+                lake_schema == nullptr ? nullptr : match_lake_field(field, lake_schema->fields, case_sensitive);
+        RETURN_IF_ERROR(validate_geo_field(field, lake_field, case_sensitive));
+    }
+    for (const auto& column : columns) {
+        const TIcebergSchemaField* lake_field = nullptr;
+        if (lake_schema != nullptr) {
+            for (const auto& candidate : lake_schema->fields) {
+                if (Utils::format_name(candidate.name, case_sensitive) ==
+                    Utils::format_name(column.name(), case_sensitive)) {
+                    lake_field = &candidate;
+                    break;
+                }
+            }
+        }
+        const ParquetField* field = nullptr;
+        if (lake_field != nullptr && schema.exist_filed_id()) {
+            field = schema.get_stored_column_by_field_id(lake_field->field_id);
+        } else if (column.col_unique_id() != -1) {
+            field = schema.get_stored_column_by_field_id(column.col_unique_id());
+        } else {
+            field = schema.get_stored_column_by_column_name(
+                    Utils::format_name(parquet_lookup_name(column), case_sensitive));
+        }
+        if ((lake_field != nullptr && iceberg_contains_geo(*lake_field)) ||
+            (field != nullptr && field->contains_geo())) {
+            return Status::NotSupported("Native geospatial type support is disabled; cannot project column " +
+                                        std::string(column.name()));
+        }
+    }
+    return Status::OK();
+}
+
 void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                                              const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                              std::vector<GroupReaderParam::Column>& read_cols,

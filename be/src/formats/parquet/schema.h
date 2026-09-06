@@ -123,6 +123,7 @@ struct ParquetField {
     int16_t max_rep_level() const { return level_info.max_rep_level; }
     std::string debug_string() const;
     bool is_complex_type() const;
+    bool contains_geo() const;
     bool has_same_complex_type(const TypeDescriptor& type_descriptor) const;
 };
 

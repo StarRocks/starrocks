@@ -56,6 +56,22 @@ protected:
 };
 
 // Test basic primitive types
+TEST_F(ParquetSchemaBuilderTest, NativeGeoRemainsUnknown) {
+    for (const auto& logical : {::parquet::LogicalType::Geography(), ::parquet::LogicalType::Geometry()}) {
+        auto geo = ::parquet::schema::PrimitiveNode::Make("shape", ::parquet::Repetition::OPTIONAL, logical,
+                                                          ::parquet::Type::BYTE_ARRAY);
+        TypeDescriptor type;
+        ASSERT_TRUE(get_parquet_type(geo, &type).ok());
+        EXPECT_EQ(TYPE_UNKNOWN, type.type);
+        EXPECT_TRUE(parquet_contains_geo(geo));
+        auto nested = create_group_node("nested", ::parquet::Repetition::OPTIONAL, {geo});
+        ASSERT_TRUE(get_parquet_type(nested, &type).ok());
+        EXPECT_EQ(TYPE_UNKNOWN, type.type);
+    }
+    auto binary = create_primitive_node("bytes", ::parquet::Repetition::OPTIONAL, ::parquet::Type::BYTE_ARRAY);
+    EXPECT_FALSE(parquet_contains_geo(binary));
+}
+
 TEST_F(ParquetSchemaBuilderTest, PrimitiveTypes) {
     TypeDescriptor type_desc;
     Status st;

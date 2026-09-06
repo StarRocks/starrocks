@@ -110,6 +110,17 @@ static bool is_map(const tparquet::SchemaElement* schema) {
                                               schema->converted_type == tparquet::ConvertedType::MAP_KEY_VALUE);
 }
 
+bool ParquetField::contains_geo() const {
+    if (schema_element.__isset.logicalType &&
+        (schema_element.logicalType.__isset.GEOMETRY || schema_element.logicalType.__isset.GEOGRAPHY)) {
+        return true;
+    }
+    for (const auto& child : children) {
+        if (child.contains_geo()) return true;
+    }
+    return false;
+}
+
 Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, const LevelInfo& cur_level_info,
                                        bool is_nullable, ParquetField* field) {
     field->name = t_schema->name;
@@ -281,6 +292,7 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
 Status SchemaDescriptor::group_to_struct_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
                                                LevelInfo cur_level_info, ParquetField* field, size_t* next_pos) {
     ASSIGN_OR_RETURN(const auto* group_schema, _get_schema_element(t_schemas, pos));
+    field->schema_element = *group_schema;
     int32_t num_children = group_schema->num_children;
     field->children.resize(num_children);
     *next_pos = pos + 1;
@@ -335,6 +347,9 @@ Status SchemaDescriptor::group_to_field(const std::vector<tparquet::SchemaElemen
 Status SchemaDescriptor::node_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
                                        LevelInfo cur_level_info, ParquetField* field, size_t* next_pos) {
     ASSIGN_OR_RETURN(const auto* node_schema, _get_schema_element(t_schemas, pos));
+    // Preserve field-id presence for recursive Iceberg matching, including groups.
+    field->schema_element = *node_schema;
+    field->field_id = node_schema->field_id;
 
     if (is_group(node_schema)) {
         // A nested field, but we don't know what kind yet
@@ -377,6 +392,28 @@ Status SchemaDescriptor::node_to_field(const std::vector<tparquet::SchemaElement
 
 // The schema resolve logic is copied from https://github.com/apache/arrow/blob/main/cpp/src/parquet/arrow/schema.cc
 Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>& t_schemas, bool case_sensitive) {
+    // Validate annotations before building fields, including annotations on groups.
+    // Valid geo fields remain in the schema even when they are not projected.
+    for (const auto& element : t_schemas) {
+        if (!element.__isset.logicalType) continue;
+        const auto& logical = element.logicalType;
+        if (!logical.__isset.GEOMETRY && !logical.__isset.GEOGRAPHY) continue;
+        if (!element.__isset.type || element.type != tparquet::Type::BYTE_ARRAY ||
+            (element.__isset.num_children && element.num_children != 0) || element.__isset.converted_type) {
+            return Status::InvalidArgument("Geo annotation requires a BYTE_ARRAY leaf without a converted type: " +
+                                           element.name);
+        }
+        if ((logical.__isset.GEOMETRY && logical.__isset.GEOGRAPHY) || logical.__isset.STRING || logical.__isset.MAP ||
+            logical.__isset.LIST || logical.__isset.ENUM || logical.__isset.DECIMAL || logical.__isset.DATE ||
+            logical.__isset.TIME || logical.__isset.TIMESTAMP || logical.__isset.INTEGER || logical.__isset.UNKNOWN ||
+            logical.__isset.JSON || logical.__isset.BSON || logical.__isset.UUID) {
+            return Status::InvalidArgument("Conflicting Parquet geo logical annotations: " + element.name);
+        }
+        if ((logical.__isset.GEOMETRY && logical.GEOMETRY.__isset.crs && logical.GEOMETRY.crs.empty()) ||
+            (logical.__isset.GEOGRAPHY && logical.GEOGRAPHY.__isset.crs && logical.GEOGRAPHY.crs.empty())) {
+            return Status::InvalidArgument("Empty CRS in Parquet geo annotation: " + element.name);
+        }
+    }
     if (t_schemas.size() == 0) {
         return Status::InvalidArgument("Empty parquet Schema");
     }
