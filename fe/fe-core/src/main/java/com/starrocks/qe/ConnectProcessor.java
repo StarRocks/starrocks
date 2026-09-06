@@ -139,6 +139,12 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
+    // Whether StmtExecutor.execute() was entered for the statement currently being processed.
+    // execute() owns the session diagnostics area: it clears the previous statement's entries on
+    // entry and records its own failure on exit. The failure paths below must therefore do that
+    // work themselves only when execute() was never reached. The executor field above cannot
+    // answer this, because it is assigned before execute() is called. Reset wherever executor is.
+    private boolean executeInvoked = false;
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -183,6 +189,13 @@ public class ConnectProcessor {
     private void handleChangeUser() throws IOException {
         if (!MysqlProto.changeUser(ctx, packetBuf)) {
             LOG.warn("Failed to execute command `Change user`.");
+            // MysqlProto.changeUser answers a rejected COM_CHANGE_USER itself, leaving the error
+            // on the state (an unsupported authentication mode, or a database that cannot be
+            // opened for the new user), and returns before resetConnectionSession() drops the
+            // buffer. Replace the diagnostics area here so SHOW ERRORS reports that rejection, and
+            // so the previous user's diagnostics do not survive an attempt to hand this connection
+            // to somebody else.
+            replaceDiagnosticsForCommand();
             return;
         }
         handleResetConnection();
@@ -205,6 +218,11 @@ public class ConnectProcessor {
         ctx.getSerializer().setCapability(ctx.getCapability());
         // reset session variable
         ctx.resetSessionVariable();
+        // drop the previous logical session's diagnostics: COM_CHANGE_USER re-authenticates a
+        // different user on this same ConnectContext, and the statements that preserve the
+        // diagnostics area (SHOW, SET, transaction control) would otherwise let the new user
+        // read the previous user's warnings
+        ctx.clearWarnings();
     }
 
     public static long getThreadAllocatedBytes(long threadId) {
@@ -549,6 +567,7 @@ public class ConnectProcessor {
 
     private void resetStmtExecutionContext(boolean refreshQueryId) {
         executor = null;
+        executeInvoked = false;
         ctx.setExecutor(null);
         ctx.setQueryDetail(null);
         ctx.getState().reset();
@@ -568,6 +587,7 @@ public class ConnectProcessor {
 
     private void resetStmtRetryContext() {
         executor = null;
+        executeInvoked = false;
         ctx.setExecutor(null);
         ctx.getState().reset();
         ctx.resetReturnRows();
@@ -618,6 +638,7 @@ public class ConnectProcessor {
             if (authenticationProvider == null) {
                 ErrorReport.report("Unknown authentication method");
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                recordPreExecutionFailureDiagnostics();
                 return true;
             }
             authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
@@ -629,6 +650,7 @@ public class ConnectProcessor {
                 ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
             }
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            recordPreExecutionFailureDiagnostics();
             return true;
         } catch (Throwable e) {
             auditStmtFailureForStmt(e, parsedStmt, originStmt);
@@ -654,6 +676,7 @@ public class ConnectProcessor {
             if (ctx.getQueryDetail() == null) {
                 executor.addRunningQueryDetail(parsedStmt);
             }
+            executeInvoked = true;
             executor.execute();
         } catch (LargeInPredicateException e) {
             // we will retry this sql later, so don't audit here
@@ -739,6 +762,9 @@ public class ConnectProcessor {
             }
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            if (!executeInvoked) {
+                recordPreExecutionFailureDiagnostics();
+            }
             // if parse failed, audit stmts together once
             if (!parseSucceeded) {
                 auditAfterExec(originStmt, null, null, null);
@@ -750,6 +776,9 @@ public class ConnectProcessor {
                     ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            if (!executeInvoked) {
+                recordPreExecutionFailureDiagnostics();
+            }
             // for safety
             if (!parseSucceeded) {
                 auditAfterExec(originStmt, null, null, null);
@@ -760,6 +789,33 @@ public class ConnectProcessor {
                 // custom_query_id session is temporary, should be cleared after query finished
                 ctx.getSessionVariable().setCustomQueryId("");
             }
+        }
+    }
+
+    // A statement rejected before StmtExecutor.execute() (parse failure, explicit-transaction
+    // validation, authentication re-check, COM_STMT_EXECUTE with an unknown statement id or
+    // malformed parameters) never reaches the execute() logic that clears the previous
+    // statement's diagnostics and records the failure into the session buffer. Do both
+    // here so SHOW WARNINGS does not return stale entries after such a failure and SHOW ERRORS
+    // mirrors the ERR packet, following MySQL diagnostics-area semantics.
+    private void recordPreExecutionFailureDiagnostics() {
+        ctx.clearWarnings();
+        ctx.addWarning(QueryWarning.fromErrorState(ctx.getState()));
+    }
+
+    // COM_INIT_DB, COM_FIELD_LIST, a rejected COM_CHANGE_USER and a command code that is unknown
+    // or unsupported are answered without ever building a StmtExecutor, so they never reach the
+    // execute() logic that owns the session diagnostics area. They own it here instead: the
+    // previous statement's entries are dropped, and the error that went into the ERR packet, when
+    // there is one, is recorded so SHOW ERRORS keeps mirroring what the client received. COM_PING,
+    // COM_QUIT, COM_STMT_CLOSE and COM_STMT_RESET are left alone because they report no error of
+    // their own, and clearing on them would drop a load's warnings behind a connection pool's
+    // liveness check.
+    private void replaceDiagnosticsForCommand() {
+        if (ctx.getState().isError()) {
+            recordPreExecutionFailureDiagnostics();
+        } else {
+            ctx.clearWarnings();
         }
     }
 
@@ -917,6 +973,7 @@ public class ConnectProcessor {
         PrepareStmtContext prepareCtx = ctx.getPreparedStmt(String.valueOf(stmtId));
         if (null == prepareCtx) {
             ctx.getState().setError("msg: Not Found prepared statement, stmtName: " + stmtId);
+            recordPreExecutionFailureDiagnostics();
             return;
         }
         int numParams = prepareCtx.getStmt().getParameters().size();
@@ -985,6 +1042,7 @@ public class ConnectProcessor {
             if (enableAudit && isQuery) {
                 executor.addRunningQueryDetail(executeStmt);
                 needAddFinishQueryDetail = true;
+                executeInvoked = true;
                 executor.execute();
                 executor.addFinishedQueryDetail();
                 needAddFinishQueryDetail = false;
@@ -992,6 +1050,7 @@ public class ConnectProcessor {
                 // Clear query detail. Otherwise, after collecting the profile, it will be mistakenly added to ctx.queryDetail,
                 // which still belongs to the previous query.
                 ctx.setQueryDetail(null);
+                executeInvoked = true;
                 executor.execute();
             }
 
@@ -1005,6 +1064,12 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            // same contract as handleQuery: a COM_STMT_EXECUTE rejected before
+            // StmtExecutor.execute() ran (malformed parameters, etc.) must replace the previous
+            // statement's diagnostics with its own error; execute() records its own failures.
+            if (!executeInvoked) {
+                recordPreExecutionFailureDiagnostics();
+            }
             if (enableAudit && executeStmt != null) {
                 if (needAddFinishQueryDetail && executor != null) {
                     executor.addFinishedQueryDetail();
@@ -1037,6 +1102,7 @@ public class ConnectProcessor {
             ErrorReport.report(ErrorCode.ERR_UNKNOWN_COM_ERROR);
             ctx.getState().setError("Unknown command(" + command + ")");
             LOG.debug("Unknown MySQL protocol command");
+            replaceDiagnosticsForCommand();
             return;
         }
         ctx.setCommand(command);
@@ -1048,6 +1114,7 @@ public class ConnectProcessor {
         switch (command) {
             case COM_INIT_DB:
                 handleInitDb();
+                replaceDiagnosticsForCommand();
                 break;
             case COM_QUIT:
                 handleQuit();
@@ -1065,6 +1132,7 @@ public class ConnectProcessor {
                 break;
             case COM_FIELD_LIST:
                 handleFieldList();
+                replaceDiagnosticsForCommand();
                 break;
             case COM_CHANGE_USER:
                 handleChangeUser();
@@ -1081,6 +1149,7 @@ public class ConnectProcessor {
             default:
                 ctx.getState().setError("Unsupported command(" + command + ")");
                 LOG.debug("Unsupported command: {}", command);
+                replaceDiagnosticsForCommand();
                 break;
         }
     }
@@ -1451,6 +1520,7 @@ public class ConnectProcessor {
         ctx.getState().reset();
         ctx.setMultiStmt(false);
         executor = null;
+        executeInvoked = false;
 
         packetBuf = req.byteBuffer();
 
@@ -1472,6 +1542,7 @@ public class ConnectProcessor {
         ctx.getState().reset();
         ctx.setMultiStmt(false);
         executor = null;
+        executeInvoked = false;
 
         // reset sequence id of MySQL protocol
         final MysqlChannel channel = ctx.getMysqlChannel();

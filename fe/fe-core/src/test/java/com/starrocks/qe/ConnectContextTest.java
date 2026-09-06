@@ -1089,4 +1089,27 @@ public class ConnectContextTest {
         // The timeout exception is caught internally; ERR_BAD_DB_ERROR is still thrown
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
     }
+
+    @Test
+    public void testWarningBufferKeepsFirstEntriesAndStaysBounded() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Recording without an intervening clear stops at the limit, and the entries kept are
+        // the first ones, so the buffer cannot grow for the lifetime of the connection.
+        for (int i = 0; i < 500; i++) {
+            ctx.addWarning(new QueryWarning("Warning", "1265", "warning " + i));
+        }
+
+        List<QueryWarning> warnings = ctx.getWarnings();
+        Assertions.assertEquals(64, warnings.size());
+        Assertions.assertEquals("warning 0", warnings.get(0).getMessage());
+        Assertions.assertEquals("warning 63", warnings.get(63).getMessage());
+
+        // The limit applies to what the buffer holds, not to the connection: the next statement
+        // clears it and records into an empty buffer again.
+        ctx.clearWarnings();
+        ctx.addWarning(QueryWarning.fromErrorState(ctx.getState()));
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        Assertions.assertEquals("Error", ctx.getWarnings().get(0).getLevel());
+    }
 }
