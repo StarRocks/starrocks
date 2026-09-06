@@ -244,7 +244,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
@@ -275,7 +278,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
