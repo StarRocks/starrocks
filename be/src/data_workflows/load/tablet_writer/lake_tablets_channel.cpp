@@ -92,7 +92,13 @@ public:
 
     void abort() override;
 
-    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
+    // A lake tablet has a single writer, so there is nothing to abort per tablet: the whole channel
+    // goes down. Record `reason` first, so requests rejected afterwards report it instead of a
+    // generic "writer closed" error.
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override {
+        cancel(reason);
+        return abort();
+    }
 
     void update_profile() override;
 
