@@ -17,7 +17,6 @@
 #include "base/failpoint/fail_point.h"
 #include "column/variant_path_parser.h"
 #include "formats/parquet/complex_column_reader.h"
-#include "formats/parquet/meta_helper.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
@@ -289,6 +288,9 @@ Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const Pa
         }
         node.parsed_full_path = std::move(parsed_path).value();
         if (fallback_field != nullptr) {
+            if (fallback_field->is_geo()) {
+                return Status::NotSupported("Geospatial annotation on variant fallback: " + fallback_field->name);
+            }
             if (fallback_field->physical_column_index < 0 ||
                 static_cast<size_t>(fallback_field->physical_column_index) >= num_column_chunks) {
                 return Status::InvalidArgument(strings::Substitute(
@@ -341,7 +343,7 @@ void VariantShreddedReadHints::clear() {
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
-    if (field->contains_geo()) {
+    if (field->is_geo()) {
         return Status::NotSupported("Native geospatial column reader is disabled: " + field->name);
     }
     // We will only set a complex type in ParquetField
@@ -412,7 +414,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type,
                                                       const TIcebergSchemaField* lake_schema_field) {
-    if (field->contains_geo() || (lake_schema_field != nullptr && iceberg_contains_geo(*lake_schema_field))) {
+    if (field->is_geo() || (lake_schema_field != nullptr && (lake_schema_field->__isset.geo_metadata ||
+                                                             (lake_schema_field->__isset.iceberg_type &&
+                                                              (lake_schema_field->iceberg_type == "GEOGRAPHY" ||
+                                                               lake_schema_field->iceberg_type == "GEOMETRY"))))) {
         return Status::NotSupported("Native geospatial column reader is disabled: " + field->name);
     }
     // We will only set a complex type in ParquetField
@@ -492,9 +497,6 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(const ColumnReaderOptions& opts,
                                                                             const ParquetField* variant_field,
                                                                             const VariantShreddedReadHints& hints) {
-    if (variant_field->contains_geo()) {
-        return Status::NotSupported("Native geospatial column reader is disabled: " + variant_field->name);
-    }
     DCHECK(opts.row_group_meta != nullptr);
     DCHECK(variant_field->type == ColumnType::STRUCT);
     DCHECK(variant_field->children.size() >= 2);
@@ -502,6 +504,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     VariantNodeFields top_fields = find_variant_node_fields(variant_field);
     if (top_fields.metadata == nullptr || top_fields.value == nullptr) {
         return Status::InvalidArgument("Variant type must have 'metadata' and 'value' fields");
+    }
+    if (top_fields.metadata->is_geo() || top_fields.value->is_geo()) {
+        return Status::NotSupported("Geospatial annotations are not variant binary fields: " + variant_field->name);
     }
 
     const tparquet::ColumnChunk* column_chunks = opts.row_group_meta->columns.data();

@@ -37,7 +37,7 @@ static Status get_parquet_variant_type(const ::parquet::schema::NodePtr& node, T
 static Status try_to_infer_struct_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 
 Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
-    if (parquet_contains_geo(node)) {
+    if (node->logical_type()->is_geometry() || node->logical_type()->is_geography()) {
         *type_desc = TypeDescriptor(TYPE_UNKNOWN);
         return Status::OK();
     }
@@ -45,18 +45,6 @@ Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* 
         return get_parquet_type_from_group(node, type_desc);
     }
     return get_parquet_type_from_primitive(node, type_desc);
-}
-
-bool parquet_contains_geo(const ::parquet::schema::NodePtr& node) {
-    const auto& logical = node->logical_type();
-    if (logical->is_geometry() || logical->is_geography()) return true;
-    if (node->is_group()) {
-        const auto* group = down_cast<const ::parquet::schema::GroupNode*>(node.get());
-        for (int i = 0; i < group->field_count(); ++i) {
-            if (parquet_contains_geo(group->field(i))) return true;
-        }
-    }
-    return false;
 }
 
 static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {

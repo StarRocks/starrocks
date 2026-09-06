@@ -27,6 +27,9 @@
 
 namespace starrocks {
 
+// Build once with the immutable table descriptor, not once per data file.
+std::vector<size_t> iceberg_geo_column_indices(const TIcebergSchema& schema);
+
 class HdfsPartitionDescriptor {
 public:
     HdfsPartitionDescriptor(const THdfsPartition& thrift_partition,
@@ -110,6 +113,7 @@ public:
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
     const TIcebergSchema* get_iceberg_schema() const { return &_t_iceberg_schema; }
+    const std::vector<size_t>& geo_column_indices() const { return _geo_column_indices; }
     bool is_unpartitioned_table() { return _partition_column_names.empty(); }
     const std::vector<std::string>& partition_column_names() { return _partition_column_names; }
     const std::vector<TExpr>& get_partition_exprs() { return _partition_exprs; }
@@ -125,6 +129,7 @@ public:
 
 private:
     TIcebergSchema _t_iceberg_schema;
+    std::vector<size_t> _geo_column_indices;
     std::vector<std::string> _source_column_names; // partition transform column's source column name
     std::vector<std::string> _partition_column_names;
     std::vector<std::string> _transform_exprs;

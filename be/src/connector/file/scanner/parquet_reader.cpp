@@ -232,16 +232,6 @@ Status ParquetReaderWrap::_init_parquet_reader() {
             return Status::EndOfFile("Unexpected nullptr FileMetaData");
         }
 
-        _num_rows = _file_metadata->num_rows();
-        // initial members
-        _total_groups = _file_metadata->num_row_groups();
-        if (_total_groups == 0) {
-            return Status::EndOfFile("Empty Parquet File");
-        }
-        RETURN_IF_ERROR(next_selected_row_group());
-
-        _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows();
-
         {
             // Initialize _map_column, map column name to it's index
             // For nested type, it has multiple column, we need to map field_name to multiple indices
@@ -251,6 +241,8 @@ Status ParquetReaderWrap::_init_parquet_reader() {
                 const auto dot_vector = column_desc->path()->ToDotVector();
                 const std::string& field_name = dot_vector[0];
                 _map_column_nested[field_name].push_back(i);
+                const auto& logical = column_desc->logical_type();
+                if (logical->is_geometry() || logical->is_geography()) _geo_columns.insert(field_name);
                 // Record the top-level column whenever any of its leaves is INT96 (including leaves
                 // nested inside ARRAY/MAP/STRUCT, since dot_vector[0] is the top-level column name).
                 // This is only a coarse filter so _rectify_int96_timezone() can skip columns with no
@@ -261,6 +253,16 @@ Status ParquetReaderWrap::_init_parquet_reader() {
                 }
             }
         }
+
+        _num_rows = _file_metadata->num_rows();
+        // initial members
+        _total_groups = _file_metadata->num_row_groups();
+        if (_total_groups == 0) {
+            return Status::EndOfFile("Empty Parquet File");
+        }
+        RETURN_IF_ERROR(next_selected_row_group());
+
+        _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows();
 
         return Status::OK();
     } catch (::parquet::ParquetException& e) {
@@ -275,16 +277,12 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
     auto init_status = _init_parquet_reader();
     // Check even empty files and explicitly supplied binary/string schemas. Arrow's
     // WKB physical representation must not bypass the native-geo feature boundary.
-    if (_file_metadata != nullptr) {
-        const auto& root = _file_metadata->schema()->group_node();
+    if (!_geo_columns.empty()) {
         for (int i = 0; i < _num_of_columns_from_file; ++i) {
             const auto* slot = tuple_slot_descs.at(i);
-            if (slot == nullptr) continue;
-            for (int j = 0; j < root->field_count(); ++j) {
-                if (root->field(j)->name() == slot->col_name() && parquet_contains_geo(root->field(j))) {
-                    return Status::NotSupported("Native geospatial type support is disabled; cannot project column " +
-                                                std::string(slot->col_name()));
-                }
+            if (slot != nullptr && _geo_columns.count(std::string(slot->col_name())) != 0) {
+                return Status::NotSupported("Native geospatial type support is disabled; cannot project column " +
+                                            std::string(slot->col_name()));
             }
         }
     }
@@ -345,7 +343,7 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
 
         // UNKNOWN_TYPE is valid for schema recognition, but SlotDescriptor
         // requires an executable type with a defined slot size.
-        if (parquet_contains_geo(field)) {
+        if (!_geo_columns.empty() && _geo_columns.count(name) != 0) {
             return Status::NotSupported("Native geospatial type support is disabled; cannot infer column " + name);
         }
 

@@ -110,6 +110,8 @@ private:
     // nested inside ARRAY/MAP/STRUCT. _rectify_int96_timezone() uses it to skip columns with no
     // INT96 leaf, then resolves the precise per-leaf re-tag via the FileReader schema manifest.
     std::unordered_set<std::string> _int96_columns;
+    // Populated alongside the existing physical-column mapping, including empty files.
+    std::unordered_set<std::string> _geo_columns;
     std::vector<int> _parquet_column_ids;
     int _total_groups{0}; // groups in a parquet file
     int _current_group{0};

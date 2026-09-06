@@ -63,13 +63,16 @@ TEST_F(ParquetSchemaBuilderTest, NativeGeoRemainsUnknown) {
         TypeDescriptor type;
         ASSERT_TRUE(get_parquet_type(geo, &type).ok());
         EXPECT_EQ(TYPE_UNKNOWN, type.type);
-        EXPECT_TRUE(parquet_contains_geo(geo));
         auto nested = create_group_node("nested", ::parquet::Repetition::OPTIONAL, {geo});
         ASSERT_TRUE(get_parquet_type(nested, &type).ok());
-        EXPECT_EQ(TYPE_UNKNOWN, type.type);
+        EXPECT_EQ(TYPE_STRUCT, type.type);
+        ASSERT_EQ(1, type.children.size());
+        EXPECT_EQ(TYPE_UNKNOWN, type.children[0].type);
     }
     auto binary = create_primitive_node("bytes", ::parquet::Repetition::OPTIONAL, ::parquet::Type::BYTE_ARRAY);
-    EXPECT_FALSE(parquet_contains_geo(binary));
+    TypeDescriptor type;
+    ASSERT_TRUE(get_parquet_type(binary, &type).ok());
+    EXPECT_EQ(TYPE_VARBINARY, type.type);
 }
 
 TEST_F(ParquetSchemaBuilderTest, PrimitiveTypes) {

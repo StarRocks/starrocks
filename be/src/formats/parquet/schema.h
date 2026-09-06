@@ -123,7 +123,11 @@ struct ParquetField {
     int16_t max_rep_level() const { return level_info.max_rep_level; }
     std::string debug_string() const;
     bool is_complex_type() const;
-    bool contains_geo() const;
+    // Leaf annotation only: reader construction already traverses selected children.
+    bool is_geo() const {
+        return !is_complex_type() && schema_element.__isset.logicalType &&
+               (schema_element.logicalType.__isset.GEOMETRY || schema_element.logicalType.__isset.GEOGRAPHY);
+    }
     bool has_same_complex_type(const TypeDescriptor& type_descriptor) const;
 };
 
@@ -143,12 +147,14 @@ public:
     const ParquetField* get_stored_column_by_field_id(int32_t field_id) const;
     const ParquetField* get_stored_column_by_column_name(std::string_view column_name) const;
     const std::vector<ParquetField>& get_parquet_fields() const { return _fields; }
+    const std::vector<size_t>& geo_column_indices() const { return _geo_column_indices; }
     const size_t get_fields_size() const { return _fields.size(); }
     const bool contain_field_id(int32_t field_id) const {
         return _field_id_2_field_idx.find(field_id) != _field_id_2_field_idx.end();
     }
 
 private:
+    static Status validate_geo_annotation(const tparquet::SchemaElement& element);
     Status leaf_to_field(const tparquet::SchemaElement* t_schema, const LevelInfo& cur_level_info, bool is_nullable,
                          ParquetField* field);
 
@@ -172,6 +178,7 @@ private:
         if (pos >= t_schemas.size()) {
             return Status::InvalidArgument("Access out-of-bounds SchemaElement");
         }
+        RETURN_IF_ERROR(validate_geo_annotation(t_schemas[pos]));
         return &t_schemas[pos];
     }
 
@@ -179,6 +186,9 @@ private:
 
     std::vector<ParquetField> _fields;
     std::vector<ParquetField*> _physical_fields;
+    // Populated during the existing schema traversal, with no second detection pass.
+    size_t _geo_leaf_count = 0;
+    std::vector<size_t> _geo_column_indices;
     // Parquet filed name(formatted with case-sensitive) mapping to field position in schema.
     std::unordered_map<std::string, size_t> _formatted_column_name_2_field_idx;
     // Parquet unique field id mapping to field position in schema.

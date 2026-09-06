@@ -14,6 +14,7 @@
 
 #include "meta_helper.h"
 
+#include <algorithm>
 #include <optional>
 
 #include "formats/parquet/metadata.h"
@@ -100,17 +101,6 @@ const TIcebergSchemaField* match_lake_field(const ParquetField& field, const std
 
 } // namespace
 
-bool iceberg_contains_geo(const TIcebergSchemaField& field) {
-    if (field.__isset.geo_metadata ||
-        (field.__isset.iceberg_type && (field.iceberg_type == "GEOGRAPHY" || field.iceberg_type == "GEOMETRY"))) {
-        return true;
-    }
-    for (const auto& child : field.children) {
-        if (iceberg_contains_geo(child)) return true;
-    }
-    return false;
-}
-
 Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field, bool case_sensitive) {
     const auto& logical = field.schema_element.logicalType;
     // A legacy repeated primitive becomes an ARRAY wrapper plus a leaf. Its
@@ -191,47 +181,61 @@ Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* 
 }
 
 Status validate_geo_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake_schema,
-                         const std::vector<FormatColumnInfo>& columns, bool case_sensitive) {
-    // Ordinary scans do not need cross-schema matching. In particular, avoid
-    // repeated name/ID lookups across wide Iceberg schemas without any geo fields.
-    bool has_geo = false;
-    for (const auto& field : schema.get_parquet_fields()) {
-        has_geo |= field.contains_geo();
+                         const std::vector<FormatColumnInfo>& columns, bool case_sensitive,
+                         const std::vector<size_t>* lake_geo_indices,
+                         const std::vector<ColumnAccessPathPtr>* column_access_paths) {
+    // Both indices were collected before this call. Ordinary files return in
+    // constant time, without traversing schemas or matching projection names.
+    const auto& parquet_geo_indices = schema.geo_column_indices();
+    if (parquet_geo_indices.empty() && (lake_geo_indices == nullptr || lake_geo_indices->empty())) {
+        return Status::OK();
     }
-    if (lake_schema != nullptr) {
-        for (const auto& field : lake_schema->fields) {
-            has_geo |= iceberg_contains_geo(field);
-        }
-    }
-    if (!has_geo) return Status::OK();
 
-    for (const auto& field : schema.get_parquet_fields()) {
+    // Only geo-bearing roots need cross-schema matching.
+    for (auto index : parquet_geo_indices) {
+        const auto& field = *schema.get_stored_column_by_field_idx(index);
         const auto* lake_field =
                 lake_schema == nullptr ? nullptr : match_lake_field(field, lake_schema->fields, case_sensitive);
         RETURN_IF_ERROR(validate_geo_field(field, lake_field, case_sensitive));
     }
+    if (lake_schema != nullptr && lake_geo_indices != nullptr) {
+        for (auto index : *lake_geo_indices) {
+            const auto& lake_field = lake_schema->fields[index];
+            const auto* field = schema.exist_filed_id() ? schema.get_stored_column_by_field_id(lake_field.field_id)
+                                                        : schema.get_stored_column_by_column_name(
+                                                                  Utils::format_name(lake_field.name, case_sensitive));
+            if (field != nullptr) RETURN_IF_ERROR(validate_geo_field(*field, &lake_field, case_sensitive));
+        }
+    }
     for (const auto& column : columns) {
+        const auto binding = find_extended_variant_virtual_binding(column_access_paths, column.name());
+        const std::string_view source_name = binding ? binding->access_path->path() : column.name();
         const TIcebergSchemaField* lake_field = nullptr;
         if (lake_schema != nullptr) {
             for (const auto& candidate : lake_schema->fields) {
                 if (Utils::format_name(candidate.name, case_sensitive) ==
-                    Utils::format_name(column.name(), case_sensitive)) {
+                    Utils::format_name(source_name, case_sensitive)) {
                     lake_field = &candidate;
                     break;
                 }
             }
         }
-        const ParquetField* field = nullptr;
+        int32_t field_idx;
         if (lake_field != nullptr && schema.exist_filed_id()) {
-            field = schema.get_stored_column_by_field_id(lake_field->field_id);
-        } else if (column.col_unique_id() != -1) {
-            field = schema.get_stored_column_by_field_id(column.col_unique_id());
+            field_idx = schema.get_field_idx_by_field_id(lake_field->field_id);
+        } else if (!binding && column.col_unique_id() != -1) {
+            field_idx = schema.get_field_idx_by_field_id(column.col_unique_id());
         } else {
-            field = schema.get_stored_column_by_column_name(
-                    Utils::format_name(parquet_lookup_name(column), case_sensitive));
+            field_idx = schema.get_field_idx_by_column_name(
+                    Utils::format_name(binding ? source_name : parquet_lookup_name(column), case_sensitive));
         }
-        if ((lake_field != nullptr && iceberg_contains_geo(*lake_field)) ||
-            (field != nullptr && field->contains_geo())) {
+        bool lake_geo = false;
+        if (lake_field != nullptr && lake_geo_indices != nullptr) {
+            const auto index = static_cast<size_t>(lake_field - lake_schema->fields.data());
+            lake_geo = std::find(lake_geo_indices->begin(), lake_geo_indices->end(), index) != lake_geo_indices->end();
+        }
+        if (lake_geo || (field_idx >= 0 && std::find(parquet_geo_indices.begin(), parquet_geo_indices.end(),
+                                                     static_cast<size_t>(field_idx)) != parquet_geo_indices.end())) {
             return Status::NotSupported("Native geospatial type support is disabled; cannot project column " +
                                         std::string(column.name()));
         }

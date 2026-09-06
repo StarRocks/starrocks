@@ -41,11 +41,12 @@ struct ParquetField;
 
 namespace starrocks::parquet {
 
-bool iceberg_contains_geo(const TIcebergSchemaField& field);
-
-// Run before missing-column substitution and all row pruning.
+// Run before missing-column substitution and all row pruning. Iceberg callers
+// supply the immutable table descriptor's geo index, including for unannotated files.
 Status validate_geo_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake_schema,
-                         const std::vector<FormatColumnInfo>& columns, bool case_sensitive);
+                         const std::vector<FormatColumnInfo>& columns, bool case_sensitive,
+                         const std::vector<size_t>* lake_geo_indices,
+                         const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr);
 Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field, bool case_sensitive);
 
 class MetaHelper {

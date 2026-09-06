@@ -20,8 +20,6 @@
 
 namespace starrocks {
 
-bool parquet_contains_geo(const ::parquet::schema::NodePtr& node);
-
 Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 
 } //namespace starrocks

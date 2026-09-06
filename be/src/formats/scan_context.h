@@ -283,6 +283,8 @@ struct FormatScanContext {
 
     // Table/lake schema used by Parquet schema evolution matching.
     const TIcebergSchema* lake_schema = nullptr;
+    // Non-owning, immutable, and shared with the table descriptor across files.
+    const std::vector<size_t>* lake_geo_column_indices = nullptr;
 
     // Non-owning predicate state built by upper scan orchestration.
     const PredicateTree* predicate_tree = nullptr;

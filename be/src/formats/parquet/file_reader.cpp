@@ -64,7 +64,8 @@ Status FileReader::init(FormatScanContext* ctx) {
     FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
     ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
     RETURN_IF_ERROR(validate_geo_scan(_file_metadata->schema(), ctx->lake_schema, ctx->materialized_columns,
-                                      ctx->options.case_sensitive));
+                                      ctx->options.case_sensitive, ctx->lake_geo_column_indices,
+                                      &ctx->column_access_paths));
 
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> existed_column_names;
