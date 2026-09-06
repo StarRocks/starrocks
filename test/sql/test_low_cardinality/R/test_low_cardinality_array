@@ -1,4 +1,7 @@
 -- name: test_low_array
+admin set frontend config ("dict_thrash_guard_threshold" = "1000000");
+-- result:
+-- !result
 CREATE TABLE `s2` (
   `v1` bigint(20) NULL COMMENT "",
   `v2` int NULL,
