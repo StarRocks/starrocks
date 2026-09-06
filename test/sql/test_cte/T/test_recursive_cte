@@ -267,3 +267,42 @@ WITH RECURSIVE r AS (
     SELECT n + 1, bal + 1 FROM r WHERE n < 5
 )
 SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=20, enable_insert_strict=true, insert_max_filter_ratio=0)*/ * FROM r ORDER BY n;
+
+-- Test 14: Error case - a recursive CTE nested inside another one whose recursive member references
+-- the OUTER recursive CTE. This cross-scope recursive reference is unsupported; it must be rejected
+-- with a clear error instead of expanding the outer CTE without end (StackOverflowError / hang).
+WITH RECURSIVE q AS (
+    SELECT employee_id, name, manager_id FROM employees WHERE manager_id IS NULL
+    UNION ALL (
+        WITH RECURSIVE x AS (
+            SELECT employee_id, name, manager_id FROM employees WHERE manager_id IS NULL
+            UNION ALL (
+                SELECT employee_id, name, manager_id FROM q WHERE employee_id < 10
+                UNION ALL
+                SELECT employee_id, name, manager_id FROM x WHERE manager_id < 10
+            )
+        )
+        SELECT employee_id, name, manager_id FROM x
+    )
+)
+SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ employee_id FROM q;
+
+-- Test 15: Error case - the recursive CTE q is referenced only inside a scalar subquery of its own
+-- recursive member (the member's FROM is a base table). That reference is resolved by the fresh
+-- QueryAnalyzer the subquery spawns, whose recursiveCteStack is empty, so it used to slip past the
+-- guard and expand q without end. It must be rejected. enable_recursive_cte is left at its default
+-- (false) so this exercises the QueryAnalyzer guard rather than the RecursiveCTEAstCheck path.
+WITH RECURSIVE q AS (
+    SELECT employee_id, name, manager_id FROM employees WHERE manager_id IS NULL
+    UNION ALL
+    SELECT employee_id, name, manager_id FROM employees WHERE employee_id < (SELECT max(employee_id) FROM q)
+)
+SELECT employee_id FROM q;
+
+-- Test 16: Error case - same, but the reference hides in an IN subquery instead of a scalar one.
+WITH RECURSIVE q AS (
+    SELECT employee_id, name, manager_id FROM employees WHERE manager_id IS NULL
+    UNION ALL
+    SELECT employee_id, name, manager_id FROM employees WHERE employee_id IN (SELECT employee_id FROM q)
+)
+SELECT employee_id FROM q;

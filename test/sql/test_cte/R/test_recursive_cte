@@ -385,3 +385,39 @@ SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=20, enable
 4	3.5
 5	4.5
 -- !result
+WITH RECURSIVE q AS (
+    SELECT employee_id, name, manager_id FROM employees WHERE manager_id IS NULL
+    UNION ALL (
+        WITH RECURSIVE x AS (
+            SELECT employee_id, name, manager_id FROM employees WHERE manager_id IS NULL
+            UNION ALL (
+                SELECT employee_id, name, manager_id FROM q WHERE employee_id < 10
+                UNION ALL
+                SELECT employee_id, name, manager_id FROM x WHERE manager_id < 10
+            )
+        )
+        SELECT employee_id, name, manager_id FROM x
+    )
+)
+SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ employee_id FROM q;
+-- result:
+[REGEX].*Doesn't support multi-level recursive CTE.*
+-- !result
+WITH RECURSIVE q AS (
+    SELECT employee_id, name, manager_id FROM employees WHERE manager_id IS NULL
+    UNION ALL
+    SELECT employee_id, name, manager_id FROM employees WHERE employee_id < (SELECT max(employee_id) FROM q)
+)
+SELECT employee_id FROM q;
+-- result:
+[REGEX].*Doesn't support multi-level recursive CTE.*
+-- !result
+WITH RECURSIVE q AS (
+    SELECT employee_id, name, manager_id FROM employees WHERE manager_id IS NULL
+    UNION ALL
+    SELECT employee_id, name, manager_id FROM employees WHERE employee_id IN (SELECT employee_id FROM q)
+)
+SELECT employee_id FROM q;
+-- result:
+[REGEX].*Doesn't support multi-level recursive CTE.*
+-- !result
