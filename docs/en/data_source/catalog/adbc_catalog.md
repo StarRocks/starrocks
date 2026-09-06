@@ -22,6 +22,8 @@ The FE uses the ADBC driver to discover schemas, tables, and Arrow column types.
 - Each scan uses one ADBC stream. Distributed or partitioned reads are not supported.
 - The following Arrow types are supported: signed and unsigned integers, floating-point values, decimal values, Boolean values, UTF-8 strings, binary values, dates, timestamps, and null values. Complex Arrow types are not supported.
 
+Arrow Date32 (days) maps to StarRocks `DATE`; Date64 (milliseconds) maps to `DATETIME`.
+
 ## Prerequisites
 
 ### Install the native ADBC driver

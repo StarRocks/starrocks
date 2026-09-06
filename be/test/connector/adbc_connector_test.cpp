@@ -25,6 +25,7 @@
 
 #include "exec/adbc_scanner.h"
 #include "runtime/descriptors.h"
+#include "types/date_value.h"
 
 namespace starrocks::connector {
 
@@ -122,6 +123,34 @@ TEST_F(ADBCConnectorTest, ScannerRejectsNullInRequiredColumn) {
     auto status = scanner._convert_batch_to_chunk(batch, &chunk);
     EXPECT_FALSE(status.ok());
     EXPECT_NE(std::string::npos, status.to_string().find("required_value"));
+}
+
+TEST_F(ADBCConnectorTest, ScannerConvertsDate64ToDatetime) {
+    date::init_date_cache();
+    TTupleDescriptor thrift_tuple;
+    thrift_tuple.id = 0;
+    TupleDescriptor tuple(thrift_tuple);
+    TSlotDescriptor thrift_slot = int_slot(0, "value", true);
+    thrift_slot.slotType.types.clear();
+    TypeDescriptor(TYPE_DATETIME).to_thrift(&thrift_slot.slotType);
+    SlotDescriptor slot(thrift_slot);
+    tuple.add_slot(&slot);
+    arrow::Date64Builder builder;
+    ASSERT_TRUE(builder.Append(-86400000).ok());
+    ASSERT_TRUE(builder.Append(0).ok());
+    ASSERT_TRUE(builder.Append(86400000).ok());
+    ASSERT_TRUE(builder.AppendNull().ok());
+    auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::date64())}), 4,
+                                          {builder.Finish().ValueOrDie()});
+    ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
+    ChunkPtr chunk;
+    ASSERT_TRUE(scanner._convert_batch_to_chunk(batch, &chunk).ok());
+    ASSERT_EQ(4, chunk->num_rows());
+    const auto& column = chunk->get_column_by_slot_id(0);
+    EXPECT_EQ("1969-12-31 00:00:00", column->get(0).get_timestamp().to_string());
+    EXPECT_EQ("1970-01-01 00:00:00", column->get(1).get_timestamp().to_string());
+    EXPECT_EQ("1970-01-02 00:00:00", column->get(2).get_timestamp().to_string());
+    EXPECT_TRUE(column->is_null(3));
 }
 
 TEST_F(ADBCConnectorTest, ScannerRechunksAndPreservesProfileCounters) {

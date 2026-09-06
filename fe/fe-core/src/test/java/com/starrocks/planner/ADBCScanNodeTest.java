@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -61,10 +62,12 @@ public class ADBCScanNodeTest {
         when(mockTable.getDbName()).thenReturn("test_schema");
         when(mockTable.getName()).thenReturn("test_table");
         when(mockTable.getProperties()).thenReturn(tableProperties);
+        when(mockTable.getType()).thenReturn(Table.TableType.ADBC);
 
         // Set up tuple descriptor with materialized slots
         mockTupleDesc = mock(TupleDescriptor.class);
         when(mockTupleDesc.getId()).thenReturn(new TupleId(0));
+        when(mockTupleDesc.getTable()).thenReturn(mockTable);
     }
 
     private ADBCScanNode createScanNodeWithColumns(String... colNames) {
@@ -115,6 +118,8 @@ public class ADBCScanNodeTest {
         assertEquals("\"col1\"", scanNode.getColumns().get(0));
         assertEquals("\"col2\"", scanNode.getColumns().get(1));
         assertEquals(50, scanNode.getLimit());
+        assertTrue(msg.isSetConnector_scan_node());
+        assertEquals("adbc", msg.getConnector_scan_node().getCatalog_type());
     }
 
     @Test

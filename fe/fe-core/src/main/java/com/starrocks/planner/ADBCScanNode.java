@@ -168,6 +168,7 @@ public class ADBCScanNode extends ScanNode {
         adbcScanNode.setFilters(filters);
         adbcScanNode.setLimit(limit);
         msg.adbc_scan_node = adbcScanNode;
+        setConnectorCatalogType(msg);
     }
 
     @Override

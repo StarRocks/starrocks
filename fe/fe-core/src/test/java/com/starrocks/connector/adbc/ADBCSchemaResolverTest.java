@@ -194,6 +194,12 @@ public class ADBCSchemaResolverTest {
         assertEquals(DateType.DATE, resolver.convertArrowFieldToSRType(field));
     }
 
+    @Test
+    public void date64_mapsDatetime() {
+        Field field = makeField("col", new ArrowType.Date(org.apache.arrow.vector.types.DateUnit.MILLISECOND));
+        assertEquals(DateType.DATETIME, resolver.convertArrowFieldToSRType(field));
+    }
+
     // --- Timestamp types (all variants map to DATETIME) ---
 
     @Test

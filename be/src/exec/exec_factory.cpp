@@ -342,10 +342,8 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     }
     case TPlanNodeType::ADBC_SCAN_NODE: {
         TPlanNode new_node = tnode;
-        TConnectorScanNode connector_scan_node;
-        connector_scan_node.connector_name = connector::Connector::ADBC_CONN;
-        new_node.connector_scan_node = connector_scan_node;
-        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
+        new_node.connector_scan_node = make_connector_scan_node(tnode, connector::Connector::ADBC_CONN);
+        CREATE_NODE(ConnectorScanNode, pool, new_node, descs);
         return Status::OK();
     }
     case TPlanNodeType::LAKE_SCAN_NODE: {

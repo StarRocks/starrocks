@@ -22,6 +22,8 @@ FE は ADBC ドライバーを使用してスキーマ、テーブル、Arrow �
 - 各スキャンは 1 つの ADBC ストリームを使用します。分散読み取りおよびパーティション読み取りはサポートされません。
 - 符号付きおよび符号なし整数、浮動小数点数、Decimal、Boolean、UTF-8 文字列、Binary、Date、Timestamp、Null の Arrow 型をサポートします。複雑な Arrow 型はサポートされません。
 
+Arrow Date32（日単位）は StarRocks の `DATE` に、Date64（ミリ秒単位）は `DATETIME` にマッピングされます。
+
 ## 前提条件
 
 ### ネイティブ ADBC ドライバーのインストール

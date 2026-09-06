@@ -14,14 +14,20 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.adbc.MockedADBCMetadata;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ADBCScanPlanTest extends ConnectorPlanTestBase {
 
@@ -96,6 +102,20 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN ADBC");
         assertContains(plan, "OlapScanNode");
+    }
+
+    @Test
+    public void testADBCCatalogQueryMetrics() throws Exception {
+        String sql = "select a from adbc0.test_db0.tbl0";
+        ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        StmtExecutor executor = new StmtExecutor(connectContext, UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        Set<String> catalogTypes = Deencapsulation.invoke(executor, "extractCatalogTypes", plan);
+        assertEquals(Set.of("adbc"), catalogTypes);
+
+        String joinSql = "select t1.a, t2.v1 from adbc0.test_db0.tbl0 t1 join test.t0 t2 on t1.c = t2.v1";
+        ExecPlan joinPlan = UtFrameUtils.getPlanAndFragment(connectContext, joinSql).second;
+        catalogTypes = Deencapsulation.invoke(executor, "extractCatalogTypes", joinPlan);
+        assertEquals(Set.of("adbc", "default"), catalogTypes);
     }
 
     @Test

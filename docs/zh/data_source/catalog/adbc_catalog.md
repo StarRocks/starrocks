@@ -22,6 +22,8 @@ FE 使用 ADBC 驱动程序发现 Schema、表和 Arrow 列类型。BE 或 CN �
 - 每次扫描仅使用一个 ADBC 数据流，暂不支持分布式或分区读取。
 - 支持以下 Arrow 类型：有符号和无符号整数、浮点数、Decimal、Boolean、UTF-8 字符串、Binary、Date、Timestamp 和 Null。暂不支持复杂 Arrow 类型。
 
+Arrow Date32（天）映射为 StarRocks `DATE`；Date64（毫秒）映射为 `DATETIME`。
+
 ## 前提条件
 
 ### 安装原生 ADBC 驱动程序

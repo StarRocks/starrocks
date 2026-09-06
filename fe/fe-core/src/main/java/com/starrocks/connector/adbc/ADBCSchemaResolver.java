@@ -27,6 +27,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
+import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -82,7 +83,7 @@ public class ADBCSchemaResolver {
                     field.getName());
             return null;
         } else if (arrowType instanceof ArrowType.Date) {
-            return DateType.DATE;
+            return ((ArrowType.Date) arrowType).getUnit() == DateUnit.DAY ? DateType.DATE : DateType.DATETIME;
         } else if (arrowType instanceof ArrowType.Timestamp) {
             return DateType.DATETIME;
         } else if (arrowType instanceof ArrowType.Null) {

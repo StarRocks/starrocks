@@ -118,6 +118,35 @@ TEST_F(ExecFactoryTest, test_file_scan_node_mapping) {
     assert_node_instance<ConnectorScanNode>(make_file_scan_node(true));
 }
 
+TEST_F(ExecFactoryTest, test_adbc_scan_preserves_catalog_type) {
+    TPlanNode tnode = make_base_plan_node(TPlanNodeType::ADBC_SCAN_NODE);
+    TADBCScanNode adbc_scan_node;
+    adbc_scan_node.__set_tuple_id(_tuple_id);
+    tnode.__set_adbc_scan_node(adbc_scan_node);
+    TConnectorScanNode connector_scan_node;
+    connector_scan_node.__set_catalog_type("adbc");
+    tnode.__set_connector_scan_node(connector_scan_node);
+
+    ExecNode* node = nullptr;
+    ASSERT_OK(ExecFactory::create_vectorized_node(&_runtime_state, &_object_pool, tnode, *_desc_tbl, &node));
+    auto* scan_node = dynamic_cast<ConnectorScanNode*>(node);
+    ASSERT_NE(nullptr, scan_node);
+    EXPECT_EQ("adbc", scan_node->catalog_type());
+}
+
+TEST_F(ExecFactoryTest, test_adbc_scan_without_catalog_type) {
+    TPlanNode tnode = make_base_plan_node(TPlanNodeType::ADBC_SCAN_NODE);
+    TADBCScanNode adbc_scan_node;
+    adbc_scan_node.__set_tuple_id(_tuple_id);
+    tnode.__set_adbc_scan_node(adbc_scan_node);
+
+    ExecNode* node = nullptr;
+    ASSERT_OK(ExecFactory::create_vectorized_node(&_runtime_state, &_object_pool, tnode, *_desc_tbl, &node));
+    auto* scan_node = dynamic_cast<ConnectorScanNode*>(node);
+    ASSERT_NE(nullptr, scan_node);
+    EXPECT_TRUE(scan_node->catalog_type().empty());
+}
+
 TEST_F(ExecFactoryTest, test_unsupported_node_type) {
     TPlanNode tnode = make_base_plan_node(TPlanNodeType::CSV_SCAN_NODE);
     ExecNode* node = nullptr;
