@@ -496,7 +496,8 @@ public class AstToStringBuilder {
         // Properties
         Map<String, String> properties = new HashMap<>();
         try {
-            properties = new HashMap<>(table.getProperties());
+            properties = table instanceof ADBCTable ? ((ADBCTable) table).getDisplayProperties(true)
+                    : new HashMap<>(table.getProperties());
         } catch (NotImplementedException e) {
             // hive view does not implement getProperties
         }

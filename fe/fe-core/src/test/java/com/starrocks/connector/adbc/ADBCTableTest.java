@@ -68,6 +68,7 @@ public class ADBCTableTest {
         List<String> ddl = new ArrayList<>();
         AstToStringBuilder.getDdlStmt(table(), ddl, null, null, false, true);
         assertCredentialsHidden(ddl.get(0));
+        assertCredentialsHidden(AstToStringBuilder.getExternalCatalogTableDdlStmt(table()));
     }
 
     @Test
