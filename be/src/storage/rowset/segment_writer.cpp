@@ -404,10 +404,9 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
 
     size_t num_columns = _tablet_schema->num_columns();
 
-    // Gather the ordinal index of every column into one contiguous run at the tail (see
-    // config::enable_segment_tail_index_region). Keep each page zone map next to its column's
-    // data pages: a predicate scan often reads both, so moving the zone map away can add a remote
-    // cache-block read rather than remove one.
+    // Gather the two indexes a cold scan cannot avoid -- the ordinal index of every accessed
+    // column and the page zone map of every predicate column -- into one contiguous run at the
+    // tail (see config::enable_segment_tail_index_region).
     //
     // This works for a vertical writer too, which calls finalize_columns() once per column
     // group: the deferred writers accumulate across groups and finalize_footer() flushes them
@@ -417,10 +416,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     // than one source rowset, so leaving it on the legacy layout would mean the region vanished
     // from essentially every wide table at its first real compaction.
     //
-    // Page zone maps and the larger optional indexes (bloom filter, bitmap, inverted, vector)
-    // deliberately stay inline. Only ordinal indexes are needed by every projected column and
-    // benefit consistently from being adjacent to the footer.
-    const bool defer_ordinal_index = config::enable_segment_tail_index_region;
+    // The larger optional indexes (bloom filter, bitmap, inverted, vector) deliberately stay
+    // inline: they are read only when a predicate needs them, and they are big enough that
+    // hoisting them would inflate the region past the point where reading it whole is a win.
+    const bool defer_small_index = config::enable_segment_tail_index_region;
 
     for (size_t i = 0; i < _column_indexes.size(); ++i) {
         uint32_t column_index = _column_indexes[i];
@@ -435,10 +434,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_data());
         // write index
         uint64_t index_offset = _wfile->size();
-        if (!defer_ordinal_index) {
+        if (!defer_small_index) {
             RETURN_IF_ERROR(column_writer->write_ordinal_index());
+            RETURN_IF_ERROR(column_writer->write_zone_map());
         }
-        RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
         RETURN_IF_ERROR(column_writer->write_inverted_index());
@@ -468,10 +467,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // check global dict valid
         _check_column_global_dict_valid(column_writer.get(), column_index);
 
-        if (defer_ordinal_index) {
+        if (defer_small_index) {
             // Survives until finalize_footer(). The data pages this writer was buffering were
-            // just released by write_data(), so what is retained is only the ordinal-index
-            // builder. The page zone map has already been written next to the column data.
+            // just released by write_data(), so what is retained is only the ordinal-index and
+            // zone-map builders.
             _deferred_small_index_writers.push_back(std::move(column_writer));
         } else {
             // reset to release memory
@@ -482,7 +481,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     _column_writers.clear();
     _column_indexes.clear();
 
-    if (defer_ordinal_index) {
+    if (defer_small_index) {
         // The short key index waits too. A vertical writer only has the key columns in its
         // first group, so writing it here would bury it under every later group's data.
         _small_index_region_deferred = true;
@@ -500,30 +499,26 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     return Status::OK();
 }
 
-// The short key index followed by every column's ordinal index, written back to back immediately
-// before the footer. Called from finalize_footer() so that it runs after the LAST column group's
-// data, which is what lets a vertical writer produce the layout at all. Page zone maps stay next
-// to their column data and are not part of this region.
+// Everything a cold scan must read before it can touch a data page, written back to back
+// immediately before the footer: every column's ordinal index and page zone map, then the short
+// key index. Called from finalize_footer() so that it runs after the LAST column group's data,
+// which is what lets a vertical writer produce the layout at all.
 Status SegmentWriter::_write_small_index_region(uint64_t* index_size) {
     const uint64_t region_offset = _wfile->size();
+    for (auto& column_writer : _deferred_small_index_writers) {
+        RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        RETURN_IF_ERROR(column_writer->write_zone_map());
+        // reset to release memory
+        column_writer.reset();
+    }
+    _deferred_small_index_writers.clear();
 
-    // The short key index is conditional and loaded independently from the per-column indexes.
-    // Put it first so it does not displace the always-read ordinal indexes from the footer block.
     if (_short_key_index_pending) {
         RETURN_IF_ERROR(_write_short_key_index());
         _index_builder.reset();
         _full_sort_key_index_builder.reset();
         _short_key_index_pending = false;
     }
-
-    // Parsing the footer already fetches the file's final cache block, so the ordinal indexes
-    // needed by every projected column can often be served from that block.
-    for (auto& column_writer : _deferred_small_index_writers) {
-        RETURN_IF_ERROR(column_writer->write_ordinal_index());
-        // reset to release memory
-        column_writer.reset();
-    }
-    _deferred_small_index_writers.clear();
 
     const uint64_t region_size = _wfile->size() - region_offset;
     if (index_size != nullptr) {
