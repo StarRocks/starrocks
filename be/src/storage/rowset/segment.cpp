@@ -321,15 +321,25 @@ struct SegmentZoneMapPruner {
         const ColumnId column_id = col_pred->column_id();
         const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
                                                                : parent->_tablet_schema->column(column_id);
-        // An extended column is synthesized by the JSON path rewrite and owns no zone map: its unique id is
-        // minted by counting up from the frontend's next_uniq_id, so it names no column on disk. Looking it
-        // up among the real column readers is never right, and on a row-store table the ids collide -- the
-        // backend's private `__row` column holds the very id handed to the first extended column of a scan.
-        // The subfield predicate was then answered against `__row`'s zone map, whose min/max span the
-        // encoded rows, so the whole segment was pruned away and the scan returned EndOfFile before an
-        // iterator was ever built. new_column_iterator_or_default() dispatches on is_extended() for the same
-        // reason; this is the second decision the synthetic id has to be kept out of.
-        if (tablet_column.is_extended()) {
+        // Neither an extended column (synthesized by the JSON path rewrite) nor a virtual column
+        // (_tablet_id_, _segment_id_, _row_id_, ... appended by extend_schema_by_virtual_columns()) is
+        // stored, so neither owns a zone map here and neither names a column on disk. The extended
+        // column's unique id is minted by counting up from the frontend's next_uniq_id; the virtual
+        // column is worse off, because nothing assigns it an id at all and it keeps TabletColumn's
+        // default of 0 -- the id the frontend hands the table's first column. Looking either one up
+        // among the real column readers is never right, and both collide in practice: on a row-store
+        // table the backend's private `__row` column holds the very id handed to the first extended
+        // column of a scan. The subfield predicate was then answered against `__row`'s zone map, whose
+        // min/max span the encoded rows, and a virtual column's predicate against the first stored
+        // column's min/max, so the whole segment was pruned away and the scan returned EndOfFile before
+        // an iterator was ever built -- rows vanished with no error and no log.
+        // Declining here gives up no pruning that was ever correct: a virtual column is served by
+        // DefaultValueColumnIterator or TRowIdColumnIterator, both of which inherit the base
+        // get_row_ranges_by_zone_map() that keeps the whole range, so the per-page decision already
+        // answered "do not prune"; the predicate is then evaluated row by row against the materialized
+        // constant. new_column_iterator_or_default() dispatches on is_extended() for the same reason;
+        // this is the second decision a synthetic id has to be kept out of.
+        if (tablet_column.is_extended() || tablet_column.is_virtual_column()) {
             return false;
         }
         const auto column_unique_id = tablet_column.unique_id();

@@ -50,6 +50,7 @@
 #include "storage/seek_range.h"
 #include "storage/seek_tuple.h"
 #include "storage/tablet_schema_helper.h"
+#include "storage/virtual_column_utils.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -1202,6 +1203,175 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
         ASSERT_EQ(varchar_col->get_slice(1), Slice("ghi"));
         ASSERT_EQ(0, stats.segment_stats_filtered);
         ASSERT_EQ(0, stats.rows_stats_filtered);
+    }
+}
+
+// A virtual column (_tablet_id_, _segment_id_, _row_id_, ...) is appended to the query's tablet
+// schema by extend_schema_by_virtual_columns() and is stored nowhere, so nothing ever assigns it a
+// unique id: TabletColumn::_unique_id keeps its C++ default of 0. Zero is not a free sentinel -- the
+// frontend mints unique ids from 0 up, so it is the id of the table's first column. The segment-level
+// zone map pruner looked the virtual column up in _column_readers by that id, got the first stored
+// column's reader and answered the virtual column's predicate against that column's min/max. When the
+// two ranges do not overlap the whole segment was pruned and the scan returned EndOfFile before a
+// SegmentIterator was ever built: rows disappeared with no error, no log and no crash. Here the key
+// column holds only negative values while a tablet id is always positive, which is exactly that shape.
+//
+// The per-page decision was always right: a virtual column is served by DefaultValueColumnIterator or
+// TRowIdColumnIterator, neither of which owns a zone map, and both inherit the base
+// ColumnIterator::get_row_ranges_by_zone_map() that keeps the whole range. Only the segment-level
+// pruner reaches around the iterator and into _column_readers, so that correct answer was never asked
+// for.
+TEST_F(SegmentIteratorTest, testVirtualColumnNotPrunedBySegmentZoneMap) {
+    std::shared_ptr<TabletSchema> tablet_schema = test::TabletSchemaBuilder()
+                                                          .create(0, false, TYPE_BIGINT, true)
+                                                          .create(1, false, TYPE_VARCHAR, true)
+                                                          .build();
+
+    // Keys -4..-1, so the first column's segment zone map is [-4, -1] -- disjoint from every value a
+    // tablet id, segment id or row id can take.
+    const std::vector<int64_t> keys = {-4, -3, -2, -1};
+    const std::vector<std::string> values = {"a", "b", "c", "d"};
+
+    const std::string file_name = kSegmentDir + "/virtual_column_segment_zone_map";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriterOptions writer_opts;
+    writer_opts.num_rows_per_block = 2;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, writer_opts);
+    std::vector<uint32_t> key_column_indexes{0, 1};
+    ASSERT_OK(writer.init(key_column_indexes, true));
+    {
+        auto write_schema = ChunkHelper::convert_schema(tablet_schema, key_column_indexes);
+        auto chunk = ChunkFactory::new_chunk(write_schema, 1024);
+        chunk->reset();
+        auto cols = chunk->columns();
+        for (size_t i = 0; i < keys.size(); ++i) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(values[i])));
+        }
+        ASSERT_OK(writer.append_chunk(*chunk));
+    }
+    uint64_t index_size = 0;
+    ASSERT_OK(writer.finalize_columns(&index_size));
+    uint64_t file_size = 0;
+    ASSERT_OK(writer.finalize_footer(&file_size));
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema));
+    ASSERT_EQ(4, segment->num_rows());
+
+    // The schema a scan that selects a virtual column really sees: the stored columns plus the
+    // virtual ones, appended after them.
+    ASSIGN_OR_ABORT(auto query_schema, extend_schema_by_virtual_columns(tablet_schema));
+    ColumnId tablet_id_cid = 0;
+    ColumnId segment_id_cid = 0;
+    for (size_t i = tablet_schema->num_columns(); i < query_schema->num_columns(); ++i) {
+        if (query_schema->column(i).name() == "_tablet_id_") {
+            tablet_id_cid = static_cast<ColumnId>(i);
+        } else if (query_schema->column(i).name() == "_segment_id_") {
+            segment_id_cid = static_cast<ColumnId>(i);
+        }
+    }
+    ASSERT_GT(tablet_id_cid, 0);
+    ASSERT_GT(segment_id_cid, 0);
+    // The premise of the defect: the virtual column is flagged virtual, carries no extended info (so
+    // the is_extended() guard let it through) and its unique id collides with the first stored
+    // column's.
+    ASSERT_TRUE(query_schema->column(tablet_id_cid).is_virtual_column());
+    ASSERT_FALSE(query_schema->column(tablet_id_cid).is_extended());
+    ASSERT_EQ(tablet_schema->column(0).unique_id(), query_schema->column(tablet_id_cid).unique_id());
+
+    constexpr int64_t kTabletId = 10086;
+    auto type_bigint = get_type_info(TYPE_BIGINT);
+
+    // Runs one predicate against the segment and reports how the scan answered. |pruned| tells
+    // whether the segment-level zone map threw the whole segment away before an iterator existed.
+    struct ScanResult {
+        bool pruned = false;
+        int64_t segment_stats_filtered = 0;
+        std::vector<int64_t> keys;
+        std::vector<int64_t> virtual_values;
+    };
+    auto scan = [&](ColumnId virtual_cid, ColumnPredicate* (*factory)(const TypeInfoPtr&, ColumnId, const Slice&),
+                    ColumnId pred_cid, const std::string& operand, ScanResult* out) {
+        auto vec_schema = ChunkHelper::convert_schema(query_schema, std::vector<ColumnId>{0, 1, virtual_cid});
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = query_schema;
+        seg_opts.tablet_id = kTabletId;
+
+        ObjectPool pool;
+        auto* pred = pool.add(factory(type_bigint, pred_cid, Slice(operand)));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{pred});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+        ASSERT_OK(ZonemapPredicatesRewriter::rewrite_predicate_tree(&pool, seg_opts.pred_tree,
+                                                                    seg_opts.pred_tree_for_zone_map));
+
+        auto chunk_iter_res = segment->new_iterator(vec_schema, seg_opts);
+        if (chunk_iter_res.status().is_end_of_file()) {
+            out->pruned = true;
+            out->segment_stats_filtered = stats.segment_stats_filtered;
+            return;
+        }
+        ASSERT_OK(chunk_iter_res.status());
+        const auto& chunk_iter = chunk_iter_res.value();
+        ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        auto res_chunk = ChunkFactory::new_chunk(chunk_iter->schema(), 1024);
+        for (int round = 0; round < 16; ++round) {
+            res_chunk->reset();
+            auto st = chunk_iter->get_next(res_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            auto* key_col = ColumnHelper::cast_to_raw<TYPE_BIGINT>(res_chunk->get_column_by_index(0));
+            auto* virtual_col = ColumnHelper::cast_to_raw<TYPE_BIGINT>(res_chunk->get_column_by_index(2));
+            for (size_t i = 0; i < res_chunk->num_rows(); ++i) {
+                out->keys.emplace_back(key_col->get_data()[i]);
+                out->virtual_values.emplace_back(virtual_col->get_data()[i]);
+            }
+        }
+        out->segment_stats_filtered = stats.segment_stats_filtered;
+    };
+
+    // 1. `_tablet_id_ > 0` holds for every row, yet it is disjoint from the key column's [-4, -1]
+    //    zone map. Before the fix new_iterator() returned EndOfFile and all four rows were lost.
+    {
+        ScanResult res;
+        scan(tablet_id_cid, new_column_gt_predicate, tablet_id_cid, "0", &res);
+        ASSERT_FALSE(res.pruned);
+        ASSERT_EQ(0, res.segment_stats_filtered);
+        ASSERT_EQ(keys, res.keys);
+        ASSERT_EQ(std::vector<int64_t>(keys.size(), kTabletId), res.virtual_values);
+    }
+
+    // 2. Same for `_segment_id_ >= 0`, likewise a tautology that falls outside [-4, -1].
+    {
+        ScanResult res;
+        scan(segment_id_cid, new_column_ge_predicate, segment_id_cid, "0", &res);
+        ASSERT_FALSE(res.pruned);
+        ASSERT_EQ(0, res.segment_stats_filtered);
+        ASSERT_EQ(keys, res.keys);
+    }
+
+    // 3. Control: a virtual-column predicate that genuinely matches nothing is not pruned either --
+    //    it is answered row by row, which costs a scan but returns the right answer.
+    {
+        ScanResult res;
+        scan(tablet_id_cid, new_column_eq_predicate, tablet_id_cid, "5", &res);
+        ASSERT_FALSE(res.pruned);
+        ASSERT_EQ(0, res.segment_stats_filtered);
+        ASSERT_TRUE(res.keys.empty());
+    }
+
+    // 4. Control: the same non-overlapping predicate on the *stored* column must still prune the
+    //    whole segment. The fix gives up no pruning that was ever correct.
+    {
+        ScanResult res;
+        scan(tablet_id_cid, new_column_gt_predicate, 0, "0", &res);
+        ASSERT_TRUE(res.pruned);
+        ASSERT_EQ(4, res.segment_stats_filtered);
     }
 }
 

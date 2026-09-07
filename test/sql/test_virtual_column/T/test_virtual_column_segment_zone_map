@@ -1,0 +1,73 @@
+-- name: test_virtual_column_segment_zone_map
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Every table below stores negative keys only, so the first column's segment zone map covers a
+-- range that no tablet id, segment id or row id can ever fall into. That makes the predicates on
+-- the virtual columns tautologies while keeping them disjoint from that zone map -- exactly the
+-- shape that used to lose every row. A virtual column is stored nowhere and so never gets a
+-- unique id of its own; the segment-level zone map pruner looked it up as id 0, which is the id
+-- of the table's first column, and answered the predicate against that column's min/max.
+create table t_dup (k int not null, v varchar(20))
+engine = olap
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_dup values (-1,'a'),(-2,'b'),(-3,'c'),(-4,'d'),(-5,'e'),(-6,'f'),(-7,'g'),(-8,'h'),(-9,'i'),(-10,'j');
+
+-- Baseline: no predicate, nothing to prune.
+select count(*) from t_dup;
+
+-- Tablet ids are positive and segment/row ids are non-negative, so all of these hold for every
+-- row. Before the fix each of them returned 0.
+select count(*) from t_dup where _tablet_id_ > 0;
+select count(*) from t_dup where _segment_id_ >= 0;
+select count(*) from t_dup where _row_id_ >= 0;
+select count(*), min(_row_id_), max(_row_id_) from t_dup where _tablet_id_ > 0;
+select count(*) from t_dup where _tablet_id_ > 0 and k = -3;
+
+-- Control: virtual-column predicates that genuinely match nothing still match nothing. A tablet
+-- id is never negative, and a single ten-row insert writes exactly one segment of ten rows.
+select count(*) from t_dup where _tablet_id_ < 0;
+select count(*) from t_dup where _segment_id_ = 1;
+select count(*) from t_dup where _row_id_ = 10;
+
+-- Control: predicates on the stored column keep filtering, so no pruning was given up.
+select count(*) from t_dup where k > 0;
+select count(*) from t_dup where k < 0;
+select count(*) from t_dup where k = -3;
+
+-- A second rowset whose zone map does intersect the id space: before the fix only that rowset
+-- survived and the query answered 1 instead of 11.
+insert into t_dup values (7,'k');
+select count(*) from t_dup where _tablet_id_ > 0;
+
+-- Primary key tables push the predicate down the same way.
+create table t_pk (k int not null, v varchar(20))
+engine = olap
+primary key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_pk values (-1,'a'),(-2,'b'),(-3,'c'),(-4,'d'),(-5,'e'),(-6,'f'),(-7,'g'),(-8,'h'),(-9,'i'),(-10,'j');
+select count(*) from t_pk where _tablet_id_ > 0;
+select count(*) from t_pk where _segment_id_ >= 0;
+
+-- Control: aggregate and unique key tables were never affected. Their virtual columns are marked
+-- REPLACE, which blocks pushdown to the storage layer, so no zone map was ever consulted.
+create table t_agg (k int not null, v bigint sum)
+engine = olap
+aggregate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_agg values (-1,1),(-2,2),(-3,3),(-4,4),(-5,5),(-6,6),(-7,7),(-8,8),(-9,9),(-10,10);
+select count(*) from t_agg where _tablet_id_ > 0;
+
+create table t_uniq (k int not null, v varchar(20))
+engine = olap
+unique key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_uniq values (-1,'a'),(-2,'b'),(-3,'c'),(-4,'d'),(-5,'e'),(-6,'f'),(-7,'g'),(-8,'h'),(-9,'i'),(-10,'j');
+select count(*) from t_uniq where _tablet_id_ > 0;
+
+drop database db_${uuid0};

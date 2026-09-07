@@ -1,0 +1,121 @@
+-- name: test_virtual_column_segment_zone_map
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_dup (k int not null, v varchar(20))
+engine = olap
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_dup values (-1,'a'),(-2,'b'),(-3,'c'),(-4,'d'),(-5,'e'),(-6,'f'),(-7,'g'),(-8,'h'),(-9,'i'),(-10,'j');
+-- result:
+-- !result
+select count(*) from t_dup;
+-- result:
+10
+-- !result
+select count(*) from t_dup where _tablet_id_ > 0;
+-- result:
+10
+-- !result
+select count(*) from t_dup where _segment_id_ >= 0;
+-- result:
+10
+-- !result
+select count(*) from t_dup where _row_id_ >= 0;
+-- result:
+10
+-- !result
+select count(*), min(_row_id_), max(_row_id_) from t_dup where _tablet_id_ > 0;
+-- result:
+10	0	9
+-- !result
+select count(*) from t_dup where _tablet_id_ > 0 and k = -3;
+-- result:
+1
+-- !result
+select count(*) from t_dup where _tablet_id_ < 0;
+-- result:
+0
+-- !result
+select count(*) from t_dup where _segment_id_ = 1;
+-- result:
+0
+-- !result
+select count(*) from t_dup where _row_id_ = 10;
+-- result:
+0
+-- !result
+select count(*) from t_dup where k > 0;
+-- result:
+0
+-- !result
+select count(*) from t_dup where k < 0;
+-- result:
+10
+-- !result
+select count(*) from t_dup where k = -3;
+-- result:
+1
+-- !result
+insert into t_dup values (7,'k');
+-- result:
+-- !result
+select count(*) from t_dup where _tablet_id_ > 0;
+-- result:
+11
+-- !result
+create table t_pk (k int not null, v varchar(20))
+engine = olap
+primary key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_pk values (-1,'a'),(-2,'b'),(-3,'c'),(-4,'d'),(-5,'e'),(-6,'f'),(-7,'g'),(-8,'h'),(-9,'i'),(-10,'j');
+-- result:
+-- !result
+select count(*) from t_pk where _tablet_id_ > 0;
+-- result:
+10
+-- !result
+select count(*) from t_pk where _segment_id_ >= 0;
+-- result:
+10
+-- !result
+create table t_agg (k int not null, v bigint sum)
+engine = olap
+aggregate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_agg values (-1,1),(-2,2),(-3,3),(-4,4),(-5,5),(-6,6),(-7,7),(-8,8),(-9,9),(-10,10);
+-- result:
+-- !result
+select count(*) from t_agg where _tablet_id_ > 0;
+-- result:
+10
+-- !result
+create table t_uniq (k int not null, v varchar(20))
+engine = olap
+unique key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_uniq values (-1,'a'),(-2,'b'),(-3,'c'),(-4,'d'),(-5,'e'),(-6,'f'),(-7,'g'),(-8,'h'),(-9,'i'),(-10,'j');
+-- result:
+-- !result
+select count(*) from t_uniq where _tablet_id_ > 0;
+-- result:
+10
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
