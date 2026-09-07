@@ -59,6 +59,10 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         } else {
             return switchToPCTRefresh(taskRunContext);
         }
+<<<<<<< HEAD
+=======
+        return switchToPCTRefresh(taskRunContext);
+>>>>>>> f224b2e734e ([BugFix] Stop a standing force setting from re-materializing an incrementally maintained materialized view (#62039))
     }
 
     private boolean isIVMRefreshEnabled(MVRefreshParams mvRefreshParams) {
