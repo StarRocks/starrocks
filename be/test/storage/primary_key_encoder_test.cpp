@@ -851,6 +851,59 @@ TEST(PrimaryKeyEncoderTest, testSimdSliceEncodingNullEscapes) {
     }
 }
 
+TEST(PrimaryKeyEncoderTest, testDecodeSliceMissingSeparatorReturnsError) {
+    // Regression: DCHECK(separator) was fatal in ASAN before the fix.
+    // Verify decode_slice returns Status::InvalidArgument for corrupt/truncated
+    // inputs instead of aborting, so callers like tablet_splitter can fall back.
+
+    // fast_decode=false path uses memmem searching for "\0\0".
+    // Fails (returns InvalidArgument) when no "\0\0" exists in the input.
+
+    // Case A: clean ASCII, no null bytes at all — no "\0\0", no "\0"
+    {
+        std::string corrupt = "hello_no_terminator";
+        Slice s(corrupt);
+        std::string dest;
+        Status st = encoding_utils::decode_slice(&s, &dest, nullptr, /*is_last=*/false, /*fast_decode=*/false);
+        EXPECT_FALSE(st.ok()) << "Expected error for missing \\0\\0 separator (fast_decode=false, no nulls)";
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // Case B: single \0 but no \0\0 — memmem still finds no "\0\0"
+    {
+        const std::string corrupt = {'h', 'e', 'l', '\0', 'l', 'o'};
+        Slice s(corrupt);
+        std::string dest;
+        Status st = encoding_utils::decode_slice(&s, &dest, nullptr, /*is_last=*/false, /*fast_decode=*/false);
+        EXPECT_FALSE(st.ok()) << "Expected error for missing \\0\\0 separator (fast_decode=false, single null)";
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // fast_decode=true path uses memchr searching for a single '\0'.
+    // Fails (returns InvalidArgument) only when there is no '\0' at all.
+
+    // Case C: no null bytes — memchr finds nothing
+    {
+        std::string corrupt = "hello_no_terminator";
+        Slice s(corrupt);
+        Slice dest_fast;
+        Status st = encoding_utils::decode_slice(&s, nullptr, &dest_fast, /*is_last=*/false, /*fast_decode=*/true);
+        EXPECT_FALSE(st.ok()) << "Expected error for missing \\0 separator (fast_decode=true, no nulls)";
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // Case D: single '\0' present — fast_decode=true succeeds (documents the asymmetry:
+    // fast_decode uses memchr not memmem, so a single null IS a valid boundary marker).
+    {
+        const std::string valid_for_fast = {'h', 'e', 'l', '\0', 'l', 'o'};
+        Slice s(valid_for_fast);
+        Slice dest_fast;
+        Status st = encoding_utils::decode_slice(&s, nullptr, &dest_fast, /*is_last=*/false, /*fast_decode=*/true);
+        EXPECT_TRUE(st.ok()) << "fast_decode=true should succeed when single \\0 present: " << st.to_string();
+        EXPECT_EQ(dest_fast.to_string(), "hel") << "Should decode up to the first \\0";
+    }
+}
+
 TEST(PrimaryKeyEncoderTest, testCompositeWithMiddleVarcharBatch) {
     auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_BIGINT});
     MutableColumnPtr dest_v1;

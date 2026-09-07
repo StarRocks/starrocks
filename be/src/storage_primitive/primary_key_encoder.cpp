@@ -35,6 +35,14 @@
 
 #include "storage_primitive/primary_key_encoder.h"
 
+#if defined(__x86_64__)
+#include <emmintrin.h>
+#include <immintrin.h>
+#include <nmmintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -52,14 +60,6 @@
 #include "storage_primitive/type_utils.h"
 #include "types/date_value.h"
 #include "types/logical_type_infra.h"
-
-#if defined(__x86_64__)
-#include <emmintrin.h>
-#include <immintrin.h>
-#include <nmmintrin.h>
-#elif defined(__ARM_NEON) && defined(__aarch64__)
-#include <arm_neon.h>
-#endif
 
 namespace starrocks {
 
@@ -220,7 +220,6 @@ Status encoding_utils::decode_slice(Slice* src, std::string* dest, Slice* dest_f
     } else {
         if (!fast_decode) {
             auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
-            DCHECK(separator) << "bad encoded primary key, separator not found";
             if (PREDICT_FALSE(separator == nullptr)) {
                 LOG(WARNING) << "bad encoded primary key, separator not found";
                 return Status::InvalidArgument("bad encoded primary key, separator not found");
@@ -250,7 +249,6 @@ Status encoding_utils::decode_slice(Slice* src, std::string* dest, Slice* dest_f
             src->remove_prefix(len + 2);
         } else {
             void* separator = std::memchr(src->data, '\0', src->size);
-            DCHECK(separator) << "bad encoded primary key, separator not found";
             if (PREDICT_FALSE(separator == nullptr)) {
                 LOG(WARNING) << "bad encoded primary key, separator not found";
                 return Status::InvalidArgument("bad encoded primary key, separator not found");
