@@ -1038,6 +1038,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             String functionName = functionCallExpr.getFnName().getFunction().toLowerCase();
             List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
             if (PARTITION_FUNCTIONS.contains(functionName)) {
+                // A partition function with no arguments (e.g. RANGE(substr(k)) parsed with an
+                // empty arg list) must surface a clean "unsupported expression" error instead of
+                // a raw IndexOutOfBoundsException from paramsExpr.get(0) below.
+                if (paramsExpr.isEmpty()) {
+                    throw new ParsingException(
+                            PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
+                }
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
                     columnList.add(((SlotRef) firstExpr).getColumnName());
