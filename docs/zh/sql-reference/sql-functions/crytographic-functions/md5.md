@@ -13,7 +13,7 @@ MD5 信息摘要算法 (MD5 Message-Digest Algorithm)，是一种广泛使用的
 
 ## 语法
 
-```Haskell
+```plaintext
 md5(expr)
 ```
 

@@ -11,7 +11,7 @@ Split string `str` by regexp expression `pattern`, return maximum `max_split` el
 
 ## Syntax
 
-```Haskell
+```plaintext
 regexp_split(str, pattern[, max_split])
 ```
 

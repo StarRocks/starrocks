@@ -22,7 +22,7 @@ UNIX タイムスタンプを必要な時間形式に変換します。デフォ
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR from_unixtime(BIGINT unix_timestamp[, VARCHAR string_format])
 ```
 

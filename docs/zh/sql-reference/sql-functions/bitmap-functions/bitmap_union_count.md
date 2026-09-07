@@ -11,7 +11,7 @@ description: "计算一组 Bitmap 值的并集并返回并集的基数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_UNION_COUNT(value)
 ```
 

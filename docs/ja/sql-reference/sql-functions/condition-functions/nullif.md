@@ -9,7 +9,7 @@ description: "expr1 が expr2 と等しい場合、NULL を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 nullif(expr1,expr2);
 ```
 

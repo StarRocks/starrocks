@@ -14,7 +14,7 @@ sidebar_position: 0.9
 
 ## Syntax
 
-```Haskell
+```plaintext
 parameter -> expression
 ```
 
@@ -58,7 +58,7 @@ x -> if(x>0,"positive","negative")
 
 高階関数でラムダ式を使用する例:
 
-```Haskell
+```plaintext
 select array_map((x,y,z) -> x + y, [1], [2], [4]);
 +----------------------------------------------+
 | array_map((x, y, z) -> x + y, [1], [2], [4]) |

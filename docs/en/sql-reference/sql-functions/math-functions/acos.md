@@ -11,7 +11,7 @@ Computes the arc cosine of an argument.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE acos(DOUBLE arg)
 ```
 

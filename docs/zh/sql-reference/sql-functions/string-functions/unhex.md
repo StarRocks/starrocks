@@ -11,7 +11,7 @@ description: "将十六进制字符串转换为其对应的二进制字符串；
 
 ## 语法
 
-```Haskell
+```plaintext
 UNHEX(str);
 ```
 

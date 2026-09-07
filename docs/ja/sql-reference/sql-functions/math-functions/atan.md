@@ -9,7 +9,7 @@ description: "引数のアークタンジェントを計算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE atan(DOUBLE arg)
 ```
 

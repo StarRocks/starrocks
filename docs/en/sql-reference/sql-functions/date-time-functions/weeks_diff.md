@@ -11,7 +11,7 @@ Returns the week difference between two date expressions (*`expr1`* − *`expr2`
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT weeks_diff(DATETIME expr1,DATETIME expr2);
 ```
 

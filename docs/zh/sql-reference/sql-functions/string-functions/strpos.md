@@ -9,7 +9,7 @@ description: "返回字符串中第N个子字符串实例的位置。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT strpos(VARCHAR str, VARCHAR substr [, INT instance])
 ```
 

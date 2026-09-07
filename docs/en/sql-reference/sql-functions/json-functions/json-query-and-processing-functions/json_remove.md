@@ -13,7 +13,7 @@ All of the JSON functions and operators are listed in the navigation and on the 
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_remove(json_object_expr, json_path[, json_path] ...)
 ```
 

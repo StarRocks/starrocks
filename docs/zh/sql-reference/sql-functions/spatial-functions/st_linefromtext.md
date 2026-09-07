@@ -11,7 +11,7 @@ description: "将 WKT（Well Known Text）转换为 Line 形式的内存表现�
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_LineFromText(wkt)
 ```
 

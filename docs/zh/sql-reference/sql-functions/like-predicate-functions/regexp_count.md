@@ -9,7 +9,7 @@ description: "计算正则表达式在目标字符串中出现的次数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT regexp_count(VARCHAR str, VARCHAR pattern)
 ```
 

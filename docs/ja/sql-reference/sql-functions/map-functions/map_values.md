@@ -11,7 +11,7 @@ description: "指定されたマップ内のすべての値を含む配列を返
 
 ## 構文
 
-```Haskell
+```plaintext
 map_values(any_map)
 ```
 

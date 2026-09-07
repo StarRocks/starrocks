@@ -9,7 +9,7 @@ description: "ARRAY_DISTINCT関数は配列から重複する要素を削除し�
 
 ## 構文
 
-```Haskell
+```plaintext
 array_distinct(array)
 ```
 

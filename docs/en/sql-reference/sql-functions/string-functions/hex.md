@@ -13,7 +13,7 @@ If `x` is a string, this function returns a hexadecimal string representation of
 
 ## Syntax
 
-```Haskell
+```plaintext
 HEX(x);
 ```
 

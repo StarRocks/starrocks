@@ -9,7 +9,7 @@ description: "array_flatten flattens one layer of nested arrays."
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_flatten(param)
 ```
 

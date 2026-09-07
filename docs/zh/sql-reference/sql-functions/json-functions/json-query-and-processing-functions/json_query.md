@@ -15,7 +15,7 @@ description: "通过 json_path 表达式查询 JSON 对象中元素值，并返�
 
 ## 语法
 
-```Haskell
+```plaintext
 json_query(json_object_expr, json_path)
 ```
 

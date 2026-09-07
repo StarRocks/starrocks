@@ -25,7 +25,7 @@ JSON ドキュメントの長さを返します。パスが指定されている
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_length(json_doc[, path])
 ```
 

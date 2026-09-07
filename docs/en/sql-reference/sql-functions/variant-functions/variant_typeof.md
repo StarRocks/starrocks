@@ -11,7 +11,7 @@ This function inspects a VARIANT value and returns its type as a string. This is
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR variant_typeof(variant_expr)
 ```
 

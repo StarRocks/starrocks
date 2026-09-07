@@ -11,7 +11,7 @@ description: "将字符串中所有字符转换为小写。"
 
 ## 语法
 
-```Haskell
+```plaintext
 lower(str)
 ```
 

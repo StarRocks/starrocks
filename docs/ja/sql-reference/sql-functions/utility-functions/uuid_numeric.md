@@ -9,7 +9,7 @@ description: "ランダムなUUIDをLARGEINT型で返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 uuid_numeric();
 ```
 

@@ -9,7 +9,7 @@ description: "指定された日付をISO 8601形式の文字列に変換しま�
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR TO_ISO8601(DATETIME | DATE date)
 ```
 

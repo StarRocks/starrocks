@@ -11,7 +11,7 @@ description: "从DATETIME类型值中提取日期部分。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATE TO_DATE(DATETIME datetime)
 ```
 

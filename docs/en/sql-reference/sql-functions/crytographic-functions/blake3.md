@@ -11,7 +11,7 @@ BLAKE3 is a modern cryptographic hash function that is significantly faster than
 
 ## Syntax
 
-```Haskell
+```plaintext
 BLAKE3(str);
 ```
 

@@ -11,7 +11,7 @@ description: "获取当前用户激活的角色。"
 
 ## 语法
 
-```Haskell
+```plaintext
 current_role();
 current_role;
 ```

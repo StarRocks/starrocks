@@ -11,7 +11,7 @@ description: "x を y で割ったアークタンジェント（x/y のアーク
 
 ## Syntax
 
-```Haskell
+```plaintext
 ATAN2(x,y);
 ```
 

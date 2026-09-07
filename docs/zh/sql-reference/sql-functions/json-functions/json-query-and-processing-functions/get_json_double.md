@@ -23,7 +23,7 @@ description: "从 JSON 字符串中指定路径提取浮点值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
 ```
 

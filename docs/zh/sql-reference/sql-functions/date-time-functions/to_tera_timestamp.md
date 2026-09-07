@@ -11,7 +11,7 @@ description: "根据指定格式解析时间日期字符串并转换为DATETIME�
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME to_tera_timestamp(VARCHAR str, VARCHAR format)
 ```
 

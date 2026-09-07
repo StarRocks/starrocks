@@ -11,7 +11,7 @@ description: "返回最近一次执行的查询的 ID。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR last_query_id();
 ```
 

@@ -9,7 +9,7 @@ description: "返回输入字符串的 32 位 XXH32 hash 值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT XX_HASH32(VARCHAR input, ...)
 ```
 

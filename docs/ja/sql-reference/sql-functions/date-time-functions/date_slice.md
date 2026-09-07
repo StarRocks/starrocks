@@ -11,7 +11,7 @@ description: "指定された時間粒度に基づいて、与えられた時間
 
 ## 構文
 
-```Haskell
+```plaintext
 DATE date_slice(DATE dt, INTERVAL N type[, boundary])
 ```
 

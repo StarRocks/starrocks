@@ -11,7 +11,7 @@ description: "从指定日期时间或日期减去指定年数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME YEARS_SUB(DATETIME date, INT years)
 ```
 

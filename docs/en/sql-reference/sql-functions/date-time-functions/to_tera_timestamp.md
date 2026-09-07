@@ -11,7 +11,7 @@ Parses a date or time string according to the specified format and converts the 
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME to_tera_timestamp(VARCHAR str, VARCHAR format)
 ```
 

@@ -11,7 +11,7 @@ Counts the number of times a pattern occurs in a string. It returns the number o
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT regexp_count(VARCHAR str, VARCHAR pattern)
 ```
 

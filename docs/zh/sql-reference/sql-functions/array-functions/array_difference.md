@@ -11,7 +11,7 @@ description: "计算数组中相邻两个元素的差值构成的数组。"
 
 ## 语法
 
-```Haskell
+```plaintext
 output array_difference(input)
 ```
 

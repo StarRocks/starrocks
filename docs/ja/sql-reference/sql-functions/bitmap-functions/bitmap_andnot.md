@@ -9,7 +9,7 @@ description: "lhsに存在し、rhsに存在しないビットマップ値を返
 
 ## 構文
 
-```Haskell
+```plaintext
 bitmap_andnot(BITMAP lhs, BITMAP rhs)
 ```
 

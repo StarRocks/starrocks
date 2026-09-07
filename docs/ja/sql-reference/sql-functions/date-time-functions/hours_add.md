@@ -9,7 +9,7 @@ description: "日付または日時に時間を加算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME hours_add(DATETIME|DATE date, INT hours);
 ```
 

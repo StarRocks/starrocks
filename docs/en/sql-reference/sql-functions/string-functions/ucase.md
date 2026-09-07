@@ -11,7 +11,7 @@ This function converts a string to upper-case. It is analogous to the function u
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR ucase(VARCHAR str)
 ```
 

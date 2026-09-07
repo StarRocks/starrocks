@@ -11,7 +11,7 @@ description: "向日期添加指定的季度数，精确到季度。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME quarters_add(DATETIME expr1, INT expr2);
 ```
 

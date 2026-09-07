@@ -14,7 +14,7 @@ description: "在字符串左侧填充指定字符使其达到指定长度。"
 
 ## 语法
 
-```Haskell
+```plaintext
 lpad(str, len, pad)
 ```
 

@@ -11,7 +11,7 @@ description: "将数字从一个进制转换为另一个进制，并以字符串
 
 ## 语法
 
-```Haskell
+```plaintext
 CONV(x,y,z);
 ```
 

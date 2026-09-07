@@ -14,7 +14,7 @@ description: "检查一个 JSON 文档是否包含特定的值或子文档。"
 
 ## 语法
 
-```Haskell
+```plaintext
 json_contains(json_target, json_candidate)
 ```
 

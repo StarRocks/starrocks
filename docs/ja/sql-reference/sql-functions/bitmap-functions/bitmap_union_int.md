@@ -9,7 +9,7 @@ TINYINT、SMALLINT、INT 型の列における異なる値の数をカウント�
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT bitmap_union_int(expr)
 ```
 

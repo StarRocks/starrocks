@@ -13,7 +13,7 @@ description: "从序列化的 DataSketches HyperLogLog (HLL) 草图估算近似�
 
 ## 语法
 
-```Haskell
+```plaintext
 bigint ds_hll_estimate(sketch)
 ```
 

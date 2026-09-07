@@ -13,7 +13,7 @@ description: "指定されたフォーマットに従って文字列をDATETIME�
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME STR_TO_DATE(VARCHAR str, VARCHAR format)
 ```
 

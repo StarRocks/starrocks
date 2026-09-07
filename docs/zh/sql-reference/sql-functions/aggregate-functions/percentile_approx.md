@@ -13,7 +13,7 @@ description: "percentile_approx 计算百分位数的近似值，支持单个或
 
 ## 语法
 
-```Haskell
+```plaintext
 DOUBLE PERCENTILE_APPROX(expr, DOUBLE|ARRAY<DOUBLE> p[, DOUBLE compression])
 ```
 

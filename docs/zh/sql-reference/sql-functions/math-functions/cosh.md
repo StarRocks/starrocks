@@ -13,7 +13,7 @@ description: "计算输入数值的双曲余弦值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DOUBLE cosh(DOUBLE arg)
 ```
 

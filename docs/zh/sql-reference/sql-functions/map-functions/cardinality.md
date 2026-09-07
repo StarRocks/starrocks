@@ -13,7 +13,7 @@ description: "返回 Map 中元素的个数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT cardinality(any_map)
 ```
 

@@ -9,7 +9,7 @@ description: "列が集計列であるかどうかを示します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 GROUPING(col_expr)
 ```
 

@@ -13,7 +13,7 @@ description: "将多个序列化的 DataSketches HyperLogLog (HLL) 草图合并�
 
 ## 语法
 
-```Haskell
+```plaintext
 sketch ds_hll_combine(sketch)
 ```
 

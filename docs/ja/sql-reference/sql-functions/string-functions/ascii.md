@@ -9,7 +9,7 @@ description: "文字列の最左の文字のASCII値を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT ascii(VARCHAR str)
 ```
 

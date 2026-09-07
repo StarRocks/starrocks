@@ -15,7 +15,7 @@ description: "返回多个输入参数中的最小值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 LEAST(expr1,...);
 ```
 

@@ -11,7 +11,7 @@ This function returns strings with a length of `len` (starting counting from the
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR lpad(VARCHAR str, INT len[, VARCHAR pad])
 ```
 

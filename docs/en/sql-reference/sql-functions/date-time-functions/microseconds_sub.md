@@ -11,7 +11,7 @@ Subtracts a time interval from a date value. The time interval is in microsecond
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME microseconds_sub(DATETIME expr1,INT expr2);
 ```
 

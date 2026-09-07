@@ -11,7 +11,7 @@ description: "根据距离 0000-01-01 的天数计算对应的日期。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATE FROM_DAYS(INT N)
 ```
 

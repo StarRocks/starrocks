@@ -9,7 +9,7 @@ description: "STDDEV_SAMP関数は標本標準偏差を返し、v2.5.10以降は
 
 ## 構文
 
-```Haskell
+```plaintext
 STDDEV_SAMP(expr)
 ```
 

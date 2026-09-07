@@ -11,7 +11,7 @@ description: "检查字符串是否模糊匹配给定的模式。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN like(VARCHAR expr, VARCHAR pattern);
 ```
 

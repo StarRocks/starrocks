@@ -9,7 +9,7 @@ description: "DATE または DATETIME の値をあるタイムゾーンから別
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE CURDATE()
 ```
 

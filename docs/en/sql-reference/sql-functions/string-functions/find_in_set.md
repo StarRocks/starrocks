@@ -11,7 +11,7 @@ This function returns the position of the first str in strlist (start counting w
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT find_in_set(VARCHAR str, VARCHAR strlist)
 ```
 

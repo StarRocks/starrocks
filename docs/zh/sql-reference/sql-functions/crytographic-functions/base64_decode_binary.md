@@ -13,7 +13,7 @@ description: "解码 Base64 编码的字符串并返回 VARBINARY 类型的值�
 
 ## 语法
 
-```Haskell
+```plaintext
 VARBINARY base64_decode_binary(VARCHAR str);
 ```
 

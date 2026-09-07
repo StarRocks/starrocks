@@ -11,7 +11,7 @@ description: "指定されたマップ内のすべてのキーを配列として
 
 ## Syntax
 
-```Haskell
+```plaintext
 map_keys(any_map)
 ```
 

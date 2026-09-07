@@ -13,7 +13,7 @@ description: "将输入转换为指定的数据类型。"
 
 ## 语法
 
-```Haskell
+```plaintext
 cast(input as type)
 input :: type
 ```

@@ -11,7 +11,7 @@ URL からホスト部分を抽出します。
 
 ## 構文
 
-```haskell
+```plaintext
 VARCHAR url_extract_host(VARCHAR str)
 ```
 

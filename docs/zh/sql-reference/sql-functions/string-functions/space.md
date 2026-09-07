@@ -11,7 +11,7 @@ description: "返回由指定数量的空格组成的字符串。"
 
 ## 语法
 
-```Haskell
+```plaintext
 space(x);
 ```
 

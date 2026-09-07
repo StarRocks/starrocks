@@ -15,7 +15,7 @@ This function is supported from v3.0 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT cardinality(any_array)
 ```
 

@@ -13,7 +13,7 @@ description: "返回当前UTC日期时间。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME UTC_TIMESTAMP()
 ```
 

@@ -11,7 +11,7 @@ description: "从给定日期或日期时间中减去指定的天数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME days_sub(DATETIME|DATE date, INT n);
 ```
 

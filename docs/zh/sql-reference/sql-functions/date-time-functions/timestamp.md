@@ -11,7 +11,7 @@ description: "返回日期或日期时间表达式的DATETIME值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME timestamp(DATETIME|DATE expr);
 ```
 

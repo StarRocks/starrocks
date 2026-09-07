@@ -14,7 +14,7 @@ description: "将 Base64 编码的字符串转换为 Bitmap。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP base64_to_bitmap(VARCHAR bitmap)
 ```
 

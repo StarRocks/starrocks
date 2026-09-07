@@ -11,7 +11,7 @@ These functions are supported from v4.0.
 
 ## Syntax
 
-```Haskell
+```plaintext
 MIN_N(<expr>, <n>)
 MAX_N(<expr>, <n>)
 ```

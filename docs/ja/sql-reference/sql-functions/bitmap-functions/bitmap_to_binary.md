@@ -15,7 +15,7 @@ bitmap_to_binary は主に Bitmap データをエクスポートするために�
 
 ## 構文
 
-```Haskell
+```plaintext
 VARBINARY bitmap_to_binary(BITMAP bitmap)
 ```
 

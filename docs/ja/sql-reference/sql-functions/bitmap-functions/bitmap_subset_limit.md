@@ -13,7 +13,7 @@ description: "start_rangeから始まる要素値を持つビットマップ値�
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP bitmap_subset_limit(BITMAP src, BIGINT start_range, BIGINT limit)
 ```
 

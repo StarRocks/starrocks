@@ -13,7 +13,7 @@ description: "应用 Lambda 函数至 Map 的键和值，生成新的 Map。"
 
 ## 语法
 
-```Haskell
+```plaintext
 MAP map_apply(lambda_func, any_map)
 ```
 

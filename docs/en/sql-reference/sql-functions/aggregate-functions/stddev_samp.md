@@ -11,7 +11,7 @@ Returns the sample standard deviation of an expression. Since v2.5.10, this func
 
 ## Syntax
 
-```Haskell
+```plaintext
 STDDEV_SAMP(expr)
 ```
 

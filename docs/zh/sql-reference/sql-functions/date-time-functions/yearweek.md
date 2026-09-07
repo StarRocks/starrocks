@@ -13,7 +13,7 @@ description: "返回给定日期对应的年份和周数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT YEARWEEK(DATETIME|DATE date[, INT mode])
 ```
 

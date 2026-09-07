@@ -9,7 +9,7 @@ description: "数値をある数値基数システムから別のシステムに
 
 ## Syntax
 
-```Haskell
+```plaintext
 CONV(x,y,z);
 ```
 

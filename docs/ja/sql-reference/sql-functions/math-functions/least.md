@@ -13,7 +13,7 @@ description: "1つ以上のパラメータのリストから最小の値を返�
 
 ## Syntax
 
-```Haskell
+```plaintext
 LEAST(expr1,...);
 ```
 

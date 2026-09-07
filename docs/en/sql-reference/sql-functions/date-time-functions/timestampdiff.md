@@ -15,7 +15,7 @@ MILLISECOND (since 3.2), SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
 ```
 

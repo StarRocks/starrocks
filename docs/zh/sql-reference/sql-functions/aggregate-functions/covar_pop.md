@@ -11,7 +11,7 @@ description: "covar_pop 返回两个表达式的总体协方差，支持作为�
 
 ## 语法
 
-```Haskell
+```plaintext
 COVAR_POP(expr1, expr2)
 ```
 

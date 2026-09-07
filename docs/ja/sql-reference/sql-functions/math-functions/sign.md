@@ -9,7 +9,7 @@ description: "x の符号を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 SIGN(x);
 ```
 

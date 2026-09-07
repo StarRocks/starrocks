@@ -9,7 +9,7 @@ description: "引数のアークサインを計算します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 DOUBLE asin(DOUBLE arg)
 ```
 

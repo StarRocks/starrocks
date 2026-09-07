@@ -11,7 +11,7 @@ description: "将 BITMAP 中的所有值组合成 BIGINT 类型的数组。"
 
 ## 语法
 
-```Haskell
+```plaintext
  `ARRAY<BIGINT>` BITMAP_TO_ARRAY (bitmap)
 ```
 

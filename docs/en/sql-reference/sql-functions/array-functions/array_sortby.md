@@ -67,7 +67,7 @@ array0 = [5, 3, 2, 4, 1]
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_sortby(array0, array1)
 array_sortby(<lambda function>, array0 [, array1...])
 array_sortby(array0, array1, [array2, array3...])

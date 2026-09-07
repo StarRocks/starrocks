@@ -11,7 +11,7 @@ Adds a time interval to a date value. The time interval is in microseconds.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME microseconds_add(DATETIME expr1,INT expr2);
 ```
 

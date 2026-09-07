@@ -11,7 +11,7 @@ description: "向日期或日期时间加上指定的天数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME days_add(DATETIME|DATE date, INT n);
 ```
 

@@ -13,7 +13,7 @@ description: "获取当前的时间，以 TIME 类型返回。"
 
 ## 语法
 
-```Haskell
+```plaintext
 TIME CURTIME()
 ```
 

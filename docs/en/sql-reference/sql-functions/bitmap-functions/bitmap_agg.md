@@ -11,7 +11,7 @@ Aggregates values (excluding NULLs) in a column into a bitmap (multiple rows int
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP_AGG(col)
 ```
 

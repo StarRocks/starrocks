@@ -11,7 +11,7 @@ Returns the current UTC date and time as a value in 'YYYY-MM-DD HH:MM:SS' or 'YY
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME UTC_TIMESTAMP()
 ```
 

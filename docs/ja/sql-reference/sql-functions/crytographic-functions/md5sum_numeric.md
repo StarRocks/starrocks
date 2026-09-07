@@ -9,7 +9,7 @@ description: "複数の文字列の 128 ビットチェックサムを 10 進数
 
 ## 構文
 
-```Haskell
+```plaintext
 LARGEINT md5sum_numeric(VARCHAR expr,...);
 ```
 

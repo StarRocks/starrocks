@@ -11,7 +11,7 @@ description: "获取计算所在节点的主机名。"
 
 ## 语法
 
-```Haskell
+```plaintext
 host_name();
 ```
 

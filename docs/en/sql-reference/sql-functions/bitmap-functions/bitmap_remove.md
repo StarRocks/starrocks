@@ -11,7 +11,7 @@ Removes `input` from the Bitmap value `lhs` and returns a result set.
 
 ## Syntax
 
-```Haskell
+```plaintext
 bitmap_remove(BITMAP lhs, BIGINT input)
 ```
 

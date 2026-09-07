@@ -11,7 +11,7 @@ Obtains an arbitrary row from each aggregated group. You can use this function t
 
 ## Syntax
 
-```Haskell
+```plaintext
 ANY_VALUE(expr)
 ```
 

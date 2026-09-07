@@ -11,7 +11,7 @@ Returns the current UTC time as a value in 'HH:MM:SS'.
 
 ## Syntax
 
-```Haskell
+```plaintext
 TIME UTC_TIME()
 ```
 

@@ -11,7 +11,7 @@ description: "检查两个数组的交集是否为空。"
 
 ## 语法
 
-```Haskell
+```plaintext
 output arrays_overlap(input0, input1)
 ```
 

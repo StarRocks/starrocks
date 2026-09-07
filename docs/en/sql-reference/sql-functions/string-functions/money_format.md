@@ -11,7 +11,7 @@ This function returns a string formatted as a currency string. The integer part 
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR money_format(Number)
 ```
 

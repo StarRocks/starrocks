@@ -9,7 +9,7 @@ description: "指定されたバイナリ形式に基づいてバイナリ値を
 
 ## Syntax
 
-```Haskell
+```plaintext
 from_binary(binary[, binary_type])
 ```
 

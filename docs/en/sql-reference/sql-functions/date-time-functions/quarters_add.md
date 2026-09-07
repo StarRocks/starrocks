@@ -11,7 +11,7 @@ Adds a specified number of quarters to the date. One quarter equals three months
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME quarters_add(DATETIME expr1, INT expr2);
 ```
 

@@ -25,7 +25,7 @@ json_string または json_path の形式が間違っている場合、この関
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
 ```
 

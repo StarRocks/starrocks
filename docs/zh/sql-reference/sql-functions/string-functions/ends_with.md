@@ -11,7 +11,7 @@ description: "判断字符串是否以指定后缀结尾。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ENDS_WITH(str, suffix)
 ```
 

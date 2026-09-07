@@ -9,7 +9,7 @@ description: "文字列を指定された回数だけ繰り返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR repeat(VARCHAR str, INT count)
 ```
 

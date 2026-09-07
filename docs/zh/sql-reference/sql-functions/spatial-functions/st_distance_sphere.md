@@ -11,7 +11,7 @@ description: "计算地球两点之间的球面距离，单位为米。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_Distance_Sphere(x_lng, x_lat, y_lng, y_lat)
 ```
 

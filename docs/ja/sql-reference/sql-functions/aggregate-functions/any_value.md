@@ -9,7 +9,7 @@ description: "各集約グループから任意の行を取得します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 ANY_VALUE(expr)
 ```
 

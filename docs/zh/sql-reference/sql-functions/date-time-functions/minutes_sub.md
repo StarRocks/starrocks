@@ -11,7 +11,7 @@ description: "从指定日期或日期时间中减去指定的分钟数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME minutes_sub(DATETIME|DATE date, INT minutes);
 ```
 

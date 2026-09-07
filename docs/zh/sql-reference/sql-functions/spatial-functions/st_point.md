@@ -11,7 +11,7 @@ description: "根据给定的 X、Y 坐标值返回对应的点。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_Point(x, y)
 ```
 

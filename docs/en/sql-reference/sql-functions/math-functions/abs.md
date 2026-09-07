@@ -11,7 +11,7 @@ Returns the absolute value of the numeric value `x`. If the input value is NULL,
 
 ## Syntax
 
-```Haskell
+```plaintext
 ABS(x);
 ```
 

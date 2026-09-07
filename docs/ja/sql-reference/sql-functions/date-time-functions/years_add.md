@@ -9,7 +9,7 @@ description: "指定された年数を日付に追加します。"
 
 ### Syntax
 
-```Haskell
+```plaintext
 DATETIME YEARS_ADD(DATETIME expr1,INT expr2)
 ```
 

@@ -13,7 +13,7 @@ description: "返回一个按时间有序的 UUID v7，具有更好的数据库�
 
 ## 语法
 
-```Haskell
+```plaintext
 uuid_v7()
 ```
 

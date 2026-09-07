@@ -11,7 +11,7 @@ description: "将 WKT 转换为地球球面上的圆。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_Circle(center_lng, center_lat, radius)
 ```
 

@@ -9,7 +9,7 @@ description: "ビットマップの最大値を取得します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 bitmap_max(bitmap)
 ```
 

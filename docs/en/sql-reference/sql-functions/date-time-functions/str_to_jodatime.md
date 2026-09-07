@@ -11,7 +11,7 @@ Converts a Joda-formatted string into a DATETIME value in the specified Joda Dat
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME str_to_jodatime(VARCHAR str, VARCHAR format)
 ```
 

@@ -15,7 +15,7 @@ description: "将 JSON 对象的最外层元素展开为键值对并返回表。
 
 ## 语法
 
-```Haskell
+```plaintext
 json_each(json_object_expr)
 ```
 

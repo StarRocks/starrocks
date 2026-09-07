@@ -15,7 +15,7 @@ Oracle との違い: Oracle では、`date` が月の最終日の場合、結果
 
 ## 構文
 
-```Haskell
+```plaintext
 ADD_MONTH(date, months)
 ```
 

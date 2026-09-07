@@ -9,7 +9,7 @@ description: "ビットマップの最小値を取得します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 bitmap_min(bitmap)
 ```
 

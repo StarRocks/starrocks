@@ -18,7 +18,7 @@ Difference between days_diff and [datediff](./datediff.md):
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT days_diff(DATETIME expr1,DATETIME expr2);
 ```
 

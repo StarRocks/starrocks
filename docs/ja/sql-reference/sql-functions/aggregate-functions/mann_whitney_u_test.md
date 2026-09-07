@@ -11,7 +11,7 @@ description: "2つの母集団から得られたサンプルに対して Mann-Wh
 
 ## 構文
 
-```Haskell
+```plaintext
 MANN_WHITNEY_U_TEST (sample_data, sample_treatment[, alternative[, continuity_correction]])
 ```
 

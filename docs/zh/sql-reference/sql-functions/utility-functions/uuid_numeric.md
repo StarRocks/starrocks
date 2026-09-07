@@ -11,7 +11,7 @@ description: "返回一个数值类型的随机 UUID 值；性能比 uuid 函数
 
 ## 语法
 
-```Haskell
+```plaintext
 uuid_numeric();
 ```
 

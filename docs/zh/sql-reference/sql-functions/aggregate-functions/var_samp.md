@@ -12,7 +12,7 @@ description: "返回表达式的样本方差，支持作为窗口函数使用。
 
 ## 语法
 
-```Haskell
+```plaintext
 VAR_SAMP(expr)
 ```
 

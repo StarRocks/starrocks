@@ -12,7 +12,7 @@ description: "返回输入字符串的128位xxhash3哈希值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 LARGEINT XX_HASH3_128(VARCHAR input, ...)
 ```
 

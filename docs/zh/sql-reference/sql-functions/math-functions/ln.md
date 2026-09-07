@@ -11,7 +11,7 @@ description: "计算参数x的自然对数（以e为底）。"
 
 ## 语法
 
-```Haskell
+```plaintext
 LN(x);
 ```
 

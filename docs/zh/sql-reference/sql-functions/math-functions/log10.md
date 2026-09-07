@@ -11,7 +11,7 @@ description: "计算以10为底的数值对数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 LOG10(x);
 ```
 

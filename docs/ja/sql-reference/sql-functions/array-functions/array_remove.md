@@ -9,7 +9,7 @@ description: "ARRAY_REMOVE関数は配列から要素を削除します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 array_remove(any_array, any_element)
 ```
 

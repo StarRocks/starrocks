@@ -11,7 +11,7 @@ description: "将数字按照货币格式输出，整数部分每隔3位用逗�
 
 ## 语法
 
-```Haskell
+```plaintext
 money_format(num)
 ```
 

@@ -13,7 +13,7 @@ description: "query_idを使用してクエリのプロファイルを取得し�
 
 ## 構文
 
-```Haskell
+```plaintext
 get_query_profile(x)
 ```
 

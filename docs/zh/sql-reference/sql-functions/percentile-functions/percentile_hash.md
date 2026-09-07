@@ -11,7 +11,7 @@ description: "将 DOUBLE 类型数值构造为 PERCENTILE 类型数值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 PERCENTILE_HASH(x);
 ```
 

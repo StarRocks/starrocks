@@ -11,7 +11,7 @@ description: "返回指定日期中的天信息，范围 1 到 31。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT DAY(DATE|DATETIME date)
 ```
 

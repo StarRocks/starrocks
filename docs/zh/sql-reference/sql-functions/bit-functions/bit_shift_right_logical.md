@@ -15,7 +15,7 @@ bit_shift_right() 和 bit_shift_right_logical() 函数对于正数会返回相�
 
 ## 语法
 
-```Haskell
+```plaintext
 bit_shift_right_logical(value, shift)
 ```
 

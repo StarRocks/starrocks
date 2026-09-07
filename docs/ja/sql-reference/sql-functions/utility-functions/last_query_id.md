@@ -9,7 +9,7 @@ description: "現在のセッションで最も最近実行されたクエリの
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR last_query_id();
 ```
 

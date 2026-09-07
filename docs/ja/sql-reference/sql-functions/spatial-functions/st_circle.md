@@ -9,7 +9,7 @@ WKT (Well Known Text) を地球の球面上の円に変換します。
 
 ## 構文
 
-```Haskell
+```plaintext
 GEOMETRY ST_Circle(DOUBLE center_lng, DOUBLE center_lat, DOUBLE radius)
 ```
 

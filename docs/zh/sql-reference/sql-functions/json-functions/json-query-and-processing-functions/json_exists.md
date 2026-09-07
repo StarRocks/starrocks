@@ -15,7 +15,7 @@ description: "检查一个 JSON 对象是否包含通过 json_path 表达式定�
 
 ## 语法
 
-```Haskell
+```plaintext
 json_exists(json_object_expr, json_path)
 ```
 

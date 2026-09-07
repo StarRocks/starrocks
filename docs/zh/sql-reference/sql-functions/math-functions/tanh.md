@@ -13,7 +13,7 @@ description: "计算输入数值的双曲正切值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DOUBLE tanh(DOUBLE arg)
 ```
 

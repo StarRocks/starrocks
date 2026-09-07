@@ -11,7 +11,7 @@ description: "计算两个日期时间表达式之间相差的年数，精确到
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT years_diff(DATETIME expr1,DATETIME expr2);
 ```
 

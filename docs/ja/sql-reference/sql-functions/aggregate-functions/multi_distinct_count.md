@@ -9,7 +9,7 @@ description: "expr の行数の合計を返し、count(distinct expr) と同等�
 
 ## Syntax
 
-```Haskell
+```plaintext
 multi_distinct_count(expr)
 ```
 

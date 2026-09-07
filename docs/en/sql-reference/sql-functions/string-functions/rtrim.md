@@ -11,7 +11,7 @@ Removes the trailing spaces or specified characters from the end (right) of the 
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR rtrim(VARCHAR str[, VARCHAR characters]);
 ```
 

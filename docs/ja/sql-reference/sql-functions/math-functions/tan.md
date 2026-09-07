@@ -9,7 +9,7 @@ description: "ラジアンで指定された値の正接を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 TAN(x);
 ```
 

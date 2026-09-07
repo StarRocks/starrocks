@@ -17,7 +17,7 @@ cat data | curl --location-trusted -u user:passwd -T - \
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP BITMAP_HASH64(expr)
 ```
 

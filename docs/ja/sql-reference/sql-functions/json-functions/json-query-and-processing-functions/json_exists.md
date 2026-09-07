@@ -15,7 +15,7 @@ description: "json_path式によって位置を特定できる要素がJSONオ�
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_exists(json_object_expr, json_path)
 ```
 

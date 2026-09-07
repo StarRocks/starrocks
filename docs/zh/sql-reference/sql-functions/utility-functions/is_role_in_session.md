@@ -13,7 +13,7 @@ description: "检查指定的角色（包括嵌套角色）在当前会话下是
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN is_role_in_session(VARCHAR role_name);
 ```
 

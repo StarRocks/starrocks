@@ -9,7 +9,7 @@ description: "ジオメトリ図形をWKT(Well Known Text)形式に変換しま�
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR ST_AsText(GEOMETRY geo)
 ```
 

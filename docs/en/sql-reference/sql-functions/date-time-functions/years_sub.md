@@ -11,7 +11,7 @@ Subtracts the specified number of years from the specified datetime or date.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME YEARS_SUB(DATETIME date, INT years)
 ```
 

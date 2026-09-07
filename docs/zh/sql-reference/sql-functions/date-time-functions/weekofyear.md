@@ -11,7 +11,7 @@ description: "计算指定时间为一年中的第几周。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT WEEKOFYEAR(DATETIME date)
 ```
 

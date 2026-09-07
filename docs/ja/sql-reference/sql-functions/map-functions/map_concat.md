@@ -11,7 +11,7 @@ description: "入力されたマップの和集合を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 ANY_MAP map_concat(any_map0, any_map1...)
 ```
 

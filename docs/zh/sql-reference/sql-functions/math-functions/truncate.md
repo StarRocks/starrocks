@@ -11,7 +11,7 @@ description: "将数值x四舍五入到小数点后y位。"
 
 ## 语法
 
-```Haskell
+```plaintext
 TRUNCATE(x,y);
 ```
 

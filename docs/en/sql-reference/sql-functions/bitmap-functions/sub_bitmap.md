@@ -15,7 +15,7 @@ This function is similar to [bitmap_subset_limit](./bitmap_subset_limit.md). The
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 ```
 

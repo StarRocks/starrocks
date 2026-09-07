@@ -11,7 +11,7 @@ Constructs DOUBLE values as PERCENTILE values.
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_HASH(x);
 ```
 

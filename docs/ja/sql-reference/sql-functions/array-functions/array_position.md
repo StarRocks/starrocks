@@ -9,7 +9,7 @@ description: "ARRAY_POSITION関数は配列内の要素の位置を取得しま�
 
 ## 構文
 
-```Haskell
+```plaintext
 array_position(any_array, any_element)
 ```
 

@@ -9,7 +9,7 @@ description: "日付値からマイクロ秒単位の時間間隔を減算しま
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME microseconds_sub(DATETIME expr1,INT expr2);
 ```
 

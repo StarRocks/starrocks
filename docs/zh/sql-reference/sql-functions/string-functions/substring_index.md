@@ -19,7 +19,7 @@ description: "从字符串中截取指定次数分隔符之前或之后的部分
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR substring_index(VARCHAR str, VARCHAR delimiter, INT count)
 ```
 

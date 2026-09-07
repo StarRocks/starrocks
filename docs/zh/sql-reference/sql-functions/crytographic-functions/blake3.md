@@ -11,7 +11,7 @@ BLAKE3 是一种现代加密哈希函数，其速度显著快于 MD5、SHA-1、S
 
 ## 语法
 
-```Haskell
+```plaintext
 BLAKE3(str);
 ```
 

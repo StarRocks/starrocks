@@ -13,7 +13,7 @@ It is faster than the COUNT and DISTINCT combination and uses a fixed-size memor
 
 ## Syntax
 
-```Haskell
+```plaintext
 APPROX_COUNT_DISTINCT(expr)
 ```
 

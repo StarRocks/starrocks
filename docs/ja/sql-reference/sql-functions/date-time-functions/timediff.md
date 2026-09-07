@@ -11,7 +11,7 @@ description: "2つのDATETIME式の差を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
 ```
 

@@ -9,7 +9,7 @@ description: "文字列を大文字に変換します。"
 
 ## 構文
 
-```haskell
+```plaintext
 upper(str)
 ```
 

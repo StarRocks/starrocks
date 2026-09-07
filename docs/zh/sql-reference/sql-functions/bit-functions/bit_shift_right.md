@@ -13,7 +13,7 @@ description: "将数值的二进制表示向右移动指定的位数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 bit_shift_right(value, shift)
 ```
 

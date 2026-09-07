@@ -19,7 +19,7 @@ Map または Struct の値を JSON 文字列に変換します。入力値が N
 
 ## 構文
 
-```Haskell
+```plaintext
 to_json(any_value)
 ```
 
@@ -33,7 +33,7 @@ JSON 値を返します。
 
 ## 例
 
-```Haskell
+```plaintext
 select to_json(map{1:'a',2:'b'});
 +---------------------------+
 | to_json(map{1:'a',2:'b'}) |

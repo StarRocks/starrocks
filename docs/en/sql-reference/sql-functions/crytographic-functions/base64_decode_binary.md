@@ -13,7 +13,7 @@ This function is supported from v3.0.
 
 ## Syntax
 
-```Haskell
+```plaintext
 base64_decode_binary(str);
 ```
 

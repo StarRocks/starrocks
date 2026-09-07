@@ -11,7 +11,7 @@ Calculates the square root of a value. dsqrt is same as sqrt.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE SQRT(DOUBLE x);
 DOUBLE DSQRT(DOUBLE x);
 ```

@@ -11,7 +11,7 @@ description: "计算单个 HLL 类型值的基数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 HLL_CARDINALITY(hll)
 ```
 

@@ -11,7 +11,7 @@ description: "若参数 expr1 成立，返回 expr2，否则返回 expr3。"
 
 ## 语法
 
-```Haskell
+```plaintext
 if(expr1,expr2,expr3);
 ```
 

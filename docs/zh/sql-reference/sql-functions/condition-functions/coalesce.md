@@ -11,7 +11,7 @@ description: "从左向右返回参数中第一个非 NULL 表达式。"
 
 ## 语法
 
-```Haskell
+```plaintext
 coalesce(expr1,...);
 ```
 

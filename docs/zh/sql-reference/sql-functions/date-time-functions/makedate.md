@@ -13,7 +13,7 @@ description: "根据给定的年份和天数值构造一个日期。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATE makedate(INT year, INT dayOfYear);
 ```
 

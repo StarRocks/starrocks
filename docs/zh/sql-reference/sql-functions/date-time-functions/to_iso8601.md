@@ -11,7 +11,7 @@ description: "将日期转换为ISO 8601标准格式的字符串。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR TO_ISO8601(DATETIME | DATE date)
 ```
 

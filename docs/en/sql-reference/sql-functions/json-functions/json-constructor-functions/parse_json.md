@@ -15,7 +15,7 @@ Accelerate your queries with [generated columns](../../../sql-statements/generat
 
 ## Syntax
 
-```Haskell
+```plaintext
 parse_json(string_expr)
 ```
 

@@ -13,7 +13,7 @@ description: "将逗号分隔的数字字符串转换为 BITMAP。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_FROM_STRING(input)
 ```
 

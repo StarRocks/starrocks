@@ -9,7 +9,7 @@ Returns the 64-bit XXH64 hash value of the input string.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT XX_HASH64(VARCHAR input, ...)
 ```
 

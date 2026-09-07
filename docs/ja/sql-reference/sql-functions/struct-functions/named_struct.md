@@ -11,7 +11,7 @@ description: "指定されたフィールド名と値を持つSTRUCTを作成し
 
 ## 構文
 
-```Haskell
+```plaintext
 STRUCT named_struct({STRING name1, ANY val1} [, ...] )
 ```
 

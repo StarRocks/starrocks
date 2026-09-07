@@ -11,7 +11,7 @@ description: "在数组末尾添加一个新的元素。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_append(any_array, any_element)
 ```
 

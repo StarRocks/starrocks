@@ -9,7 +9,7 @@ description: "VAR_SAMP関数は標本分散を返し、v2.5.10以降はウィン
 
 ## 構文
 
-```Haskell
+```plaintext
 VAR_SAMP(expr)
 ```
 

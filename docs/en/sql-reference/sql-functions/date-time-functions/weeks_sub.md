@@ -11,7 +11,7 @@ Subtracts a specified number of weeks from a datetime or date value.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME weeks_sub(DATETIME expr1, INT expr2);
 ```
 

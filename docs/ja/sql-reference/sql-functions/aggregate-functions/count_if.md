@@ -16,7 +16,7 @@ description: "指定された条件を満たすレコードの数を返します
 
 ## 構文
 
-```Haskell
+```plaintext
 COUNT_IF(condition)
 ```
 

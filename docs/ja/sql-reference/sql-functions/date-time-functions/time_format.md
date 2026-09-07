@@ -9,7 +9,7 @@ description: "TIME型の値を指定されたフォーマットでフォーマ�
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR TIME_FORMAT(TIME time, VARCHAR format)
 ```
 

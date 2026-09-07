@@ -9,7 +9,7 @@ description: "入力文字列の32ビットのmurmur3ハッシュ値を返しま
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT MURMUR_HASH3_32(VARCHAR input, ...)
 ```
 

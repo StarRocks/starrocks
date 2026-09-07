@@ -9,7 +9,7 @@ description: "expr1 が TRUE と評価される場合、expr2 を返します。
 
 ## Syntax
 
-```Haskell
+```plaintext
 if(expr1,expr2,expr3);
 ```
 

@@ -18,7 +18,7 @@ description: "count_if 计算满足指定条件的记录数，内部转化为 CO
 
 ## 语法
 
-```Haskell
+```plaintext
 COUNT_IF(condition)
 ```
 

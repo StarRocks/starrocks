@@ -11,7 +11,7 @@ description: "返回原始日期加上指定周数后的日期。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME weeks_add(DATETIME|DATE expr1, INT expr2)
 ```
 

@@ -9,7 +9,7 @@ description: "文字列内のすべての文字を小文字に変換します。
 
 ## 構文
 
-```Haskell
+```plaintext
 INT lower(VARCHAR str)
 ```
 

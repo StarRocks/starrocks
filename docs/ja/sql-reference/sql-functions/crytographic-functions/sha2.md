@@ -9,7 +9,7 @@ description: "文字列の SHA-224、SHA-256、SHA-384、または SHA-512 ハ�
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR sha2(VARCHAR expr, INT hash_length)
 ```
 

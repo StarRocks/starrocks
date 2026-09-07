@@ -11,7 +11,7 @@ If the str string is not empty and does not contain trailing_char character in t
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR append_trailing_char_if_absent(VARCHAR str, VARCHAR trailing_char)
 ```
 

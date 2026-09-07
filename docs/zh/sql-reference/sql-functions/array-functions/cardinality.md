@@ -13,7 +13,7 @@ description: "返回数组中的元素个数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT cardinality(any_array)
 ```
 

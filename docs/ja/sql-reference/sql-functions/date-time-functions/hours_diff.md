@@ -9,7 +9,7 @@ description: "2つの日付式の時間差を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT hours_diff(DATETIME expr1, DATETIME expr2);
 ```
 

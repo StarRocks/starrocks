@@ -11,7 +11,7 @@ description: "将 WKT（Well Known Text）转换为对应的多边形内存形�
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_Polygon(wkt)
 ```
 

@@ -11,7 +11,7 @@ description: "计算多个输入参数的 MD5 128-bit 校验和并返回十进�
 
 ## 语法
 
-```Haskell
+```plaintext
 LARGEINT md5sum_numeric(VARCHAR expr,...);
 ```
 

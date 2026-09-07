@@ -11,7 +11,7 @@ BLAKE3 は、MD5、SHA-1、SHA-2、SHA-3 よりも大幅に高速でありなが
 
 ## 構文
 
-```Haskell
+```plaintext
 BLAKE3(str);
 ```
 

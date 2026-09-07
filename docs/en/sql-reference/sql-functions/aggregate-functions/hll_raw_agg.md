@@ -11,7 +11,7 @@ This function is an aggregate function that is used to aggregate HLL fields. It 
 
 ## Syntax
 
-```Haskell
+```plaintext
 hll_raw_agg(hll)
 ```
 

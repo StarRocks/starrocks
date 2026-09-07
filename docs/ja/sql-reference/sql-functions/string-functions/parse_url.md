@@ -9,7 +9,7 @@ URL を解析し、この URL からコンポーネントを抽出します。
 
 ## 構文
 
-```Haskell
+```plaintext
 parse_url(expr1,expr2);
 ```
 

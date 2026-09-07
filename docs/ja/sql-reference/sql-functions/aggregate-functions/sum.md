@@ -9,7 +9,7 @@ description: "SUM関数は非NULL値の合計を返し、DISTINCTキーワード
 
 ## Syntax
 
-```Haskell
+```plaintext
 SUM([DISTINCT] expr)
 ```
 

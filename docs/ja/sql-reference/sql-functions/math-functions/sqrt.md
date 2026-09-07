@@ -9,7 +9,7 @@ description: "値の平方根を計算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE SQRT(DOUBLE x);
 DOUBLE DSQRT(DOUBLE x);
 ```

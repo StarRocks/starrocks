@@ -15,7 +15,7 @@ description: "将SQL数组的每个元素转换为JSON值并返回由这些值�
 
 ## 语法
 
-```Haskell
+```plaintext
 json_array(value, ...)
 ```
 

@@ -13,13 +13,13 @@ This function is supported from v3.1 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP transform_keys(lambda_func, any_map)
 ```
 
 `lambda_func` can also be placed after `any_map`:
 
-```Haskell
+```plaintext
 MAP transform_keys(any_map, lambda_func)
 ```
 

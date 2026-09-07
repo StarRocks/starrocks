@@ -9,7 +9,7 @@ description: "ARRAY_JOIN関数は配列の要素を連結して文字列にし�
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_join(array, sep[, null_replace_str])
 ```
 

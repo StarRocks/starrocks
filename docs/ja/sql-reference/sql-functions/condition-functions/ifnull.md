@@ -9,7 +9,7 @@ description: "expr1 が NULL の場合、expr2 を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 ifnull(expr1,expr2);
 ```
 

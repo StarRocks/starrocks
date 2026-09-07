@@ -22,7 +22,7 @@ description: "计算两个日期的差值，结果精确到天。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT DATEDIFF(DATETIME expr1,DATETIME expr2)
 ```
 

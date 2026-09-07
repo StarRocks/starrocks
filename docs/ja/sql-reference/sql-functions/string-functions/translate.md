@@ -11,7 +11,7 @@ description: "文字列内の指定された文字を別の文字に置換しま
 
 ## Syntax
 
-```Haskell
+```plaintext
 TRANSLATE(source, from_string, to_string)
 ```
 

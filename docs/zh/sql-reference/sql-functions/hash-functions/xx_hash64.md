@@ -9,7 +9,7 @@ description: "返回输入字符串的 64 位 XXH64 hash 值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT XX_HASH64(VARCHAR input, ...)
 ```
 

@@ -13,7 +13,7 @@ description: "从 Bitmap 中返回取值在指定范围内的元素子集。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP bitmap_subset_in_range(BITMAP src, BIGINT start_range, BIGINT end_range)
 ```
 

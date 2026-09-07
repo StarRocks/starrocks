@@ -9,7 +9,7 @@ description: "グループ化後の値のセットに対して bitmap union を�
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP BITMAP_UNION(BITMAP value)
 ```
 

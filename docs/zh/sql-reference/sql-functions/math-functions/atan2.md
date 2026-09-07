@@ -11,7 +11,7 @@ description: "返回 x/y 的反正切主值，范围在 [-π, π]。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ATAN2(x,y);
 ```
 

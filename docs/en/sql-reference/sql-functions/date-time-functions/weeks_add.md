@@ -11,7 +11,7 @@ Returns the value with the number of weeks added to date.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME weeks_add(DATETIME expr1, INT expr2);
 ```
 

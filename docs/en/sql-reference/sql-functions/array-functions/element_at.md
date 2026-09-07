@@ -15,7 +15,7 @@ If you want to retrieve a value from a key-value pair in a map, see [element_at]
 
 ## Syntax
 
-```Haskell
+```plaintext
 element_at(any_array, position)
 ```
 

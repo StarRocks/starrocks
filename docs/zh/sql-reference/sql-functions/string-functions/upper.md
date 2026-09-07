@@ -11,7 +11,7 @@ description: "将字符串转换为大写形式。"
 
 ## 语法
 
-```haskell
+```plaintext
 upper(str)
 ```
 

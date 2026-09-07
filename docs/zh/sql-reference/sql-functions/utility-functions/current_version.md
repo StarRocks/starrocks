@@ -11,7 +11,7 @@ description: "返回当前 StarRocks 的版本。"
 
 ## 语法
 
-```Haskell
+```plaintext
 current_version();
 
 @@version_comment;

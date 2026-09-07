@@ -9,7 +9,7 @@ ARRAY 内のすべてのデータの最大値を取得し、この結果を返�
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_max(array(type))
 ```
 

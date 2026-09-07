@@ -11,7 +11,7 @@ Computes the arc tangent of the argument.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE atan(DOUBLE arg)
 ```
 

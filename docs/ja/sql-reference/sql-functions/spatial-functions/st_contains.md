@@ -9,7 +9,7 @@ description: "ジオメトリ図形shape1がshape2を完全に含むかどうか
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)
 ```
 

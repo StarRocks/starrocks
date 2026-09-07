@@ -15,7 +15,7 @@ SQL 配列の各要素を JSON 値に変換し、JSON 値からなる JSON 配�
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_array(value, ...)
 ```
 

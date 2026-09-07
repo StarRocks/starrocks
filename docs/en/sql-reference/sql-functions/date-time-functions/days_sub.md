@@ -11,7 +11,7 @@ Subtracts specified days from a date or datetime to get a new datetime.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME days_sub(DATETIME|DATE d, INT n);
 ```
 

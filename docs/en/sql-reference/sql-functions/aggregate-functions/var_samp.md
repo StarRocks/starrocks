@@ -11,7 +11,7 @@ Returns the sample variance of an expression. Since v2.5.10, this function can a
 
 ## Syntax
 
-```Haskell
+```plaintext
 VAR_SAMP(expr)
 ```
 

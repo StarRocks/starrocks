@@ -14,7 +14,7 @@ From v2.5 onwards, StarRocks supports using lambda expressions in the following 
 
 ## Syntax
 
-```Haskell
+```plaintext
 parameter -> expression
 ```
 
@@ -58,7 +58,7 @@ x -> if(x>0,"positive","negative")
 
 An example of using lambda expressions in higher-order functions:
 
-```Haskell
+```plaintext
 select array_map((x,y,z) -> x + y, [1], [2], [4]);
 +----------------------------------------------+
 | array_map((x, y, z) -> x + y, [1], [2], [4]) |

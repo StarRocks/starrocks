@@ -17,7 +17,7 @@ Returns NULL if an invalid date or a NULL argument is passed in.
 
 ## Syntax
 
-```Haskell
+```plaintext
 ADD_MONTH(date, months)
 ```
 

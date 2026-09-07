@@ -9,7 +9,7 @@ description: "指定された日時から指定された時間数を減算しま
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME hours_sub(DATETIME|DATE date, INT hours);
 ```
 

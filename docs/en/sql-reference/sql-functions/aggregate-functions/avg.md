@@ -13,7 +13,7 @@ Optional field DISTINCT parameters can be used to return the weighted average.
 
 ## Syntax
 
-```Haskell
+```plaintext
 AVG([DISTINCT] expr)
 ```
 

@@ -11,7 +11,7 @@ description: "引数の双曲線余弦を計算します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 DOUBLE cosh(DOUBLE arg)
 ```
 

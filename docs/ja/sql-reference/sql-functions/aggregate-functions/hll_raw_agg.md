@@ -9,7 +9,7 @@ description: "HLL フィールドを集計し、HLL 値を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 hll_raw_agg(hll)
 ```
 

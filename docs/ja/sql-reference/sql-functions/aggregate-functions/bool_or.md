@@ -9,7 +9,7 @@ description: "expr のいずれかの行が true と評価された場合に tru
 
 ## 構文
 
-```Haskell
+```plaintext
 bool_or(expr)
 ```
 

@@ -13,7 +13,7 @@ description: "查询当前会话所在的 Catalog。"
 
 ## 语法
 
-```Haskell
+```plaintext
 catalog()
 ```
 

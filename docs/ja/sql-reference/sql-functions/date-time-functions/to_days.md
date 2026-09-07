@@ -11,7 +11,7 @@ description: "日付と0000-01-01の間の日数を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT TO_DAYS(DATETIME date)
 ```
 

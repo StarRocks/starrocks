@@ -15,7 +15,7 @@ MILLISECOND（3.2 及以后），SECOND，MINUTE，HOUR，DAY，WEEK，MONTH，Y
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME TIMESTAMPADD(unit, interval, DATETIME datetime_expr)
 ```
 

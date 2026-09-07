@@ -9,7 +9,7 @@ WKT (Well Known Text) を対応するポリゴンのメモリ形式に変換し�
 
 ## 構文
 
-```Haskell
+```plaintext
 GEOMETRY ST_Polygon(VARCHAR wkt)
 ```
 

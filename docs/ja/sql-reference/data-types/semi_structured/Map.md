@@ -15,7 +15,7 @@ v2.5 以降、StarRocks はデータレイクから複雑なデータ型 MAP と
 
 ## 構文
 
-```Haskell
+```plaintext
 MAP<key_type,value_type>
 ```
 

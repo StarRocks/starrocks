@@ -9,7 +9,7 @@ description: "日付または日時式の日付部分を抽出します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME DATE_ADD(DATETIME|DATE date,INTERVAL expr type)
 ```
 

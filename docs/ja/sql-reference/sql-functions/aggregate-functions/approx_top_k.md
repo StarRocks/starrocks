@@ -11,7 +11,7 @@ description: "expr 内で最も頻繁に出現する上位 k 個のアイテム�
 
 ## Syntax
 
-```Haskell
+```plaintext
 APPROX_TOP_K(<expr> [ , <k> [ , <counter_num> ] ] )
 ```
 

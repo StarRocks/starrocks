@@ -11,7 +11,7 @@ Converts a date into a string according to the specified format. Currently it su
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR DATE_FORMAT(DATETIME date, VARCHAR format)
 ```
 

@@ -14,7 +14,7 @@ From v2.4, StarRocks supports conversion to the ARRAY type.
 
 ## Syntax
 
-```Haskell
+```plaintext
 cast(input as type)
 input :: type
 ```

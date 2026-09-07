@@ -13,7 +13,7 @@ Null は通常の値として処理されます。
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_concat(input0, input1, ...)
 ```
 

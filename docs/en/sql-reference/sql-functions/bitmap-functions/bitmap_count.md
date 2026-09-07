@@ -11,7 +11,7 @@ Returns the 1-bit count for the input bitmap.
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT BITMAP_COUNT(any_bitmap)
 ```
 

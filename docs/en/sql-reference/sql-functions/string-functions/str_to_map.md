@@ -13,7 +13,7 @@ This function is supported from v3.1 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP<VARCHAR, VARCHAR> str_to_map(VARCHAR content[, VARCHAR delimiter[, VARCHAR map_delimiter]])
 ```
 

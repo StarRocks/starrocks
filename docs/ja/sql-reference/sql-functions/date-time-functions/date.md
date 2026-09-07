@@ -9,7 +9,7 @@ description: "現在の時刻を取得し、TIME 型の値を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE date(DATETIME|DATE expr)
 ```
 

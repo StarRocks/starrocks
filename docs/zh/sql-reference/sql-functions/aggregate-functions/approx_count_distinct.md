@@ -13,7 +13,7 @@ description: "approx_count_distinct 返回类似 COUNT(DISTINCT col) 的近似�
 
 ## 语法
 
-```Haskell
+```plaintext
 APPROX_COUNT_DISTINCT(expr)
 ```
 

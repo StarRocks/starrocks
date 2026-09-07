@@ -11,7 +11,7 @@ This function uses fixed-size memory, so less memory can be used for columns wit
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE|ARRAY<DOUBLE p[, DOUBLE compression])
 ```
 

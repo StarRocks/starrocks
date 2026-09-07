@@ -11,7 +11,7 @@ description: "返回当前会话所在的数据库名称。"
 
 ## 语法
 
-```Haskell
+```plaintext
 database()
 ```
 

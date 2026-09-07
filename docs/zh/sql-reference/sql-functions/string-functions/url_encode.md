@@ -13,7 +13,7 @@ description: "将字符串根据 application/x-www-form-urlencoded 格式进行�
 
 ## 语法
 
-```haskell
+```plaintext
 VARCHAR url_encode(VARCHAR str)
 ```
 

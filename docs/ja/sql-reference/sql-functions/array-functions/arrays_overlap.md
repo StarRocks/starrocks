@@ -9,7 +9,7 @@ description: "2つの配列の交差が空かどうかを確認します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 arrays_overlap(input0, input1)
 ```
 

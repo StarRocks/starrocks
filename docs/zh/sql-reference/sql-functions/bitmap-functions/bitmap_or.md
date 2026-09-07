@@ -11,7 +11,7 @@ description: "计算两个 Bitmap 的并集并返回新的 Bitmap。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_OR(lhs, rhs)
 ```
 

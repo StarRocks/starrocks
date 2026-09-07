@@ -11,7 +11,7 @@ description: "获取数组中某个元素的位置。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_position(any_array, any_element)
 ```
 

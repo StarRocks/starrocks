@@ -13,7 +13,7 @@ This function comes in the following two forms. The lambda adoption allows for m
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_filter(array, array<bool>)
 array_filter(lambda_function, arr1,arr2...)
 ```

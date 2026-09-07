@@ -9,7 +9,7 @@ description: "数値を通貨形式の文字列にフォーマットします。
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR money_format(Number)
 ```
 

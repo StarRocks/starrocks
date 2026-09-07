@@ -13,7 +13,7 @@ description: "根据 Boolean 数组或 Lambda 函数过滤 Map 中的键值对�
 
 ## 语法
 
-```Haskell
+```plaintext
 MAP map_filter(any_map, array<boolean>)
 MAP map_filter(lambda_func, any_map)
 ```

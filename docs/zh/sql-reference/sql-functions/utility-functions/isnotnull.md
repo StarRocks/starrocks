@@ -11,7 +11,7 @@ description: "判断输入值是否为非 NULL；不是 NULL 返回 1，否则�
 
 ## 语法
 
-```Haskell
+```plaintext
 ISNOTNULL(v)
 ```
 

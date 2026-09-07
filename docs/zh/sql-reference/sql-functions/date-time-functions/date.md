@@ -11,7 +11,7 @@ description: "从日期或时间日期表达式中截取日期部分。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATE date(DATETIME|DATE expr)
 ```
 

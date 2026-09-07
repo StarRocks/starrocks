@@ -13,7 +13,7 @@ This function is supported from v3.2.
 
 ## Syntax
 
-```haskell
+```plaintext
 VARCHAR url_extract_parameter(VARCHAR str, VARCHAR name)
 ```
 

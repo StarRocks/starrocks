@@ -11,7 +11,7 @@ Converts a string into a Base64-encoded string. This function is an inverse of [
 
 ## Syntax
 
-```Haskell
+```plaintext
 to_base64(str);
 ```
 

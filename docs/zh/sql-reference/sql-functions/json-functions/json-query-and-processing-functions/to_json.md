@@ -19,7 +19,7 @@ description: "将 Map 或 Struct 值转换为 JSON 字符串。"
 
 ## 语法
 
-```Haskell
+```plaintext
 to_json(any_value)
 ```
 
@@ -33,7 +33,7 @@ to_json(any_value)
 
 ## 示例
 
-```Haskell
+```plaintext
 select to_json(map{1:'a',2:'b'});
 +---------------------------+
 | to_json(map{1:'a',2:'b'}) |

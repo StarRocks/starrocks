@@ -11,7 +11,7 @@ description: "根据输入的 ASCII 值返回对应的字符。"
 
 ## 语法
 
-```Haskell
+```plaintext
 char(x);
 ```
 

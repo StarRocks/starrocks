@@ -11,7 +11,7 @@ Obtains the hostname of the node on which the computation is performed.
 
 ## Syntax
 
-```Haskell
+```plaintext
 host_name();
 ```
 

@@ -11,7 +11,7 @@ Applies a [Lambda expression](../Lambda_expression.md) to the keys and values of
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP map_apply(lambda_func, any_map)
 ```
 

@@ -11,7 +11,7 @@ description: "将列中的值（包括NULL）聚合成数组，支持使用ORDER
 
 ## 语法
 
-```Haskell
+```plaintext
 ARRAY_AGG([distinct] col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 ```
 

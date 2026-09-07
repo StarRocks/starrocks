@@ -9,7 +9,7 @@ description: "値の平方を計算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 square(arg)
 ```
 

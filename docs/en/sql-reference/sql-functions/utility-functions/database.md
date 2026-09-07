@@ -11,7 +11,7 @@ Returns the name of the current database. If no database is selected, an empty v
 
 ## Syntax
 
-```Haskell
+```plaintext
 database()
 ```
 

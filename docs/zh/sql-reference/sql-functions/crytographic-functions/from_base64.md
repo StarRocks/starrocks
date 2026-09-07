@@ -11,7 +11,7 @@ description: "将 Base64 编码过的字符串进行解码。"
 
 ## 语法
 
-```Haskell
+```plaintext
 from_base64(str);
 ```
 

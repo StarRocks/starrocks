@@ -11,7 +11,7 @@ description: "返回dividend除以divisor后的正余数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 pmod(dividend,divisor);
 ```
 

@@ -11,7 +11,7 @@ description: "将列中的多行非 NULL 数值合并成一行 BITMAP 值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_AGG(col)
 ```
 

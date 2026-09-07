@@ -13,7 +13,7 @@ struct() は row() のエイリアスです。
 
 ## 構文
 
-```Haskell
+```plaintext
 STRUCT row(ANY val, ...)
 ```
 

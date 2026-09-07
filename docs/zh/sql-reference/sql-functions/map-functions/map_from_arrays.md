@@ -13,7 +13,7 @@ description: "将两个 Array 数组组合成一个 Map，分别作为 Key 和 V
 
 ## 语法
 
-```Haskell
+```plaintext
 MAP map_from_arrays(ARRAY keys, ARRAY values)
 ```
 

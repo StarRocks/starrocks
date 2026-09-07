@@ -11,7 +11,7 @@ description: "指定された日付の年の日数を返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 INT DAYOFYEAR(DATETIME|DATE date)
 ```
 

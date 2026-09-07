@@ -9,7 +9,7 @@ description: "入力されたビットマップの1ビット数を返します�
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT BITMAP_COUNT(any_bitmap)
 ```
 

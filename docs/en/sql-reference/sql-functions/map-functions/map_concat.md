@@ -13,7 +13,7 @@ This function is supported from v3.1 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 ANY_MAP map_concat(any_map0, any_map1...)
 ```
 

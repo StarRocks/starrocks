@@ -11,7 +11,7 @@ description: "返回以弧度表示的角度x的正弦值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 SIN(x);
 ```
 

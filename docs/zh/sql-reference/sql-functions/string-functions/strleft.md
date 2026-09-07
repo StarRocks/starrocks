@@ -11,7 +11,7 @@ description: "从字符串左侧返回指定长度的字符，是left函数的�
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR strleft(VARCHAR str, INT len)
 ```
 

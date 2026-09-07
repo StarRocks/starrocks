@@ -11,7 +11,7 @@ Obtains the ID of the most recently executed query in the current session.
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR last_query_id();
 ```
 

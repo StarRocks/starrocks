@@ -9,7 +9,7 @@ description: "計算が実行されているノードのホスト名を取得し
 
 ## 構文
 
-```Haskell
+```plaintext
 host_name();
 ```
 

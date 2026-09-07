@@ -13,7 +13,7 @@ regexp() supports more complex matching conditions than [like()](like.md).
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN regexp(VARCHAR expr, VARCHAR pattern);
 ```
 

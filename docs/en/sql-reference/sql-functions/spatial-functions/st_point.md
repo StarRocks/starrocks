@@ -15,7 +15,7 @@ Returns the corresponding Point with the given X-coordinate and Y-coordinate. At
 
 ## Syntax
 
-```Haskell
+```plaintext
 POINT ST_Point(DOUBLE x, DOUBLE y)
 ```
 

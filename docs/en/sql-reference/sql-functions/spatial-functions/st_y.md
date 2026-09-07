@@ -11,7 +11,7 @@ If point is of a valid Point type, return the corresponding Y-coordinate value.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE ST_Y(POINT point)
 ```
 

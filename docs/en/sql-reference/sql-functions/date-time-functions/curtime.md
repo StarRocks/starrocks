@@ -13,7 +13,7 @@ This function may return different results for different time zones. For more in
 
 ## Syntax
 
-```Haskell
+```plaintext
 TIME CURTIME()
 ```
 

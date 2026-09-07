@@ -11,7 +11,7 @@ description: "将匹配正则表达式的子字符串替换为指定字符串。
 
 ### 语法
 
-```Haskell
+```plaintext
 regexp_replace(str, pattern, repl)
 ```
 

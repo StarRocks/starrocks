@@ -9,7 +9,7 @@ description: "値がNULLかどうかを確認し、結果を1または0で返し
 
 ## 構文
 
-```Haskell
+```plaintext
 ISNULL(v)
 ```
 

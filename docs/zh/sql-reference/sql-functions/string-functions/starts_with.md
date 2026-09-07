@@ -11,7 +11,7 @@ description: "如果字符串以指定前缀开头返回1，否则返回0。"
 
 ## 语法
 
-```Haskell
+```plaintext
 starts_with(str, prefix)
 ```
 
