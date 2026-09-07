@@ -27,6 +27,9 @@
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
 #endif
+#if defined(__aarch64__)
+#include <arm_acle.h>
+#endif
 #include <zlib.h>
 
 namespace starrocks {

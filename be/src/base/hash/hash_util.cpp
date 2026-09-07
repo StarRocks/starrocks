@@ -14,8 +14,10 @@
 
 #include "base/hash/hash_util.hpp"
 
-#ifdef __SSE4_2__
+#if defined(__SSE4_2__)
 #include <nmmintrin.h>
+#elif defined(__aarch64__)
+#include <arm_acle.h>
 #endif
 
 #include <mutex>
@@ -27,10 +29,13 @@
 
 namespace starrocks {
 
-#ifdef __SSE4_2__
+#if defined(__SSE4_2__)
 // Forward declarations for SSE4.2 implementations (only used within this file)
 static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash);
 static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash);
+#elif defined(__aarch64__)
+static uint32_t crc_hash_arm64(const void* data, int32_t bytes, uint32_t hash);
+static uint64_t crc_hash64_arm64(const void* data, int32_t bytes, uint64_t hash);
 #endif
 
 // Function pointer types for hash functions to avoid runtime CPU checks
@@ -66,7 +71,7 @@ static void init_hash_functions() {
     g_crc32_func = HashUtil::zlib_crc_hash;
     g_crc64_func = crc_hash64_fallback;
 
-#ifdef __SSE4_2__
+#if defined(__SSE4_2__)
     base::CPU cpu;
     if (cpu.has_sse42()) {
         g_hash32_func = crc_hash_sse42;
@@ -74,6 +79,11 @@ static void init_hash_functions() {
         g_crc32_func = crc_hash_sse42;
         g_crc64_func = crc_hash64_sse42;
     }
+#elif defined(__aarch64__)
+    g_hash32_func = crc_hash_arm64;
+    g_hash64_func = crc_hash64_arm64;
+    g_crc32_func = crc_hash_arm64;
+    g_crc64_func = crc_hash64_arm64;
 #endif
 }
 
@@ -154,6 +164,55 @@ static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash)
 
     while (bytes--) {
         (bytes & 1) ? (h1 = _mm_crc32_u8(h1, *p)) : (h2 = _mm_crc32_u8(h2, *p));
+        ++p;
+    }
+
+    h1 = (h1 << 16) | (h1 >> 16);
+    h2 = (h2 << 16) | (h2 >> 16);
+    hash = (static_cast<uint64_t>(h2) << 32) | h1;
+    return hash;
+}
+#endif
+
+#if defined(__aarch64__)
+static uint32_t crc_hash_arm64(const void* data, int32_t bytes, uint32_t hash) {
+    uint32_t words = bytes / sizeof(uint32_t);
+    bytes = bytes % sizeof(uint32_t);
+
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+
+    while (words--) {
+        hash = __crc32cw(hash, unaligned_load<uint32_t>(p));
+        p += sizeof(uint32_t);
+    }
+
+    while (bytes--) {
+        hash = __crc32cb(hash, *p);
+        ++p;
+    }
+
+    // The lower half of the CRC hash has poor uniformity, so swap the halves
+    // for anyone who only uses the first several bits of the hash.
+    hash = (hash << 16) | (hash >> 16);
+    return hash;
+}
+
+static uint64_t crc_hash64_arm64(const void* data, int32_t bytes, uint64_t hash) {
+    uint32_t words = bytes / sizeof(uint32_t);
+    bytes = bytes % sizeof(uint32_t);
+
+    uint32_t h1 = hash >> 32;
+    uint32_t h2 = (hash << 32) >> 32;
+
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+    while (words--) {
+        const uint32_t value = unaligned_load<uint32_t>(p);
+        (words & 1) ? (h1 = __crc32cw(h1, value)) : (h2 = __crc32cw(h2, value));
+        p += sizeof(uint32_t);
+    }
+
+    while (bytes--) {
+        (bytes & 1) ? (h1 = __crc32cb(h1, *p)) : (h2 = __crc32cb(h2, *p));
         ++p;
     }
 
