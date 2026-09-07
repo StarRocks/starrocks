@@ -68,6 +68,8 @@ bvar::Adder<int64_t> g_tablet_merge_dcg_rebuild_fallback_not_supported_total(
         "tablet_merge_dcg_rebuild_fallback_not_supported_total");
 
 bvar::Adder<int64_t> g_tablet_merge_gap_delvec_total("tablet_merge_gap_delvec_total");
+bvar::Adder<int64_t> g_tablet_merge_alias_partial_shared_contribution_total(
+        "tablet_merge_alias_partial_shared_contribution_total");
 bvar::Adder<int64_t> g_tablet_merge_non_pk_skip_dedup_total("tablet_merge_non_pk_skip_dedup_total");
 bvar::Adder<int64_t> g_tablet_merge_synthesized_only_delvec_total("tablet_merge_synthesized_only_delvec_total");
 
@@ -1892,6 +1894,91 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
     return Status::OK();
 }
 
+// A rowset holding at least one segment the split handed to every child. segment_metas_size() alone is
+// insufficient: a rowset can own only non-shared segments.
+bool carries_shared_segment(const RowsetMetadataPB& rowset) {
+    return std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                       [](const SegmentMetadataPB& segment) { return segment.shared(); });
+}
+
+// A range-distributed primary-key tablet whose ORDER BY differs from the primary key. Such a tablet routes
+// rows by a range in PRIMARY-KEY space while its segments are laid out in sort-key order, so no rowid
+// interval of a segment corresponds to its range -- which is why Rowset::get_seek_range withholds the range
+// for this shape instead of publishing one no consumer can use.
+//
+// has_range() is tested first because it is a bit test and the schema construction is not: only a resharded
+// tablet can be in this shape at all, and this runs once per merge.
+bool routes_by_primary_key_range(const TabletMetadataPB& metadata) {
+    return metadata.has_range() && is_primary_key(metadata) && metadata.has_schema() &&
+           TabletSchema::create(metadata.schema())->has_separate_sort_key();
+}
+
+// The ids of the canonical rowsets that carry a shared segment and whose contributors leave part of the
+// merged range unclaimed -- exactly the rowsets compute_synthesized_gap_specs would then have to locate a
+// gap bitmap for by rowid.
+//
+// This is that function's range algebra and nothing more: no segment is opened and no bound is decoded
+// against a schema, so it is safe on a tablet whose range is in primary-key space while its segments are in
+// sort-key order. It is the same algebra update_canonical already ran over these bounds.
+StatusOr<std::vector<uint32_t>> rowsets_with_unclaimed_range(const TabletMetadataPB& new_metadata,
+                                                             const CanonicalContribMap& canonical_contribs) {
+    std::vector<uint32_t> rowset_ids;
+    for (const auto& [canonical_index, contrib] : canonical_contribs) {
+        if (canonical_index >= static_cast<size_t>(new_metadata.rowsets_size())) {
+            return Status::InternalError(
+                    fmt::format("rowsets_with_unclaimed_range: invalid canonical_index {}", canonical_index));
+        }
+        const auto& canonical = new_metadata.rowsets(static_cast<int>(canonical_index));
+        if (!carries_shared_segment(canonical)) continue;
+        ASSIGN_OR_RETURN(auto sorted_disjoint, tablet_reshard_helper::sort_and_merge_adjacent_ranges(contrib));
+        ASSIGN_OR_RETURN(auto unclaimed,
+                         tablet_reshard_helper::compute_disjoint_gaps_within(new_metadata.range(), sorted_disjoint));
+        if (!unclaimed.empty()) {
+            rowset_ids.emplace_back(canonical.id());
+        }
+    }
+    return rowset_ids;
+}
+
+// The query-side parent alias a primary-key-range split keeps alive serves every row of a shared segment it
+// carries, because that is exactly what the pre-split parent served: this shape never range-filters a
+// segment read, so the parent's view of a shared segment was the whole file minus its delete vector. Taking
+// the union of the children's delete vectors reproduces it, and the uid dedup keeps one copy, so no row is
+// served twice -- no gap masking needed, which is fortunate, because synthesizing one would mean turning a
+// primary-key interval into a rowid window and this shape cannot answer that.
+//
+// The one way that reasoning breaks is a source that no longer carries a shared rowset its sibling still
+// does -- a compaction that consumed its copy -- because the alias would then serve those rows twice: once
+// from the compaction output, once from the sibling's untouched copy, as duplicate primary keys. That cannot
+// happen today: PrimaryCompactionPolicy::pick_rowsets skips ordinary compaction for this shape while any
+// rowset carries a shared segment, and the UNSHARE that does consume them ends the alias phase. So this is a
+// tripwire for a future change that unblocks it, not a live case.
+//
+// Deliberately a warning and not an error: this runs on the publish critical path once per version, an alias
+// rebuild is deterministic, and so a failure here would be a permanent publish stall -- the exact failure
+// this shape has already been wedged by. Duplicate keys are visible and bounded; a wedged partition is not.
+void warn_on_partial_shared_contributions(const TabletMetadataPB& new_metadata,
+                                          const CanonicalContribMap& canonical_contribs, size_t num_sources) {
+    if (num_sources < 2) {
+        return;
+    }
+    for (const auto& [canonical_index, contrib] : canonical_contribs) {
+        if (canonical_index >= static_cast<size_t>(new_metadata.rowsets_size())) {
+            continue;
+        }
+        const auto& canonical = new_metadata.rowsets(static_cast<int>(canonical_index));
+        if (!carries_shared_segment(canonical) || contrib.size() == num_sources) {
+            continue;
+        }
+        g_tablet_merge_alias_partial_shared_contribution_total << 1;
+        LOG(WARNING) << "parent alias of a primary-key-range split carries a shared rowset that only " << contrib.size()
+                     << " of " << num_sources
+                     << " children still contribute; rows of the missing children's ranges may be served "
+                        "twice. tablet="
+                     << new_metadata.id() << " version=" << new_metadata.version() << " rowset=" << canonical.id();
+    }
+}
+
 // Phase 0: for every PK canonical rowset that owns at least one shared
 // segment, mask the rowids whose key falls outside ⋃ contributors but inside
 // the merged tablet range.
@@ -1921,17 +2008,8 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
                     fmt::format("compute_synthesized_gap_specs: invalid canonical_index {}", canonical_index));
         }
         const auto& canonical = new_metadata.rowsets(static_cast<int>(canonical_index));
-        // segment_metas_size() alone is insufficient because a rowset can own only
-        // non-shared segments. Only synthesize gap bits when at least one segment is
-        // actually shared.
-        bool has_shared = false;
-        for (const auto& segment_meta : canonical.segment_metas()) {
-            if (segment_meta.shared()) {
-                has_shared = true;
-                break;
-            }
-        }
-        if (!has_shared) continue;
+        // Only synthesize gap bits when at least one segment is actually shared.
+        if (!carries_shared_segment(canonical)) continue;
 
         ASSIGN_OR_RETURN(auto sorted_disjoint, tablet_reshard_helper::sort_and_merge_adjacent_ranges(contrib));
         ASSIGN_OR_RETURN(auto non_contributed,
@@ -3395,6 +3473,15 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     if (old_tablet_metadatas.empty()) {
         return Status::InvalidArgument("No old tablet metadata to merge");
     }
+    // A range-distributed primary-key tablet whose ORDER BY differs from the primary key needs different
+    // handling below: it has no rowid window for a key range, so gap-delvec synthesis cannot run on it.
+    //
+    // Answered over every source, not just the first: the shape is a schema property that all of them
+    // share, but has_range() is per tablet, and a table still migrating to range distribution can hand a
+    // rangeless source in alongside ranged ones.
+    const bool primary_key_range_layout = std::any_of(
+            old_tablet_metadatas.begin(), old_tablet_metadatas.end(),
+            [](const auto& metadata) { return metadata != nullptr && routes_by_primary_key_range(*metadata); });
 
     std::vector<TabletMergeContext> merge_contexts;
     merge_contexts.reserve(old_tablet_metadatas.size());
@@ -3473,7 +3560,37 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // (merge_delvecs), so the two paths cannot diverge. For non-PK tables the
     // specs stay empty, which keeps DCG coverage strict.
     std::vector<CanonicalGapSpec> gap_specs;
-    if (is_primary_key(*new_tablet_metadata)) {
+    if (primary_key_range_layout && skip_sstable_merge) {
+        // The read-only parent alias. It carries every row of a shared segment on purpose -- that is what
+        // the pre-split parent served -- so there is nothing to mask, which is fortunate because a
+        // primary-key interval has no rowid window here. See the helper for the invariant this leans on and
+        // the one thing that would break it.
+        warn_on_partial_shared_contributions(*new_tablet_metadata, canonical_contribs, merge_contexts.size());
+    } else if (primary_key_range_layout) {
+        // A real MERGE does have to attribute each row of a shared segment to a source, and gap synthesis
+        // is how it does that. Refuse exactly the merges that need a bitmap this shape cannot locate --
+        // never more than that: a merge whose contributors cover the merged range needs no bitmap and
+        // produces precisely what it did before, and MergeTabletJob cannot abort once it is past shard
+        // creation, so refusing one of those would create the permanent publish stall this change removes.
+        //
+        // FE stops scheduling merges on this shape at all (TabletReshardUtils.tabletMergeUnsupported); this
+        // is the backstop for an FE that has not caught up or a job replayed from the edit log, and the
+        // guard to lift once the bitmap is built by a row-level primary-key filter -- the tool the UNSHARE
+        // compaction already has.
+        ASSIGN_OR_RETURN(auto unclaimed, rowsets_with_unclaimed_range(*new_tablet_metadata, canonical_contribs));
+        if (!unclaimed.empty()) {
+            std::string rowset_ids;
+            for (uint32_t rowset_id : unclaimed) {
+                if (!rowset_ids.empty()) rowset_ids += ",";
+                rowset_ids += std::to_string(rowset_id);
+            }
+            return Status::NotSupported(fmt::format(
+                    "tablet merge is not supported on a range-distributed primary-key tablet whose ORDER BY "
+                    "differs from the primary key when a shared rowset is not fully contributed, new_tablet={} "
+                    "rowsets={}",
+                    merging_tablet.new_tablet_id(), rowset_ids));
+        }
+    } else if (is_primary_key(*new_tablet_metadata)) {
         ASSIGN_OR_RETURN(gap_specs,
                          compute_synthesized_gap_specs(tablet_manager, *new_tablet_metadata, canonical_contribs));
         if (!gap_specs.empty()) {

@@ -224,6 +224,37 @@ public class TabletReshardUtils {
         }
     }
 
+    /**
+     * Whether a tablet merge of this table is unsupported for now.
+     *
+     * <p>True for the same shape as {@link #splitRewritesEveryShard}: a range-distributed primary-key
+     * table whose ORDER BY key differs from the primary key. A merge has to decide, for every row of a
+     * segment its sources share, which source still owns it, and the BE answers that by turning a
+     * primary-key interval into a rowid window. On this shape there is no such window -- the tablet range
+     * is in primary-key space while the segments are laid out in sort-key order -- so the merge fails at
+     * publish, permanently, and takes every later transaction on the partition with it.
+     *
+     * <p>Not gated on file bundling, unlike {@code splitRewritesEveryShard}: that gate is about the cost
+     * of the UNSHARE rewrite the split knobs bound, while this is about a merge that cannot be made
+     * correct. CREATE TABLE requires file_bundling=true for this shape anyway, so the two agree in
+     * practice; where they could disagree, refusing the merge is the safe answer.
+     *
+     * <p>The read-only parent alias a split keeps alive is not affected: it reproduces the pre-split
+     * parent rather than deciding ownership per row. See {@code merge_tablet} on the BE.
+     */
+    public static boolean tabletMergeUnsupported(OlapTable table) {
+        if (table == null) {
+            return false;
+        }
+        try {
+            return MetaUtils.hasSeparateSortKey(table, table.getBaseIndexMetaId());
+        } catch (IllegalArgumentException e) {
+            // Base index meta went away underneath us; leave the decision to the BE backstop rather than
+            // throwing from a scheduling decision.
+            return false;
+        }
+    }
+
     /** Per-tablet split fan-out cap for this table. */
     public static int effectiveMaxSplitCount(OlapTable table) {
         int cap = Config.tablet_reshard_max_split_count;
