@@ -58,15 +58,9 @@
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/merge_iterator.h"
 #include "storage/metadata_util.h"
-<<<<<<< HEAD
 #include "storage/olap_define.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/row_source_mask.h"
-=======
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/primary_key_encoder.h"
-#include "storage/primitive/storage_define.h"
-#include "storage/primitive/type_utils.h"
->>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504))
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"

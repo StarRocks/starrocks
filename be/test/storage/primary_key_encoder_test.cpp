@@ -19,21 +19,17 @@
 #include <limits>
 #include <memory>
 
-#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
-<<<<<<< HEAD
 #include "column/datum.h"
-=======
-#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
->>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504))
 #include "column/schema.h"
-#include "common/config_local_io_fwd.h"
+#include "common/config.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 #include "types/date_value.h"
+#include "util/defer_op.h"
 
 using namespace std;
 
@@ -59,8 +55,8 @@ static BinaryColumn::MutablePtr make_unrepresentable_binary_column() {
     config::enable_zero_copy_from_page_cache = true;
     DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
 
-    auto owner = std::make_shared<std::string>("x");
-    ContainerResource resource(owner, owner->data(), Column::MAX_CAPACITY_LIMIT);
+    // The size check must reject this view without reading its payload.
+    ContainerResource resource(nullptr, "x", Column::MAX_CAPACITY_LIMIT);
     BinaryColumn::Offsets offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(Column::MAX_CAPACITY_LIMIT);
@@ -267,17 +263,6 @@ TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
     auto binary = BinaryColumn::create();
     binary->append_strings(strings.data(), strings.size());
     ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*binary).ok());
-
-    auto sticky_large = BinaryColumn::create();
-    sticky_large->append_strings(strings.data(), strings.size());
-    AdaptiveOffsets::Large large_offsets;
-    large_offsets.resize(sticky_large->get_offset().size());
-    for (size_t i = 0; i < sticky_large->get_offset().size(); ++i) {
-        large_offsets[i] = sticky_large->get_offset()[i];
-    }
-    sticky_large->get_offset().set_large_buffer(std::move(large_offsets));
-    ASSERT_TRUE(sticky_large->get_offset().is_large());
-    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*sticky_large).ok());
 
     auto nullable_data = BinaryColumn::create();
     nullable_data->append_strings(strings.data(), strings.size());

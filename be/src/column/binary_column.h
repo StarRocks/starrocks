@@ -14,12 +14,9 @@
 
 #pragma once
 
-<<<<<<< HEAD
-=======
 #include <fmt/format.h>
 
 #include <exception>
->>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504))
 #include <memory>
 
 #include "column/bytes.h"
