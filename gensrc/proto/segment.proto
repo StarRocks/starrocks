@@ -270,6 +270,34 @@ message SegmentFooterPB {
     // only when enable_full_sort_key_index is on; absent otherwise. Old binaries ignore this field
     // and read short_key_index_page as before.
     optional PagePointerPB full_sort_key_index_page = 11;
+
+    // Byte range of the "small index region": one contiguous run, written immediately before
+    // this footer, holding the ordinal index of EVERY column. In the legacy layout each column's
+    // ordinal index sits right after that column's
+    // own data pages, so opening a segment costs one scattered small read per column; with a
+    // block-granular cache in front of object storage each of those reads fetches (and mostly
+    // wastes) a whole cache block, one round trip at a time. Gathered here they share blocks,
+    // and being written last they take the block the footer read already brings in.
+    //
+    // Nothing else is in this region. Page zone maps stay beside their own column's data pages,
+    // where they ride in a cache block a predicate scan is reading anyway, and the short key index
+    // keeps the position it has always had.
+    //
+    // Written when config::lake_enable_segment_tail_index_region was on at write time AND the segment
+    // belongs to a cloud-native (shared-data) tablet. Vertical compaction produces it too. A
+    // partial-update rewrite does not: it copies an existing segment's prefix and appends the
+    // remaining value columns, so the copied columns keep their original index pages and a region
+    // gathered from the appended ones would describe only part of the segment. Absent otherwise,
+    // including on every shared-nothing segment, in which case the layout is exactly as before.
+    //
+    // Nothing on the read path requires these fields: every index is still located through its
+    // own absolute PagePointer in `columns`, so a reader that ignores them stays correct on
+    // either layout. They record where the region is, which is what makes the layout auditable
+    // from a footer dump and what a future reader-side optimization would key off. Offsets use
+    // the same origin as every other PagePointer in this footer -- the segment's own start,
+    // which is bundle-file relative when this segment is a slice of a bundle file.
+    optional uint64 small_index_region_offset = 12;
+    optional uint64 small_index_region_size = 13;
 }
 
 message BTreeMetaPB {

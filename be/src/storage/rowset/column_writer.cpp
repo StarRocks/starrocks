@@ -255,6 +255,9 @@ public:
     Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); };
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _scalar_column_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
     Status write_inverted_index() override { return _scalar_column_writer->write_inverted_index(); };
 
@@ -301,6 +304,9 @@ public:
     Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); };
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _scalar_column_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
@@ -575,6 +581,13 @@ Status ScalarColumnWriter::write_zone_map() {
         return _zone_map_index_builder->finish(_wfile, _opts.meta->add_indexes());
     }
     return Status::OK();
+}
+
+// Give up the ordinal-index builder so the rest of this writer can be destroyed on schedule. The
+// meta pointer travels with it because write_ordinal_index() records the page pointer through
+// _opts.meta, and by the time the region is written this writer is gone.
+void ScalarColumnWriter::take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) {
+    out->push_back({std::move(_ordinal_index_builder), _opts.meta});
 }
 
 Status ScalarColumnWriter::write_bitmap_index() {
