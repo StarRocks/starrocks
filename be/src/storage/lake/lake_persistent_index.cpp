@@ -1108,6 +1108,9 @@ void LakePersistentIndex::assign_generation_versions(PersistentIndexSstableMetaP
 }
 
 Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_version) {
+    // Before the guard, as it was on the facade's forward: an early return still reports the (near
+    // zero) latency rather than leaving a publish trace with no commit entry at all.
+    TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
     if (_memtable == nullptr) {
         return Status::OK(); // nothing built yet; a no-op, as before the merge
     }
