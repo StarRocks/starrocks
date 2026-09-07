@@ -297,6 +297,7 @@ struct CanonicalAllocationPlan {
     size_t selected_context_index = 0;
     RowsetMetadataPB source_form_rowset;
     std::optional<int64_t> schema_id;
+    std::optional<uint32_t> recovery_target;
     std::vector<TabletRangePB> contributor_ranges;
 };
 
@@ -333,23 +334,38 @@ std::string stable_rowset_mode(RowsetMetadataPB rowset) {
     rowset.clear_segment_metas();
     rowset.clear_range();
     rowset.clear_del_files();
+    rowset.clear_max_compact_input_rowset_id();
     return rowset.SerializeAsString();
+}
+
+Status validate_complete_segment_set(const RowsetMetadataPB& first, const RowsetMetadataPB& other) {
+    if (first.segment_metas_size() != other.segment_metas_size()) {
+        return Status::Corruption("tablet merge rowsets have different complete segment sets");
+    }
+    // Preflight already requires explicit, strictly increasing indices. Compare the
+    // entire immutable declaration at each index; only ownership may differ.
+    for (int i = 0; i < first.segment_metas_size(); ++i) {
+        SegmentMetadataPB a(first.segment_metas(i));
+        SegmentMetadataPB b(other.segment_metas(i));
+        a.clear_shared();
+        b.clear_shared();
+        if (a.SerializeAsString() != b.SerializeAsString()) {
+            return Status::Corruption("tablet merge rowsets have conflicting complete segment declarations");
+        }
+    }
+    return Status::OK();
 }
 
 Status validate_exact_duplicate(const RowsetMetadataPB& first, const RowsetMetadataPB& other) {
     if (first.num_rows() != other.num_rows() || first.data_size() != other.data_size() ||
         first.num_dels() != other.num_dels() ||
         first.has_max_compact_input_rowset_id() != other.has_max_compact_input_rowset_id() ||
-        first.max_compact_input_rowset_id() != other.max_compact_input_rowset_id() ||
         first.segment_metas_size() != other.segment_metas_size()) {
         return Status::Corruption("tablet merge equal-range rowsets disagree on stats, cursor or complete segment set");
     }
     CanonicalAllocationPlan copy;
     copy.source_form_rowset.CopyFrom(first);
-    RETURN_IF_ERROR(reconcile_segments(&copy.source_form_rowset, &other));
-    if (copy.source_form_rowset.segment_metas_size() != first.segment_metas_size()) {
-        return Status::Corruption("tablet merge equal-range rowsets have different complete segment sets");
-    }
+    RETURN_IF_ERROR(validate_complete_segment_set(first, other));
     return reconcile_duplicate_dels(&copy, other);
 }
 
@@ -380,9 +396,14 @@ StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<Tablet
             const auto schema = rowset_schema_id(merge_contexts[first.context_index], first.rowset->id());
             for (const auto& occurrence : occurrences) {
                 if (stable_rowset_mode(*occurrence.rowset) != mode ||
+                    occurrence.rowset->has_max_compact_input_rowset_id() !=
+                            first.rowset->has_max_compact_input_rowset_id() ||
                     occurrence.rowset->del_files().empty() != first.rowset->del_files().empty() ||
                     rowset_schema_id(merge_contexts[occurrence.context_index], occurrence.rowset->id()) != schema) {
                     return Status::Corruption("tablet merge same-uid rowsets have conflicting canonical modes");
+                }
+                if (!first.rowset->del_files().empty()) {
+                    RETURN_IF_ERROR(validate_complete_segment_set(*first.rowset, *occurrence.rowset));
                 }
             }
         }
@@ -925,6 +946,14 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(
         cursor = result.projections[context_index].target_end();
     }
 
+    for (auto& canonical : result.canonicals) {
+        if (canonical.source_form_rowset.has_max_compact_input_rowset_id()) {
+            ASSIGN_OR_RETURN(canonical.recovery_target,
+                             result.projections[canonical.selected_context_index].map_primary_rssid(
+                                     canonical.source_form_rowset.max_compact_input_rowset_id()));
+        }
+    }
+
     for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
         const auto& metadata = *contexts[context_index].metadata();
         for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
@@ -955,8 +984,26 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(
                 }
                 RETURN_IF_ERROR(add_alias(static_cast<uint32_t>(source), uint64_t{canonical_target} + index));
             }
+            if (canonical.recovery_target.has_value()) {
+                RETURN_IF_ERROR(result.projections[context_index].add_occurrence_alias(
+                        occurrence.max_compact_input_rowset_id(), *canonical.recovery_target));
+            }
         }
         result.projections[context_index].finalize_aliases();
+        for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
+            const auto& decision = emission[context_index][rowset_index];
+            const auto& occurrence = metadata.rowsets(rowset_index);
+            if (decision.canonical_index < 0 || occurrence.has_delete_predicate() ||
+                !occurrence.has_max_compact_input_rowset_id())
+                continue;
+            const auto& projection = result.projections[context_index];
+            const uint32_t raw_key = occurrence.max_compact_input_rowset_id();
+            ASSIGN_OR_RETURN(auto mapped, projection.map_occurrence_rssid(raw_key));
+            if (projection.has_divergent_occurrence_alias(raw_key) ||
+                mapped != *result.canonicals[decision.canonical_index].recovery_target) {
+                return Status::Corruption("tablet merge occurrence recovery keys do not remain equivalent");
+            }
+        }
     }
 
     for (const auto& canonical : result.canonicals) {
@@ -968,10 +1015,6 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(
         RETURN_IF_ERROR(validate_primary_affine_span(projection, rowset.id(), extent_end, "canonical extent"));
         ASSIGN_OR_RETURN(auto mapped_id, projection.map_primary_rssid(rowset.id()));
         if (mapped_id >= cursor) return Status::Corruption("tablet merge canonical target is outside cursor");
-        if (rowset.has_max_compact_input_rowset_id()) {
-            ASSIGN_OR_RETURN(auto mapped, projection.map_primary_rssid(rowset.max_compact_input_rowset_id()));
-            (void)mapped;
-        }
         for (const auto& del : rowset.del_files()) {
             const uint32_t offset = del.has_op_offset() ? del.op_offset() : final_max;
             RETURN_IF_ERROR(validate_primary_affine_span(projection, del.origin_rowset_id(),
@@ -988,7 +1031,12 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(
             const auto& rowset = canonical.source_form_rowset;
             const uint32_t raw_key =
                     rowset.has_max_compact_input_rowset_id() ? rowset.max_compact_input_rowset_id() : rowset.id();
-            ASSIGN_OR_RETURN(uint32_t target_key, result.projections[context_index].map_primary_rssid(raw_key));
+            uint32_t target_key;
+            if (canonical.recovery_target.has_value()) {
+                target_key = *canonical.recovery_target;
+            } else {
+                ASSIGN_OR_RETURN(target_key, result.projections[context_index].map_primary_rssid(raw_key));
+            }
             if (result.projections[context_index].has_divergent_occurrence_alias(raw_key)) {
                 return Status::Corruption("tablet merge recovery key has a divergent occurrence alias");
             }
@@ -1023,9 +1071,8 @@ Status materialize_planned_rowsets(const TabletMergeAllocationPlan& plan, Tablet
         const auto& projection = plan.projections[canonical.selected_context_index];
         ASSIGN_OR_RETURN(auto mapped_id, projection.map_primary_rssid(output.id()));
         output.set_id(mapped_id);
-        if (output.has_max_compact_input_rowset_id()) {
-            ASSIGN_OR_RETURN(auto mapped, projection.map_primary_rssid(output.max_compact_input_rowset_id()));
-            output.set_max_compact_input_rowset_id(mapped);
+        if (canonical.recovery_target.has_value()) {
+            output.set_max_compact_input_rowset_id(*canonical.recovery_target);
         }
         for (auto& del : *output.mutable_del_files()) {
             ASSIGN_OR_RETURN(auto mapped, projection.map_primary_rssid(del.origin_rowset_id()));
