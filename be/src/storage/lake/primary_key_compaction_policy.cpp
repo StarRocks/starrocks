@@ -88,6 +88,39 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, nullptr);
 }
 
+<<<<<<< HEAD
+=======
+// A cross-published rowset's segments are handed to every child by the split, so UNSHARE has to
+// rewrite them privately. A rowset that a partial-update rewrite already produced needs nothing:
+// SegmentRewriter's owned-only rewrites drop the rows this tablet does not own, so that output is
+// private and foreign-row-free the moment it is published. `shared` is therefore the whole signal,
+// and it terminates because the UNSHARE clears it -- unlike a rowset's range, which a tablet merge
+// stamps on every rowset it emits and nothing ever clears.
+static bool carries_shared_segment(const RowsetMetadataPB& rowset) {
+    return std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                       [](const SegmentMetadataPB& segment) { return segment.shared(); });
+}
+
+StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
+    std::vector<RowsetPtr> input_rowsets;
+    for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
+        if (carries_shared_segment(_tablet_metadata->rowsets(i))) {
+            input_rowsets.emplace_back(
+                    std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
+        }
+    }
+    return input_rowsets;
+}
+
+StatusOr<CompactionAlgorithm> UnshareCompactionPolicy::choose_compaction_algorithm(
+        const std::vector<RowsetPtr>& rowsets) {
+    if (rowsets.empty()) {
+        return CLOUD_NATIVE_INDEX_COMPACTION;
+    }
+    return CompactionPolicy::choose_compaction_algorithm(rowsets);
+}
+
+>>>>>>> 0c49f9e ([BugFix] Drop a cross-published rewrite's unowned rows instead of serving them as duplicate keys (#78237))
 // Return true if segment number meet the requirement of min input
 bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
     int64_t total_segment_cnt = 0;
@@ -293,6 +326,27 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_base_rowsets(
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+<<<<<<< HEAD
+=======
+    // Ordinary compaction cannot range-filter a separate-sort-key segment and would make sibling
+    // rows permanently private. Wait for the scheduled UNSHARE to remove them first.
+    //
+    // Wait on shared segments, never on a rowset's range: a tablet merge stamps its range onto every
+    // rowset it emits and nothing ever clears one, so waiting on that would stall this tablet's
+    // ordinary compaction for good -- ahead of the _force_base_compaction branch below, so an
+    // ALTER TABLE ... COMPACT could not break it either -- while FE schedules an UNSHARE only from a
+    // split. Nothing is left behind: a rewrite's output no longer holds foreign rows at all.
+    if (tablet_metadata->has_range() && TabletSchema::create(tablet_metadata->schema())->has_separate_sort_key()) {
+        const bool awaiting_unshare = std::any_of(tablet_metadata->rowsets().begin(), tablet_metadata->rowsets().end(),
+                                                  carries_shared_segment);
+        if (awaiting_unshare) {
+            VLOG(2) << "skip ordinary compaction while a split's shared segments await UNSHARE, tablet="
+                    << tablet_metadata->id() << " version=" << tablet_metadata->version();
+            return std::vector<RowsetPtr>{};
+        }
+    }
+
+>>>>>>> 0c49f9e ([BugFix] Drop a cross-published rewrite's unowned rows instead of serving them as duplicate keys (#78237))
     // Base compaction reclaims space from delete-bearing rowsets. Trigger it when a manual
     // ALTER TABLE ... COMPACT requested a base compaction, or when the tablet has accumulated
     // enough deletes to be worth reclaiming -- either as a fraction of its rows
