@@ -76,11 +76,14 @@ public final class LockHoldDepth {
         if (depth[0] > 0) {
             depth[0]--;
         }
+<<<<<<< HEAD
         if (depth[0] == 0) {
             // Leaving the outermost critical section: whatever external call this thread made while inside
             // it is no longer anyone's slow lock, and the thread may go back to a pool.
             BlockingCallUnderLock.clearForCurrentThread();
         }
+=======
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
     }
 
     /** Number of metadata locks held by the current thread. */
@@ -99,6 +102,9 @@ public final class LockHoldDepth {
      */
     public static void reset() {
         DEPTH.get()[0] = 0;
+<<<<<<< HEAD
         BlockingCallUnderLock.clearForCurrentThread();
+=======
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
     }
 }

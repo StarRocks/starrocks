@@ -74,6 +74,7 @@ import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
  * The set of guarded points is meant to grow; each addition shrinks the blind spot rather than
  * changing the design. Known gaps today:
  * <ul>
+<<<<<<< HEAD
  *     <li>Iceberg's write path through {@code IcebergCachingFileIO}. A door there would have to wrap
  *         the {@code OutputFile}, and iceberg picks its writer by that object's type -- so the wrapper
  *         would change how the file gets written. {@code deleteFile} is guarded; {@code create()} is
@@ -145,6 +146,18 @@ import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
  *         that only logs and carries on, as the hive drop-database and create-table cleanups do --
  *         would turn the refusal into a lie. Where that means hoisting local validation above the
  *         remote part, hoist it.</li>
+=======
+ *     <li>BRPC to the BEs outside the publish path -- vacuum, compaction, delete, tablet stats --
+ *         is awaited at a dozen scattered {@code Future.get()} sites with no shared helper.</li>
+ *     <li>ODPS holds a third-party {@code Odps} object and calls it directly; constructing it is
+ *         local, so there is no door on the way out.</li>
+ *     <li>Delta Lake goes through {@code io.delta.kernel}'s engine, which reaches storage on its
+ *         own rather than through the FE's file-system layer.</li>
+ *     <li>{@code HdfsFsManager} -- the file-system layer used by broker-less load and
+ *         {@code TableFunctionTable} -- caches an {@code HdfsFs} per identity and creates the
+ *         underlying file system inside its per-scheme helpers, so a guard has to go in each of
+ *         those rather than at {@code getFileSystem}'s entry, where it would report cache hits.</li>
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
  * </ul>
  *
  * <h3>What it deliberately does not do</h3>
@@ -156,6 +169,10 @@ import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
  * carrying the transport, the lock depth and the offending caller's stack, which turns a slow-lock
  * incident from "the metastore was flaky" into a named call site.
  *
+<<<<<<< HEAD
+=======
+ * @see LockTargetValidator the same channel, enforcing who may be locked at all
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
  */
 public class BlockingCallValidator {
     /** Grep token, the report's {@code kind=} field. See {@link LockInvariantViolations#LOG_TAG}. */
@@ -182,6 +199,7 @@ public class BlockingCallValidator {
      *                  "lock-held time grouped by transport" an aggregatable metric.
      */
     public static void validateNotUnderLock(String transport) {
+<<<<<<< HEAD
         validateNotUnderLock(transport, null);
     }
 
@@ -205,12 +223,21 @@ public class BlockingCallValidator {
 
         Mode mode = LockInvariantViolations.currentBlockingCallMode();
         if (mode == Mode.OFF) {
+=======
+        Mode mode = LockInvariantViolations.currentBlockingCallMode();
+        if (mode == Mode.OFF || !LockHoldDepth.isUnderLock()) {
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
             return;
         }
 
         String callSite = callerOfTheGuard();
+<<<<<<< HEAD
         String detail = "about to contact " + transport + (catalog == null ? "" : " (catalog " + catalog + ")")
                 + " while holding " + LockHoldDepth.current() + " FE metadata lock(s)";
+=======
+        String detail = "about to contact " + transport + " while holding " + LockHoldDepth.current()
+                + " FE metadata lock(s)";
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
         LockInvariantViolations.reportAtSite(KIND_BLOCKING_CALL_UNDER_LOCK, detail, REMEDY, mode, callSite);
     }
 

@@ -39,6 +39,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
@@ -203,6 +204,8 @@ public class EsRestClient {
      * @throws StarRocksConnectorException
      */
     public EsShardPartitions searchShards(String indexName) throws StarRocksConnectorException {
+        // Issues its own request rather than going through execute().
+        BlockingCallValidator.validateNotUnderLock("elasticsearch");
         String path = indexName + "/_search_shards";
         String searchShards = execute(path);
         if (searchShards == null) {
@@ -218,6 +221,12 @@ public class EsRestClient {
      * @return response
      */
     String execute(String path) throws StarRocksConnectorException {
+<<<<<<< HEAD
+=======
+        // The funnel for the index and mapping lookups.
+        BlockingCallValidator.validateNotUnderLock("elasticsearch");
+        int retrySize = nodes.length;
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
         StarRocksConnectorException scratchExceptionForThrow = null;
         OkHttpClient client;
         if (sslEnabled) {

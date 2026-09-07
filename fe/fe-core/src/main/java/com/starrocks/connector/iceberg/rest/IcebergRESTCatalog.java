@@ -21,7 +21,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.Version;
+=======
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -144,7 +147,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         // initialize() below performs a GET /v1/config against the REST service, and an OAuth
         // exchange when configured, so construction is itself a remote call -- reached before any
         // of the guarded catalog actions, on the first resolve of a replayed connector.
+<<<<<<< HEAD
         BlockingCallValidator.validateNotUnderLock("iceberg-rest", catalogName);
+=======
+        BlockingCallValidator.validateNotUnderLock("iceberg-rest");
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
         try {
             RESTSessionCatalog restCatalog = new RESTSessionCatalog();
             configureHadoopConf(restCatalog, conf);
@@ -513,7 +520,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private <T> T withAuthRecovery(Supplier<T> action) {
         // Wraps the REST calls; runWithAuthRecovery delegates here too. Reached only on a cache
         // miss, because CachingIcebergCatalog sits in front of this delegate.
+<<<<<<< HEAD
         BlockingCallValidator.validateNotUnderLock("iceberg-rest", catalogName);
+=======
+        BlockingCallValidator.validateNotUnderLock("iceberg-rest");
+>>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
         try {
             return action.get();
         } catch (RuntimeException e) {
