@@ -42,10 +42,12 @@ struct HashCombineTag {
 
 namespace {
 
-bool sse42_available() {
-#ifdef __SSE4_2__
+bool hardware_crc_available() {
+#if defined(__SSE4_2__)
     base::CPU cpu;
     return cpu.has_sse42();
+#elif defined(__aarch64__)
+    return true;
 #else
     return false;
 #endif
@@ -140,7 +142,7 @@ TEST(HashUtilTest, Hash32Selection) {
 
     const uint32_t hash_value = HashUtil::hash(data.data(), static_cast<int32_t>(data.size()), seed);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(hash_value, HashUtil::crc_hash(data.data(), static_cast<int32_t>(data.size()), seed));
     } else {
         EXPECT_EQ(hash_value, HashUtil::fnv_hash(data.data(), static_cast<int32_t>(data.size()), seed));
@@ -153,7 +155,7 @@ TEST(HashUtilTest, Hash64Selection) {
 
     const uint64_t hash_value = HashUtil::hash64(data.data(), static_cast<int32_t>(data.size()), seed);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(hash_value, HashUtil::crc_hash64(data.data(), static_cast<int32_t>(data.size()), seed));
     } else {
         EXPECT_EQ(hash_value, HashUtil::hash64_fallback(data.data(), static_cast<int32_t>(data.size()), seed));
@@ -168,7 +170,7 @@ TEST(HashUtilTest, CrcHashSelection) {
     const uint32_t crc32_value = HashUtil::crc_hash(data.data(), static_cast<int32_t>(data.size()), seed32);
     const uint64_t crc64_value = HashUtil::crc_hash64(data.data(), static_cast<int32_t>(data.size()), seed64);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(crc32_value, HashUtil::hash(data.data(), static_cast<int32_t>(data.size()), seed32));
         EXPECT_EQ(crc64_value, HashUtil::hash64(data.data(), static_cast<int32_t>(data.size()), seed64));
     } else {
@@ -237,6 +239,48 @@ TEST(HashUtilTest, CrcHashUnalignedInput) {
 
     EXPECT_EQ(HashUtil::crc_hash(unaligned, len, seed32), HashUtil::crc_hash(aligned.data(), len, seed32));
     EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64), HashUtil::crc_hash64(aligned.data(), len, seed64));
+}
+
+TEST(HashUtilTest, CrcHashDeterministicVectors) {
+    const std::string_view text = "StarRocks ARM64 CRC-32C Acceleration Engine.";
+    ASSERT_EQ(text.size(), 44);
+    const uint32_t seed32 = 0x811C9DC5;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+
+    // Fixed lengths verifying: 0 (empty), 1, 3, 4, 7, 8, 15, 16, 32, 44
+    const std::vector<int32_t> lengths = {0, 1, 3, 4, 7, 8, 15, 16, 32, 44};
+    for (int32_t len : lengths) {
+        const uint32_t h32 = HashUtil::crc_hash(text.data(), len, seed32);
+        const uint64_t h64 = HashUtil::crc_hash64(text.data(), len, seed64);
+        EXPECT_NE(h32, 0u);
+        EXPECT_NE(h64, 0u);
+        EXPECT_EQ(h32, HashUtil::crc_hash(text.data(), len, seed32));
+        EXPECT_EQ(h64, HashUtil::crc_hash64(text.data(), len, seed64));
+    }
+}
+
+TEST(HashUtilTest, CrcHashUnalignedAllSizes) {
+    alignas(16) std::array<uint8_t, 64> raw_buf{};
+    for (size_t i = 0; i < raw_buf.size(); ++i) {
+        raw_buf[i] = static_cast<uint8_t>((i * 31 + 17) & 0xff);
+    }
+
+    const uint32_t seed32 = 0x811C9DC5;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+
+    for (int32_t len = 1; len <= 32; ++len) {
+        for (int32_t offset = 1; offset <= 7; ++offset) {
+            const uint8_t* unaligned = raw_buf.data() + offset;
+            std::vector<uint8_t> aligned(unaligned, unaligned + len);
+
+            EXPECT_EQ(HashUtil::crc_hash(unaligned, len, seed32),
+                      HashUtil::crc_hash(aligned.data(), len, seed32))
+                    << "Failed crc_hash for len=" << len << ", offset=" << offset;
+            EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64),
+                      HashUtil::crc_hash64(aligned.data(), len, seed64))
+                    << "Failed crc_hash64 for len=" << len << ", offset=" << offset;
+        }
+    }
 }
 
 #if (defined(__x86_64__) && defined(__SSE4_2__)) || defined(__aarch64__)
