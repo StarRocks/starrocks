@@ -312,6 +312,7 @@ DEFINE_FAIL_POINT(tablet_merge_before_delete_predicate_range);
 
 Status reconcile_segments(RowsetMetadataPB* canonical, const RowsetMetadataPB* occurrence);
 Status reconcile_duplicate_dels(CanonicalAllocationPlan* canonical, const RowsetMetadataPB& occurrence);
+bool same_range(const TabletRange& a, const TabletRange& b);
 
 std::optional<int64_t> rowset_schema_id(const TabletMergeContext& context, uint32_t rowset_id) {
     const auto& mapping = context.metadata()->rowset_to_schema();
@@ -433,15 +434,7 @@ StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<Tablet
                     TabletRange earlier_range;
                     RETURN_IF_ERROR(incoming_range.from_proto(incoming.effective_range));
                     RETURN_IF_ERROR(earlier_range.from_proto(earlier.effective_range));
-                    // Encoding differences do not change ownership. Inclusion
-                    // flags on an unbounded endpoint have no semantic effect.
-                    const bool equal = incoming_range.lower_bound() == earlier_range.lower_bound() &&
-                                       incoming_range.upper_bound() == earlier_range.upper_bound() &&
-                                       (incoming_range.is_minimum() || incoming_range.lower_bound_included() ==
-                                                                               earlier_range.lower_bound_included()) &&
-                                       (incoming_range.is_maximum() ||
-                                        incoming_range.upper_bound_included() == earlier_range.upper_bound_included());
-                    if (equal) {
+                    if (same_range(incoming_range, earlier_range)) {
                         RETURN_IF_ERROR(validate_exact_duplicate(*earlier.rowset, *incoming.rowset));
                         plan[incoming.context_index][incoming.rowset_index].role =
                                 RowsetOccurrenceRole::EXACT_DUPLICATE;
