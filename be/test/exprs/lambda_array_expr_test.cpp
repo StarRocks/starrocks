@@ -667,8 +667,8 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     const SlotId kOuterArg = 100000; // a : array<int>
     const SlotId kInnerArg = 100001; // b : int
 
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);            // array<int>
-    TypeDescriptor type_arr_arr_int = array_type(type_arr_int);    // array<array<int>>
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);         // array<int>
+    TypeDescriptor type_arr_arr_int = array_type(type_arr_int); // array<array<int>>
 
     // Outer input: const ARRAY<ARRAY<INT>>[[1, 2]] (one row).
     auto arr2 = ColumnHelper::create_column(type_arr_arr_int, true);

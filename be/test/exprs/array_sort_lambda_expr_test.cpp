@@ -224,9 +224,9 @@ TEST_F(ArraySortLambdaExprTest, invalid_comparator_error_is_not_cached) {
 //   array_sort(arr_of_arrays, (x, y) -> array_length(array_map(z -> array_length(x) + z, x)) < array_length(y))
 // Must not crash.
 TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
-    const SlotId kZ = 100002; // inner array_map argument
-    TypeDescriptor int_arr = array_type(TYPE_INT);         // array<int>  (comparator element type: x, y)
-    TypeDescriptor int_arr_arr = array_type(int_arr);      // array<array<int>> (sorted array)
+    const SlotId kZ = 100002;                         // inner array_map argument
+    TypeDescriptor int_arr = array_type(TYPE_INT);    // array<int>  (comparator element type: x, y)
+    TypeDescriptor int_arr_arr = array_type(int_arr); // array<array<int>> (sorted array)
 
     // Sorted array column: 2 rows, each an array<array<int>> = [[4,4],[1],[3,3,3]].
     auto array = ColumnHelper::create_column(int_arr_arr, false);
