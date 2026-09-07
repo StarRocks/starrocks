@@ -54,6 +54,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
@@ -1440,5 +1441,67 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "jobProperties", jobProperties);
 
         Assertions.assertEquals(CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM, routineLoadJob.getEnvelope());
+    }
+
+    @Test
+    public void testAnnotateMemLimitExceededLeavesOtherReasonsAlone() {
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+
+        Assertions.assertNull(routineLoadJob.annotateMemLimitExceeded(null));
+        Assertions.assertEquals("too many filtered rows",
+                routineLoadJob.annotateMemLimitExceeded("too many filtered rows"));
+        // exec_mem_limit does not raise a BE-wide or a query pool limit.
+        Assertions.assertEquals("Mem usage has exceed the limit of BE",
+                routineLoadJob.annotateMemLimitExceeded("Mem usage has exceed the limit of BE"));
+        Assertions.assertEquals("Mem usage has exceed the limit of query pool",
+                routineLoadJob.annotateMemLimitExceeded("Mem usage has exceed the limit of query pool"));
+        // The big query limit of a resource group is not raised by exec_mem_limit either, and it is
+        // the one other variant that mentions a query.
+        String bigQuery = "Mem usage has exceed the big query limit of the resource group [rg1]. "
+                + "You can change the limit by modifying [big_query_mem_limit] of this group";
+        Assertions.assertEquals(bigQuery, routineLoadJob.annotateMemLimitExceeded(bigQuery));
+        // A BE that no longer names query_mem_limit is passed through rather than half rewritten.
+        String drifted = "Mem usage has exceed the limit of single query, raise something else.";
+        Assertions.assertEquals(drifted, routineLoadJob.annotateMemLimitExceeded(drifted));
+    }
+
+    @Test
+    public void testAnnotateMemLimitExceededToleratesAdviceWordingDrift() {
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+
+        // Only the tracker phrase and the variable it names are anchored, so the wording between
+        // them may move without leaving half of the old sentence behind.
+        String reworded = "Used: 3, Limit: 2. Mem usage has exceed the limit of single query, "
+                + "please raise the session variable query_mem_limit. Backend: 127.0.0.1";
+
+        String annotated = routineLoadJob.annotateMemLimitExceeded(reworded);
+        Assertions.assertFalse(annotated.contains("query_mem_limit"), annotated);
+        Assertions.assertTrue(annotated.startsWith("Used: 3, Limit: 2. "), annotated);
+        Assertions.assertTrue(annotated.endsWith(" Backend: 127.0.0.1"), annotated);
+        Assertions.assertTrue(annotated.contains("re-create the job."), annotated);
+    }
+
+    @Test
+    public void testAnnotateMemLimitExceededReplacesTheQueryMemLimitAdvice() {
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+
+        String head = "Memory of Fragment abc exceed limit. QUERY Backend: 127.0.0.1, Used: 2160761544, "
+                + "Limit: 2147483648. ";
+        String beMsg = head + "Mem usage has exceed the limit of single query, You can change the limit by "
+                + "set session variable query_mem_limit.";
+
+        String annotated = routineLoadJob.annotateMemLimitExceeded(beMsg);
+        Assertions.assertTrue(annotated.startsWith(head), annotated);
+        Assertions.assertFalse(annotated.contains("query_mem_limit"), annotated);
+        Assertions.assertTrue(
+                annotated.contains(SessionVariable.EXEC_MEM_LIMIT + "=" + SessionVariable.DEFAULT_EXEC_MEM_LIMIT),
+                annotated);
+        Assertions.assertTrue(annotated.endsWith("and re-create the job."), annotated);
+
+        routineLoadJob.getSessionVariables().put(SessionVariable.EXEC_MEM_LIMIT, "4294967296");
+        Assertions.assertTrue(
+                routineLoadJob.annotateMemLimitExceeded(beMsg)
+                        .contains(SessionVariable.EXEC_MEM_LIMIT + "=4294967296"),
+                annotated);
     }
 }

@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -128,6 +129,8 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_LOAD_DATA_PARSE_ERROR;
@@ -152,6 +155,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public static final boolean DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR = false;
 
     protected static final String STAR_STRING = "*";
+
+    // The BE sentence for a fragment memory limit, anchored on the tracker phrase and on the variable
+    // it names so the span to replace stays pinned while the wording between them may move.
+    private static final Pattern BE_SINGLE_QUERY_MEM_LIMIT_ADVICE =
+            Pattern.compile("Mem usage has exceed the limit of single query.*?query_mem_limit\\.");
 
     /*
                      +-----------------+
@@ -1409,6 +1417,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
+    /**
+     * A routine load task is capped by this job's exec_mem_limit, which the job captured from the
+     * session that created it and which ALTER ROUTINE LOAD cannot change. The BE knows only the byte
+     * value, so the advice is composed here, where the job is at hand. A reason that does not match
+     * BE_SINGLE_QUERY_MEM_LIMIT_ADVICE is left untouched.
+     */
+    @VisibleForTesting
+    String annotateMemLimitExceeded(String txnStatusChangeReasonStr) {
+        if (txnStatusChangeReasonStr == null) {
+            return null;
+        }
+        Matcher matcher = BE_SINGLE_QUERY_MEM_LIMIT_ADVICE.matcher(txnStatusChangeReasonStr);
+        if (!matcher.find()) {
+            return txnStatusChangeReasonStr;
+        }
+        return matcher.replaceFirst(Matcher.quoteReplacement(
+                "This task is capped by this job's " + SessionVariable.EXEC_MEM_LIMIT + "=" + getExecMemLimit()
+                        + ", captured when the job was created. Raise it with SET "
+                        + SessionVariable.EXEC_MEM_LIMIT + " and re-create the job."));
+    }
+
     // check task exists or not before call method
     private void executeTaskOnTxnStatusChanged(RoutineLoadTaskInfo routineLoadTaskInfo, TransactionState txnState,
                                                TransactionStatus txnStatus, String txnStatusChangeReasonStr)
@@ -1450,7 +1479,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             if (txnStatus == TransactionStatus.ABORTED) {
                 RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
-                newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr, true);
+                newRoutineLoadTaskInfo.setMsg(
+                        "previous task aborted because of " + annotateMemLimitExceeded(txnStatusChangeReasonStr),
+                        true);
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
                         .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
                                 routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
@@ -1870,6 +1901,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public Map<String, String> getSessionVariables() {
         return sessionVariables;
+    }
+
+    // The per-task memory limit this job hands the BE as TQueryOptions.mem_limit.
+    public long getExecMemLimit() {
+        String execMemLimit = sessionVariables.get(SessionVariable.EXEC_MEM_LIMIT);
+        return execMemLimit == null ? SessionVariable.DEFAULT_EXEC_MEM_LIMIT : Long.parseLong(execMemLimit);
     }
 
     private String jobPropertiesToJsonString() {

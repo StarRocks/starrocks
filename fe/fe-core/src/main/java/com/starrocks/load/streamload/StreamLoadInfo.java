@@ -477,11 +477,7 @@ public class StreamLoadInfo {
         }
         partialUpdate = routineLoadJob.isPartialUpdate();
         partialUpdateMode = TPartialUpdateMode.ROW_MODE;
-        if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.EXEC_MEM_LIMIT)) {
-            execMemLimit = Long.parseLong(routineLoadJob.getSessionVariables().get(SessionVariable.EXEC_MEM_LIMIT));
-        } else {
-            execMemLimit = SessionVariable.DEFAULT_EXEC_MEM_LIMIT;
-        }
+        execMemLimit = routineLoadJob.getExecMemLimit();
         if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
             compressionType = CompressionUtils.findTCompressionByName(
                     routineLoadJob.getSessionVariables().get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
