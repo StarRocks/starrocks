@@ -53,6 +53,14 @@
 #include "types/date_value.h"
 #include "types/logical_type_infra.h"
 
+#if defined(__x86_64__)
+#include <emmintrin.h>
+#include <immintrin.h>
+#include <nmmintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 namespace starrocks {
 
 constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
@@ -61,15 +69,41 @@ constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
 using namespace encoding_utils;
 
 template <int LEN>
-static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
-#if defined(__aarch64__) || !defined(__SSE4_2__)
+static inline bool simd_encode_chunk(const uint8_t** srcp, uint8_t** dstp) {
+#if defined(__ARM_NEON) && defined(__aarch64__)
+    if constexpr (LEN == 16) {
+        // Load 16 bytes (unaligned) into NEON vector register.
+        uint8x16_t data = vld1q_u8(*srcp);
+        // Compare each byte with 0x00. Returns 0xFF where byte == 0, else 0x00.
+        uint8x16_t zero_bytes = vceqq_u8(data, vdupq_n_u8(0));
+        // AArch64 single-instruction horizontal maximum reduction:
+        // If any byte was '\0', zero_bytes has 0xFF; vmaxvq_u8 returns 0xFF != 0.
+        if (PREDICT_FALSE(vmaxvq_u8(zero_bytes) != 0)) {
+            return false;
+        }
+        vst1q_u8(*dstp, data);
+        *dstp += 16;
+        *srcp += 16;
+        return true;
+    } else if constexpr (LEN == 8) {
+        // Load 8 bytes (unaligned) into NEON vector register.
+        uint8x8_t data = vld1_u8(*srcp);
+        uint8x8_t zero_bytes = vceq_u8(data, vdup_n_u8(0));
+        if (PREDICT_FALSE(vmaxv_u8(zero_bytes) != 0)) {
+            return false;
+        }
+        vst1_u8(*dstp, data);
+        *dstp += 8;
+        *srcp += 8;
+        return true;
+    }
     return false;
-#else
+#elif defined(__x86_64__) && defined(__SSE4_2__)
     __m128i data;
-    if (LEN == 16) {
+    if constexpr (LEN == 16) {
         // Load 16 bytes (unaligned) into the XMM register.
         data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(*srcp));
-    } else if (LEN == 8) {
+    } else if constexpr (LEN == 8) {
         // Load 8 bytes (unaligned) into the XMM register
         data = reinterpret_cast<__m128i>(_mm_load_sd(reinterpret_cast<const double*>(*srcp)));
     }
@@ -81,7 +115,7 @@ static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
 
     // Check whether the resulting vector is all-zero.
     bool all_zeros;
-    if (LEN == 16) {
+    if constexpr (LEN == 16) {
         all_zeros = _mm_testz_si128(zero_bytes, zero_bytes);
     } else { // LEN == 8
         all_zeros = _mm_cvtsi128_si64(zero_bytes) == 0;
@@ -92,7 +126,7 @@ static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
         return false;
     }
 
-    if (LEN == 16) {
+    if constexpr (LEN == 16) {
         _mm_storeu_si128(reinterpret_cast<__m128i*>(*dstp), data);
     } else {
         _mm_storel_epi64(reinterpret_cast<__m128i*>(*dstp), data); // movq m64, xmm
@@ -100,7 +134,9 @@ static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
     *dstp += LEN;
     *srcp += LEN;
     return true;
-#endif //__aarch64__
+#else
+    return false;
+#endif
 }
 
 // Non-SSE loop which encodes 'len' bytes from 'srcp' into 'dst'.
@@ -135,13 +171,13 @@ void encoding_utils::encode_slice(const Slice& s, std::string* dst, bool is_last
         size_t rem = len;
 
         while (rem >= 16) {
-            if (!SSEEncodeChunk<16>(&srcp, &dstp)) {
+            if (!simd_encode_chunk<16>(&srcp, &dstp)) {
                 goto slow_path;
             }
             rem -= 16;
         }
         while (rem >= 8) {
-            if (!SSEEncodeChunk<8>(&srcp, &dstp)) {
+            if (!simd_encode_chunk<8>(&srcp, &dstp)) {
                 goto slow_path;
             }
             rem -= 8;
@@ -150,7 +186,7 @@ void encoding_utils::encode_slice(const Slice& s, std::string* dst, bool is_last
         if (len > 8 && rem > 0) {
             dstp -= 8 - rem;
             srcp -= 8 - rem;
-            if (!SSEEncodeChunk<8>(&srcp, &dstp)) {
+            if (!simd_encode_chunk<8>(&srcp, &dstp)) {
                 // TODO: optimize for the case where the input slice has '\0'
                 // bytes. (e.g. move the pointer to the first zero byte.)
                 dstp += 8 - rem;
@@ -171,7 +207,7 @@ void encoding_utils::encode_slice(const Slice& s, std::string* dst, bool is_last
     }
 }
 
-inline Status decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool is_last, bool fast_decode) {
+Status encoding_utils::decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool is_last, bool fast_decode) {
     if (is_last) {
         if (!fast_decode) {
             dest->append(src->data, src->size);
@@ -179,6 +215,8 @@ inline Status decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool
             dest_fast->data = src->data;
             dest_fast->size = src->size;
         }
+        // Fully consume the terminal slice to maintain a consistent caller contract
+        src->remove_prefix(src->size);
     } else {
         if (!fast_decode) {
             auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
@@ -189,11 +227,25 @@ inline Status decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool
             }
             auto* data = (uint8_t*)src->data;
             int len = separator - data;
-            for (int i = 0; i < len; i++) {
-                if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
-                    continue;
+            // Fast path for clean slices (no embedded nulls):
+            // memmem() above already scanned for "\0\0" to locate the column boundary.
+            // std::memchr() now scans the payload-only region to check for null-escaped
+            // bytes ('\0\1'). Both memmem() and memchr() in glibc and musl are backed by
+            // vectorised SIMD routines (__memchr_avx2 on x86, __memchr_aarch64 on ARM)
+            // that process 16–32 bytes per cycle using hardware SIMD.
+            // A hand-rolled scalar loop fusing both passes would be substantially slower
+            // due to per-byte branch mispredictions and loss of SIMD throughput.
+            // For the common case of clean strings (> 99% of real-world PK values),
+            // memchr returns nullptr in a few cycles, enabling an O(n) bulk append.
+            if (std::memchr(data, '\0', len) == nullptr) {
+                dest->append(reinterpret_cast<const char*>(data), len);
+            } else {
+                for (int i = 0; i < len; i++) {
+                    if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
+                        continue;
+                    }
+                    dest->push_back((char)data[i]);
                 }
-                dest->push_back((char)data[i]);
             }
             src->remove_prefix(len + 2);
         } else {

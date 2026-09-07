@@ -718,4 +718,197 @@ TEST(PrimaryKeyEncoderTest, testV2EncodeExceedLimitForComposite) {
                                                        PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
 }
 
+TEST(PrimaryKeyEncoderTest, testSimdSliceEncodingBoundaries) {
+    const std::vector<size_t> test_lengths = {0,  1,  2,  7,  8,  9,  15,  16,  17,  23,  24,  31, 32,
+                                              33, 47, 48, 63, 64, 65, 127, 128, 129, 255, 256, 512};
+    for (size_t len : test_lengths) {
+        std::string original(len, 'a');
+        for (size_t i = 0; i < len; ++i) {
+            original[i] = static_cast<char>('a' + (i % 26));
+        }
+        Slice src(original);
+
+        // Test is_last = false (exercises SIMD 16-byte and 8-byte chunk loop + rollback + terminator)
+        std::string encoded;
+        encoding_utils::encode_slice(src, &encoded, false);
+        EXPECT_GE(encoded.size(), len + 2);
+        EXPECT_EQ(encoded[encoded.size() - 2], '\0');
+        EXPECT_EQ(encoded[encoded.size() - 1], '\0');
+
+        // Test normal decode (exercises memchr fast path)
+        Slice enc_slice(encoded);
+        std::string decoded;
+        Status st = encoding_utils::decode_slice(&enc_slice, &decoded, nullptr, false, false);
+        ASSERT_TRUE(st.ok()) << "Failed for length " << len;
+        EXPECT_EQ(decoded, original) << "Mismatch for length " << len;
+        EXPECT_EQ(enc_slice.size, 0);
+
+        // Test fast decode
+        Slice enc_slice_fast(encoded);
+        Slice decoded_fast;
+        st = encoding_utils::decode_slice(&enc_slice_fast, nullptr, &decoded_fast, false, true);
+        ASSERT_TRUE(st.ok()) << "Fast decode failed for length " << len;
+        EXPECT_EQ(decoded_fast.to_string(), original) << "Fast decode mismatch for length " << len;
+        EXPECT_EQ(enc_slice_fast.size, 0);
+
+        // Test is_last = true (terminal column: no escaping, no delimiter appended)
+        // Encoding is a plain byte copy; decoding consumes all of src.
+        std::string encoded_last;
+        encoding_utils::encode_slice(src, &encoded_last, true);
+        EXPECT_EQ(encoded_last.size(), len) << "is_last=true encode size mismatch at len=" << len;
+        EXPECT_EQ(encoded_last, original) << "is_last=true encode content mismatch at len=" << len;
+
+        // Normal decode for is_last = true
+        Slice enc_last_slice(encoded_last);
+        std::string decoded_last;
+        Status st_last = encoding_utils::decode_slice(&enc_last_slice, &decoded_last, nullptr, true, false);
+        ASSERT_TRUE(st_last.ok()) << "is_last=true decode failed at len=" << len;
+        EXPECT_EQ(decoded_last, original) << "is_last=true decode mismatch at len=" << len;
+        EXPECT_EQ(enc_last_slice.size, 0) << "is_last=true: src not fully consumed at len=" << len;
+
+        // Fast decode for is_last = true
+        Slice enc_last_fast(encoded_last);
+        Slice decoded_last_fast;
+        Status st_last_fast = encoding_utils::decode_slice(&enc_last_fast, nullptr, &decoded_last_fast, true, true);
+        ASSERT_TRUE(st_last_fast.ok()) << "is_last=true fast decode failed at len=" << len;
+        EXPECT_EQ(decoded_last_fast.to_string(), original) << "is_last=true fast decode mismatch at len=" << len;
+        EXPECT_EQ(enc_last_fast.size, 0) << "is_last=true fast: src not fully consumed at len=" << len;
+    }
+}
+
+TEST(PrimaryKeyEncoderTest, testSimdSliceEncodingNullEscapes) {
+    // Test various positions of '\0' across SIMD 8-byte and 16-byte chunk boundaries
+    const size_t base_len = 64;
+    const std::vector<std::vector<size_t>> null_positions_list = {
+            {0},                       // at first byte
+            {3},                       // middle of first 8 bytes
+            {7},                       // 8-byte boundary
+            {8},                       // start of second 8 bytes
+            {15},                      // 16-byte boundary
+            {16},                      // start of second 16-byte chunk
+            {31},                      // 32-byte boundary
+            {63},                      // last byte
+            {0, 7, 8, 15, 16, 31, 63}, // multiple boundaries
+            {10, 11, 12},              // consecutive nulls
+    };
+
+    for (const auto& null_positions : null_positions_list) {
+        std::string original(base_len, 'x');
+        for (size_t pos : null_positions) {
+            original[pos] = '\0';
+        }
+        Slice src(original);
+
+        std::string encoded;
+        encoding_utils::encode_slice(src, &encoded, false);
+
+        // Decoding with nulls exercises the escaped scalar fallback in decode_slice
+        Slice enc_slice(encoded);
+        std::string decoded;
+        Status st = encoding_utils::decode_slice(&enc_slice, &decoded, nullptr, false, false);
+        ASSERT_TRUE(st.ok());
+        EXPECT_EQ(decoded, original);
+        EXPECT_EQ(enc_slice.size, 0);
+    }
+
+    // Fundamental Invariant: the encoding MUST preserve lexicographical sort order.
+    // For any pair of raw strings key_a < key_b, their encoded forms must satisfy
+    // encoded(key_a) < encoded(key_b) — otherwise the primary-key index returns
+    // wrong results for range scans.
+
+    // Case 1: embedded null < next byte value.
+    // Raw: "abc\0def" < "abc\1def"  =>  encoded forms must preserve this order.
+    {
+        const std::string key_a = {'a', 'b', 'c', '\0', 'd', 'e', 'f'};
+        const std::string key_b = {'a', 'b', 'c', '\1', 'd', 'e', 'f'};
+        ASSERT_LT(key_a, key_b) << "precondition: raw ordering";
+        std::string enc_a, enc_b;
+        encoding_utils::encode_slice(Slice(key_a), &enc_a, false);
+        encoding_utils::encode_slice(Slice(key_b), &enc_b, false);
+        EXPECT_LT(enc_a, enc_b) << "sort order violated: null vs \\x01";
+    }
+
+    // Case 2: null-escaped key < higher ASCII value.
+    {
+        const std::string key_a = {'a', 'b', 'c', '\0', 'd', 'e', 'f'};
+        const std::string key_c = {'a', 'b', 'c', '\x02', 'd', 'e', 'f'};
+        ASSERT_LT(key_a, key_c) << "precondition: raw ordering";
+        std::string enc_a, enc_c;
+        encoding_utils::encode_slice(Slice(key_a), &enc_a, false);
+        encoding_utils::encode_slice(Slice(key_c), &enc_c, false);
+        EXPECT_LT(enc_a, enc_c) << "sort order violated: null vs \\x02";
+    }
+
+    // Case 3: shared prefix, shorter < longer.
+    {
+        const std::string key_a = "abcdef";
+        const std::string key_b = "abcdefg";
+        ASSERT_LT(key_a, key_b) << "precondition: raw ordering";
+        std::string enc_a, enc_b;
+        encoding_utils::encode_slice(Slice(key_a), &enc_a, false);
+        encoding_utils::encode_slice(Slice(key_b), &enc_b, false);
+        EXPECT_LT(enc_a, enc_b) << "sort order violated: prefix ordering";
+    }
+}
+
+TEST(PrimaryKeyEncoderTest, testCompositeWithMiddleVarcharBatch) {
+    auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_BIGINT});
+    MutableColumnPtr dest_v1;
+    MutableColumnPtr dest_v2;
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest_v1, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest_v2, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2).ok());
+
+    const int num_rows = 128;
+    auto pchunk = ChunkFactory::new_chunk(*sc, num_rows);
+
+    for (int i = 0; i < num_rows; ++i) {
+        Datum d0;
+        d0.set_int32(i * 100);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d0);
+
+        // Generate strings of varying lengths spanning 0 to 64 bytes
+        std::string str(i % 65, 'A' + (i % 26));
+        if (i % 7 == 0 && !str.empty()) {
+            str[str.size() / 2] = '\0'; // insert null byte
+        }
+        Datum d1;
+        d1.set_slice(Slice(str));
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(d1);
+
+        Datum d2;
+        d2.set_int64(i * 1000000LL);
+        pchunk->columns()[2]->as_mutable_ptr()->append_datum(d2);
+    }
+
+    // Test V1 composite encoding
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, num_rows, dest_v1.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+    auto decoded_v1 = pchunk->clone_empty_with_schema();
+    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest_v1, 0, num_rows, decoded_v1.get(),
+                                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                        .ok());
+    for (int i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
+                  decoded_v1->get_column_by_index(0)->get(i).get_int32());
+        EXPECT_EQ(pchunk->get_column_by_index(1)->get(i).get_slice(),
+                  decoded_v1->get_column_by_index(1)->get(i).get_slice());
+        EXPECT_EQ(pchunk->get_column_by_index(2)->get(i).get_int64(),
+                  decoded_v1->get_column_by_index(2)->get(i).get_int64());
+    }
+
+    // Test V2 composite encoding
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, num_rows, dest_v2.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+    auto decoded_v2 = pchunk->clone_empty_with_schema();
+    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest_v2, 0, num_rows, decoded_v2.get(),
+                                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2)
+                        .ok());
+    for (int i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
+                  decoded_v2->get_column_by_index(0)->get(i).get_int32());
+        EXPECT_EQ(pchunk->get_column_by_index(1)->get(i).get_slice(),
+                  decoded_v2->get_column_by_index(1)->get(i).get_slice());
+        EXPECT_EQ(pchunk->get_column_by_index(2)->get(i).get_int64(),
+                  decoded_v2->get_column_by_index(2)->get(i).get_int64());
+    }
+}
+
 } // namespace starrocks
