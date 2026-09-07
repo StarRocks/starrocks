@@ -24,6 +24,7 @@
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -356,7 +357,7 @@ TEST_F(ADBCConnectorTest, ScannerPreservesRowsAndNulls) {
     auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::int32())}), 2, {array});
     ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
     ChunkPtr chunk;
-    ASSERT_TRUE(scanner._convert_batch_to_chunk(batch, &chunk).ok());
+    ASSERT_TRUE(scanner._convert_batch_to_chunk(nullptr, batch, &chunk).ok());
     ASSERT_EQ(2, chunk->num_rows());
     EXPECT_EQ(7, chunk->get_column_by_slot_id(0)->get(0).get_int32());
     EXPECT_TRUE(chunk->get_column_by_slot_id(0)->is_null(1));
@@ -394,13 +395,111 @@ TEST_F(ADBCConnectorTest, ScannerDecodesDictionaryColumns) {
             {numbers, strings});
     ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
     ChunkPtr chunk;
-    ASSERT_TRUE(scanner._convert_batch_to_chunk(batch, &chunk).ok());
+    ASSERT_TRUE(scanner._convert_batch_to_chunk(nullptr, batch, &chunk).ok());
     EXPECT_EQ(8, chunk->get_column_by_slot_id(0)->get(0).get_int32());
     EXPECT_EQ("second", chunk->get_column_by_slot_id(1)->get(0).get_slice().to_string());
     EXPECT_TRUE(chunk->get_column_by_slot_id(0)->is_null(1));
     EXPECT_TRUE(chunk->get_column_by_slot_id(1)->is_null(1));
     EXPECT_EQ(7, chunk->get_column_by_slot_id(0)->get(2).get_int32());
     EXPECT_EQ("first", chunk->get_column_by_slot_id(1)->get(2).get_slice().to_string());
+}
+
+TEST_F(ADBCConnectorTest, ScannerPreservesUnsignedIntegerRanges) {
+    for (bool nullable : {false, true}) {
+        SCOPED_TRACE(nullable);
+        TTupleDescriptor thrift_tuple;
+        thrift_tuple.id = 0;
+        TupleDescriptor tuple(thrift_tuple);
+        auto typed_slot = [nullable](int id, LogicalType type) {
+            auto thrift = int_slot(id, "u" + std::to_string(id), nullable);
+            thrift.slotType.types.clear();
+            TypeDescriptor(type).to_thrift(&thrift.slotType);
+            return thrift;
+        };
+        SlotDescriptor u8(typed_slot(0, TYPE_SMALLINT));
+        SlotDescriptor u16(typed_slot(1, TYPE_INT));
+        SlotDescriptor u32(typed_slot(2, TYPE_BIGINT));
+        SlotDescriptor u64(typed_slot(3, TYPE_LARGEINT));
+        for (auto* slot : {&u8, &u16, &u32, &u64}) {
+            tuple.add_slot(slot);
+        }
+        auto values = [nullable](auto* builder, auto maximum) {
+            EXPECT_TRUE(builder->Append(0).ok());
+            EXPECT_TRUE(builder->Append(maximum).ok());
+            if (nullable) {
+                EXPECT_TRUE(builder->AppendNull().ok());
+            }
+            return builder->Finish().ValueOrDie();
+        };
+        arrow::UInt8Builder u8_builder;
+        arrow::UInt16Builder u16_builder;
+        arrow::UInt32Builder u32_builder;
+        arrow::UInt64Builder u64_builder;
+        auto schema = arrow::schema({arrow::field("u0", arrow::uint8()), arrow::field("u1", arrow::uint16()),
+                                     arrow::field("u2", arrow::uint32()), arrow::field("u3", arrow::uint64())});
+        auto batch = arrow::RecordBatch::Make(schema, nullable ? 3 : 2,
+                                              {values(&u8_builder, std::numeric_limits<uint8_t>::max()),
+                                               values(&u16_builder, std::numeric_limits<uint16_t>::max()),
+                                               values(&u32_builder, std::numeric_limits<uint32_t>::max()),
+                                               values(&u64_builder, std::numeric_limits<uint64_t>::max())});
+        ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
+        ChunkPtr chunk;
+        ASSERT_TRUE(scanner._convert_batch_to_chunk(nullptr, batch, &chunk).ok());
+        EXPECT_EQ(0, chunk->get_column_by_slot_id(0)->get(0).get_int16());
+        EXPECT_EQ(0, chunk->get_column_by_slot_id(1)->get(0).get_int32());
+        EXPECT_EQ(0, chunk->get_column_by_slot_id(2)->get(0).get_int64());
+        EXPECT_EQ(0, chunk->get_column_by_slot_id(3)->get(0).get_int128());
+        EXPECT_EQ(255, chunk->get_column_by_slot_id(0)->get(1).get_int16());
+        EXPECT_EQ(65535, chunk->get_column_by_slot_id(1)->get(1).get_int32());
+        EXPECT_EQ(4294967295LL, chunk->get_column_by_slot_id(2)->get(1).get_int64());
+        EXPECT_EQ(static_cast<int128_t>(std::numeric_limits<uint64_t>::max()),
+                  chunk->get_column_by_slot_id(3)->get(1).get_int128());
+        if (nullable) {
+            for (int id = 0; id < 4; ++id) {
+                EXPECT_TRUE(chunk->get_column_by_slot_id(id)->is_null(2));
+            }
+        }
+    }
+}
+
+TEST_F(ADBCConnectorTest, ScannerUsesSessionTimezoneForAwareTimestamps) {
+    date::init_date_cache();
+    for (bool aware : {false, true}) {
+        SCOPED_TRACE(aware);
+        TestADBCDriver driver;
+        auto type = arrow::timestamp(arrow::TimeUnit::MICRO, aware ? "UTC" : "");
+        arrow::TimestampBuilder builder(type, arrow::default_memory_pool());
+        ASSERT_TRUE(builder.Append(1704067200123456LL).ok());
+        ASSERT_TRUE(builder.AppendNull().ok());
+        driver.schema = arrow::schema({arrow::field("value", type)});
+        driver.batches = {arrow::RecordBatch::Make(driver.schema, 2, {builder.Finish().ValueOrDie()})};
+        TTupleDescriptor thrift_tuple;
+        thrift_tuple.id = 0;
+        TupleDescriptor tuple(thrift_tuple);
+        auto thrift_slot = int_slot(0, "value", true);
+        thrift_slot.slotType.types.clear();
+        TypeDescriptor(TYPE_DATETIME).to_thrift(&thrift_slot.slotType);
+        SlotDescriptor slot(thrift_slot);
+        tuple.add_slot(&slot);
+        RuntimeState state;
+        ASSERT_TRUE(state.set_timezone("Asia/Shanghai"));
+        state.set_chunk_size(1);
+        RuntimeProfile profile("ADBC timestamp");
+        ADBCScanner scanner(ADBCScanContext{}, &tuple, &profile);
+        ASSERT_TRUE(scanner.open(&state).ok());
+        ChunkPtr chunk;
+        bool eos = false;
+        ASSERT_TRUE(scanner.get_next(&state, &chunk, &eos).ok());
+        ASSERT_FALSE(eos);
+        ASSERT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(aware ? "2024-01-01 08:00:00.123456" : "2024-01-01 00:00:00.123456",
+                  chunk->get_column_by_slot_id(0)->get(0).get_timestamp().to_string());
+        ASSERT_TRUE(scanner.get_next(&state, &chunk, &eos).ok());
+        EXPECT_FALSE(eos);
+        EXPECT_TRUE(chunk->get_column_by_slot_id(0)->is_null(0));
+        ASSERT_TRUE(scanner.get_next(&state, &chunk, &eos).ok());
+        EXPECT_TRUE(eos);
+    }
 }
 
 TEST_F(ADBCConnectorTest, ScannerRejectsNullInRequiredColumn) {
@@ -422,7 +521,7 @@ TEST_F(ADBCConnectorTest, ScannerRejectsNullInRequiredColumn) {
                                           1, {null_array, value_array});
     ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
     ChunkPtr chunk;
-    auto status = scanner._convert_batch_to_chunk(batch, &chunk);
+    auto status = scanner._convert_batch_to_chunk(nullptr, batch, &chunk);
     EXPECT_FALSE(status.ok());
     EXPECT_NE(std::string::npos, status.to_string().find("required_value"));
 }
@@ -446,7 +545,7 @@ TEST_F(ADBCConnectorTest, ScannerConvertsDate64ToDatetime) {
                                           {builder.Finish().ValueOrDie()});
     ADBCScanner scanner(ADBCScanContext{}, &tuple, nullptr);
     ChunkPtr chunk;
-    ASSERT_TRUE(scanner._convert_batch_to_chunk(batch, &chunk).ok());
+    ASSERT_TRUE(scanner._convert_batch_to_chunk(nullptr, batch, &chunk).ok());
     ASSERT_EQ(4, chunk->num_rows());
     const auto& column = chunk->get_column_by_slot_id(0);
     EXPECT_EQ("1969-12-31 00:00:00", column->get(0).get_timestamp().to_string());

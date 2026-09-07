@@ -59,7 +59,8 @@ private:
     Status _init_adbc();
     Status _get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status _execute_query();
-    Status _convert_batch_to_chunk(const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk);
+    Status _convert_batch_to_chunk(RuntimeState* state, const std::shared_ptr<arrow::RecordBatch>& batch,
+                                   ChunkPtr* chunk);
 
     // Context (copied, not borrowed, since caller may not outlive scanner)
     const ADBCScanContext _ctx;
