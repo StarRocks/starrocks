@@ -27,9 +27,6 @@
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
 #endif
-#if defined(__aarch64__)
-#include <arm_acle.h>
-#endif
 #include <zlib.h>
 
 namespace starrocks {
@@ -41,7 +38,8 @@ public:
         return crc32(hash, (const unsigned char*)data, bytes);
     }
 
-    // Compute the Crc32 hash for data. Uses SSE4 instructions when available, otherwise falls back to zlib.
+    // Compute the Crc32 hash for data. Uses SSE4.2 (x86_64) or ACLE CRC (ARM64)
+    // instructions when available, otherwise falls back to zlib.
     // The input hash parameter is the current hash/seed value.
     // This is ~4x faster than Fnv/Boost Hash when SSE4.2 is available.
     // NOTE: DO NOT use this method for checksum! This does not generate the standard CRC32 checksum!
@@ -53,7 +51,8 @@ public:
     static uint32_t crc_hash(const void* data, int32_t bytes, uint32_t hash);
 
     // Public interface for 64-bit hash - uses function pointer initialized at program startup
-    // Uses SSE4 instructions when available, otherwise falls back to zlib-based implementation
+    // Uses SSE4.2 (x86_64) or ACLE CRC (ARM64) instructions when available,
+    // otherwise falls back to zlib-based implementation
     static uint64_t crc_hash64(const void* data, int32_t bytes, uint64_t hash);
 
     // refer to https://github.com/apache/commons-codec/blob/master/src/main/java/org/apache/commons/codec/digest/MurmurHash3.java
