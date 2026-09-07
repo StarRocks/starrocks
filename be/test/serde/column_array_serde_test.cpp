@@ -16,17 +16,6 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/serde/column_array_serde_test.cpp
-=======
-#include <memory>
-
-#include "base/coding.h"
-#include "base/failpoint/fail_point.h"
-#include "base/hash/hash_std.hpp"
-#include "base/testutil/assert.h"
-#include "base/testutil/parallel_test.h"
-#include "base/utility/defer_op.h"
->>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504)):be/test/runtime/serde_core_test.cpp
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -35,12 +24,13 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/variant_column.h"
-#include "common/config_local_io_fwd.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "types/hll.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
 #include "util/json.h"
@@ -53,8 +43,8 @@ static BinaryColumn::MutablePtr make_unrepresentable_binary_column() {
     config::enable_zero_copy_from_page_cache = true;
     DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
 
-    auto owner = std::make_shared<std::string>("x");
-    ContainerResource resource(owner, owner->data(), Column::MAX_CAPACITY_LIMIT);
+    // The size check must reject this view without reading its payload.
+    ContainerResource resource(nullptr, "x", Column::MAX_CAPACITY_LIMIT);
     BinaryColumn::Offsets offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(Column::MAX_CAPACITY_LIMIT);

@@ -27,11 +27,7 @@
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/lake/pk_tablet_unsort_sst_writer.h"
 #include "storage/lake/tablet_manager.h"
-<<<<<<< HEAD
 #include "storage/primary_key_encoder.h"
-=======
-#include "storage/primitive/primary_key_encoder.h"
->>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504))
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
 #include "util/crc32c.h"

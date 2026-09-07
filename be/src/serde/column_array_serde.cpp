@@ -281,12 +281,7 @@ public:
             buff = write_raw(bytes.data(), bytes_size, buff);
         }
 
-<<<<<<< HEAD:be/src/serde/column_array_serde.cpp
-        //TODO: if T is uint32_t, `offsets_size` may be overflow
         T offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
-=======
-        T offsets_size = offsets.size() * sizeof(T);
->>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504)):be/src/column/serde/column_array_serde.cpp
         if constexpr (std::is_same_v<T, uint32_t>) {
             buff = write_little_endian_32(offsets_size, buff);
         } else {
