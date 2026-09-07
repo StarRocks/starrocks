@@ -2184,8 +2184,61 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
 
         // TODO: plan vector column in FE Planner
+<<<<<<< HEAD
         chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
                                     _vector_index_ctx->vector_slot_id);
+=======
+        // The distance column reuses vector_column_id as its column id because the FE does not yet
+        // allocate a distinct one. The scan loop `do { _do_get_next(chunk); } while (chunk->num_rows()
+        // == 0)` re-invokes _do_get_next on the same chunk whenever a batch is fully filtered (e.g. the
+        // vector_range predicate dropped every row), and Chunk::reset() keeps the appended column in
+        // _cid_to_index. append_or_update_column tolerates that by updating the distance column in place
+        // instead of appending a duplicate.
+        chunk->append_or_update_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
+                                       _vector_index_ctx->vector_slot_id);
+    } else if (_vector_index_ctx && _vector_index_ctx->use_brute_force) {
+        // Brute-force fallback: compute distances from the raw vector column. It lives in `chunk` when
+        // FE kept it (swapped in by _build_final_chunk), or in _dict_chunk when FE pruned it and
+        // _setup_brute_force_fallback re-added it to the read schema (the delete-pred filter above keeps
+        // it row-aligned). resolve_brute_force_vector_column picks the right one; the distance is
+        // appended to `chunk`, which always holds the planner-allocated slot.
+        auto vec_col_id = _vector_index_ctx->vector_data_column_id;
+        ASSIGN_OR_RETURN(ColumnPtr vector_column,
+                         resolve_brute_force_vector_column(chunk, _context->_dict_chunk.get(), vec_col_id));
+        DCHECK_EQ(vector_column->size(), chunk->num_rows())
+                << "brute-force vector column row count must match chunk; row alignment was lost";
+        if (UNLIKELY(vector_column->size() != chunk->num_rows())) {
+            return Status::InternalError("brute-force vector column row count does not match chunk row count");
+        }
+        _compute_brute_force_distances(vector_column.get(), chunk);
+
+        // Apply vector_range filter before removing columns, so slot_id mapping is intact
+        double vr = _vector_index_ctx->vector_range;
+        if (_vector_index_ctx->has_vector_range && chunk->num_rows() > 0) {
+            auto dist_col = chunk->get_column_by_slot_id(_vector_index_ctx->vector_slot_id);
+            const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
+            const float* dist_data = distances->get_data().data();
+            size_t num = chunk->num_rows();
+            // result_order: 0 = ASC, 1 = DESC (matches FE VectorSearchOptions
+            // and tenann::AnnSearcher::ResultOrder convention).
+            bool ascending = (_vector_index_ctx->result_order == 0);
+            Buffer<uint8_t> selection(num);
+            for (size_t i = 0; i < num; i++) {
+                selection[i] = within_vector_range(dist_data[i], static_cast<float>(vr), ascending);
+            }
+            chunk->filter_range(selection, 0, num);
+            if (rowid != nullptr) {
+                auto new_sz = ColumnHelper::filter_range<uint32_t>(selection, rowid->data(), 0, num);
+                rowid->resize(new_sz);
+            }
+        }
+
+        // Remove the vector data column if we added it (it was pruned by FE)
+        if (_vector_index_ctx->added_vector_data_column && chunk->is_cid_exist(vec_col_id)) {
+            auto idx = chunk->get_column_id_to_index_map().at(vec_col_id);
+            chunk->remove_column_by_index(idx);
+        }
+>>>>>>> 2893cdb ([BugFix] Let the ANN distance column tolerate a reused scan chunk (#78686))
     }
 
     result->swap_chunk(*chunk);
@@ -2386,6 +2439,237 @@ FieldPtr SegmentIterator::_make_field(size_t i) {
     return std::make_shared<Field>(i, _vector_index_ctx->vector_distance_column_name, get_type_info(TYPE_FLOAT), false);
 }
 
+<<<<<<< HEAD
+=======
+FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Column* vector_column) {
+    DCHECK(_vector_index_ctx != nullptr);
+    const auto& query_vec = _opts.vector_search_option->query_vector;
+    const size_t dim = query_vec.size();
+    const size_t num_rows = vector_column->size();
+
+    const VectorMetricType metric_type = _vector_index_ctx->metric_type;
+    const bool is_cosine_similarity = metric_type == VectorMetricType::kCosineSimilarity;
+    const bool is_inner_product = metric_type == VectorMetricType::kInnerProduct;
+
+    // Unwrap NullableColumn if needed
+    const Column* data_col = vector_column;
+    const uint8_t* null_data = nullptr;
+    if (vector_column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(vector_column);
+        data_col = nullable->data_column().get();
+        if (nullable->has_null()) {
+            null_data = nullable->null_column()->raw_data();
+        }
+    }
+    const auto* array_col = down_cast<const ArrayColumn*>(data_col);
+    const auto& offsets = array_col->offsets().get_data();
+    // elements() may be NullableColumn wrapping FloatColumn. Vector index columns are
+    // ARRAY<FLOAT> with a nullable element column at the schema level, but tenann's
+    // builder rejects a row with any null element at write time. Defensively, if the
+    // elements column actually carries nulls at read time we treat the entire row as
+    // null (sentinel distance) rather than reading whatever undefined float lives in
+    // the slot.
+    const Column* elem_col = &array_col->elements();
+    const uint8_t* elem_null_data = nullptr;
+    if (elem_col->is_nullable()) {
+        const auto* nullable_elem = down_cast<const NullableColumn*>(elem_col);
+        if (nullable_elem->has_null()) {
+            elem_null_data = nullable_elem->null_column()->raw_data();
+        }
+        elem_col = nullable_elem->data_column().get();
+    }
+    const auto* float_col = down_cast<const FloatColumn*>(elem_col);
+    const float* elements_data = float_col->get_data().data();
+
+    FloatColumn::MutablePtr distance_column = FloatColumn::create();
+    distance_column->reserve(num_rows);
+
+    // Pre-compute the query-vector norm once: it is constant across all rows and
+    // brute-force scans can sweep many rows. (cosine path only.)
+    float query_norm = 0.0f;
+    if (is_cosine_similarity) {
+        for (size_t j = 0; j < dim; j++) {
+            query_norm += query_vec[j] * query_vec[j];
+        }
+        query_norm = std::sqrt(query_norm);
+    }
+
+    const float sentinel = is_cosine_similarity ? -1.0f
+                                                : (is_inner_product ? std::numeric_limits<float>::lowest()
+                                                                    : std::numeric_limits<float>::max());
+    for (size_t i = 0; i < num_rows; i++) {
+        if (null_data && null_data[i]) {
+            // Null vector: use max distance / min similarity as sentinel
+            distance_column->append(sentinel);
+            continue;
+        }
+        const size_t row_offset = offsets[i];
+        size_t vec_dim = offsets[i + 1] - row_offset;
+        // If any element of this row's array is null, treat the whole vector as null.
+        if (elem_null_data != nullptr) {
+            bool has_null_elem = false;
+            for (size_t j = 0; j < vec_dim; j++) {
+                if (elem_null_data[row_offset + j]) {
+                    has_null_elem = true;
+                    break;
+                }
+            }
+            if (has_null_elem) {
+                distance_column->append(sentinel);
+                continue;
+            }
+        }
+        const float* vec = elements_data + row_offset;
+        // tenann's index build validates dim equality at write time, so a row
+        // here with a different dim would point to corruption or a schema/index
+        // mismatch. Truncate to the shorter side and warn rather than crash.
+        if (vec_dim != dim) {
+            LOG_EVERY_N(WARNING, 1024) << "brute-force vector fallback: row " << i << " dim=" << vec_dim
+                                       << " differs from query dim " << dim << " in segment " << _segment->file_name();
+        }
+        size_t calc_dim = std::min(dim, vec_dim);
+
+        if (is_cosine_similarity) {
+            // cosine_similarity = dot(q, v) / (|q| * |v|)
+            float dot = 0, norm_v = 0;
+            for (size_t j = 0; j < calc_dim; j++) {
+                dot += query_vec[j] * vec[j];
+                norm_v += vec[j] * vec[j];
+            }
+            float denom = query_norm * std::sqrt(norm_v);
+            float sim = denom > 0 ? dot / denom : 0.0f;
+            // Non-finite (NaN/Inf from Inf inputs) would break the top-k heap's ordering (NaN compares
+            // false both ways), so map it to the sentinel -- ranked worst, like a null vector.
+            distance_column->append(std::isfinite(sim) ? sim : sentinel);
+        } else if (is_inner_product) {
+            float score = 0;
+            for (size_t j = 0; j < calc_dim; j++) {
+                score += query_vec[j] * vec[j];
+            }
+            distance_column->append(std::isfinite(score) ? score : sentinel);
+        } else {
+            // l2_distance = sum((q[j] - v[j])^2)
+            float dist = 0;
+            for (size_t j = 0; j < calc_dim; j++) {
+                float diff = query_vec[j] - vec[j];
+                dist += diff * diff;
+            }
+            distance_column->append(std::isfinite(dist) ? dist : sentinel);
+        }
+    }
+
+    return distance_column;
+}
+
+void SegmentIterator::_compute_brute_force_distances(const Column* vector_column, Chunk* chunk) {
+    // append_or_update_column tolerates the scan loop re-emitting the distance column onto a reused
+    // chunk (see the ANN path in _do_get_next).
+    chunk->append_or_update_column(_brute_force_distance_column(vector_column),
+                                   _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
+}
+
+// Exact distance rescan over a candidate bitmap. Reached only when the HNSW filtered search returned
+// fewer survivors than the exact pre-filter bitmap could supply (selective + scattered residual, where
+// graph reachability misses candidates). The candidate set is small here, so reading the embedding
+// column for just those rows and computing exact distances is cheap and restores completeness.
+Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& candidates) {
+    // Locate the embedding column from the segment's vector index metadata.
+    int32_t vec_ucid = -1;
+    for (const auto& index : *_segment->tablet_schema().indexes()) {
+        if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
+            vec_ucid = index.col_unique_ids()[0];
+            break;
+        }
+    }
+    if (vec_ucid < 0) {
+        return Status::InternalError("exact vector rescan: no vector index column in segment metadata");
+    }
+    int32_t col_idx = _segment->tablet_schema().field_index(vec_ucid);
+    if (col_idx < 0) {
+        return Status::InternalError("exact vector rescan: vector column not found in tablet schema");
+    }
+    const ColumnId vec_cid = static_cast<ColumnId>(col_idx);
+
+    // PRE does not add the embedding column to _schema, so create its iterator on demand.
+    if (vec_cid >= _column_iterators.size()) {
+        _column_iterators.resize(vec_cid + 1);
+    }
+    if (_column_iterators[vec_cid] == nullptr) {
+        RETURN_IF_ERROR(_init_column_iterator_by_cid(vec_cid, vec_ucid, false));
+    }
+
+    const auto& tcol = _segment->tablet_schema().column(vec_cid);
+    auto field = std::make_shared<Field>(StorageSchemaHelper::convert_field(vec_cid, tcol));
+
+    _vector_index_ctx->id2distance_map.clear();
+    // Enforce the range-query radius here: the FE folded the distance conjunct out of the scan
+    // predicate, so nothing downstream re-checks it. Same convention as the brute read path
+    // (ascending keeps d <= range, descending keeps d >= range).
+    const bool has_range = _vector_index_ctx->has_vector_range;
+    const auto range = static_cast<float>(_vector_index_ctx->vector_range);
+    const bool ascending = _vector_index_ctx->result_order == 0;
+
+    // Top-k mode keeps only the k best rows (bounded heap), matching the HNSW path's per-segment contract
+    // -- the upper TopN merges into the global top-k. Keeping every candidate would size id2distance_map
+    // and _scan_range to the whole live set (a memory cliff on a large delete-narrowed rescan). Range
+    // search cannot bound to k: it returns every row within the radius.
+    struct Cand {
+        float dist;
+        rowid_t rid;
+    };
+    // Heap top is the WORST kept row (evicted first): the largest distance when ascending (smaller is
+    // nearer), the smallest when descending (larger is nearer).
+    auto worse_on_top = [ascending](const Cand& a, const Cand& b) {
+        return ascending ? (a.dist < b.dist) : (a.dist > b.dist);
+    };
+    std::priority_queue<Cand, std::vector<Cand>, decltype(worse_on_top)> topk(worse_on_top);
+    const size_t k = static_cast<size_t>(_vector_index_ctx->k);
+
+    roaring::Roaring survivors;
+    SparseRange<> rows = roaring2range(candidates);
+    for (auto it = rows.new_iterator(); it.has_more();) {
+        Range<> r = it.next(4096);
+        MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(r.begin()));
+        // Array row ordinals are rowid_t, but their flattened element ordinals are 64-bit and can
+        // exceed UINT32_MAX. Do not wrap this contiguous row range in SparseRange<rowid_t>: the Array
+        // iterator would truncate the element range before passing it to the element iterator.
+        size_t rows_to_read = r.span_size();
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(&rows_to_read, col.get()));
+        DCHECK_EQ(rows_to_read, r.span_size());
+        auto dist = _brute_force_distance_column(col.get());
+        const auto& dvals = dist->get_data();
+        const uint32_t bn = r.end() - r.begin();
+        for (uint32_t i = 0; i < bn; i++) {
+            const float d = dvals[i];
+            const rowid_t rid = r.begin() + i;
+            if (has_range) {
+                if (!within_vector_range(d, range, ascending)) {
+                    continue;
+                }
+                _vector_index_ctx->id2distance_map[rid] = d;
+                survivors.add(rid);
+            } else if (k > 0) {
+                topk.push(Cand{d, rid});
+                if (topk.size() > k) {
+                    topk.pop();
+                }
+            }
+        }
+    }
+    if (!has_range) {
+        while (!topk.empty()) {
+            const Cand& c = topk.top();
+            _vector_index_ctx->id2distance_map[c.rid] = c.dist;
+            survivors.add(c.rid);
+            topk.pop();
+        }
+    }
+    _scan_range = roaring2range(survivors);
+    return Status::OK();
+}
+
+>>>>>>> 2893cdb ([BugFix] Let the ANN distance column tolerate a reused scan chunk (#78686))
 Status SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
         const ordinal_t ordinal = _cur_rowid;
