@@ -97,10 +97,12 @@ static inline Slice truncate_utf8(const Slice& str, const size_t max_size) {
 template <bool use_skipped_chars>
 static inline const char* skip_leading_utf8(const char* p, const char* end, size_t n,
                                             [[maybe_unused]] size_t* skipped_chars) {
-    int char_size = 0;
+    size_t char_size = 0;
     size_t i = 0;
     for (; i < n && p < end; ++i, p += char_size) {
-        char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<uint8_t>(*p)];
+        // A truncated/invalid UTF-8 lead byte at the tail can claim more bytes than remain;
+        // clamp to the rest of the string so the returned pointer stays within the input.
+        char_size = std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<uint8_t>(*p)], static_cast<size_t>(end - p));
     }
     if constexpr (use_skipped_chars) {
         *skipped_chars = i;
