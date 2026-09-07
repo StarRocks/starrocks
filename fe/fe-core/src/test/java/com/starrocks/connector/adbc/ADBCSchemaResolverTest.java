@@ -22,10 +22,9 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
-import com.starrocks.type.VarcharType;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -153,15 +152,13 @@ public class ADBCSchemaResolverTest {
     @Test
     public void utf8_mapsVarchar() {
         Field field = makeField("col", ArrowType.Utf8.INSTANCE);
-        Type expected = new VarcharType(StringType.DEFAULT_STRING_LENGTH);
-        assertEquals(expected, resolver.convertArrowFieldToSRType(field));
+        assertEquals(TypeFactory.createDefaultCatalogString(), resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void largeUtf8_mapsVarchar() {
         Field field = makeField("col", ArrowType.LargeUtf8.INSTANCE);
-        Type expected = new VarcharType(StringType.DEFAULT_STRING_LENGTH);
-        assertEquals(expected, resolver.convertArrowFieldToSRType(field));
+        assertEquals(TypeFactory.createDefaultCatalogString(), resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Binary types ---
