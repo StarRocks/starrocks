@@ -25,6 +25,8 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "connector/file/scanner/arrow_scanner.h"
 #include "connector/file/scanner/json_scanner.h"
 #include "exec/exec_env.h"
@@ -151,7 +153,7 @@ static DescriptorTbl* create_descriptor_table(RuntimeState* state, ObjectPool* p
 }
 
 static TBrokerScanRange* create_scan_range(ObjectPool* pool, const std::string& path, TFileFormatType::type format_type,
-                                           DescriptorTbl* desc_tbl) {
+                                           DescriptorTbl* desc_tbl, TFileType::type file_type = TFileType::FILE_LOCAL) {
     TBrokerScanRangeParams* params = pool->add(new TBrokerScanRangeParams());
     params->strict_mode = true;
     params->src_tuple_id = 0;
@@ -181,7 +183,7 @@ static TBrokerScanRange* create_scan_range(ObjectPool* pool, const std::string& 
     range.__set_path(path);
     range.start_offset = 0;
     range.size = LONG_MAX;
-    range.file_type = TFileType::FILE_LOCAL;
+    range.file_type = file_type;
     range.__set_format_type(format_type);
     range.__set_num_of_columns_from_file(src_tuple->slots().size());
 
@@ -269,6 +271,78 @@ static void BM_ArrowScanner(benchmark::State& state) {
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * kNumRows);
 }
 
+static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
+    std::ifstream file(g_arrow_file_path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        state.SkipWithError("Failed to open Arrow bench stream file");
+        return;
+    }
+    std::streamsize file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::string arrow_bytes(file_size, '\0');
+    if (!file.read(&arrow_bytes[0], file_size)) {
+        state.SkipWithError("Failed to read Arrow bench stream file");
+        return;
+    }
+
+    ObjectPool pool;
+    TQueryOptions query_options;
+    TQueryGlobals query_globals;
+    ExecEnv exec_env;
+    auto* runtime_state = pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, &exec_env));
+    runtime_state->init_instance_mem_tracker();
+
+    auto* desc_tbl = create_descriptor_table(runtime_state, &pool);
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    std::string pipe_id = "bench_arrow_routine_load_pipe";
+    auto* scan_range =
+            create_scan_range(&pool, pipe_id, TFileFormatType::FORMAT_ARROW, desc_tbl, TFileType::FILE_STREAM);
+
+    for (auto _ : state) {
+        std::shared_ptr<StreamLoadPipe> pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
+        exec_env.load_stream_mgr()->put(pipe_id, pipe);
+
+        ByteBufferPtr bb = ByteBuffer::allocate(arrow_bytes.size());
+        bb->put_bytes(arrow_bytes.data(), arrow_bytes.size());
+        bb->flip();
+        (void)pipe->append(bb);
+        (void)pipe->finish();
+
+        auto profile = pool.add(new RuntimeProfile("arrow_routine_load_bench_prof"));
+        auto counter = pool.add(new ScannerCounter());
+        auto scanner = std::make_unique<ArrowScanner>(runtime_state, profile, *scan_range, counter);
+
+        Status st = scanner->open();
+        if (!st.ok()) {
+            state.SkipWithError(("Failed to open ArrowScanner for pipe: " + st.to_string()).c_str());
+            exec_env.load_stream_mgr()->remove(pipe_id);
+            break;
+        }
+
+        int64_t total_rows = 0;
+        while (true) {
+            auto res = scanner->get_next();
+            if (res.status().is_end_of_file()) {
+                break;
+            }
+            if (!res.ok()) {
+                state.SkipWithError(("Failed to scan chunk from pipe: " + res.status().to_string()).c_str());
+                break;
+            }
+            auto chunk = res.value();
+            if (chunk) {
+                total_rows += chunk->num_rows();
+            }
+        }
+        scanner->close();
+        exec_env.load_stream_mgr()->remove(pipe_id);
+        benchmark::DoNotOptimize(total_rows);
+    }
+
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * kNumRows);
+}
+
 static void BM_JsonScanner(benchmark::State& state) {
     ObjectPool pool;
     TQueryOptions query_options;
@@ -316,6 +390,7 @@ static void BM_JsonScanner(benchmark::State& state) {
 
 BENCHMARK(BM_JsonScanner)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_ArrowScanner)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_ArrowRoutineLoadPipeScanner)->Unit(benchmark::kMillisecond);
 
 } // namespace starrocks
 
