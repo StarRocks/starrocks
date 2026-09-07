@@ -18,10 +18,14 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <limits>
+#include <map>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
 #include "column/schema.h"
@@ -177,12 +181,35 @@ VariantTuple build_canonical_boundary(const VariantTuple& source, int32_t coloca
     return canonical;
 }
 
+constexpr size_t kMaxSplitMetadataVisits = 1'000'000;
+
+class SplitMetadataVisitBudget {
+public:
+    SplitMetadataVisitBudget() { TEST_SYNC_POINT_CALLBACK("tablet_splitter:set_metadata_visit_limit", &_remaining); }
+    Status consume(size_t count, std::string_view description) {
+        if (count > _remaining) {
+            return Status::CapacityLimitExceed(
+                    fmt::format("tablet split metadata visit budget exhausted: {}", description));
+        }
+        _remaining -= count;
+        return Status::OK();
+    }
+    size_t remaining() const { return _remaining; }
+
+private:
+    size_t _remaining = kMaxSplitMetadataVisits;
+};
+
+Status consume_metadata_visits(SplitMetadataVisitBudget* budget, size_t count, std::string_view description) {
+    return budget == nullptr ? Status::OK() : budget->consume(count, description);
+}
+
 struct RangeInfo {
     VariantTuple min;
     VariantTuple max;
     int64_t num_rows = 0;
     int64_t data_size = 0;
-    SourceStats source_stats;
+    std::unique_ptr<SourceStats> source_stats;
 };
 
 // Find ordered_ranges overlapping [sub_min, sub_max].
@@ -190,28 +217,32 @@ struct RangeInfo {
 // ownership: non-last range owns x iff r.min <= x < r.max; last range owns x
 // iff r.min <= x <= r.max. For non-zero-width sub-segments, uses the standard
 // two-comparator binary-search overlap rule.
-void find_overlapping_ranges(const VariantTuple& sub_min, const VariantTuple& sub_max,
-                             std::vector<RangeInfo>& ordered_ranges, std::vector<RangeInfo*>& result) {
+Status find_overlapping_ranges(const VariantTuple& sub_min, const VariantTuple& sub_max,
+                               std::vector<RangeInfo>& ordered_ranges, std::vector<RangeInfo*>& result,
+                               SplitMetadataVisitBudget* budget) {
     result.clear();
+    if (ordered_ranges.empty()) return Status::OK();
     const size_t last_range_index = ordered_ranges.size() - 1;
 
     if (sub_min.compare(sub_max) == 0) {
         // Zero-width: point ownership matching split output [lower, upper).
         for (size_t i = 0; i < ordered_ranges.size(); ++i) {
+            RETURN_IF_ERROR(consume_metadata_visits(budget, 1, "point overlap"));
             auto& r = ordered_ranges[i];
             bool owns = (i != last_range_index) ? (r.min.compare(sub_min) <= 0 && sub_min.compare(r.max) < 0)
                                                 : (r.min.compare(sub_min) <= 0 && sub_min.compare(r.max) <= 0);
             if (owns) {
                 result.push_back(&r);
-                return;
+                return Status::OK();
             }
         }
-        return;
+        return Status::OK();
     }
 
     // Non-zero-width: binary search for the first overlapping range.
     size_t lo = 0, hi = ordered_ranges.size();
     while (lo < hi) {
+        RETURN_IF_ERROR(consume_metadata_visits(budget, 1, "overlap search"));
         size_t mid = lo + (hi - lo) / 2;
         int cmp = ordered_ranges[mid].max.compare(sub_min);
         if ((mid == last_range_index) ? (cmp < 0) : (cmp <= 0)) {
@@ -221,11 +252,13 @@ void find_overlapping_ranges(const VariantTuple& sub_min, const VariantTuple& su
         }
     }
     for (size_t i = lo; i < ordered_ranges.size(); i++) {
+        RETURN_IF_ERROR(consume_metadata_visits(budget, 1, "range overlap"));
         auto& r = ordered_ranges[i];
         if (r.min.compare(sub_max) > 0) break;
         if (i != last_range_index && r.min.compare(sub_max) >= 0) break;
         result.push_back(&r);
     }
+    return Status::OK();
 }
 
 // Distribute num_rows/data_size evenly across overlapping ranges with remainder
@@ -240,9 +273,11 @@ void distribute_to_ranges(const std::vector<RangeInfo*>& overlapping, int64_t nu
         overlapping[i]->num_rows += delta_rows;
         overlapping[i]->data_size += delta_size;
         if (track_sources) {
-            auto& stats = overlapping[i]->source_stats[source_id];
-            stats.first += delta_rows;
-            stats.second += delta_size;
+            auto& stats = overlapping[i]->source_stats;
+            if (stats == nullptr) stats = std::make_unique<SourceStats>();
+            auto& value = (*stats)[source_id];
+            value.first += delta_rows;
+            value.second += delta_size;
         }
     }
 }
@@ -250,17 +285,17 @@ void distribute_to_ranges(const std::vector<RangeInfo*>& overlapping, int64_t nu
 // Distribute one segment's data across ordered_ranges. When the segment has
 // sort-key samples, it is split into N+1 sub-segments with known row counts;
 // otherwise, the entire segment is treated as a single [min_key, max_key] range.
-void distribute_segment_to_ranges(const SegmentSplitInfo& segment, std::vector<RangeInfo>& ordered_ranges,
-                                  bool track_sources) {
-    if (segment.num_rows == 0 && segment.data_size == 0) return;
+Status distribute_segment_to_ranges(const SegmentSplitInfo& segment, std::vector<RangeInfo>& ordered_ranges,
+                                    bool track_sources, SplitMetadataVisitBudget* budget = nullptr) {
+    if (segment.num_rows == 0 && segment.data_size == 0) return Status::OK();
 
     std::vector<RangeInfo*> overlapping;
     const int64_t num_samples = static_cast<int64_t>(segment.sort_key_samples.size());
 
     if (num_samples == 0) {
-        find_overlapping_ranges(segment.min_key, segment.max_key, ordered_ranges, overlapping);
+        RETURN_IF_ERROR(find_overlapping_ranges(segment.min_key, segment.max_key, ordered_ranges, overlapping, budget));
         distribute_to_ranges(overlapping, segment.num_rows, segment.data_size, segment.source_id, track_sources);
-        return;
+        return Status::OK();
     }
 
     // Sampled path: N+1 sub-segments with known row counts.
@@ -285,10 +320,11 @@ void distribute_segment_to_ranges(const SegmentSplitInfo& segment, std::vector<R
         DCHECK_GT(sub_rows, 0);
         const int64_t sub_bytes = (k == num_samples) ? (segment.data_size - bytes_assigned) : bytes_for(sub_rows);
         bytes_assigned += sub_bytes;
-        find_overlapping_ranges(bound(k), bound(k + 1), ordered_ranges, overlapping);
+        RETURN_IF_ERROR(find_overlapping_ranges(bound(k), bound(k + 1), ordered_ranges, overlapping, budget));
         distribute_to_ranges(overlapping, sub_rows, sub_bytes, segment.source_id, track_sources);
     }
     DCHECK_EQ(bytes_assigned, segment.data_size);
+    return Status::OK();
 }
 
 // Resolves the sort key a split must speak: the TabletSchema for |schema_pb|, which applies the
@@ -453,11 +489,10 @@ Status validate_split_ranges(const std::vector<TabletRangeInfo>& split_ranges, c
 // Core range split algorithm (public API)
 // ================================================================================
 
-StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
-                                                            int32_t target_split_count, int64_t target_value_per_split,
-                                                            bool use_num_rows, bool track_sources,
-                                                            const TabletRange* tablet_range,
-                                                            int32_t colocate_column_count) {
+static StatusOr<RangeSplitResult> calculate_range_split_boundaries_impl(
+        const std::vector<SegmentSplitInfo>& segments, int32_t target_split_count, int64_t target_value_per_split,
+        bool use_num_rows, bool track_sources, const TabletRange* tablet_range, int32_t colocate_column_count,
+        SplitMetadataVisitBudget* budget) {
     RangeSplitResult result;
 
     if (segments.empty() || target_split_count <= 1) {
@@ -469,6 +504,7 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     // colocate boundaries that don't exist in any segment.
     std::vector<VariantTuple> ordered_boundary_values;
     for (const auto& segment : segments) {
+        RETURN_IF_ERROR(consume_metadata_visits(budget, 2 + segment.sort_key_samples.size(), "boundary values"));
         ordered_boundary_values.push_back(segment.min_key);
         ordered_boundary_values.push_back(segment.max_key);
         for (const auto& sample : segment.sort_key_samples) {
@@ -484,6 +520,7 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     // all, so a partial-crossing range is kept whole and its full data_size /
     // num_rows is summed into one of the new splits.
     if (tablet_range != nullptr) {
+        RETURN_IF_ERROR(consume_metadata_visits(budget, 2, "tablet boundaries"));
         if (!tablet_range->is_minimum()) {
             ordered_boundary_values.push_back(tablet_range->lower_bound());
         }
@@ -511,6 +548,7 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
                 // canonical can equal curr when curr already has the (k, NULL...) shape.
                 DCHECK_GT(canonical.compare(ordered_boundary_values[i - 1]), 0);
                 if (canonical.compare(ordered_boundary_values[i]) <= 0) {
+                    RETURN_IF_ERROR(consume_metadata_visits(budget, 1, "canonical boundary"));
                     with_canonical.push_back(std::move(canonical));
                 }
             }
@@ -540,7 +578,7 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
 
     // Step 3: Distribute segment data across overlapping ranges.
     for (const auto& segment : segments) {
-        distribute_segment_to_ranges(segment, ordered_ranges, track_sources);
+        RETURN_IF_ERROR(distribute_segment_to_ranges(segment, ordered_ranges, track_sources, budget));
     }
 
     // Step 4: Calculate split boundaries using a greedy algorithm.
@@ -706,7 +744,8 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
             result.range_num_rows[group_index] += range->num_rows;
 
             if (track_sources) {
-                for (const auto& [source_id, stats_pair] : range->source_stats) {
+                if (range->source_stats == nullptr) continue;
+                for (const auto& [source_id, stats_pair] : *range->source_stats) {
                     auto& dest = result.range_source_stats[group_index][source_id];
                     dest.first += stats_pair.first;
                     dest.second += stats_pair.second;
@@ -730,119 +769,149 @@ static Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, co
 
 namespace {
 
-// Per-rowset anchor totals taken from the old tablet's recorded metadata. Used to
-// renormalize per-split-group estimates so Σ new tablets equals the old tablet exactly,
-// preserving stat conservation across re-splits regardless of how the
-// underlying segment-distribution model approximates straddling sub-segments.
+using RowsetEmissionMask = std::vector<std::vector<bool>>;
+
 struct RowsetAnchor {
     int64_t num_rows = 0;
     int64_t data_size = 0;
     int64_t num_dels = 0;
 };
 
-// Build the per-rowset anchor map from the old tablet metadata. For PK
-// tablets without a populated num_dels field on the rowset (legacy
-// metadata), derive num_dels from the delvec — same fallback as the
-// pre-anchor code path. If a rowset reports num_dels > num_rows
-// (pathological metadata), clamp up front with a WARNING; the
-// cap-and-redistribute contract assumes the old tablet's num_dels <= num_rows.
-std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetadataPB& metadata,
-                                                               TabletManager* tablet_manager) {
-    std::unordered_map<uint32_t, RowsetAnchor> anchor;
-    anchor.reserve(metadata.rowsets_size());
-    const bool pk = is_primary_key(metadata);
-    for (const auto& rowset : metadata.rowsets()) {
-        RowsetAnchor a;
-        // Anchor totals: prefer the rowset-level fields. When legacy /
-        // incomplete metadata omits them, fall back to summing the
-        // segment-level fields. Without this fallback, anchor=0 collapses
-        // every new tablet's stat to 0 even though segment metadata still
-        // carries real values — the pre-anchor path implicitly used the
-        // segment-derived numbers via range_source_stats, so we preserve
-        // that property explicitly here.
-        if (rowset.has_num_rows()) {
-            a.num_rows = rowset.num_rows();
-        } else {
-            for (const auto& sm : rowset.segment_metas()) {
-                a.num_rows += sm.num_rows();
-            }
+StatusOr<RowsetAnchor> rowset_anchor(const RowsetMetadataPB& rowset) {
+    __int128 rows = rowset.num_rows(), bytes = rowset.data_size();
+    for (const auto& segment : rowset.segment_metas()) {
+        if (segment.num_rows() < 0 || segment.size() < 0) {
+            return Status::Corruption("tablet split has negative segment statistics");
         }
-        if (rowset.has_data_size()) {
-            a.data_size = rowset.data_size();
-        } else {
-            for (const auto& sm : rowset.segment_metas()) {
-                a.data_size += sm.size();
-            }
-        }
-        if (rowset.has_num_dels()) {
-            a.num_dels = rowset.num_dels();
-        } else if (pk && tablet_manager != nullptr) {
-            // Legacy fallback: derive num_dels from the delvec. Costs one
-            // delvec read per rowset, acceptable on the one-shot split path.
-            a.num_dels = static_cast<int64_t>(tablet_manager->update_mgr()->get_rowset_num_deletes(metadata, rowset));
-        }
-        if (a.num_dels > a.num_rows) {
-            LOG(WARNING) << "rowset id=" << rowset.id() << " has num_dels=" << a.num_dels
-                         << " > num_rows=" << a.num_rows << "; clamping for split allocation";
-            a.num_dels = a.num_rows;
-        }
-        anchor.emplace(rowset.id(), a);
+        if (!rowset.has_num_rows()) rows += segment.num_rows();
+        if (!rowset.has_data_size()) bytes += segment.size();
     }
-    return anchor;
+    if (rows < 0 || bytes < 0 || rows > INT64_MAX || bytes > INT64_MAX || rowset.num_dels() < 0 ||
+        rowset.num_dels() > rows) {
+        return Status::Corruption("tablet split has invalid rowset statistics");
+    }
+    return RowsetAnchor{static_cast<int64_t>(rows), static_cast<int64_t>(bytes), rowset.num_dels()};
 }
 
-// Anchor each split group's per-rowset stats to the old tablet's recorded totals
-// using the Hare-Niemeyer helper. Σ new tablets stat == old tablet stat exactly for
-// num_rows, data_size, and num_dels per rowset (modulo cap-and-redistribute
-// for invalid old tablets — see tablet_reshard_helper.h contracts).
-//
-// Replaces the pre-anchor flow which wrote per-source weights raw into
-// rowset_stats and ran a separate num_dels Hare-Niemeyer pass after.
-void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& anchor, const RangeSplitResult& split_result,
-                         std::vector<TabletRangeInfo>* split_ranges) {
-    DCHECK(split_ranges != nullptr);
-    const int64_t num_splits = static_cast<int64_t>(split_ranges->size());
-    if (num_splits == 0) return;
+using PhysicalSlices = std::map<std::pair<std::string, int64_t>, std::string>;
 
-    for (const auto& [source_id, ra] : anchor) {
-        // Gather per-group weights for this source. Missing entries
-        // contribute weight 0; zero-weight buckets receive zero allocation
-        // (or share the uniform fallback when every weight is zero).
-        std::vector<int64_t> rows_w(num_splits, 0);
-        std::vector<int64_t> bytes_w(num_splits, 0);
-        for (int64_t g = 0; g < num_splits; ++g) {
-            if (g >= static_cast<int64_t>(split_result.range_source_stats.size())) break;
-            auto it = split_result.range_source_stats[g].find(source_id);
-            if (it != split_result.range_source_stats[g].end()) {
-                rows_w[g] = it->second.first;
-                bytes_w[g] = it->second.second;
+StatusOr<bool> insert_physical_slice(const SegmentMetadataPB& segment, PhysicalSlices* slices) {
+    auto declaration = segment;
+    declaration.clear_segment_idx();
+    declaration.clear_shared();
+    const auto serialized = declaration.SerializeAsString();
+    auto [it, inserted] = slices->emplace(std::make_pair(segment.filename(), segment.bundle_file_offset()), serialized);
+    if (!inserted && it->second != serialized) {
+        return Status::Corruption("tablet split has conflicting physical segment declarations");
+    }
+    return inserted;
+}
+
+Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitBudget* budget) {
+    // Bound the live-file reference set used during child cleanup as part of the
+    // same operation budget, before any flush or child metadata allocation.
+    RETURN_IF_ERROR(budget->consume(static_cast<size_t>(source.delvec_meta().delvecs_size()) +
+                                            source.delvec_meta().version_to_file_size() +
+                                            source.sstable_meta().sstables_size(),
+                                    "source sidecar declarations"));
+    TabletRange parent;
+    RETURN_IF_ERROR(parent.from_proto(source.range()));
+    Status fallback;
+    PhysicalSlices slices;
+    for (const auto& rowset : source.rowsets()) {
+        RETURN_IF_ERROR(budget->consume(1, "source rowset"));
+        if (!tablet_reshard_helper::has_valid_uid(rowset)) {
+            return Status::Corruption("tablet split rowset has no valid UID");
+        }
+        RETURN_IF_ERROR(budget->consume(rowset.segment_metas_size(), "source segment declarations"));
+        ASSIGN_OR_RETURN(auto anchor, rowset_anchor(rowset));
+        if (rowset.has_delete_predicate() && (rowset.segment_metas_size() != 0 || rowset.del_files_size() != 0 ||
+                                              anchor.num_rows != 0 || anchor.data_size != 0 || anchor.num_dels != 0)) {
+            return Status::Corruption("tablet split has invalid delete predicate shape");
+        }
+        TabletRange effective;
+        RETURN_IF_ERROR(effective.from_proto(rowset.has_range() ? rowset.range() : source.range()));
+        if (effective.is_empty()) {
+            fallback = Status::NotSupported("tablet split effective rowset range is empty");
+        } else {
+            ASSIGN_OR_RETURN(auto intersection, effective.intersect(parent));
+            if ((!parent.is_minimum() &&
+                 (effective.is_minimum() || effective.lower_bound().compare(parent.lower_bound()) < 0 ||
+                  (effective.lower_bound() == parent.lower_bound() && effective.lower_bound_included() &&
+                   parent.lower_bound_excluded()))) ||
+                (!parent.is_maximum() &&
+                 (effective.is_maximum() || effective.upper_bound().compare(parent.upper_bound()) > 0 ||
+                  (effective.upper_bound() == parent.upper_bound() && effective.upper_bound_included() &&
+                   parent.upper_bound_excluded()))) ||
+                intersection.is_empty()) {
+                return Status::Corruption("tablet split effective rowset range lies outside source tablet");
             }
         }
-
-        std::vector<int64_t> rows_alloc(num_splits, 0);
-        std::vector<int64_t> bytes_alloc(num_splits, 0);
-        std::vector<int64_t> dels_alloc(num_splits, 0);
-        tablet_reshard_helper::allocate_proportionally(ra.num_rows, rows_w, &rows_alloc);
-        tablet_reshard_helper::allocate_proportionally(ra.data_size, bytes_w, &bytes_alloc);
-        // num_dels follows the row distribution: deletes are per-row, not
-        // per-byte, so byte weights would skew the split when row and byte
-        // distributions disagree (e.g. compressed columns).
-        tablet_reshard_helper::allocate_proportionally(ra.num_dels, rows_w, &dels_alloc);
-        tablet_reshard_helper::cap_and_redistribute_dels(rows_alloc, &dels_alloc);
-
-        for (int64_t g = 0; g < num_splits; ++g) {
-            // Skip writes that would create an empty entry — keeps the
-            // rowset_stats map sparse, identical to the pre-anchor behavior
-            // for sources with no representation in the group.
-            if (rows_alloc[g] == 0 && bytes_alloc[g] == 0 && dels_alloc[g] == 0) {
-                continue;
+        std::unordered_set<uint32_t> indices;
+        uint32_t previous = 0;
+        bool first = true;
+        for (const auto& segment : rowset.segment_metas()) {
+            RETURN_IF_ERROR(budget->consume(segment.deprecated_sort_key_samples_size(), "source metadata samples"));
+            if (!segment.has_segment_idx()) {
+                fallback = Status::NotSupported("tablet split segment index is absent");
+            } else {
+                const uint32_t index = segment.segment_idx();
+                if (!indices.insert(index).second || (!first && index <= previous)) {
+                    return Status::Corruption("tablet split segment indices are not strictly increasing");
+                }
+                if (uint64_t{rowset.id()} + index > UINT32_MAX) {
+                    return Status::Corruption("tablet split segment RSSID overflows uint32");
+                }
+                previous = index;
+                first = false;
             }
-            auto& dst = (*split_ranges)[g].rowset_stats[source_id];
-            dst.num_rows = rows_alloc[g];
-            dst.data_size = bytes_alloc[g];
-            dst.num_dels = dels_alloc[g];
+            RETURN_IF_ERROR(insert_physical_slice(segment, &slices).status());
+        }
+        for (const auto& del : rowset.del_files()) {
+            RETURN_IF_ERROR(budget->consume(1, "source delete declaration"));
+            const uint64_t offset = del.has_op_offset() ? del.op_offset() : previous;
+            if (uint64_t{del.origin_rowset_id()} + offset > UINT32_MAX) {
+                return Status::Corruption("tablet split delete replay span overflows uint32");
+            }
+            if (del.origin_rowset_id() == rowset.id() &&
+                (rowset.segment_metas_size() == 0 ? offset != 0 : !indices.contains(offset))) {
+                fallback = Status::NotSupported("tablet split self-origin delete offset is not a current segment");
+            }
         }
     }
+    return fallback;
+}
+
+// Count-only reshard planning consumes metadata once per immutable physical slice.
+// The public segment loader retains its full-index sampling contract.
+Status build_unique_boundary_segments(TabletManager* tablet_manager, const TabletMetadataPtr& metadata,
+                                      const TabletSchema& schema, SplitMetadataVisitBudget* budget,
+                                      std::vector<SegmentSplitInfo>* segments) {
+    TEST_SYNC_POINT_CALLBACK("tablet_splitter:boundary_planner", nullptr);
+    ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(schema));
+    PhysicalSlices slices;
+    for (const auto& rowset : metadata->rowsets()) {
+        RETURN_IF_ERROR(budget->consume(1, "boundary rowset"));
+        for (const auto& sm : rowset.segment_metas()) {
+            RETURN_IF_ERROR(budget->consume(1 + sm.deprecated_sort_key_samples_size(), "boundary segment samples"));
+            if (sm.num_rows() < 0 || sm.size() < 0) {
+                return Status::Corruption("tablet split has negative physical segment statistics");
+            }
+            ASSIGN_OR_RETURN(bool inserted, insert_physical_slice(sm, &slices));
+            if (!inserted) continue;
+            SegmentSplitInfo segment;
+            RETURN_IF_ERROR(segment.min_key.from_proto(sm.sort_key_min()));
+            RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
+            segment.num_rows = sm.num_rows();
+            segment.data_size = sm.size();
+            RETURN_IF_ERROR(segment.load_sort_key_samples(sm));
+            projection.project(&segment.min_key);
+            projection.project(&segment.max_key);
+            for (auto& sample : segment.sort_key_samples) projection.project(&sample);
+            segments->push_back(std::move(segment));
+        }
+    }
+    return Status::OK();
 }
 
 Status build_split_ranges_from_boundaries(const TabletMetadataPtr& tablet_metadata,
@@ -889,19 +958,18 @@ Status build_split_ranges_from_boundaries(const TabletMetadataPtr& tablet_metada
 // Postcondition on Status::OK: split_ranges->size() == split_count.
 // When the algorithm cannot produce exactly that many ranges (insufficient
 // boundary points given the segment key distribution), returns
-// Status::InvalidArgument with split_ranges cleared. The caller (split_tablet)
+// Status::NotSupported with split_ranges cleared. The caller (split_tablet)
 // is expected to fall back to identical-tablet publish; only new_tablet_ids(0)
 // is consumed in that case, and FE is responsible for reclaiming the remaining
 // preallocated tablet ids.
 //
 // colocate_column_count > 0 enables colocate-aware boundary canonicalization (see
 // calculate_range_split_boundaries). A malformed FE that sends colocate_column_count
-// larger than the sort-key arity returns Status::InvalidArgument here, which triggers
-// the same identical-tablet fallback as "no boundaries" — preserves the publish loop
-// instead of hard-failing.
+// larger than the sort-key arity returns Status::InvalidArgument and propagates;
+// malformed input is not a safe no-split outcome.
 Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
                                     int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
-                                    int32_t colocate_column_count) {
+                                    int32_t colocate_column_count, SplitMetadataVisitBudget* budget) {
     if (split_count < 2) {
         return Status::InvalidArgument("Invalid split count, it is less than 2");
     }
@@ -936,9 +1004,9 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     }
 
     std::vector<SegmentSplitInfo> segments;
-    RETURN_IF_ERROR(build_segments_from_rowsets_impl(tablet_manager, tablet_metadata, *tablet_schema, &segments));
+    RETURN_IF_ERROR(build_unique_boundary_segments(tablet_manager, tablet_metadata, *tablet_schema, budget, &segments));
     if (segments.empty()) {
-        return Status::InvalidArgument("No segments found in tablet metadata");
+        return Status::NotSupported("No segments found in tablet metadata");
     }
 
     // Step 2: Calculate split boundaries with tablet range filtering.
@@ -947,17 +1015,20 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
 
     int64_t total_num_rows = 0;
     for (const auto& segment : segments) {
+        if (segment.num_rows > INT64_MAX - total_num_rows) {
+            return Status::Corruption("tablet split physical row count exceeds int64");
+        }
         total_num_rows += segment.num_rows;
     }
     int64_t avg_num_rows = std::max<int64_t>(1, total_num_rows / split_count);
 
-    ASSIGN_OR_RETURN(auto split_result,
-                     calculate_range_split_boundaries(segments, split_count, avg_num_rows,
-                                                      /*use_num_rows=*/true,
-                                                      /*track_sources=*/true, &tablet_range, colocate_column_count));
+    ASSIGN_OR_RETURN(auto split_result, calculate_range_split_boundaries_impl(segments, split_count, avg_num_rows,
+                                                                              /*use_num_rows=*/true,
+                                                                              /*track_sources=*/false, &tablet_range,
+                                                                              colocate_column_count, budget));
 
     if (split_result.boundaries.empty()) {
-        return Status::InvalidArgument("Not enough split ranges available");
+        return Status::NotSupported("Not enough split ranges available");
     }
 
     // Step 3: Build TabletRangeInfo directly from result.
@@ -969,7 +1040,7 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
                      << " produced=" << split_ranges->size();
         auto produced = split_ranges->size();
         split_ranges->clear();
-        return Status::InvalidArgument(
+        return Status::NotSupported(
                 fmt::format("Insufficient split boundaries: requested {}, produced {}", split_count, produced));
     }
 
@@ -980,17 +1051,6 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     // remaining arity skew into an aborted reshard rather than corrupt metadata.
     RETURN_IF_ERROR(validate_split_ranges(*split_ranges, *tablet_schema, tablet_metadata->id()));
 
-    // Anchor per-split per-rowset stats to the old tablet's recorded totals so
-    // that Σ new tablets stat == old tablet stat exactly for num_rows / data_size /
-    // num_dels. The segment-level distribution from
-    // calculate_range_split_boundaries is used as relative weights only;
-    // absolute values come from the old tablet metadata. This eliminates the
-    // residual drift seen across multi-level splits when the algorithm
-    // re-runs on the same physical segments under a different
-    // ordered_boundaries set.
-    auto anchor = build_rowset_anchor(*tablet_metadata, tablet_manager);
-    apply_rowset_anchor(anchor, split_result, split_ranges);
-
     return Status::OK();
 }
 
@@ -998,7 +1058,8 @@ Status get_tablet_split_ranges_from_pk_index_samples_impl(TabletManager* tablet_
                                                           const TabletMetadataPtr& tablet_metadata, int32_t split_count,
                                                           std::vector<std::string> encoded_samples,
                                                           std::vector<TabletRangeInfo>* split_ranges,
-                                                          int32_t colocate_column_count) {
+                                                          int32_t colocate_column_count,
+                                                          SplitMetadataVisitBudget* budget) {
     if (split_count < 2) {
         return Status::InvalidArgument("Invalid split count, it is less than 2");
     }
@@ -1034,6 +1095,7 @@ Status get_tablet_split_ranges_from_pk_index_samples_impl(TabletManager* tablet_
     };
     std::sort(encoded_samples.begin(), encoded_samples.end(), encoded_less);
     encoded_samples.erase(std::unique(encoded_samples.begin(), encoded_samples.end()), encoded_samples.end());
+    RETURN_IF_ERROR(budget->consume(encoded_samples.size(), "PK unique boundary values"));
     encoded_samples.erase(std::remove_if(encoded_samples.begin(), encoded_samples.end(),
                                          [&](const std::string& key) {
                                              if (key.empty()) return true;
@@ -1046,7 +1108,7 @@ Status get_tablet_split_ranges_from_pk_index_samples_impl(TabletManager* tablet_
                                          }),
                           encoded_samples.end());
     if (encoded_samples.size() < static_cast<size_t>(split_count)) {
-        return Status::InvalidArgument(
+        return Status::NotSupported(
                 fmt::format("Not enough distinct PK-index samples: requested {} splits, got {} "
                             "strict-interior keys",
                             split_count, encoded_samples.size()));
@@ -1099,30 +1161,18 @@ Status get_tablet_split_ranges_from_pk_index_samples_impl(TabletManager* tablet_
 
     RETURN_IF_ERROR(build_split_ranges_from_boundaries(tablet_metadata, boundaries, split_ranges));
 
-    // SST samples approximate PK density but cannot safely attribute individual historical rowsets.
-    // Keep FE statistics conservative and exact by distributing every old rowset uniformly, while
-    // anchoring the totals so their sum is unchanged across children.
-    const auto anchor = build_rowset_anchor(*tablet_metadata, tablet_manager);
-    RangeSplitResult uniform_result;
-    uniform_result.range_source_stats.resize(split_count);
-    for (auto& range_stats : uniform_result.range_source_stats) {
-        for (const auto& anchor_entry : anchor) {
-            range_stats[anchor_entry.first] = {1, 1};
-        }
-    }
-    apply_rowset_anchor(anchor, uniform_result, split_ranges);
     return Status::OK();
 }
 
 Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
                                                   const TabletMetadataPtr& tablet_metadata, int32_t split_count,
                                                   std::vector<TabletRangeInfo>* split_ranges,
-                                                  int32_t colocate_column_count) {
+                                                  int32_t colocate_column_count, SplitMetadataVisitBudget* budget) {
     if (split_count < 2) {
         return Status::InvalidArgument("Invalid split count, it is less than 2");
     }
     if (!tablet_metadata->has_sstable_meta() || tablet_metadata->sstable_meta().sstables().empty()) {
-        return Status::InvalidArgument("Cloud-native PK index has no SSTs to sample");
+        return Status::NotSupported("Cloud-native PK index has no SSTs to sample");
     }
 
     // Sampling is scoped to THIS tablet's range, not to the SSTs' own extent: a tablet produced by an
@@ -1138,6 +1188,7 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
     std::vector<const PersistentIndexSstablePB*> overlapping_sstables;
     size_t overlapping_bytes = 0;
     for (const auto& sstable_pb : tablet_metadata->sstable_meta().sstables()) {
+        RETURN_IF_ERROR(budget->consume(1, "PK SST declaration"));
         if (!sstable_pb.has_range() || sstable_pb.range().start_key().empty() || sstable_pb.range().end_key().empty()) {
             return Status::Corruption(fmt::format("PK-index SST {} has no usable key range", sstable_pb.filename()));
         }
@@ -1147,7 +1198,7 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
         }
     }
     if (overlapping_sstables.empty()) {
-        return Status::InvalidArgument("No PK-index SST overlaps the tablet range");
+        return Status::NotSupported("No PK-index SST overlaps the tablet range");
     }
 
     constexpr size_t kSamplesPerSplit = 32;
@@ -1156,8 +1207,6 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
     std::vector<std::string> encoded_samples;
     auto* block_cache = tablet_manager->update_mgr()->block_cache();
     for (const auto* sstable_pb : overlapping_sstables) {
-        encoded_samples.push_back(sstable_pb->range().start_key());
-        encoded_samples.push_back(sstable_pb->range().end_key());
         // Weight each SST's share of the sample budget by its size, so the quantiles picked downstream
         // stay data-volume weighted the way the previous byte-interval sampling made them. Within one
         // SST the samples are spread evenly over the part of its index that lies in the tablet range.
@@ -1165,6 +1214,12 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
                 overlapping_bytes == 0
                         ? target_sample_count
                         : std::max<size_t>(1, target_sample_count * sstable_pb->filesize() / overlapping_bytes);
+        RETURN_IF_ERROR(budget->consume(3 + sst_sample_count, "PK SST sampling"));
+        TEST_SYNC_POINT_CALLBACK("tablet_splitter:pk_sampler", nullptr);
+        encoded_samples.push_back(sstable_pb->range().start_key());
+        encoded_samples.push_back(sstable_pb->range().end_key());
+        const size_t sample_count_before = encoded_samples.size();
+        TEST_SYNC_POINT_CALLBACK("tablet_splitter:sst_open", nullptr);
         ASSIGN_OR_RETURN(
                 auto sstable,
                 PersistentIndexSstable::new_sstable(
@@ -1172,11 +1227,14 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
                         block_cache ? block_cache->cache() : nullptr, false, nullptr, tablet_metadata, tablet_manager));
         RETURN_IF_ERROR(sstable->sample_data_keys(&encoded_samples, Slice(tablet_sst_range.seek_key),
                                                   Slice(tablet_sst_range.stop_key), sst_sample_count));
+        if (encoded_samples.size() - sample_count_before > 2 + sst_sample_count) {
+            return Status::InternalError("PK SST sampler exceeded its requested metadata bound");
+        }
     }
 
     return get_tablet_split_ranges_from_pk_index_samples_impl(tablet_manager, tablet_metadata, split_count,
                                                               std::move(encoded_samples), split_ranges,
-                                                              colocate_column_count);
+                                                              colocate_column_count, budget);
 }
 
 // Builds a single new-tablet metadata that is "identical" to the old tablet —
@@ -1210,9 +1268,8 @@ MutableTabletMetadataPtr make_identical_new_tablet_metadata(const TabletMetadata
 
 // external-boundaries peer of get_tablet_split_ranges: produces a vector<TabletRangeInfo>
 // from FE-supplied boundaries instead of computing them from segment
-// distribution. Reuses distribute_segment_to_ranges, build_rowset_anchor, and
-// apply_rowset_anchor so the per-rowset stat math is identical to the
-// data-driven path. Inline numbered step tags document each phase.
+// distribution. This phase validates ranges only; the shared rowset-local projector
+// supplies weights and anchors for both external and data-driven paths.
 //
 // Non-OK return is caller-handled (split_tablet) by routing to the symmetric
 // identical-fallback path with the external-boundaries bvar bumped. The helper does NOT
@@ -1220,7 +1277,9 @@ MutableTabletMetadataPtr make_identical_new_tablet_metadata(const TabletMetadata
 Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_manager,
                                                           const TabletMetadataPtr& old_tablet_metadata,
                                                           const RepeatedPtrField<TabletRangePB>& external_ranges,
-                                                          std::vector<TabletRangeInfo>* split_ranges) {
+                                                          std::vector<TabletRangeInfo>* split_ranges,
+                                                          SplitMetadataVisitBudget* budget) {
+    RETURN_IF_ERROR(budget->consume(external_ranges.size(), "external ranges"));
     DCHECK(split_ranges != nullptr);
     DCHECK(split_ranges->empty());
 
@@ -1324,8 +1383,7 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
         }
     }
 
-    // 2. Seed K TabletRangeInfo from external_ranges; rowset_stats stays empty
-    //    for now (filled by apply_rowset_anchor in step 10).
+    // 2. Seed K TabletRangeInfo; the final-range projector fills rowset_stats.
     split_ranges->reserve(external_ranges.size());
     for (const auto& external_range : external_ranges) {
         auto& range_info = split_ranges->emplace_back();
@@ -1378,173 +1436,197 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
         }
     }
 
-    // 4. Empty old tablet fast-path: no rowsets to distribute, K
-    //    TabletRangeInfo with empty rowset_stats is the correct output.
-    //    build_new_tablets_from_split_ranges will produce K new tablets with
-    //    no rowsets. Runs AFTER FE-input validation so empty tablets via external boundaries
-    //    cannot accept semantically-invalid ranges either.
-    if (old_tablet_metadata->rowsets_size() == 0) {
-        return Status::OK();
-    }
-
-    // For ORDER BY != PK, segment min/max and sampling metadata are in sort-key
-    // space and cannot estimate a PK-space child distribution. Correctness only
-    // requires every inherited rowset to remain shared until UNSHARE. Use uniform
-    // weights for transitional FE statistics and avoid comparing the two domains.
-    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && tablet_schema->has_separate_sort_key()) {
-        RangeSplitResult uniform_result;
-        uniform_result.range_source_stats.resize(external_ranges.size());
-        const auto anchor = build_rowset_anchor(*old_tablet_metadata, tablet_manager);
-        for (size_t i = 0; i < uniform_result.range_source_stats.size(); ++i) {
-            for (const auto& anchor_entry : anchor) {
-                uniform_result.range_source_stats[i][anchor_entry.first] = {1, 1};
-            }
-        }
-        apply_rowset_anchor(anchor, uniform_result, split_ranges);
-        return Status::OK();
-    }
-
-    // 5. Build SegmentSplitInfo from rowsets via shared helper. Empty-segments
-    //    here is corruption (we already short-circuited the empty-rowsets case
-    //    at step 4); external boundaries uses a distinct error message vs the data-driven path.
-    std::vector<SegmentSplitInfo> segments;
-    RETURN_IF_ERROR(build_segments_from_rowsets(tablet_manager, old_tablet_metadata, &segments));
-    if (segments.empty()) {
-        return Status::InvalidArgument("rowsets present but no segments derived (possibly corrupt metadata)");
-    }
-
-    // 6. Compute segment envelope and effective envelope.
-    VariantTuple seg_min = segments.front().min_key;
-    VariantTuple seg_max = segments.front().max_key;
-    for (const auto& s : segments) {
-        if (s.min_key.compare(seg_min) < 0) seg_min = s.min_key;
-        if (s.max_key.compare(seg_max) > 0) seg_max = s.max_key;
-    }
-    VariantTuple effective_lo = seg_min;
-    VariantTuple effective_hi = seg_max;
-    if (old_tablet_metadata->range().has_lower_bound()) {
-        VariantTuple parent_lo;
-        RETURN_IF_ERROR(parent_lo.from_proto(old_tablet_metadata->range().lower_bound()));
-        if (parent_lo.compare(effective_lo) > 0) effective_lo = parent_lo;
-    }
-    if (old_tablet_metadata->range().has_upper_bound()) {
-        VariantTuple parent_hi;
-        RETURN_IF_ERROR(parent_hi.from_proto(old_tablet_metadata->range().upper_bound()));
-        if (parent_hi.compare(effective_hi) < 0) effective_hi = parent_hi;
-    }
-    // '>=' covers both empty (lo > hi) and degenerate-point (lo == hi)
-    // envelopes. Half-open range math cannot K-way split a point; for P0
-    // both cases return InvalidArgument and the caller falls back.
-    if (effective_lo.compare(effective_hi) >= 0) {
-        return Status::InvalidArgument(
-                "effective envelope empty or degenerate-point (segments don't overlap old tablet's range or collapse "
-                "to "
-                "a single key)");
-    }
-
-    // 7. Build distribution vector covering the FULL segment envelope.
-    //    dist_to_final[j] == -1 for sinks, otherwise the index into split_ranges.
-    //    Non-explicit ±infinity sides clip to the effective envelope edge.
-    std::vector<RangeInfo> dist_ranges;
-    std::vector<int> dist_to_final;
-    dist_ranges.reserve(external_ranges.size() + 2);
-    dist_to_final.reserve(external_ranges.size() + 2);
-    if (seg_min.compare(effective_lo) < 0) {
-        RangeInfo sink;
-        sink.min = seg_min;
-        sink.max = effective_lo;
-        dist_ranges.push_back(std::move(sink));
-        dist_to_final.push_back(-1);
-    }
-    for (int i = 0; i < external_ranges.size(); ++i) {
-        const VariantTuple clipped_lo =
-                parsed[i].lo_explicit ? ((parsed[i].lo.compare(effective_lo) < 0) ? effective_lo : parsed[i].lo)
-                                      : effective_lo;
-        const VariantTuple clipped_hi =
-                parsed[i].hi_explicit ? ((parsed[i].hi.compare(effective_hi) > 0) ? effective_hi : parsed[i].hi)
-                                      : effective_hi;
-        // Skip on '>=' (zero-width too): [x,x) cannot contain any row under
-        // closed-open semantics; including would risk closed-last-range edge.
-        if (clipped_lo.compare(clipped_hi) >= 0) continue;
-        RangeInfo ri;
-        ri.min = clipped_lo;
-        ri.max = clipped_hi;
-        dist_ranges.push_back(std::move(ri));
-        dist_to_final.push_back(i);
-    }
-    if (seg_max.compare(effective_hi) > 0) {
-        RangeInfo sink;
-        sink.min = effective_hi;
-        sink.max = seg_max;
-        dist_ranges.push_back(std::move(sink));
-        dist_to_final.push_back(-1);
-    }
-    // Defense-in-depth: should be unreachable under v20 invariants (envelope
-    // check at step 5 ensures effective_lo < effective_hi; FE ranges tile
-    // the old tablet's range; at least one FE range must overlap effective envelope).
-    // Asserted at runtime so a future regression in invariants doesn't OOB
-    // find_overlapping_ranges' last_range_index = size()-1.
-    if (dist_ranges.empty()) {
-        return Status::InvalidArgument("distribution vector empty (degenerate envelope or all active slots skipped)");
-    }
-
-    // 8. Distribute segments into the full distribution vector. Out-of-old-tablet
-    //    data flows into sink buckets; sink stats are discarded at step 10.
-    for (const auto& seg : segments) {
-        distribute_segment_to_ranges(seg, dist_ranges, /*track_sources=*/true);
-    }
-
-    // 9. Build anchor BEFORE the sanity check. anchor's per-rowset totals
-    //    fall back to summing segment_metas when rowset-level num_rows /
-    //    data_size are absent on legacy metadata, so the sanity check below
-    //    using anchor totals catches legacy rowsets that direct
-    //    rowset.num_rows() access would miss.
-    auto anchor = build_rowset_anchor(*old_tablet_metadata, tablet_manager);
-
-    // 10. Per-axis all-zero sanity check. For each rowset where anchor totals
-    //     are positive, require Σ over active slots > 0 on the matching axis.
-    //     allocate_proportionally falls back to uniform allocation when all
-    //     weights are zero, which would silently invent stats.
-    for (const auto& [rowset_id, ra] : anchor) {
-        const bool need_row_weight = (ra.num_rows > 0);
-        const bool need_byte_weight = (ra.data_size > 0);
-        if (!need_row_weight && !need_byte_weight) continue;
-        int64_t active_rows_w = 0;
-        int64_t active_bytes_w = 0;
-        for (size_t j = 0; j < dist_ranges.size(); ++j) {
-            if (dist_to_final[j] < 0) continue; // skip sinks
-            auto it = dist_ranges[j].source_stats.find(rowset_id);
-            if (it != dist_ranges[j].source_stats.end()) {
-                active_rows_w += it->second.first;
-                active_bytes_w += it->second.second;
-            }
-        }
-        if (need_row_weight && active_rows_w == 0) {
-            return Status::InvalidArgument(fmt::format(
-                    "rowset id={} has anchor.num_rows={} but no active row weight (possibly corrupt metadata)",
-                    rowset_id, ra.num_rows));
-        }
-        if (need_byte_weight && active_bytes_w == 0) {
-            return Status::InvalidArgument(fmt::format(
-                    "rowset id={} has anchor.data_size={} but no active byte weight (possibly corrupt metadata)",
-                    rowset_id, ra.data_size));
-        }
-    }
-
-    // 11. Synthesize RangeSplitResult with K slots; active slots get their
-    //     accumulated source_stats, sinks discarded, skipped slots stay empty.
-    RangeSplitResult fake_result;
-    fake_result.range_source_stats.resize(external_ranges.size());
-    for (size_t j = 0; j < dist_ranges.size(); ++j) {
-        if (dist_to_final[j] < 0) continue;
-        fake_result.range_source_stats[dist_to_final[j]] = dist_ranges[j].source_stats;
-    }
-
-    // 12. Anchor: Σ new tablets stat == old tablet stat exactly for num_rows /
-    //     data_size / num_dels. Writes split_ranges[i].rowset_stats.
-    apply_rowset_anchor(anchor, fake_result, split_ranges);
-
     return Status::OK();
+}
+
+Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<TabletRange>& parsed_ranges,
+                            const std::vector<RowsetOwnership>& ownership, const std::vector<bool>& rowset_prunable,
+                            SplitMetadataVisitBudget* budget, std::vector<TabletRangeInfo>* split_ranges,
+                            RowsetEmissionMask* emission) {
+    const size_t child_count = parsed_ranges.size();
+    RETURN_IF_ERROR(budget->consume(source.rowsets_size(), "projector rowsets"));
+    emission->resize(source.rowsets_size());
+    ASSIGN_OR_RETURN(const auto schema, materialize_sort_key_schema(source.schema()));
+    const bool separate_sort = schema->keys_type() == PRIMARY_KEYS && schema->has_separate_sort_key();
+    ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(*schema));
+    for (int r = 0; r < source.rowsets_size(); ++r) {
+        const auto& rowset = source.rowsets(r);
+        RETURN_IF_ERROR(budget->consume(child_count, "projector intersections"));
+        ASSIGN_OR_RETURN(auto anchor, rowset_anchor(rowset));
+        TabletRange effective;
+        RETURN_IF_ERROR(effective.from_proto(rowset.has_range() ? rowset.range() : source.range()));
+        auto& emit = (*emission)[r];
+        emit.assign(child_count, false);
+        std::vector<int64_t> row_weights(child_count, 0), byte_weights(child_count, 0);
+        std::vector<int64_t> rows(child_count, 0), bytes(child_count, 0), dels(child_count, 0);
+        for (size_t c = 0; c < child_count; ++c) {
+            ASSIGN_OR_RETURN(auto intersection, effective.intersect(parsed_ranges[c]));
+            emit[c] = !intersection.is_empty();
+            if (emit[c] && rowset_prunable[r]) {
+                emit[c] = false;
+                for (const auto& segment : ownership[r].segments) {
+                    RETURN_IF_ERROR(budget->consume(1, "projector segment ownership"));
+                    if (segment.keep[c]) {
+                        emit[c] = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (std::none_of(emit.begin(), emit.end(), [](bool value) { return value; })) {
+            return Status::Corruption("tablet split rowset has no emitted child");
+        }
+        if (separate_sort || rowset.segment_metas_size() == 0) {
+            for (size_t c = 0; c < child_count; ++c) row_weights[c] = byte_weights[c] = emit[c] ? 1 : 0;
+        } else {
+            // Only this rowset's segment/sample weights are live. Include sinks outside
+            // its effective range, so clipping never donates out-of-range samples to a child.
+            std::vector<SegmentSplitInfo> segments;
+            for (const auto& sm : rowset.segment_metas()) {
+                RETURN_IF_ERROR(
+                        budget->consume(1 + sm.deprecated_sort_key_samples_size(), "projector segment samples"));
+                SegmentSplitInfo segment;
+                RETURN_IF_ERROR(segment.min_key.from_proto(sm.sort_key_min()));
+                RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
+                segment.num_rows = sm.num_rows();
+                segment.data_size = sm.size();
+                RETURN_IF_ERROR(segment.load_sort_key_samples(sm));
+                projection.project(&segment.min_key);
+                projection.project(&segment.max_key);
+                for (auto& sample : segment.sort_key_samples) projection.project(&sample);
+                segments.push_back(std::move(segment));
+            }
+            VariantTuple lo = segments.front().min_key, hi = segments.front().max_key;
+            for (const auto& segment : segments) {
+                if (segment.min_key.compare(lo) < 0) lo = segment.min_key;
+                if (segment.max_key.compare(hi) > 0) hi = segment.max_key;
+            }
+            RETURN_IF_ERROR(budget->consume(2, "projector envelope"));
+            std::vector<VariantTuple> cuts{lo, hi};
+            auto add_cut = [&](const VariantTuple& cut) -> Status {
+                if (cut.compare(lo) > 0 && cut.compare(hi) < 0) {
+                    RETURN_IF_ERROR(budget->consume(1, "projector cut"));
+                    cuts.push_back(cut);
+                }
+                return Status::OK();
+            };
+            if (!effective.is_minimum()) RETURN_IF_ERROR(add_cut(effective.lower_bound()));
+            if (!effective.is_maximum()) RETURN_IF_ERROR(add_cut(effective.upper_bound()));
+            for (const auto& range : parsed_ranges) {
+                if (!range.is_minimum()) RETURN_IF_ERROR(add_cut(range.lower_bound()));
+                if (!range.is_maximum()) RETURN_IF_ERROR(add_cut(range.upper_bound()));
+            }
+            std::sort(cuts.begin(), cuts.end());
+            cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+            std::vector<RangeInfo> distribution;
+            std::vector<int> destinations;
+            const size_t interval_count = std::max<size_t>(1, cuts.size() - 1);
+            for (size_t i = 0; i < interval_count; ++i) {
+                auto& range = distribution.emplace_back();
+                range.min = cuts[i];
+                range.max = cuts[std::min(i + 1, cuts.size() - 1)];
+                int destination = -1;
+                for (size_t c = 0; c < child_count; ++c) {
+                    RETURN_IF_ERROR(budget->consume(1, "projector interval intersection"));
+                    if (emit[c] && effective.contains(range.min) && parsed_ranges[c].contains(range.min)) {
+                        destination = c;
+                        break;
+                    }
+                }
+                destinations.push_back(destination);
+            }
+            // The physical maximum can itself belong to the next child (or to a
+            // sink at an excluded parent edge). Give that point its own last bucket
+            // only when its owner differs, preserving the ordinary interval weights.
+            int endpoint_destination = -1;
+            for (size_t c = 0; c < child_count; ++c) {
+                RETURN_IF_ERROR(budget->consume(1, "projector endpoint intersection"));
+                if (emit[c] && effective.contains(hi) && parsed_ranges[c].contains(hi)) {
+                    endpoint_destination = c;
+                    break;
+                }
+            }
+            if (endpoint_destination != destinations.back()) {
+                RETURN_IF_ERROR(budget->consume(1, "projector endpoint bucket"));
+                auto& endpoint = distribution.emplace_back();
+                endpoint.min = hi;
+                endpoint.max = hi;
+                destinations.push_back(endpoint_destination);
+            }
+            for (const auto& segment : segments) {
+                RETURN_IF_ERROR(distribute_segment_to_ranges(segment, distribution, false, budget));
+            }
+            for (size_t i = 0; i < distribution.size(); ++i) {
+                if (destinations[i] < 0) continue;
+                row_weights[destinations[i]] += distribution[i].num_rows;
+                byte_weights[destinations[i]] += distribution[i].data_size;
+            }
+        }
+        const auto positive = [](int64_t weight) { return weight > 0; };
+        if ((anchor.num_rows > 0 && std::none_of(row_weights.begin(), row_weights.end(), positive)) ||
+            (anchor.data_size > 0 && std::none_of(byte_weights.begin(), byte_weights.end(), positive))) {
+            return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
+        }
+        tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
+        tablet_reshard_helper::allocate_proportionally(anchor.data_size, byte_weights, &bytes);
+        tablet_reshard_helper::allocate_proportionally(anchor.num_dels, row_weights, &dels);
+        tablet_reshard_helper::cap_and_redistribute_dels(rows, &dels);
+        for (size_t c = 0; c < child_count; ++c) {
+            if (emit[c]) (*split_ranges)[c].rowset_stats[rowset.id()] = {rows[c], bytes[c], dels[c]};
+        }
+    }
+    return Status::OK();
+}
+
+Status prepare_split_projection(const TabletMetadataPB& source, SplitMetadataVisitBudget* budget,
+                                std::vector<TabletRangeInfo>* split_ranges, std::vector<RowsetOwnership>* ownership,
+                                std::vector<bool>* prunable, RowsetEmissionMask* emission) {
+    RETURN_IF_ERROR(budget->consume(split_ranges->size() + source.rowsets_size(), "projection shape"));
+    std::vector<TabletRange> ranges(split_ranges->size());
+    for (size_t c = 0; c < split_ranges->size(); ++c) RETURN_IF_ERROR(ranges[c].from_proto((*split_ranges)[c].range));
+    ASSIGN_OR_RETURN(const auto schema, materialize_sort_key_schema(source.schema()));
+    const bool compatible = !(schema->keys_type() == PRIMARY_KEYS && schema->has_separate_sort_key());
+    ownership->resize(source.rowsets_size());
+    prunable->assign(source.rowsets_size(), false);
+    for (int r = 0; r < source.rowsets_size(); ++r) {
+        const auto& rowset = source.rowsets(r);
+        if (!compatible || rowset.segment_metas_size() == 0 || rowset.del_files_size() != 0 ||
+            !can_prune_rowset_segments(rowset, raw_sort_key_arity(source.schema())))
+            continue;
+        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+            RETURN_IF_ERROR(budget->consume(ranges.size(), "ownership intersections"));
+        }
+        ASSIGN_OR_RETURN((*ownership)[r], compute_rowset_segment_ownership(rowset, ranges));
+        (*prunable)[r] = true;
+    }
+    return project_rowset_stats(source, ranges, *ownership, *prunable, budget, split_ranges, emission);
+}
+
+void erase_omitted_rowset_state(const RowsetMetadataPB& rowset, TabletMetadataPB* child) {
+    auto erase = [&](uint32_t rssid) {
+        if (child->has_delvec_meta()) child->mutable_delvec_meta()->mutable_delvecs()->erase(rssid);
+        if (child->has_dcg_meta()) child->mutable_dcg_meta()->mutable_dcgs()->erase(rssid);
+        if (child->has_idg_meta()) child->mutable_idg_meta()->mutable_idgs()->erase(rssid);
+    };
+    if (rowset.segment_metas_size() == 0) erase(rowset.id());
+    for (const auto& segment : rowset.segment_metas()) erase(rowset.id() + segment.segment_idx());
+    child->mutable_rowset_to_schema()->erase(rowset.id());
+}
+
+void prune_unreferenced_delvec_files(TabletMetadataPB* child) {
+    if (!child->has_delvec_meta()) return;
+    std::unordered_set<int64_t> versions;
+    for (const auto& [rssid, page] : child->delvec_meta().delvecs()) versions.insert(page.version());
+    for (const auto& sst : child->sstable_meta().sstables()) {
+        if (sst.has_delvec()) versions.insert(sst.delvec().version());
+    }
+    auto* files = child->mutable_delvec_meta()->mutable_version_to_file();
+    for (auto it = files->begin(); it != files->end();) {
+        if (versions.contains(it->first))
+            ++it;
+        else
+            it = files->erase(it);
+    }
 }
 
 // Build K new-tablet metadata entries from a pre-computed split_ranges vector.
@@ -1601,170 +1683,50 @@ void propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& row
 }
 
 // Precondition: split_ranges.size() == splitting_tablet.new_tablet_ids_size().
-// Per-rowset stats are honored when present in split_ranges[i].rowset_stats;
-// otherwise the rowset is preserved in the new tablet's metadata (still
-// referencing the same shared segment files) but with num_rows / data_size /
-// num_dels set to 0, signaling "rowset is visible in this new tablet's metadata
-// but contributes no rows here under the new tablet's range".
+// The emission mask is the sole rowset-retention decision. Every emitted rowset
+// has projected statistics, including genuinely zero-valued anchors.
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablets_from_split_ranges(
-        const TabletMetadataPtr& old_tablet_metadata, const SplittingTabletInfoPB& splitting_tablet,
-        int64_t new_version, const TxnInfoPB& txn_info, const std::vector<TabletRangeInfo>& split_ranges) {
-    // Defense-in-depth: callers (get_tablet_split_ranges and external-boundaries helper) are
-    // contracted to return split_ranges.size() == new_tablet_ids_size() on OK,
-    // but a runtime check here prevents OOB reads if the contract is ever
-    // broken by a future refactor (Release builds strip DCHECK).
+        const TabletMetadataPtr& source, const SplittingTabletInfoPB& splitting_tablet, int64_t new_version,
+        const TxnInfoPB& txn_info, const std::vector<TabletRangeInfo>& split_ranges,
+        const std::vector<RowsetOwnership>& ownership, const std::vector<bool>& prunable,
+        const RowsetEmissionMask& emission) {
     if (split_ranges.size() != static_cast<size_t>(splitting_tablet.new_tablet_ids_size())) {
-        return Status::InternalError(fmt::format("split_ranges size mismatch: expected={}, actual={}",
-                                                 splitting_tablet.new_tablet_ids_size(), split_ranges.size()));
+        return Status::InternalError("tablet split range count does not match child count");
     }
-
-    std::unordered_map<int64_t, MutableTabletMetadataPtr> new_metadatas;
-    new_metadatas.reserve(splitting_tablet.new_tablet_ids_size());
-    // Per-segment ownership compares each segment's stored sort-key bounds against the new tablets'
-    // ranges, so it is only sound while the two live in the same key space. TabletRangeHelper::
-    // range_key_idxes keeps a non-PK tablet's range in sort-key space whatever its ORDER BY, so those
-    // stay comparable; only a PRIMARY KEY tablet moves its range into primary-key space, and there a
-    // segment's sort-key bounds say nothing about which child owns its rows.
-    const auto old_tablet_schema = TabletSchema::create(old_tablet_metadata->schema());
-    const bool can_prune_by_segment_sort_bounds =
-            !(old_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && old_tablet_schema->has_separate_sort_key());
-
-    // The full set of new-tablet ranges, used by per-segment ownership to test
-    // overlap/containment of each segment against every sibling's range.
-    std::vector<TabletRangePB> new_tablet_ranges(split_ranges.size());
-    for (size_t new_tablet_index = 0; new_tablet_index < split_ranges.size(); ++new_tablet_index) {
-        new_tablet_ranges[new_tablet_index] = split_ranges[new_tablet_index].range;
-    }
-
-    // Per-segment ownership depends only on (source rowset, new_tablet_ranges),
-    // not on which new tablet we build, so compute it ONCE per source rowset before
-    // the per-new-tablet loop. This keeps the bvar counters per-decision (not
-    // per-new-tablet) and avoids recomputing the geometry split_count times.
-    // rowset_prunable[rowset_index] is false when the rowset is non-pruneable OR
-    // was degraded to all-shared on an unparseable sort key.
-    //
-    // Parse new_tablet_ranges into TabletRange ONCE before the per-rowset loop;
-    // the parsed form is invariant across rowsets, so this saves N redundant
-    // proto parses for a tablet with N pruneable rowsets.
-    ASSIGN_OR_RETURN(auto parsed_new_tablet_ranges, parse_tablet_ranges(new_tablet_ranges));
-    // Ownership compares a segment's stored sort-key bounds against the new tablets' ranges, which
-    // are at the tablet's current sort-key arity. A rowset written before a metadata-only trailing
-    // sort-key ADD stores narrower bounds and must not be pruned with them (see
-    // can_prune_rowset_segments); it degrades to all-shared instead.
-    const size_t sort_key_arity = raw_sort_key_arity(old_tablet_metadata->schema());
-    const int rowset_count = old_tablet_metadata->rowsets_size();
-    std::vector<RowsetOwnership> rowset_ownership(rowset_count);
-    std::vector<bool> rowset_prunable(rowset_count, false);
-    for (int rowset_index = 0; rowset_index < rowset_count; ++rowset_index) {
-        const auto& source_rowset = old_tablet_metadata->rowsets(rowset_index);
-        if (!can_prune_by_segment_sort_bounds || !can_prune_rowset_segments(source_rowset, sort_key_arity)) continue;
-        auto ownership_or = compute_rowset_segment_ownership(source_rowset, parsed_new_tablet_ranges);
-        if (ownership_or.ok()) {
-            rowset_ownership[rowset_index] = std::move(ownership_or.value());
-            rowset_prunable[rowset_index] = true;
-        } else {
-            // Unparseable sort key: degrade the whole rowset to all-shared below.
-            g_tablet_reshard_split_anomaly_total << 1;
-        }
-    }
-
-    for (int32_t i = 0; i < splitting_tablet.new_tablet_ids_size(); ++i) {
-        auto new_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_metadata);
-        new_tablet_new_metadata->set_id(splitting_tablet.new_tablet_ids(i));
-        new_tablet_new_metadata->set_version(new_version);
-        new_tablet_new_metadata->set_commit_time(txn_info.commit_time());
-        new_tablet_new_metadata->set_gtid(txn_info.gtid());
-        new_tablet_new_metadata->clear_compaction_inputs();
-        new_tablet_new_metadata->clear_orphan_files();
-        new_tablet_new_metadata->clear_prev_garbage_version();
-        new_tablet_new_metadata->mutable_range()->CopyFrom(split_ranges[i].range);
-        // Non-segment files (delvec/dcg/sstable) stay all-shared; each rowset's
-        // per-segment shared flags are (re)written below by exactly one branch per rowset.
-        tablet_reshard_helper::set_non_segment_files_shared(new_tablet_new_metadata.get());
-
-        // The copy preserves rowset order, so rowset_index aligns with old_tablet_metadata.
-        // keep_rowset[idx] is cleared for a rowset whose every segment was pruned from
-        // this new tablet (and which carries no other semantics); such rowsets are
-        // compacted out of rowsets[] after the loop.
-        const int rowset_count = new_tablet_new_metadata->rowsets_size();
-        std::vector<bool> keep_rowset(rowset_count, true);
-        std::vector<uint32_t> removed_rowset_ids;
-        int rowset_index = 0;
-        for (auto& rowset_metadata : *new_tablet_new_metadata->mutable_rowsets()) {
-            RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&rowset_metadata, split_ranges[i].range));
-
-            // Phase-1 per-segment shared. The uid (logical rowset identity for a later MERGE) is
-            // preserved verbatim by the metadata copy, identical across new tablets. Segments
-            // are then pruned to those overlapping this new tablet (shared=false where provably
-            // exclusive+contained), or for non-pruneable / degraded rowsets stay all-shared.
-            if (rowset_prunable[rowset_index]) {
-                propagate_pruned_ownership_to_non_segment_files(rowset_metadata, rowset_ownership[rowset_index], i,
-                                                                new_tablet_new_metadata.get());
-
-                RETURN_IF_ERROR(apply_segment_ownership_to_new_tablet_rowset(&rowset_metadata,
-                                                                             rowset_ownership[rowset_index], i));
-                // del_files stay shared (per-segment pruning operates on segments, not del_files).
-                for (auto& del_file : *rowset_metadata.mutable_del_files()) del_file.set_shared(true);
-
-                // A rowset whose every segment was pruned from this new tablet carries no
-                // data here. Remove it (and its rowset_to_schema mapping) unless it still
-                // holds a delete predicate or del_files.
-                if (rowset_metadata.segment_metas_size() == 0 && !rowset_metadata.has_delete_predicate() &&
-                    rowset_metadata.del_files_size() == 0) {
-                    keep_rowset[rowset_index] = false;
-                    removed_rowset_ids.push_back(rowset_metadata.id());
-                }
+    std::unordered_map<int64_t, MutableTabletMetadataPtr> children;
+    for (size_t c = 0; c < split_ranges.size(); ++c) {
+        auto child =
+                make_identical_new_tablet_metadata(source, splitting_tablet.new_tablet_ids(c), new_version, txn_info);
+        *child->mutable_range() = split_ranges[c].range;
+        tablet_reshard_helper::set_non_segment_files_shared(child.get());
+        child->clear_rowsets();
+        uint32_t cumulative_point = 0;
+        for (int r = 0; r < source->rowsets_size(); ++r) {
+            const auto& source_rowset = source->rowsets(r);
+            if (!emission[r][c]) {
+                erase_omitted_rowset_state(source_rowset, child.get());
+                continue;
+            }
+            auto* rowset = child->add_rowsets();
+            *rowset = source_rowset;
+            RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(rowset, split_ranges[c].range));
+            if (prunable[r] && rowset->del_files_size() == 0) {
+                propagate_pruned_ownership_to_non_segment_files(*rowset, ownership[r], c, child.get());
+                RETURN_IF_ERROR(apply_segment_ownership_to_new_tablet_rowset(rowset, ownership[r], c));
             } else {
-                tablet_reshard_helper::set_all_data_files_shared(&rowset_metadata);
+                tablet_reshard_helper::set_all_data_files_shared(rowset);
             }
-
-            const auto it = split_ranges[i].rowset_stats.find(rowset_metadata.id());
-            if (it != split_ranges[i].rowset_stats.end()) {
-                // apply_rowset_anchor + cap_and_redistribute_dels guarantee
-                // num_dels <= num_rows for every (rowset, new tablet). The std::min
-                // below is defense-in-depth against an upstream regression.
-                DCHECK_LE(it->second.num_dels, it->second.num_rows);
-                int64_t scaled_num_dels = std::min<int64_t>(it->second.num_dels, it->second.num_rows);
-                rowset_metadata.set_num_rows(it->second.num_rows);
-                rowset_metadata.set_data_size(it->second.data_size);
-                rowset_metadata.set_num_dels(scaled_num_dels);
-            } else {
-                rowset_metadata.set_num_rows(0);
-                rowset_metadata.set_data_size(0);
-                rowset_metadata.set_num_dels(0);
-            }
-            ++rowset_index;
+            const auto& projected = split_ranges[c].rowset_stats.at(rowset->id());
+            rowset->set_num_rows(projected.num_rows);
+            rowset->set_data_size(projected.data_size);
+            rowset->set_num_dels(projected.num_dels);
+            if (r < source->cumulative_point()) ++cumulative_point;
         }
-
-        // Compact out removed (fully-pruned) rowsets, preserving order, and drop their
-        // rowset_to_schema mappings. Move survivors into a fresh field then swap — the
-        // order-stable RepeatedPtrField idiom (positional swap-compaction would desync
-        // from the original-position keep_rowset[] vector).
-        if (!removed_rowset_ids.empty()) {
-            // cumulative_point indexes into rowsets[] (base rowsets are [0, cp), cumulative
-            // [cp, size)) for non-PK base+cumulative compaction. Removing rowsets shifts
-            // positions, so recompute the point as the number of SURVIVING rowsets that
-            // were originally in the base region [0, old_cp); otherwise the inherited point
-            // could misclassify rowsets or exceed rowsets_size().
-            const int old_cumulative_point = static_cast<int>(new_tablet_new_metadata->cumulative_point());
-            google::protobuf::RepeatedPtrField<RowsetMetadataPB> survivors;
-            auto* rowsets = new_tablet_new_metadata->mutable_rowsets();
-            uint32_t new_cumulative_point = 0;
-            for (int idx = 0; idx < rowsets->size(); ++idx) {
-                if (!keep_rowset[idx]) continue;
-                if (idx < old_cumulative_point) ++new_cumulative_point;
-                survivors.Add()->Swap(rowsets->Mutable(idx));
-            }
-            rowsets->Swap(&survivors);
-            new_tablet_new_metadata->set_cumulative_point(new_cumulative_point);
-            auto* rowset_to_schema = new_tablet_new_metadata->mutable_rowset_to_schema();
-            for (uint32_t id : removed_rowset_ids) rowset_to_schema->erase(id);
-        }
-
-        new_metadatas.emplace(new_tablet_new_metadata->id(), std::move(new_tablet_new_metadata));
+        child->set_cumulative_point(cumulative_point);
+        prune_unreferenced_delvec_files(child.get());
+        children.emplace(child->id(), std::move(child));
     }
-
-    return new_metadatas;
+    return children;
 }
 
 } // namespace
@@ -1925,35 +1887,53 @@ Status build_segments_from_rowsets(TabletManager* tablet_manager, const TabletMe
     return build_segments_from_rowsets_impl(tablet_manager, tablet_metadata, *tablet_schema, segments);
 }
 
-// Public wrapper for the anon-namespace implementation. Exposed via
-// tablet_splitter.h so unit tests can drive the validation paths directly
-// without spinning up a TabletManager/filesystem fixture.
-Status compute_split_ranges_from_external_boundaries(TabletManager* tablet_manager,
-                                                     const TabletMetadataPtr& old_tablet_metadata,
+// Focused SPLIT helpers create one bounded budget; the generic calculator used by
+// parallel compaction remains unlimited, including explicitly source-tracked calls.
+StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
+                                                            int32_t target_split_count, int64_t target_value_per_split,
+                                                            bool use_num_rows, bool track_sources,
+                                                            const TabletRange* tablet_range,
+                                                            int32_t colocate_column_count) {
+    return calculate_range_split_boundaries_impl(segments, target_split_count, target_value_per_split, use_num_rows,
+                                                 track_sources, tablet_range, colocate_column_count, nullptr);
+}
+
+Status compute_split_ranges_from_external_boundaries(TabletManager* tablet_manager, const TabletMetadataPtr& metadata,
                                                      const RepeatedPtrField<TabletRangePB>& external_ranges,
                                                      std::vector<TabletRangeInfo>* split_ranges) {
-    return compute_split_ranges_from_external_boundaries_impl(tablet_manager, old_tablet_metadata, external_ranges,
-                                                              split_ranges);
+    SplitMetadataVisitBudget budget;
+    RETURN_IF_ERROR(compute_split_ranges_from_external_boundaries_impl(tablet_manager, metadata, external_ranges,
+                                                                       split_ranges, &budget));
+    std::vector<RowsetOwnership> ownership;
+    std::vector<bool> prunable;
+    RowsetEmissionMask emission;
+    return prepare_split_projection(*metadata, &budget, split_ranges, &ownership, &prunable, &emission);
 }
 
-// Public wrapper for the data-driven split-ranges helper. Exposed for parity
-// testing against compute_split_ranges_from_external_boundaries; production
-// call site is split_tablet().
-Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
-                               int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
-                               int32_t colocate_column_count) {
-    return get_tablet_split_ranges_impl(tablet_manager, tablet_metadata, split_count, split_ranges,
-                                        colocate_column_count);
+Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& metadata, int32_t split_count,
+                               std::vector<TabletRangeInfo>* split_ranges, int32_t colocate_column_count) {
+    SplitMetadataVisitBudget budget;
+    RETURN_IF_ERROR(get_tablet_split_ranges_impl(tablet_manager, metadata, split_count, split_ranges,
+                                                 colocate_column_count, &budget));
+    std::vector<RowsetOwnership> ownership;
+    std::vector<bool> prunable;
+    RowsetEmissionMask emission;
+    return prepare_split_projection(*metadata, &budget, split_ranges, &ownership, &prunable, &emission);
 }
 
-Status get_tablet_split_ranges_from_pk_index_samples(TabletManager* tablet_manager,
-                                                     const TabletMetadataPtr& tablet_metadata, int32_t split_count,
-                                                     std::vector<std::string> encoded_samples,
+Status get_tablet_split_ranges_from_pk_index_samples(TabletManager* tablet_manager, const TabletMetadataPtr& metadata,
+                                                     int32_t split_count, std::vector<std::string> encoded_samples,
                                                      std::vector<TabletRangeInfo>* split_ranges,
                                                      int32_t colocate_column_count) {
-    return get_tablet_split_ranges_from_pk_index_samples_impl(tablet_manager, tablet_metadata, split_count,
-                                                              std::move(encoded_samples), split_ranges,
-                                                              colocate_column_count);
+    SplitMetadataVisitBudget budget;
+    RETURN_IF_ERROR(budget.consume(encoded_samples.size(), "PK samples"));
+    RETURN_IF_ERROR(get_tablet_split_ranges_from_pk_index_samples_impl(tablet_manager, metadata, split_count,
+                                                                       std::move(encoded_samples), split_ranges,
+                                                                       colocate_column_count, &budget));
+    std::vector<RowsetOwnership> ownership;
+    std::vector<bool> prunable;
+    RowsetEmissionMask emission;
+    return prepare_split_projection(*metadata, &budget, split_ranges, &ownership, &prunable, &emission);
 }
 
 // -----------------------------------------------------------------------------
@@ -2130,54 +2110,60 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         return Status::InvalidArgument("splitting tablet has no new tablet");
     }
 
-    auto split_schema = TabletSchema::create(tablet_metadata->schema());
-    if (split_schema->keys_type() == KeysType::PRIMARY_KEYS && split_schema->has_separate_sort_key() &&
-        ((tablet_metadata->has_dcg_meta() && !tablet_metadata->dcg_meta().dcgs().empty()) ||
-         (tablet_metadata->has_idg_meta() && !tablet_metadata->idg_meta().idgs().empty()))) {
+    SplitMetadataVisitBudget budget;
+    Status status = validate_split_inputs(*tablet_metadata, &budget);
+    auto can_fallback_identical = [](const Status& outcome) {
+        return outcome.is_not_supported() || outcome.is_capacity_limit_exceeded();
+    };
+    if (!status.ok() && !can_fallback_identical(status)) return status;
+    ASSIGN_OR_RETURN(const auto split_schema, materialize_sort_key_schema(tablet_metadata->schema()));
+    const bool separate_sort = split_schema->keys_type() == PRIMARY_KEYS && split_schema->has_separate_sort_key();
+    if (separate_sort && ((tablet_metadata->has_dcg_meta() && !tablet_metadata->dcg_meta().dcgs().empty()) ||
+                          (tablet_metadata->has_idg_meta() && !tablet_metadata->idg_meta().idgs().empty()))) {
         return Status::NotSupported("range-tablet split with ORDER BY != PK does not support DCG or IDG yet");
     }
+    const bool is_external_boundaries = splitting_tablet.new_tablet_ranges_size() > 0;
+    std::vector<TabletRangeInfo> split_ranges;
+    std::vector<RowsetOwnership> ownership;
+    std::vector<bool> prunable;
+    RowsetEmissionMask emission;
 
-    // Flush the old tablet's PK-index memtable into sstables before propagating
-    // metadata to the new tablets, so every new tablet inherits an sstable_meta that
-    // already covers its rowsets' live data. This is the pre-split half of
-    // the "reshard inputs must have full sstable coverage" invariant; merge
-    // does the post-split half in merge_sstables.
+    // Paths 1/2 finish range validation and projection against the input metadata.
+    // Path 3 validates source coordinates/stats here but needs the flushed PK SSTs.
+    if (is_external_boundaries && splitting_tablet.new_tablet_ranges_size() != splitting_tablet.new_tablet_ids_size()) {
+        return Status::InvalidArgument("new_tablet_ranges count does not match new_tablet_ids");
+    }
+    if (status.ok() && (is_external_boundaries || !separate_sort)) {
+        if (is_external_boundaries) {
+            status = compute_split_ranges_from_external_boundaries_impl(
+                    tablet_manager, tablet_metadata, splitting_tablet.new_tablet_ranges(), &split_ranges, &budget);
+        } else {
+            status = get_tablet_split_ranges_impl(tablet_manager, tablet_metadata,
+                                                  splitting_tablet.new_tablet_ids_size(), &split_ranges,
+                                                  txn_info.colocate_column_count(), &budget);
+        }
+        if (status.ok()) {
+            status = prepare_split_projection(*tablet_metadata, &budget, &split_ranges, &ownership, &prunable,
+                                              &emission);
+        }
+    }
+    if (!status.ok() && !can_fallback_identical(status)) return status;
+
+    // Exactly one required flush, including typed no-split outcomes. Identical
+    // fallback must inherit this flushed metadata rather than the input snapshot.
+    TEST_SYNC_POINT_CALLBACK("tablet_splitter:pk_flush", nullptr);
     ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
                      tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata, new_version));
-
-    // Dispatch on FE-supplied new_tablet_ranges. When set, FE has computed the K-1 boundaries
-    // externally and BE computes per-rowset stats only. Otherwise ORDER BY != PK tablets sample
-    // their cloud-native PK-index SSTs; tablets whose physical order is the range key keep using
-    // the segment-driven boundary search.
-    //
-    // Symmetric identical-fallback: either path's non-OK Status routes through
-    // make_identical_new_tablet_metadata to produce a single identical new
-    // tablet that inherits the old tablet's data. Distinct bvar counters distinguish
-    // the failure root cause for ops alerting.
-    std::vector<TabletRangeInfo> split_ranges;
-    // colocate_column_count is carried at the txn level (single split job = single txn) since
-    // every SplittingTabletInfoPB in the same job would carry the same value. See lake_types.proto.
-    // External-boundaries path skips boundary computation entirely (FE-supplied), so it does not consume the
-    // colocate_column_count signal.
-    const bool is_external_boundaries = splitting_tablet.new_tablet_ranges_size() > 0;
-    // For external boundaries, FE supplies two parallel lists (new_tablet_ids and new_tablet_ranges);
-    // they must agree in size, since downstream code zips them per index.
-    Status status;
-    if (is_external_boundaries && splitting_tablet.new_tablet_ranges_size() != splitting_tablet.new_tablet_ids_size()) {
-        status = Status::InvalidArgument(fmt::format("new_tablet_ranges.size={} != new_tablet_ids.size={}",
-                                                     splitting_tablet.new_tablet_ranges_size(),
-                                                     splitting_tablet.new_tablet_ids_size()));
-    } else if (is_external_boundaries) {
-        status = compute_split_ranges_from_external_boundaries(tablet_manager, old_tablet_metadata,
-                                                               splitting_tablet.new_tablet_ranges(), &split_ranges);
-    } else if (split_schema->keys_type() == KeysType::PRIMARY_KEYS && split_schema->has_separate_sort_key()) {
+    if (status.ok() && !is_external_boundaries && separate_sort) {
         status = get_tablet_split_ranges_from_pk_index_impl(tablet_manager, old_tablet_metadata,
                                                             splitting_tablet.new_tablet_ids_size(), &split_ranges,
-                                                            txn_info.colocate_column_count());
-    } else {
-        status = get_tablet_split_ranges(tablet_manager, old_tablet_metadata, splitting_tablet.new_tablet_ids_size(),
-                                         &split_ranges, txn_info.colocate_column_count());
+                                                            txn_info.colocate_column_count(), &budget);
+        if (status.ok()) {
+            status = prepare_split_projection(*old_tablet_metadata, &budget, &split_ranges, &ownership, &prunable,
+                                              &emission);
+        }
     }
+    if (!status.ok() && !can_fallback_identical(status)) return status;
     if (!status.ok()) {
         if (is_external_boundaries) {
             g_tablet_reshard_split_external_boundaries_fallback_total << 1;
@@ -2198,7 +2184,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     }
 
     return build_new_tablets_from_split_ranges(old_tablet_metadata, splitting_tablet, new_version, txn_info,
-                                               split_ranges);
+                                               split_ranges, ownership, prunable, emission);
 }
 
 } // namespace starrocks::lake

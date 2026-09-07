@@ -73,6 +73,7 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/tablet_splitter.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
@@ -161,6 +162,71 @@ public:
     }
 
 protected:
+    std::shared_ptr<TabletMetadataPB> split_source(bool separate_sort = false) {
+        auto m = std::make_shared<TabletMetadataPB>();
+        m->set_id(next_id());
+        m->set_version(1);
+        m->set_next_rowset_id(30);
+        set_int_primary_key_schema(m.get(), next_id());
+        if (separate_sort) {
+            auto* c = m->mutable_schema()->add_column();
+            c->set_unique_id(1);
+            c->set_name("v");
+            c->set_type("INT");
+            c->set_is_key(false);
+            c->set_is_nullable(false);
+            m->mutable_schema()->add_sort_key_idxes(1);
+        }
+        auto* r = m->add_rowsets();
+        r->set_id(2);
+        lake::tablet_reshard_helper::set_rowset_uid(r);
+        r->set_num_rows(100);
+        r->set_data_size(1000);
+        r->set_num_dels(10);
+        for (int i = 0; i < 2; ++i) {
+            auto* sm = r->add_segment_metas();
+            sm->set_filename(fmt::format("split-{}.dat", i));
+            sm->set_segment_idx(i == 0 ? 0 : 7);
+            sm->set_num_rows(50);
+            sm->set_size(500);
+            *sm->mutable_sort_key_min() = generate_sort_key(i * 50);
+            *sm->mutable_sort_key_max() = generate_sort_key(i * 50 + 49);
+        }
+        return m;
+    }
+
+    auto split_source_into_children(const TabletMetadataPtr& m, bool external = true) {
+        // Deliberately bypass the current-producer stamping wrapper: malformed
+        // rejection fixtures must reach SPLIT exactly as declared by each test.
+        CHECK_OK(_tablet_manager->put_tablet_metadata(m));
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(m->id());
+        splitting.add_new_tablet_ids(m->id() + 100000);
+        splitting.add_new_tablet_ids(m->id() + 200000);
+        if (external) {
+            *splitting.add_new_tablet_ranges()->mutable_upper_bound() = generate_sort_key(50);
+            splitting.mutable_new_tablet_ranges(0)->set_upper_bound_included(false);
+            *splitting.add_new_tablet_ranges()->mutable_lower_bound() = generate_sort_key(50);
+            splitting.mutable_new_tablet_ranges(1)->set_lower_bound_included(true);
+        }
+        return lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB());
+    }
+
+    void expect_split_fallback_after_flush(const std::shared_ptr<TabletMetadataPB>& m) {
+        auto* sync = SyncPoint::GetInstance();
+        int flushes = 0;
+        sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+        ASSERT_EQ(1, children.size());
+        EXPECT_EQ(1, flushes);
+        EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString());
+    }
+
     void prepare_tablet_dirs(int64_t tablet_id) {
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(tablet_id)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(tablet_id)));
@@ -268,6 +334,9 @@ protected:
     Status put_tablet_metadata(TabletMetadataPB metadata) {
         for (auto& rowset : *metadata.mutable_rowsets()) {
             lake::tablet_reshard_helper::ensure_rowset_uid(&rowset);
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                if (!rowset.segment_metas(i).has_segment_idx()) rowset.mutable_segment_metas(i)->set_segment_idx(i);
+            }
         }
         return _tablet_manager->put_tablet_metadata(metadata);
     }
@@ -276,6 +345,9 @@ protected:
         auto mutable_meta = std::make_shared<TabletMetadataPB>(*metadata);
         for (auto& rowset : *mutable_meta->mutable_rowsets()) {
             lake::tablet_reshard_helper::ensure_rowset_uid(&rowset);
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                if (!rowset.segment_metas(i).has_segment_idx()) rowset.mutable_segment_metas(i)->set_segment_idx(i);
+            }
         }
         return _tablet_manager->put_tablet_metadata(mutable_meta);
     }
@@ -4464,6 +4536,242 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_tde_failure_retry_ma
     }
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_preserves_sparse_segment_indices) {
+    auto m = split_source();
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    EXPECT_EQ(0, children.at(m->id() + 100000)->rowsets(0).segment_metas(0).segment_idx());
+    EXPECT_EQ(7, children.at(m->id() + 200000)->rowsets(0).segment_metas(0).segment_idx());
+    for (const auto& [id, child] : children) {
+        ASSERT_EQ(1, child->rowsets(0).segment_metas_size());
+        EXPECT_EQ(m->rowsets(0).uid().SerializeAsString(), child->rowsets(0).uid().SerializeAsString());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_omits_nonintersecting_rowset_and_sidecars) {
+    auto m = split_source();
+    for (uint32_t rssid : {2, 9}) {
+        auto& page = (*m->mutable_delvec_meta()->mutable_delvecs())[rssid];
+        page.set_version(rssid);
+        (*m->mutable_delvec_meta()->mutable_version_to_file())[rssid].set_name(fmt::format("{}.dv", rssid));
+        (*m->mutable_dcg_meta()->mutable_dcgs())[rssid].add_column_files(fmt::format("{}.dcg", rssid));
+        (*m->mutable_idg_meta()->mutable_idgs())[rssid];
+    }
+    auto* outside = m->add_rowsets();
+    *outside = m->rowsets(0);
+    outside->set_id(20);
+    lake::tablet_reshard_helper::set_rowset_uid(outside);
+    outside->clear_segment_metas();
+    *outside->add_segment_metas() = m->rowsets(0).segment_metas(1);
+    outside->mutable_segment_metas(0)->set_segment_idx(0);
+    *outside->mutable_range()->mutable_lower_bound() = generate_sort_key(50);
+    outside->mutable_range()->set_lower_bound_included(true);
+    outside->set_next_compaction_offset(1); // opaque rowset still must be omitted by effective range
+    (*m->mutable_rowset_to_schema())[20] = 123;
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    auto left = children.at(m->id() + 100000);
+    auto right = children.at(m->id() + 200000);
+    EXPECT_EQ(1, left->rowsets_size());
+    EXPECT_EQ(0, left->rowset_to_schema().count(20));
+    for (auto [child, live, dead] : {std::tuple{left, 2, 9}, std::tuple{right, 9, 2}}) {
+        EXPECT_EQ(1, child->delvec_meta().delvecs().count(live));
+        EXPECT_EQ(1, child->dcg_meta().dcgs().count(live));
+        EXPECT_EQ(1, child->idg_meta().idgs().count(live));
+        EXPECT_EQ(0, child->delvec_meta().delvecs().count(dead));
+        EXPECT_EQ(0, child->delvec_meta().version_to_file().count(dead));
+        EXPECT_EQ(0, child->dcg_meta().dcgs().count(dead));
+        EXPECT_EQ(0, child->idg_meta().idgs().count(dead));
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_preserves_nonzero_compaction_cursor) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->set_next_compaction_offset(1);
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    for (const auto& [id, child] : children) {
+        EXPECT_EQ(1, child->rowsets(0).next_compaction_offset());
+        EXPECT_EQ(2, child->rowsets(0).segment_metas_size());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_capacity_limit_uses_identical_fallback) {
+    auto m = split_source();
+    SyncPoint::GetInstance()->SetCallBack("tablet_splitter:set_metadata_visit_limit",
+                                          [](void* p) { *static_cast<size_t*>(p) = 0; });
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_corruption_does_not_use_identical_fallback) {
+    for (int malformed = 0; malformed < 7; ++malformed) {
+        auto m = split_source();
+        auto* rowset = m->mutable_rowsets(0);
+        switch (malformed) {
+        case 0:
+            rowset->set_num_dels(101);
+            break;
+        case 1:
+            rowset->set_num_rows(-1);
+            break;
+        case 2:
+            rowset->set_data_size(-1);
+            break;
+        case 3:
+            rowset->set_num_dels(-1);
+            break;
+        case 4:
+            rowset->mutable_delete_predicate()->set_version(1);
+            break;
+        case 5:
+            rowset->mutable_segment_metas(1)->set_segment_idx(UINT32_MAX);
+            break;
+        case 6:
+            auto* del = rowset->add_del_files();
+            del->set_name("overflow.del");
+            del->set_origin_rowset_id(UINT32_MAX);
+            del->set_op_offset(1);
+            break;
+        }
+        EXPECT_TRUE(split_source_into_children(m).status().is_corruption()) << malformed;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_corrupt_source_fails_before_pk_flush) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->set_num_dels(101);
+    auto* sync = SyncPoint::GetInstance();
+    int flushes = 0;
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    EXPECT_TRUE(split_source_into_children(m).status().is_corruption());
+    EXPECT_EQ(0, flushes);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_missing_uid_is_corruption) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->clear_uid();
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(m));
+    EXPECT_TRUE(split_source_into_children(m).status().is_corruption());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_absent_segment_idx_falls_back_after_pk_flush) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->mutable_segment_metas(0)->clear_segment_idx();
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_duplicate_segment_idx_is_corruption) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->mutable_segment_metas(1)->set_segment_idx(0);
+    EXPECT_TRUE(split_source_into_children(m).status().is_corruption());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_logically_empty_range_falls_back_after_pk_flush) {
+    auto m = split_source();
+    auto* range = m->mutable_rowsets(0)->mutable_range();
+    *range->mutable_lower_bound() = generate_sort_key(50);
+    *range->mutable_upper_bound() = generate_sort_key(50);
+    range->set_lower_bound_included(true);
+    range->set_upper_bound_included(false);
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_self_del_offset_falls_back_after_pk_flush) {
+    auto m = split_source();
+    auto* del = m->mutable_rowsets(0)->add_del_files();
+    del->set_name("self.del");
+    del->set_origin_rowset_id(2);
+    del->set_op_offset(1);
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_inherited_del_offset_uses_origin_space) {
+    auto m = split_source();
+    auto* del = m->mutable_rowsets(0)->add_del_files();
+    del->set_name("inherited.del");
+    del->set_origin_rowset_id(1);
+    del->set_op_offset(19);
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    for (const auto& [id, child] : children) {
+        EXPECT_EQ(2, child->rowsets(0).segment_metas_size());
+        EXPECT_EQ(19, child->rowsets(0).del_files(0).op_offset());
+        EXPECT_EQ(1, child->rowsets(0).del_files(0).origin_rowset_id());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_opaque_del_rowset_is_full_copy_or_omitted) {
+    auto m = split_source();
+    auto* rowset = m->mutable_rowsets(0);
+    *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(50);
+    rowset->mutable_range()->set_lower_bound_included(true);
+    auto* del = rowset->add_del_files();
+    del->set_name("self.del");
+    del->set_origin_rowset_id(2);
+    del->set_op_offset(7);
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    EXPECT_EQ(0, children.at(m->id() + 100000)->rowsets_size());
+    auto right = children.at(m->id() + 200000);
+    ASSERT_EQ(1, right->rowsets_size());
+    EXPECT_EQ(2, right->rowsets(0).segment_metas_size());
+    EXPECT_EQ(1, right->rowsets(0).del_files_size());
+    EXPECT_EQ(100, right->rowsets(0).num_rows());
+}
+
+TEST_F(LakeTabletReshardTest, test_separate_sort_pk_split_flushes_before_budgeted_sst_sampling) {
+    auto m = split_source(true);
+    const std::string name = "split-sampling.sst";
+    std::vector<std::tuple<std::string, uint32_t, uint32_t>> entries;
+    for (int i = 0; i < 100; ++i) entries.emplace_back(encode_int_primary_key(i), 2, i);
+    auto* sst = m->mutable_sstable_meta()->add_sstables();
+    sst->set_filename(name);
+    sst->set_filesize(write_legacy_pk_sstable(_tablet_manager->sst_location(m->id(), name), entries));
+    sst->mutable_range()->set_start_key(encode_int_primary_key(0));
+    sst->mutable_range()->set_end_key(encode_int_primary_key(99));
+    auto* sync = SyncPoint::GetInstance();
+    std::vector<std::string> order;
+    for (const auto& phase : {"pk_flush", "pk_sampler", "sst_open"}) {
+        sync->SetCallBack(std::string("tablet_splitter:") + phase, [&, phase](void*) { order.emplace_back(phase); });
+    }
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m, false));
+    EXPECT_EQ(2, children.size());
+    EXPECT_EQ((std::vector<std::string>{"pk_flush", "pk_sampler", "sst_open"}), order);
+}
+
+TEST_F(LakeTabletReshardTest, test_separate_sort_pk_budget_stops_before_sst_open_then_falls_back) {
+    auto m = split_source(true);
+    auto* sst = m->mutable_sstable_meta()->add_sstables();
+    sst->set_filename("must-not-open.sst");
+    sst->mutable_range()->set_start_key(encode_int_primary_key(0));
+    sst->mutable_range()->set_end_key(encode_int_primary_key(99));
+    auto* sync = SyncPoint::GetInstance();
+    std::vector<std::string> order;
+    // Enough for source preflight and the SST declaration, not its requested 64 samples.
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [](void* p) { *static_cast<size_t*>(p) = 10; });
+    for (const auto& phase : {"pk_flush", "pk_sampler", "sst_open"}) {
+        sync->SetCallBack(std::string("tablet_splitter:") + phase, [&, phase](void*) { order.emplace_back(phase); });
+    }
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m, false));
+    EXPECT_EQ(1, children.size());
+    EXPECT_EQ((std::vector<std::string>{"pk_flush"}), order);
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
     starrocks::TabletMetadata metadata;
     auto tablet_id = next_id();
@@ -5222,7 +5530,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_del_files_rowset) {
                                               metadata.version() + 1, txn_info, false, tablet_metadatas,
                                               tablet_ranges));
 
-    int rs_a_fully_pruned_but_kept = 0;
+    int rs_a_full_copies = 0;
     int rs_b_present = 0;
     for (int64_t child : {child0, child1}) {
         auto c = tablet_metadatas.at(child);
@@ -5231,12 +5539,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_del_files_rowset) {
             if (r.id() == 2) rs_a_out = &r;
             if (r.id() == 10) ++rs_b_present;
         }
-        ASSERT_NE(rs_a_out, nullptr) << "rs_a must survive on every child (overlap or del_files guard)";
+        ASSERT_NE(rs_a_out, nullptr) << "the opaque rowset's unbounded effective range overlaps every child";
         EXPECT_GT(rs_a_out->del_files_size(), 0) << "rs_a keeps its del_files";
-        if (rs_a_out->segment_metas_size() == 0) ++rs_a_fully_pruned_but_kept; // kept purely by the del_files guard
+        ASSERT_EQ(1, rs_a_out->segment_metas_size());
+        EXPECT_EQ("a_seg.dat", rs_a_out->segment_metas(0).filename());
+        EXPECT_TRUE(rs_a_out->segment_metas(0).shared());
+        ++rs_a_full_copies;
     }
-    EXPECT_EQ(1, rs_a_fully_pruned_but_kept)
-            << "exactly one child fully prunes rs_a's segment yet keeps it for del_files";
+    EXPECT_EQ(2, rs_a_full_copies) << "opaque del-bearing rowsets retain the complete ordered file set";
     EXPECT_EQ(1, rs_b_present) << "rs_b (no del_files) is removed from the non-overlapping child";
 }
 

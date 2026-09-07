@@ -117,6 +117,7 @@ struct RangeSplitResult {
 //
 // Returns RangeSplitResult with boundaries and per-range estimates, or empty boundaries if
 // splitting is not possible (e.g., not enough data or segments).
+// This generic calculator is unlimited. SPLIT operations use a separate bounded internal path.
 //
 // colocate_column_count > 0 enables colocate-aware boundary canonicalization: when the
 // selected boundary crosses a colocate-prefix transition between adjacent candidate ranges,
@@ -177,9 +178,9 @@ struct TabletRangeInfo {
 // testing (parity comparison with the external-boundaries path); the production call site
 // is in split_tablet().
 //
-// `tablet_manager` is only dereferenced by build_rowset_anchor's primary-key
-// delvec fallback. For tests using DUP_KEYS metadata with num_dels populated
-// directly, `tablet_manager` may be nullptr.
+// Uses unique physical segment metadata for boundaries, then projects each rowset's
+// recorded statistics onto eligible children. This metadata-only helper accepts a null manager
+// and applies the SPLIT metadata-visit budget; it does not load segment or delvec files.
 Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
                                int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
                                int32_t colocate_column_count = 0);
@@ -201,9 +202,8 @@ Status get_tablet_split_ranges_from_pk_index_samples(TabletManager* tablet_manag
 // distribution. Exposed for unit testing of the validation paths; the
 // production call site is in split_tablet().
 //
-// `tablet_manager` is only dereferenced when the old tablet has rowsets
-// (build_rowset_anchor at step 9). For empty-tablet validation tests
-// `tablet_manager` may be nullptr.
+// Skips boundary planning entirely. Projection uses metadata-only weights, or uniform
+// eligible-child weights for separate-sort PK and segmentless rowsets. The manager may be null.
 Status compute_split_ranges_from_external_boundaries(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
         const google::protobuf::RepeatedPtrField<TabletRangePB>& external_ranges,

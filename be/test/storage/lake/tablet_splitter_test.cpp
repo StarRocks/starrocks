@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
@@ -258,7 +259,7 @@ TEST(TabletSplitterTest, pk_index_samples_reject_insufficient_distinct_keys) {
     std::vector<TabletRangeInfo> ranges;
     auto status = get_tablet_split_ranges_from_pk_index_samples(/*tablet_manager=*/nullptr, metadata,
                                                                 /*split_count=*/3, std::move(samples), &ranges);
-    EXPECT_TRUE(status.is_invalid_argument());
+    EXPECT_TRUE(status.is_not_supported());
     EXPECT_TRUE(ranges.empty());
 }
 
@@ -1225,6 +1226,144 @@ static TabletMetadataPtr make_dup_keys_metadata_with_rowsets(
 }
 
 } // namespace
+
+TEST(TabletSplitterTest, DataDrivenSplit_UsesUniquePhysicalSegmentsForBoundaries) {
+    auto unique = std::make_shared<TabletMetadataPB>(
+            *make_dup_keys_metadata_with_rowsets({{1, 0, 90, 100, 1000}, {2, 100, 190, 100, 1000}}));
+    for (int i = 0; i < 2; ++i) {
+        auto* sm = unique->mutable_rowsets(i)->mutable_segment_metas(0);
+        sm->set_bundle_file_offset(64);
+        sm->set_deprecated_sort_key_sample_row_interval(10);
+        for (int k = 1; k < 9; ++k) *sm->add_deprecated_sort_key_samples() = make_bigint_tuple_pb(i * 100 + k * 10);
+    }
+    auto repeated = std::make_shared<TabletMetadataPB>(*unique);
+    auto* duplicate = repeated->add_rowsets();
+    *duplicate = repeated->rowsets(0);
+    duplicate->set_id(3);
+    duplicate->mutable_segment_metas(0)->set_segment_idx(7);
+    duplicate->mutable_segment_metas(0)->set_shared(true);
+    std::vector<TabletRangeInfo> expected, actual;
+    ASSERT_OK(get_tablet_split_ranges(nullptr, unique, 2, &expected));
+    ASSERT_OK(get_tablet_split_ranges(nullptr, repeated, 2, &actual));
+    ASSERT_EQ(expected.size(), actual.size());
+    for (size_t i = 0; i < actual.size(); ++i) {
+        EXPECT_TRUE(MessageDifferencer::Equals(expected[i].range, actual[i].range));
+    }
+}
+
+TEST(TabletSplitterTest, DataDrivenSplit_RejectsConflictingPhysicalSlice) {
+    auto source = make_dup_keys_metadata_with_rowsets({{1, 0, 40, 100, 1000}, {2, 50, 99, 100, 1000}});
+    auto m = std::make_shared<TabletMetadataPB>(*source);
+    auto* duplicate = m->add_rowsets();
+    *duplicate = m->rowsets(0);
+    duplicate->set_id(3);
+    duplicate->mutable_segment_metas(0)->set_size(1001);
+    std::vector<TabletRangeInfo> ranges;
+    EXPECT_TRUE(get_tablet_split_ranges(nullptr, m, 2, &ranges).is_corruption());
+}
+
+TEST(TabletSplitterTest, DataDrivenSplit_StopsAtMetadataVisitBudget) {
+    auto m = make_dup_keys_metadata_with_rowsets({{1, 0, 40, 100, 1000}, {2, 50, 99, 100, 1000}});
+    auto* sync = SyncPoint::GetInstance();
+    int opens = 0;
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [](void* p) { *static_cast<size_t*>(p) = 1; });
+    sync->SetCallBack("tablet_splitter:segment_open", [&](void*) { ++opens; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::vector<TabletRangeInfo> ranges;
+    EXPECT_TRUE(get_tablet_split_ranges(nullptr, m, 2, &ranges).is_capacity_limit_exceeded());
+    EXPECT_EQ(0, opens);
+    // Parallel-compaction callers keep the unlimited public calculator even while
+    // a focused SPLIT helper has an exhausted test budget.
+    EXPECT_OK(calculate_range_split_boundaries({make_seg(0, 40, 100, 1000), make_seg(50, 99, 100, 1000)}, 2, 100, true)
+                      .status());
+}
+
+TEST(TabletSplitterExternalBoundariesTest, ExternalRanges_SkipBoundaryPlannerAndConserveStats) {
+    auto m = make_dup_keys_metadata_with_rowsets({{1, 0, 40, 101, 1001}, {2, 50, 99, 103, 1003}},
+                                                 make_bigint_range_pb(0, 100));
+    RepeatedPtrField<TabletRangePB> external;
+    *external.Add() = make_bigint_range_pb(0, 50);
+    *external.Add() = make_bigint_range_pb(50, 100);
+    auto* sync = SyncPoint::GetInstance();
+    int planners = 0;
+    sync->SetCallBack("tablet_splitter:boundary_planner", [&](void*) { ++planners; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(compute_split_ranges_from_external_boundaries(nullptr, m, external, &ranges));
+    ASSERT_EQ(2, ranges.size());
+    EXPECT_EQ(0, planners);
+    EXPECT_EQ(101, ranges[0].rowset_stats.at(1).num_rows);
+    EXPECT_EQ(1003, ranges[1].rowset_stats.at(2).data_size);
+    EXPECT_EQ(0, ranges[0].rowset_stats.count(2));
+    EXPECT_EQ(0, ranges[1].rowset_stats.count(1));
+}
+
+TEST(TabletSplitterExternalBoundariesTest, ExternalRanges_AssignsPointAtPhysicalEnvelopeEndToRightChild) {
+    auto m = std::make_shared<TabletMetadataPB>(*make_dup_keys_metadata_with_rowsets({{1, 0, 40, 50, 500}}));
+    auto* rowset = m->mutable_rowsets(0);
+    rowset->set_num_rows(100);
+    rowset->set_data_size(1000);
+    auto* point = rowset->add_segment_metas();
+    *point = rowset->segment_metas(0);
+    point->set_filename("point");
+    point->set_segment_idx(7);
+    *point->mutable_sort_key_min() = make_bigint_tuple_pb(50);
+    *point->mutable_sort_key_max() = make_bigint_tuple_pb(50);
+    RepeatedPtrField<TabletRangePB> external;
+    *external.Add() = make_bigint_range_pb(std::nullopt, 50);
+    *external.Add() = make_bigint_range_pb(50, std::nullopt);
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(compute_split_ranges_from_external_boundaries(nullptr, m, external, &ranges));
+    ASSERT_EQ(2, ranges.size());
+    EXPECT_EQ(50, ranges[0].rowset_stats.at(1).num_rows);
+    EXPECT_EQ(50, ranges[1].rowset_stats.at(1).num_rows);
+}
+
+TEST(TabletSplitterExternalBoundariesTest, ExternalRanges_SeparateSortPkUsesEligibleUniformWeights) {
+    auto m = make_pk_order_by_metadata();
+    auto* r = m->add_rowsets();
+    r->set_id(1);
+    r->set_num_rows(101);
+    r->set_data_size(1001);
+    r->set_num_dels(3);
+    *r->mutable_range()->mutable_lower_bound() = [] {
+        VariantTuple t;
+        t.append(DatumVariant(get_type_info(TYPE_INT), Datum(50)));
+        TuplePB p;
+        t.to_proto(&p);
+        return p;
+    }();
+    r->mutable_range()->set_lower_bound_included(true);
+    RepeatedPtrField<TabletRangePB> external;
+    *external.Add()->mutable_upper_bound() = r->range().lower_bound();
+    external.Mutable(0)->set_upper_bound_included(false);
+    *external.Add()->mutable_lower_bound() = r->range().lower_bound();
+    external.Mutable(1)->set_lower_bound_included(true);
+    auto* sync = SyncPoint::GetInstance();
+    int planners = 0;
+    sync->SetCallBack("tablet_splitter:boundary_planner", [&](void*) { ++planners; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(compute_split_ranges_from_external_boundaries(nullptr, m, external, &ranges));
+    ASSERT_EQ(2, ranges.size());
+    EXPECT_EQ(0, planners);
+    EXPECT_EQ(0, ranges[0].rowset_stats.count(1));
+    EXPECT_EQ(101, ranges[1].rowset_stats.at(1).num_rows);
+    EXPECT_EQ(1001, ranges[1].rowset_stats.at(1).data_size);
+    EXPECT_EQ(3, ranges[1].rowset_stats.at(1).num_dels);
+}
 
 TEST(TabletSplitterExternalBoundariesTest, parent_envelope_clips_effective_lo_hi) {
     // Parent [0, 100). Two rowsets fully within parent at [10, 40] and [60, 90].
