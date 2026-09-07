@@ -23,6 +23,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
@@ -147,11 +148,19 @@ std::vector<ColumnId> DeltaWriter::map_sort_key_to_partial_schema(const std::vec
 bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
                                                            const std::vector<int32_t>& referenced_column_ids,
                                                            const std::vector<ColumnId>& sort_key_idxes,
-                                                           size_t num_key_columns) {
+                                                           size_t num_key_columns, bool column_mode_inserts_rows) {
+    // A FLEXIBLE load stays in COLUMN_UPDATE_MODE but inserts rows whose key is not in the tablet
+    // yet, so it belongs on the inserting side of this gate. COLUMN_UPDATE_MODE is otherwise
+    // excluded here precisely because update-only never inserts and therefore never has to decide a
+    // new row's position -- an assumption that stopped holding when flexible inserts started
+    // materialising instead of being silently dropped. Without this, those rows land in a segment
+    // whose order the sort key cannot address.
+    const bool inserts_new_rows =
+            partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+            (partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE && column_mode_inserts_rows);
     // In the current implementation, UNKNOWN_MODE and AUTO_MODE can be considered as ROW_MODE
     if (partial_update_mode == PartialUpdateMode::ROW_MODE || partial_update_mode == PartialUpdateMode::AUTO_MODE ||
-        partial_update_mode == PartialUpdateMode::UNKNOWN_MODE ||
-        partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE) {
+        partial_update_mode == PartialUpdateMode::UNKNOWN_MODE || inserts_new_rows) {
         // Using Row Mode partial update, then the column to be updated must contain the sort key column,
         // because they need sort key to decide their order when segment is generated.
         // Column mode with upsert will insert new rows, which also need sort key to decide their order.
@@ -272,6 +281,27 @@ Status DeltaWriter::_init() {
         }
     }();
 
+    // SDCG flexible partial update: flexible iff FE injected the hidden "__cset__" slot
+    // (directly before "__op"). Detect from the slots so the local path is self-contained
+    // and consistent with the scanner and the lake writer; _opt.flexible_partial_update
+    // (mirrored from PTabletWriterOpenRequest) is OR-ed in for completeness.
+    const bool flexible_partial_update = _opt.flexible_partial_update || [this]() {
+        const bool has_op = _opt.slots->size() > 0 && _opt.slots->back()->col_name() == "__op";
+        const size_t cset_pos = has_op ? (_opt.slots->size() >= 2 ? _opt.slots->size() - 2 : _opt.slots->size())
+                                       : (_opt.slots->empty() ? 0 : _opt.slots->size() - 1);
+        return cset_pos < _opt.slots->size() && (*_opt.slots)[cset_pos]->col_name() == LOAD_CSET_COLUMN;
+    }();
+
+    // Flexible partial update is SHARED-DATA (lake) only. The local (shared-nothing) apply path does not
+    // understand the "__cset__" set-id / distinct_column_sets, so it would overwrite every union column
+    // (incl. NULL placeholders) and silently NULL a row's undeclared columns. FE rejects flexible on a
+    // non-cloud-native table (StreamLoadPlanner); this is the BE belt-and-suspenders in case a load reaches
+    // the local writer with the flexible slot set.
+    if (flexible_partial_update) {
+        return Status::NotSupported(
+                "flexible partial update is only supported on shared-data (cloud-native) primary key tables");
+    }
+
     // build tablet schema in request level
     auto tablet_schema_ptr = _tablet->tablet_schema();
     RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, tablet_schema_ptr));
@@ -288,6 +318,13 @@ Status DeltaWriter::_init() {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
+            // SDCG flexible partial update: the hidden "__cset__" slot is NOT a real tablet
+            // column, so it is excluded from referenced_column_ids (which must stay the set
+            // of real value columns == the UNION). A synthetic "__cset__" column is appended
+            // to the partial schema below so the set-id still flows into the .upt.
+            if (flexible_partial_update && slot_col_name == LOAD_CSET_COLUMN) {
+                continue;
+            }
             int32_t index = _tablet_schema->field_index(slot_col_name);
             if (index < 0) {
                 auto msg = strings::Substitute("Invalid column name: $0", slot_col_name);
@@ -330,6 +367,20 @@ Status DeltaWriter::_init() {
             partial_update_schema->set_num_short_key_columns(1);
             partial_update_schema->set_sort_key_idxes(sort_key_idxes);
         }
+        // SDCG flexible partial update: append the synthetic "__cset__" set-id column to the
+        // partial schema so it is written into the .upt as a real Segment v2 column (the
+        // lake apply / finalize handler reads it by upt_rowid -> set-id -> distinct_column_sets
+        // -> column-uid mask). It carries a reserved uid (kCsetReservedColumnUid) that avoids
+        // real column uids and the FULL_ROW/op sentinels. It is appended LAST so it does not
+        // shift any real value column position; the partial chunk presents it last after the
+        // memtable splits "__op" out.
+        if (flexible_partial_update) {
+            TabletColumn cset_col(STORAGE_AGGREGATE_REPLACE, LogicalType::TYPE_SMALLINT, /*is_nullable=*/false);
+            cset_col.set_name(LOAD_CSET_COLUMN);
+            cset_col.set_unique_id(kCsetReservedColumnUid);
+            cset_col.set_length(sizeof(int16_t));
+            partial_update_schema->append_column(cset_col);
+        }
         // The rewrite above points sort_key_idxes at the primary key columns in primary key order,
         // which is what the .upt segment's own index uses. Missing-key upserts are materialised into
         // full segments after commit under the table's ORIGINAL sort key order, and the encoded size
@@ -347,6 +398,9 @@ Status DeltaWriter::_init() {
         writer_context.is_partial_update = true;
         writer_context.partial_update_mode = _opt.partial_update_mode;
         writer_context.column_to_expr_value = _opt.column_to_expr_value;
+        // SDCG: carry the flexible flag so the rowset writer folds the per-load set-id
+        // dictionary (interned by the scanner, keyed by txn_id) into RowsetTxnMetaPB.
+        writer_context.flexible_partial_update = flexible_partial_update;
         _tablet_schema = partial_update_schema;
     } else {
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {

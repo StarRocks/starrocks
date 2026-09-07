@@ -142,6 +142,44 @@ public class StreamLoadInfoTest {
         assertEquals(TEnvelopeType.DEBEZIUM, info.getEnvelope());
     }
 
+    @Test
+    public void testFlexiblePartialUpdateAccepted() throws Exception {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        // buildTStreamLoadPutRequest already sets FORMAT_JSON + partial_update=true.
+        request.setFlexible_partial_update(true);
+        StreamLoadInfo info = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
+        org.junit.jupiter.api.Assertions.assertTrue(info.isFlexiblePartialUpdate());
+    }
+
+    @Test
+    public void testFlexiblePartialUpdateRequiresJson() {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setFlexible_partial_update(true);
+        StarRocksException exception = assertThrows(StarRocksException.class,
+                () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
+        assertEquals("flexible partial update is only supported for json format load",
+                exception.getMessage());
+    }
+
+    @Test
+    public void testFlexiblePartialUpdateRequiresPartialUpdate() {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setPartial_update(false);
+        request.setFlexible_partial_update(true);
+        StarRocksException exception = assertThrows(StarRocksException.class,
+                () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
+        assertEquals("flexible partial update requires partial_update=true", exception.getMessage());
+    }
+
+    @Test
+    public void testSetFlexiblePartialUpdate() {
+        StreamLoadInfo info = new StreamLoadInfo(new TUniqueId(1, 2), 3L, TFileType.FILE_STREAM,
+                TFileFormatType.FORMAT_JSON);
+        info.setFlexiblePartialUpdate(true);
+        org.junit.jupiter.api.Assertions.assertTrue(info.isFlexiblePartialUpdate());
+    }
+
     private TStreamLoadPutRequest buildTStreamLoadPutRequest() {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.setTxnId(1);

@@ -52,6 +52,7 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/stack_util.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
@@ -99,6 +100,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _merge_condition = table_sink.merge_condition;
     _encryption_meta = table_sink.encryption_meta;
     _partial_update_mode = table_sink.partial_update_mode;
+    if (table_sink.__isset.flexible_partial_update) {
+        _flexible_partial_update = table_sink.flexible_partial_update;
+    }
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
@@ -258,6 +262,14 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _state = state;
+    // A flexible partial update ships the per-row column-set dictionary its json scanners intern on the
+    // eos request (AddChunksRequestBuilder). The scanners release their references as they finish, which
+    // can be before the eos is built, so the sink holds one from prepare (before any scanner runs) until
+    // close_wait. See FlexiblePartialUpdateRegistry.
+    if (_flexible_partial_update && !_cset_dict_retained) {
+        FlexiblePartialUpdateRegistry::instance()->retain(_txn_id);
+        _cset_dict_retained = true;
+    }
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
@@ -926,6 +938,13 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         _span->SetStatus(trace::StatusCode::kError, std::string(status.message()));
     }
     _close_wait_status = status;
+    // Every node channel has acknowledged its eos by now (or the load failed), so the column-set
+    // dictionary this plan's json scanners interned has been shipped to every writer; give back the
+    // reference taken in prepare(). The entry itself goes when its last holder releases it.
+    if (_cset_dict_retained) {
+        _cset_dict_retained = false;
+        FlexiblePartialUpdateRegistry::instance()->release(_txn_id);
+    }
     return status;
 }
 

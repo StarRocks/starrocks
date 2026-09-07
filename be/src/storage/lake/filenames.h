@@ -188,7 +188,7 @@ inline std::string extract_uuid_from(std::string_view file_name) {
 
     // check extension
     if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols" &&
-        extension != ".idx") {
+        extension != ".spcols" && extension != ".idx") {
         return {};
     }
 
@@ -212,7 +212,7 @@ inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_n
     }
 
     if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name) &&
-                 !is_cols(old_file_name) && !is_idx(old_file_name))) {
+                 !is_cols(old_file_name) && !is_spcols(old_file_name) && !is_idx(old_file_name))) {
         // not a valid file
         return {};
     }
@@ -229,6 +229,12 @@ inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_n
 
 inline std::string gen_cols_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.cols", txn_id, generate_uuid_string());
+}
+
+// Generate a filename for a Sparse Delta Column Group payload file (`.spcols`).
+// Mirrors gen_cols_filename: {txn_id}_{uuid}.spcols.
+inline std::string gen_spcols_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.spcols", txn_id, generate_uuid_string());
 }
 
 inline std::string gen_del_filename(int64_t txn_id) {

@@ -193,6 +193,30 @@ public class InsertPlanner {
         return GenColumnDependency.PARTIALLY_DEPEND_ON_TARGET_COLUMNS;
     }
 
+    /**
+     * The columns this INSERT actually writes, for the inverted-index guard.
+     *
+     * <p>Returns an empty list when the statement names no target columns: that is a whole-row write,
+     * which rebuilds the index rather than leaving it stale, and
+     * {@link Load#forceRowModeForInvertedIndexedColumn} treats an empty list as "nothing to check".
+     */
+    private static List<Column> targetColumnsForPartialUpdate(InsertStmt insertStmt, OlapTable olapTable) {
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        List<Column> targetColumns = Lists.newArrayList();
+        for (Column column : olapTable.getFullSchema()) {
+            for (String name : targetColumnNames) {
+                if (column.getName().equalsIgnoreCase(name)) {
+                    targetColumns.add(column);
+                    break;
+                }
+            }
+        }
+        return targetColumns;
+    }
+
     private static boolean checkIfUseColumnUpsertMode(ConnectContext session,
                                                       InsertStmt insertStmt,
                                                       OlapTable olapTable) {
@@ -456,6 +480,15 @@ public class InsertPlanner {
                     if (checkIfUseColumnUpsertMode(session, insertStmt, olapTable)) {
                         partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
                     }
+                    // A column-mode partial update rewrites values through a delta column group, which
+                    // leaves any inverted index built on the base data stale -- the reader would then
+                    // prune rows using the pre-update terms. Every other planner that can request
+                    // column mode applies this guard (LoadPlanner, StreamLoadPlanner, UpdatePlanner);
+                    // this one did not, and it is the easiest of the four to reach: partial_update_mode
+                    // defaults to "auto", under which checkIfUseColumnUpsertMode picks column mode for
+                    // any narrow INSERT, so `INSERT INTO t (pk, gin_col) SELECT ...` took it silently.
+                    partialUpdateMode = Load.forceRowModeForInvertedIndexedColumn(
+                            olapTable, targetColumnsForPartialUpdate(insertStmt, olapTable), partialUpdateMode);
                     ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
                     if (insertStmt.autoIncrementPartialUpdate()) {
                         ((OlapTableSink) dataSink).setMissAutoIncrementColumn();

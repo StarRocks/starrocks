@@ -80,7 +80,7 @@ protected:
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
         } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name) ||
-                   is_idx(name) || is_lcrm(name)) {
+                   is_idx(name) || is_lcrm(name) || is_cols(name) || is_spcols(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -1247,6 +1247,10 @@ TEST_P(LakeVacuumTest, test_delete_tablets_03) {
     // Referenced in the txn log of tablet id 901 and txn id 5000
     create_data_file("00000000004259e4_47dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
 
+    // Referenced in the txn log of tablet id 900 and txn id 6000: the merged `.spcols` of an SDCG
+    // overlay-chain merge. Nothing but this log references it until publish.
+    create_data_file("00000000005259e4_57dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.spcols");
+
     ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
         {
             "tablet_id": 900,
@@ -1328,6 +1332,25 @@ TEST_P(LakeVacuumTest, test_delete_tablets_03) {
         }
         )DEL")));
 
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 900,
+            "txn_id": 6000,
+            "op_dcg_compaction": {
+                "compact_version": 7,
+                "entries": [
+                    {
+                        "rssid": 3,
+                        "merged_file": {
+                            "name": "00000000005259e4_57dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.spcols"
+                        },
+                        "merged_versions": [5, 6, 7]
+                    }
+                ]
+            }
+        }
+        )DEL")));
+
     {
         DeleteTabletRequest request;
         DeleteTabletResponse response;
@@ -1339,7 +1362,11 @@ TEST_P(LakeVacuumTest, test_delete_tablets_03) {
         EXPECT_FALSE(file_exist(txn_log_filename(900, 2000)));
         EXPECT_FALSE(file_exist(txn_log_filename(900, 3000)));
         EXPECT_FALSE(file_exist(txn_log_filename(900, 4000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(900, 6000)));
         EXPECT_TRUE(file_exist(txn_log_filename(901, 5000)));
+        // Referenced in the txn log of tablet id 900 and txn id 6000: the unpublished overlay merge's
+        // `.spcols` goes with the tablet; no metadata will ever list it for a later vacuum.
+        EXPECT_FALSE(file_exist("00000000005259e4_57dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.spcols"));
 
         // Referenced in the txn log of tablet id 900 and txn id 2000
         EXPECT_FALSE(file_exist("00000000001259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));

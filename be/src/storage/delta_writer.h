@@ -67,6 +67,11 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+    // SDCG flexible partial update: mirrors PTabletWriterOpenRequest.flexible_partial_update
+    // (and TOlapTableSink.flexible_partial_update). When true, "__cset__" is among `slots`
+    // (immediately before "__op") and the per-load set-id dictionary is in
+    // FlexiblePartialUpdateRegistry keyed by `txn_id`.
+    bool flexible_partial_update = false;
     // `ptable_schema_param` is valid during initialization.
     // And it will be set to nullptr because we only need to access it during intialization.
     // If you need to access it after intialization, please make sure the pointer is valid.
@@ -227,10 +232,13 @@ public:
     }
     const DeltaWriterStat& get_writer_stat() const { return _stats; }
 
+    // |column_mode_inserts_rows| tells the sort-key gate that a COLUMN_UPDATE_MODE load can still
+    // INSERT rows. That is true only for a flexible partial update, which stays in
+    // COLUMN_UPDATE_MODE but upserts; every other column-update load is update-only.
     static bool is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
                                                          const std::vector<int32_t>& referenced_column_ids,
                                                          const std::vector<ColumnId>& sort_key_idxes,
-                                                         size_t num_key_columns);
+                                                         size_t num_key_columns, bool column_mode_inserts_rows = false);
 
     // Maps the table's sort key columns, in their original order, onto positions in a partial update
     // schema built from |referenced_column_ids|. Returns an empty vector if any sort key column is

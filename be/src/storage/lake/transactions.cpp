@@ -868,6 +868,16 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             collect_vi_files(rowset);
         }
     }
+    // SDCG overlay-chain merge: the merged `.spcols` was written before the log was put and is referenced by
+    // nothing else until publish. An aborted merge must delete it here; no metadata ever lists it, so no
+    // later vacuum can find it.
+    if (txn_log.has_op_dcg_compaction()) {
+        for (const auto& entry : txn_log.op_dcg_compaction().entries()) {
+            if (entry.has_merged_file() && !entry.merged_file().name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, entry.merged_file().name()));
+            }
+        }
+    }
     if (txn_log.has_op_replication()) {
         for (const auto& op_write : txn_log.op_replication().op_writes()) {
             for (const auto& segment_meta : op_write.rowset().segment_metas()) {
