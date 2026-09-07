@@ -17,9 +17,11 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -75,6 +77,42 @@ public class DeletePlanTest extends PlanTestBase {
             assertNotNull(explainString, "Explain plan should not be null for SQL: " + sql);
             assertTrue(explainString.contains("ICEBERG DELETE SINK"));
         }
+    }
+
+    @Test
+    public void testDeleteOnPartitionByGeneratedColumn() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_gencol` (\n" +
+                "  `org` STRING NOT NULL,\n" +
+                "  `created_at` DATETIME NOT NULL,\n" +
+                "  `tid` STRING NOT NULL,\n" +
+                "  `v` BIGINT NOT NULL DEFAULT \"0\",\n" +
+                "  `week_start` DATETIME AS (date_trunc('week', created_at + INTERVAL 1 DAY) - INTERVAL 1 DAY)\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`org`, `created_at`, `tid`)\n" +
+                "PARTITION BY (`week_start`)\n" +
+                "DISTRIBUTED BY HASH(`org`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        ExecPlan execPlan = getDeleteExecPlan(
+                "delete from t_gencol where org = 'a' and created_at = '2026-01-01 00:00:00' and tid = '1'");
+        OlapTableSink sink = null;
+        for (PlanFragment fragment : execPlan.getFragments()) {
+            if (fragment.getSink() instanceof OlapTableSink) {
+                sink = (OlapTableSink) fragment.getSink();
+                break;
+            }
+        }
+        Assertions.assertNotNull(sink, "OLAP table sink should not be null for PK delete");
+        boolean hasWeekStart = false;
+        for (SlotDescriptor slot : sink.getTupleDescriptor().getSlots()) {
+            if (slot.getColumn() != null && "week_start".equals(slot.getColumn().getName())) {
+                hasWeekStart = true;
+                break;
+            }
+        }
+        assertTrue(hasWeekStart,
+                "sink tuple should carry the user-declared generated partition column week_start");
     }
 
     @Test
