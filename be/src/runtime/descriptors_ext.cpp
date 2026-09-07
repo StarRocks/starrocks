@@ -29,20 +29,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
-std::vector<size_t> iceberg_geo_column_indices(const TIcebergSchema& schema) {
-    std::vector<size_t> indices;
-    const auto visit = [&](const auto& self, const TIcebergSchemaField& field, size_t root) -> void {
-        if (field.__isset.geo_metadata ||
-            (field.__isset.iceberg_type && (field.iceberg_type == "GEOGRAPHY" || field.iceberg_type == "GEOMETRY"))) {
-            if (indices.empty() || indices.back() != root) indices.push_back(root);
-            return;
-        }
-        for (const auto& child : field.children) self(self, child, root);
-    };
-    for (size_t i = 0; i < schema.fields.size(); ++i) visit(visit, schema.fields[i], i);
-    return indices;
-}
-
 // ============== HDFS Table Descriptor ============
 
 HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsPartition& thrift_partition, std::pmr::memory_resource* mr)
@@ -151,7 +137,6 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
     _table_location.assign(tdesc.icebergTable.location);
     _columns = tdesc.icebergTable.columns;
     _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
-    _geo_column_indices = iceberg_geo_column_indices(_t_iceberg_schema);
     if (tdesc.icebergTable.__isset.partition_info) {
         for (const auto& part_info : tdesc.icebergTable.partition_info) {
             _source_column_names.push_back(part_info.source_column_name);

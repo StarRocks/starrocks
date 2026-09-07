@@ -79,7 +79,7 @@ public:
     void set_invalid_as_null(bool invalid_as_null) { _invalid_as_null = invalid_as_null; }
 
 private:
-    Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
+    Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool file_exhausted);
     Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
     Status next_selected_row_group();
     // _init_parquet_reader initializes the underlying parquets reader.
@@ -110,8 +110,6 @@ private:
     // nested inside ARRAY/MAP/STRUCT. _rectify_int96_timezone() uses it to skip columns with no
     // INT96 leaf, then resolves the precise per-leaf re-tag via the FileReader schema manifest.
     std::unordered_set<std::string> _int96_columns;
-    // Populated alongside the existing physical-column mapping, including empty files.
-    std::unordered_set<std::string> _geo_columns;
     std::vector<int> _parquet_column_ids;
     int _total_groups{0}; // groups in a parquet file
     int _current_group{0};

@@ -63,14 +63,11 @@ Status FileReader::init(FormatScanContext* ctx) {
     // parse FileMetadata
     FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
     ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
-    RETURN_IF_ERROR(validate_geo_scan(_file_metadata->schema(), ctx->lake_schema, ctx->materialized_columns,
-                                      ctx->options.case_sensitive, ctx->lake_geo_column_indices,
-                                      &ctx->column_access_paths));
 
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> existed_column_names;
     _meta_helper = _build_meta_helper();
-    _prepare_read_columns(existed_column_names);
+    RETURN_IF_ERROR(_prepare_read_columns(existed_column_names));
     RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(existed_column_names));
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
@@ -92,11 +89,9 @@ Status FileReader::init(FormatScanContext* ctx) {
 }
 
 std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
-    if (_scanner_ctx->lake_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
-        // Use LakeMetaHelper only when both an Iceberg/Paimon lake schema is present AND
-        // the parquet file carries field ids.  Without field ids, the lake schema cannot
-        // be matched reliably and we fall back to ParquetMetaHelper which handles
-        // col_unique_id / col_physical_name / name lookup chains correctly.
+    if (_scanner_ctx->lake_schema != nullptr) {
+        // Reuse the lake field mapping for geo validation. Files without IDs keep
+        // the ordinary physical-name/column-ID lookup and reader behavior.
         return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->options.case_sensitive,
                                                 _scanner_ctx->lake_schema);
     } else {
@@ -239,11 +234,13 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     return filter;
 }
 
-void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, &_scanner_ctx->column_access_paths,
-                                       _group_reader_param.read_cols, existed_column_names);
+Status FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
+    RETURN_IF_ERROR(_meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns,
+                                                       &_scanner_ctx->column_access_paths,
+                                                       _group_reader_param.read_cols, existed_column_names));
     _no_materialized_column_scan =
             (_group_reader_param.read_cols.empty() && _scanner_ctx->reserved_field_slots.empty());
+    return Status::OK();
 }
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {

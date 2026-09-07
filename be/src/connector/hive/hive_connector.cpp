@@ -858,7 +858,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     // Reset per-range table-specific state before populating.
     _scanner_ctx.table_specific = {};
     _scanner_ctx.format_scan_context.lake_schema = nullptr;
-    _scanner_ctx.format_scan_context.lake_geo_column_indices = nullptr;
     _scanner_ctx.format_scan_context.split = {};
     for (const auto& delete_file : scan_range.delete_files) {
         _scanner_ctx.table_specific.iceberg_delete_files.emplace_back(&delete_file);
@@ -872,7 +871,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (dynamic_cast<const IcebergTableDescriptor*>(_scanner_ctx.hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_scanner_ctx.hive_table);
         _scanner_ctx.format_scan_context.lake_schema = tbl->get_iceberg_schema();
-        _scanner_ctx.format_scan_context.lake_geo_column_indices = &tbl->geo_column_indices();
     }
 
     if (dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx.hive_table)) {

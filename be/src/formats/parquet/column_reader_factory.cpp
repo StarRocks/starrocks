@@ -414,10 +414,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type,
                                                       const TIcebergSchemaField* lake_schema_field) {
-    if (field->is_geo() || (lake_schema_field != nullptr && (lake_schema_field->__isset.geo_metadata ||
-                                                             (lake_schema_field->__isset.iceberg_type &&
-                                                              (lake_schema_field->iceberg_type == "GEOGRAPHY" ||
-                                                               lake_schema_field->iceberg_type == "GEOMETRY"))))) {
+    if (field->is_geo() || (lake_schema_field != nullptr && lake_schema_field->__isset.geo_metadata)) {
         return Status::NotSupported("Native geospatial column reader is disabled: " + field->name);
     }
     // We will only set a complex type in ParquetField

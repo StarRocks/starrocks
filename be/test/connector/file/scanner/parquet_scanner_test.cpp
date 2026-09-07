@@ -66,6 +66,14 @@ TEST(ParquetGeoReaderTest, EmptyFileStillRejectsBinaryGeoProjection) {
         EXPECT_TRUE(inferred.empty());
         SlotDescriptor binary(0, "shape", TypeDescriptor::create_varbinary_type(1024));
         EXPECT_TRUE(reader.init_parquet_reader({&binary}).is_not_supported());
+        SlotDescriptor missing(1, "missing", TypeDescriptor(TYPE_INT));
+        ParquetReaderWrap ordinary(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
+                                   result.ValueOrDie()->size());
+        EXPECT_TRUE(ordinary.init_parquet_reader({&missing}).is_end_of_file());
+        // Missing ordinary columns must neither change EOF nor hide a later geo projection.
+        ParquetReaderWrap mixed(std::make_shared<ParquetChunkFile>(file, 0, &counter), 2, 0,
+                                result.ValueOrDie()->size());
+        EXPECT_TRUE(mixed.init_parquet_reader({&missing, &binary}).is_not_supported());
     }
 }
 

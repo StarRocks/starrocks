@@ -41,13 +41,8 @@ struct ParquetField;
 
 namespace starrocks::parquet {
 
-// Run before missing-column substitution and all row pruning. Iceberg callers
-// supply the immutable table descriptor's geo index, including for unannotated files.
-Status validate_geo_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake_schema,
-                         const std::vector<FormatColumnInfo>& columns, bool case_sensitive,
-                         const std::vector<size_t>* lake_geo_indices,
-                         const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr);
-Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field, bool case_sensitive);
+// Validate one scalar geo leaf; callers reuse their existing field matching.
+Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field);
 
 class MetaHelper {
 public:
@@ -55,10 +50,10 @@ public:
             : _file_metadata(file_metadata), _case_sensitive(case_sensitive) {}
     virtual ~MetaHelper() = default;
 
-    virtual void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
-                                      const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                                      std::vector<GroupReaderParam::Column>& read_cols,
-                                      std::unordered_set<std::string>& existed_column_names) const = 0;
+    virtual Status prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
+                                        const std::vector<ColumnAccessPathPtr>* column_access_paths,
+                                        std::vector<GroupReaderParam::Column>& read_cols,
+                                        std::unordered_set<std::string>& existed_column_names) const = 0;
 
 protected:
     GroupReaderParam::Column _build_column(int32_t idx_in_parquet, const tparquet::Type::type& type_in_parquet,
@@ -83,19 +78,19 @@ public:
             : MetaHelper(file_metadata, case_sensitive) {}
     ~ParquetMetaHelper() override = default;
 
-    void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
-                              const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                              std::vector<GroupReaderParam::Column>& read_cols,
-                              std::unordered_set<std::string>& existed_column_names) const override;
+    Status prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
+                                const std::vector<ColumnAccessPathPtr>* column_access_paths,
+                                std::vector<GroupReaderParam::Column>& read_cols,
+                                std::unordered_set<std::string>& existed_column_names) const override;
 
-private:
+protected:
     bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
 };
 
-class LakeMetaHelper : public MetaHelper {
+class LakeMetaHelper : public ParquetMetaHelper {
 public:
     LakeMetaHelper(const FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_lake_schema)
-            : MetaHelper(file_metadata, case_sensitive) {
+            : ParquetMetaHelper(file_metadata, case_sensitive) {
         _lake_schema = t_lake_schema;
         DCHECK(_lake_schema != nullptr);
         _init_field_mapping();
@@ -103,10 +98,10 @@ public:
 
     ~LakeMetaHelper() override = default;
 
-    void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
-                              const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                              std::vector<GroupReaderParam::Column>& read_cols,
-                              std::unordered_set<std::string>& existed_column_names) const override;
+    Status prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
+                                const std::vector<ColumnAccessPathPtr>* column_access_paths,
+                                std::vector<GroupReaderParam::Column>& read_cols,
+                                std::unordered_set<std::string>& existed_column_names) const override;
 
 private:
     friend class LakeMetaHelperTest;
