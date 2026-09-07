@@ -381,6 +381,20 @@ private:
     std::vector<uint32_t> _indexes;
 };
 
+// Unlike the fixed-width specialization, a row skipped because a pushed-down filter excludes it
+// cannot just be left with a garbage value: a BinaryColumn row that is not written contributes no
+// bytes at all. Consumers of a FIXED_LEN_BYTE_ARRAY column may walk the bytes with a fixed stride
+// instead of loading an offset per row -- BinaryToDecimalConverter does -- which is only valid
+// under this layout invariant:
+//
+//     a non-NULL row occupies exactly `type_length` bytes, a NULL row occupies none.
+//
+// So the excluded rows are marked NULL rather than left NOT NULL. Leaving them NOT NULL creates a
+// third state, zero bytes but not NULL, that the invariant does not cover: such a consumer would
+// consume `type_length` bytes for the row anyway, decode every following row -- including the rows
+// that survive the filter -- from a misaligned offset, and read past the end of the buffer. The
+// caller drops the excluded rows immediately after this, so the NULL is never observable, and
+// marking it also lets those consumers skip the excluded rows entirely.
 template <>
 class DictDecoder<Slice> final : public CacheAwareDictDecoder {
 public:
@@ -496,6 +510,108 @@ private:
                                      Column* dst, const FilterData* filter) override {
         return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
     }
+<<<<<<< HEAD
+=======
+
+    Status next_value_batch_with_nulls(size_t count, size_t cur_size, const NullInfos& null_infos, Column* dst,
+                                       const FilterData* filter) {
+        DCHECK(dst->is_nullable());
+        const uint8_t* __restrict is_nulls = null_infos.nulls_data();
+        // assign null infos
+        size_t null_cnt = null_infos.num_nulls;
+        // resize data
+        auto* data_column = ColumnHelper::get_data_column(dst);
+        if (UNLIKELY(!data_column->is_binary())) {
+            return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+        }
+        auto* binary_column = down_cast<BinaryColumn*>(data_column);
+        size_t read_count = count - null_cnt;
+
+        if (read_count == 0) {
+            binary_column->append_default(count);
+            return Status::OK();
+        }
+
+        if (filter) {
+            _indexes.resize(read_count);
+            auto decoded_num = _rle_batch_reader.GetBatch(_indexes.data(), read_count);
+            if (decoded_num < read_count) {
+                return Status::InternalError("didn't get enough data from dict-decoder");
+            }
+            if (UNLIKELY(indices_out_of_bounds(_indexes.data(), read_count, _dict.size()))) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
+            // `_next_null_column` has already written this batch's NULL flags from the definition
+            // levels; the rows the filter excludes are added on top, so that a row which
+            // contributes no bytes is always marked NULL (see the class comment).
+            uint8_t* null_data = down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->get_data().data() + cur_size;
+            size_t cnt = 0;
+            size_t num_excluded = 0;
+            for (int i = 0; i < count; ++i) {
+                if (filter[i] && !is_nulls[i]) {
+                    binary_column->append(_dict[_indexes[cnt]]);
+                } else {
+                    binary_column->append_default();
+                    if (!is_nulls[i]) {
+                        null_data[i] = 1;
+                        ++num_excluded;
+                    }
+                }
+                cnt += !is_nulls[i];
+            }
+            if (num_excluded > 0) {
+                down_cast<NullableColumn*>(dst)->set_has_null(true);
+            }
+
+        } else {
+            auto& bytes = binary_column->get_bytes();
+            size_t offset = bytes.size();
+
+            _slices.resize(read_count);
+            auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), read_count);
+            if (UNLIKELY(ret <= 0)) {
+                return Status::InternalError("DictDecoder<Slice> GetBatchWithDict failed");
+            }
+
+            _temp_lengths.resize(read_count + 1);
+            _temp_datas.resize(read_count + 1);
+            uint32_t* lengths = _temp_lengths.data();
+            char** datas = _temp_datas.data();
+
+            uint64_t total_length = 0;
+            for (size_t i = 0; i < read_count; ++i) {
+                datas[i] = _slices[i].data;
+                lengths[i] = _slices[i].size;
+                total_length += lengths[i];
+            }
+
+            // relocate offsets
+            auto& offsets = binary_column->get_offset();
+            size_t prev_offsets = offsets.size();
+            const uint64_t final_offset = offset + total_length;
+            offsets.resize_uninitialized(count + prev_offsets, final_offset);
+            const uint32_t* lengths_ptr = lengths;
+            offsets.visit_storage([prev_offsets, count, offset, is_nulls, lengths_ptr](auto& offsets_buf) mutable {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* __restrict dst_offsets = offsets_buf.data() + prev_offsets;
+                size_t cnt = 0;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                }
+            });
+
+            if (read_count == 0) {
+                return Status::OK();
+            }
+            binary_column->append_bytes_overflow(datas, lengths, read_count, _max_value_length);
+            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
+        }
+
+        return Status::OK();
+    }
+
+>>>>>>> 267fba9 ([BugFix] Mark filter-excluded FLBA dictionary rows NULL (#78685))
     Status _next_batch_value(size_t count, Column* dst, const FilterData* filter) override {
         if (filter) {
             _indexes.reserve(count);
@@ -511,16 +627,40 @@ private:
             if (UNLIKELY(flag)) {
                 return Status::InternalError("Index not in dictionary bounds");
             }
+            uint8_t* null_data = nullptr;
             if (dst->is_nullable()) {
+<<<<<<< HEAD
                 down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
             }
             auto* binary_column = ColumnHelper::get_binary_column(dst);
+=======
+                auto* null_column = down_cast<NullableColumn*>(dst)->null_column_raw_ptr();
+                size_t null_base = null_column->size();
+                null_column->append_default(count);
+                null_data = null_column->get_data().data() + null_base;
+            }
+            auto* data_column = ColumnHelper::get_data_column(dst);
+            if (UNLIKELY(!data_column->is_binary())) {
+                return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+            }
+            auto* binary_column = down_cast<BinaryColumn*>(data_column);
+            size_t num_excluded = 0;
+>>>>>>> 267fba9 ([BugFix] Mark filter-excluded FLBA dictionary rows NULL (#78685))
             for (int i = 0; i < count; ++i) {
                 if (filter[i]) {
                     binary_column->append(_dict[_indexes[i]]);
                 } else {
+                    // Skipping the dictionary lookup means this row contributes no bytes, so it
+                    // must be marked NULL to keep the layout invariant (see the class comment).
                     binary_column->append_default();
+                    if (null_data != nullptr) {
+                        null_data[i] = 1;
+                    }
+                    ++num_excluded;
                 }
+            }
+            if (num_excluded > 0 && null_data != nullptr) {
+                down_cast<NullableColumn*>(dst)->set_has_null(true);
             }
         } else {
             raw::stl_vector_resize_uninitialized(&_slices, count);
