@@ -953,6 +953,13 @@ public abstract class LakeOnlineRewriteJobBase
         for (RewritePlan plan : plans) {
             switch (classifyRewrite(plan.physicalPartitionId)) {
                 case DONE:
+                    // This partition's rewrite has published. Drop its failure streak and its retry
+                    // diagnostic: errMsg is persisted, so a message journaled before a leader failover
+                    // must be cleared on observed progress, not off the transient map that replay
+                    // leaves empty. clearRetryDiagnostic only clears THIS partition's message, so a
+                    // sibling partition that is still retrying keeps reporting its stall.
+                    firstRewriteFailureTimeMs.remove(plan.physicalPartitionId);
+                    clearRetryDiagnostic(plan.physicalPartitionId);
                     continue;
                 case IN_FLIGHT:
                     // Committed-not-yet-visible: stay in RUNNING; the scheduler re-invokes this method.
@@ -1160,8 +1167,11 @@ public abstract class LakeOnlineRewriteJobBase
                 }
                 throw new AlterCancelException(error);
             }
-            // The attempt reached the executor without error: end any failure streak for this partition.
+            // The attempt reached the executor without error: end any failure streak for this partition
+            // and drop the retry diagnostic it published, so the message does not outlive the failure
+            // through the publication wait.
             firstRewriteFailureTimeMs.remove(plan.physicalPartitionId);
+            clearRetryDiagnostic(plan.physicalPartitionId);
         } catch (AlterCancelException e) {
             throw e;
         } catch (Exception e) {
@@ -1209,10 +1219,35 @@ public abstract class LakeOnlineRewriteJobBase
                     jobId, physicalPartitionId, budgetMs / 1000, elapsedMs / 1000, error);
             return false;
         }
+        // Surface the stall in SHOW ALTER TABLE COLUMN's Msg column: getInfo emits errMsg regardless of
+        // job state, and checkTableStable already reports a waiting job this way. It also means that if
+        // the job is later cancelled for an unrelated reason, the operator has already seen the cause.
+        errMsg = retryDiagnosticPrefix(physicalPartitionId) + error;
         LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}, retrying on a later tick "
                         + "({}s of the {}s budget used): {}",
                 jobId, physicalPartitionId, elapsedMs / 1000, budgetMs / 1000, error);
         return true;
+    }
+
+    /**
+     * The retry diagnostic this job publishes through {@code errMsg} for one partition. The partition id
+     * is part of the message on purpose: {@code errMsg} is persisted, so after a leader failover the
+     * transient failure map is gone and the message itself is the only thing that still says which
+     * partition it belongs to.
+     */
+    private static String retryDiagnosticPrefix(long physicalPartitionId) {
+        return "rewrite INSERT failed for partition " + physicalPartitionId + ", retrying: ";
+    }
+
+    /**
+     * Drop the retry diagnostic iff it is the one this partition published. Clearing unconditionally
+     * would erase a sibling partition's active retry message and hide that partition's stall.
+     * Null-safe: a replayed {@code errMsg} can be null if the journal carried an explicit JSON null.
+     */
+    private void clearRetryDiagnostic(long physicalPartitionId) {
+        if (errMsg != null && errMsg.startsWith(retryDiagnosticPrefix(physicalPartitionId))) {
+            errMsg = "";
+        }
     }
 
     /** Mirrors {@code OnlineOptimizeJobV2.buildConnectContext}: an inner ROOT context for the INSERT. */

@@ -2404,4 +2404,62 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
         }
     }
+
+    /**
+     * A retry must be visible in SHOW ALTER TABLE COLUMN's Msg column while the job is still RUNNING.
+     * getInfo emits errMsg regardless of job state, and AlterJobV2.checkTableStable already reports a
+     * waiting job the same way.
+     */
+    @Test
+    public void testRetryIsReportedInTheMsgColumn() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        job.setRewriteExecutor((context, insertStmt) ->
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR));
+        job.runRunningJob();
+
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        String msg = String.valueOf(infos.get(0).get(10));
+        Assertions.assertTrue(msg.contains(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR),
+                "Msg must explain why the rewrite is stalled, was: " + msg);
+        Assertions.assertTrue(msg.contains(String.valueOf(physicalPartitionId)),
+                "Msg must name the partition being retried, was: " + msg);
+    }
+
+    /**
+     * The retry diagnostic must be cleared once the partition's rewrite is observed published - and that
+     * must not depend on the transient failure map, which is empty after a leader failover replays the
+     * job. Simulated here by clearing the map (as replay leaves it) before the partition reaches DONE.
+     */
+    @Test
+    public void testRetryDiagnosticIsClearedOnObservedProgressEvenAfterReplay() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        job.setRewriteExecutor((context, insertStmt) ->
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR));
+        job.runRunningJob();
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertNotEquals("", String.valueOf(infos.get(0).get(10)),
+                "the retry must have left a diagnostic to clear");
+
+        // A replayed job has the persisted errMsg but an empty transient failure map.
+        job.resetTransientState();
+
+        // The partition's rewrite is now a published shadow-rewrite carrier -> DONE.
+        job.setRewriteTxnIdForTest(physicalPartitionId, 424242L);
+        mockShadowRewriteTransaction(job.getTransactionId().get(),
+                job.getWatershedVersion(physicalPartitionId));
+        job.setRewriteExecutor((context, insertStmt) -> { });
+        job.runRunningJob();
+
+        infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "observed progress must clear the retry diagnostic even when the failure map was reset");
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+    }
 }
