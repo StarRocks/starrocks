@@ -798,4 +798,25 @@ public class CreateRoutineLoadStmtTest {
         customProperties.put(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY, "127.0.0.1:8080");
         return customProperties;
     }
+    @Test
+    public void testSkipOnFatalParseError() throws Exception {
+        String sql = "CREATE ROUTINE LOAD testdb.job_with_skip ON table1\n"
+                + "PROPERTIES\n"
+                + "(\n"
+                + "  \"skip_on_fatal_parse_error\" = \"true\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "  \"kafka_broker_list\" = \"localhost:9092\",\n"
+                + "  \"kafka_topic\" = \"test_topic\"\n"
+                + ")\n";
+
+        List<StatementBase> stmts = SqlParser.parse(sql, ctx.getSessionVariable());
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) stmts.get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
+        // Verify the property is parsed correctly
+        Assertions.assertTrue(stmt.isSkipOnFatalParseError(),
+                "skip_on_fatal_parse_error should be true");
+    }
 }
