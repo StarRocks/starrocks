@@ -20,6 +20,7 @@ import com.starrocks.alter.reshard.PublishTabletsInfo;
 import com.starrocks.alter.reshard.ReshardingTablet;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
@@ -216,13 +217,36 @@ public class Utils {
                                       Map<Long, TabletStatPB> tabletStats,
                                       boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, compactionScores, tabletRanges, computeResource,
+                tabletStats, useAggregatePublish, vectorIndexBuildInfos, false);
+    }
+
+    /**
+     * @param preferSharedInitialMetadata see
+     *        {@link Utils#createSubRequestForAggregatePublish}. Meaningful only on the aggregate path:
+     *        the shared version-1 layout exists only for `file_bundling` tables, which always publish
+     *        with useAggregatePublish set.
+     */
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                      long newVersion, Map<Long, Double> compactionScores,
+                                      Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                      Map<Long, TabletStatPB> tabletStats,
+                                      boolean useAggregatePublish,
+                                      List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                      boolean preferSharedInitialMetadata)
+            throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
         if (!useAggregatePublish) {
             publishVersionBatch(tablets, txnInfos, baseVersion, newVersion,
                     compactionScores, tabletRanges, null, computeResource, tabletStats);
         } else {
             aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores,
+<<<<<<< HEAD
                     tabletRanges, null, computeResource, tabletStats);
+=======
+                    tabletRanges, null, computeResource, tabletStats, vectorIndexBuildInfos,
+                    preferSharedInitialMetadata);
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
         }
     }
 
@@ -271,11 +295,93 @@ public class Utils {
         return computeNode;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether this aggregate request publishes an UNSHARE compaction -- the publish that retires a
+     * split's parent view, and therefore the one that must not be handed parent metadata to build.
+     *
+     * <p>The marker comes from the persisted transaction attachment rather than the scheduler's
+     * in-memory job map, so it stays correct when a committed UNSHARE transaction is published by a new
+     * FE leader.
+     *
+     * <p>Read across every batch already in the request, not only the one being added. One request can
+     * be filled twice ({@code PublishVersionDaemon#aggregatePublishWithCarryForward}), both batches
+     * share a single {@code parentTabletPublishInfos} list, and the carry-forward batch carries
+     * synthetic {@code TXN_EMPTY} infos that do not repeat the marker -- so a per-batch answer would let
+     * the second batch re-attach the parent view the first one correctly withheld.
+     */
+    @VisibleForTesting
+    static boolean publishesUnshareCompaction(List<TxnInfoPB> txnInfos, List<PublishVersionRequest> publishReqs) {
+        return Optional.ofNullable(txnInfos).orElseGet(List::<TxnInfoPB>of).stream()
+                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()))
+                || Optional.ofNullable(publishReqs).orElseGet(List::<PublishVersionRequest>of).stream()
+                .flatMap(req -> Optional.ofNullable(req.getTxnInfos()).orElseGet(List::<TxnInfoPB>of).stream())
+                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()));
+    }
+
+    /**
+     * Whether every tablet of {@code partition} resolves its {@code baseVersion} metadata from the
+     * single partition-shared initial-metadata object (tablet id 0) instead of its own per-tablet key.
+     * Sent to the BE as {@code PublishVersionRequest.prefer_shared_initial_metadata} so the
+     * publish does not have to discover the layout by probing a key that was never written. The BE
+     * applies it to that request's base-version reads only and caches nothing, so a wrong answer
+     * costs one request rather than correctness.
+     *
+     * <p>Every clause is load-bearing:
+     * <ul>
+     * <li>Only version 1 is ever shared. DDL writes that object once at partition creation; every
+     *     later version is written per tablet or into a bundle.</li>
+     * <li>{@code file_bundling} is what makes DDL write it ({@code LocalMetastore#buildPartitions}),
+     *     and it is the only switch this predicate keys on. A partition that has the shared layout
+     *     for any other reason reports false and keeps the BE's unhinted fallback, which resolves it
+     *     correctly at the cost of one probe per tablet.</li>
+     * <li>A non-zero {@code metadataSwitchVersion} means the partition predates the switch to
+     *     bundling, so its version 1 is per-tablet even though the table is bundling now.</li>
+     * <li>The object is named after tablet id 0 with no index discriminator, and all indexes of a
+     *     physical partition share one storage path, so DDL only writes it for a single-index
+     *     partition and the alter jobs never write it. Counting over {@code ALL} rather than
+     *     {@code VISIBLE} is deliberate: a schema-change / rollup shadow index is invisible to
+     *     {@code VISIBLE} exactly while its own tablets are reading their per-tablet version-1
+     *     metadata, and handing them the base index's object would return the wrong schema.</li>
+     * </ul>
+     */
+    public static boolean preferSharedInitialMetadata(OlapTable table, PhysicalPartition partition,
+                                                            long baseVersion) {
+        return table != null
+                && partition != null
+                && baseVersion == PhysicalPartition.PARTITION_INIT_VERSION
+                && table.isCloudNativeTableOrMaterializedView()
+                && Boolean.TRUE.equals(table.isFileBundling())
+                && partition.getMetadataSwitchVersion() == 0
+                && partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size() == 1;
+    }
+
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
     public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                                            long baseVersion, long newVersion,
                                                            Map<ComputeNode, List<Long>> nodeToTablets,
                                                            ComputeResource computeResource,
                                                            AggregatePublishVersionRequest request)
+            throws NoAliveBackendException, RpcException {
+        createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion, nodeToTablets, computeResource,
+                request, false);
+    }
+
+    /**
+     * @param preferSharedInitialMetadata see
+     *        {@code PublishVersionRequest.prefer_shared_initial_metadata}. Only a publish that reads
+     *        the partition's EXISTING tablets at baseVersion may pass true: the normal-load path, and
+     *        tablet reshard (split / merge), which reads the old tablets. The rollup and schema-change
+     *        jobs publish shadow-index tablets that keep their own per-tablet version-1 metadata and
+     *        must leave it false.
+     */
+    public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                                           long baseVersion, long newVersion,
+                                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                                           ComputeResource computeResource,
+                                                           AggregatePublishVersionRequest request,
+                                                           boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
@@ -301,6 +407,7 @@ public class Utils {
             singleReq.setTimeoutMs(LakeService.TIMEOUT_PUBLISH_VERSION);
             singleReq.setTxnInfos(txnInfos);
             singleReq.setEnableAggregatePublish(true);
+            singleReq.setPreferSharedInitialMetadata(preferSharedInitialMetadata);
 
             if (!rebuildPindexTabletIds.isEmpty()) {
                 singleReq.setRebuildPindexTabletIds(rebuildPindexTabletIds);
@@ -452,10 +559,30 @@ public class Utils {
                                                ComputeResource computeResource,
                                                Map<Long, TabletStatPB> tabletStats)
             throws NoAliveBackendException, RpcException {
+        aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores, tabletRanges,
+                nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos, false);
+    }
+
+    /**
+     * @param preferSharedInitialMetadata see
+     *        {@link Utils#createSubRequestForAggregatePublish}; only the normal-load and tablet-reshard
+     *        publish paths may pass true.
+     */
+    public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                               long baseVersion, long newVersion,
+                                               Map<Long, Double> compactionScores,
+                                               Map<Long, TabletRange> tabletRanges,
+                                               Map<ComputeNode, List<Long>> nodeToTablets,
+                                               ComputeResource computeResource,
+                                               Map<Long, TabletStatPB> tabletStats,
+                                               List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                               boolean preferSharedInitialMetadata)
+            throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         try {
             createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion,
-                                                nodeToTablets, computeResource, request);
+                                                nodeToTablets, computeResource, request,
+                                                preferSharedInitialMetadata);
             sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores,
                                                tabletRanges, tabletStats);
         } catch (Exception e) {

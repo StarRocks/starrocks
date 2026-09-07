@@ -257,8 +257,13 @@ public class SplitTabletJob extends TabletReshardJob {
                     for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         tablets.addAll(index.getTablets());
                     }
+                    // The old tablets are read at commitVersion - 1, which for a partition resharded before its
+                    // first load is version 1. A file_bundling partition keeps that metadata only in the
+                    // partition-shared object, so tell the BE where to look, exactly as a normal load does.
+                    boolean preferSharedInitialMetadata =
+                            Utils.preferSharedInitialMetadata(olapTable, physicalPartition, commitVersion - 1);
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
-                            tablets, commitVersion, useAggregatePublish, computeResource));
+                            tablets, commitVersion, useAggregatePublish, computeResource, preferSharedInitialMetadata));
                     reshardingPhysicalPartition.setPublishFuture(future);
                 } else if (publishResult.publishState() == PublishState.IN_PROGRESS) {
                     // Publish is in progress
@@ -593,7 +598,7 @@ public class SplitTabletJob extends TabletReshardJob {
     }
 
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
-            boolean useAggregatePublish, ComputeResource computeResource) {
+            boolean useAggregatePublish, ComputeResource computeResource, boolean preferSharedInitialMetadata) {
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = transactionId;
@@ -610,7 +615,11 @@ public class SplitTabletJob extends TabletReshardJob {
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
+<<<<<<< HEAD
                     computeResource, null, useAggregatePublish);
+=======
+                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos, preferSharedInitialMetadata);
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
 
             return tabletRange;
         } catch (Exception e) {

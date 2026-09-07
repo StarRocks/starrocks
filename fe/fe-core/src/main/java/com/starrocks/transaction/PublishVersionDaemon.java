@@ -610,6 +610,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
         boolean useAggregatePublish = Config.enable_file_bundling;
+        // Resolved under the lock below, where the physical partition is in scope.
+        boolean preferSharedInitialMetadata = false;
         ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
         try {
             OlapTable table =
@@ -634,6 +636,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             useAggregatePublish = table.isFileBundling();
+            preferSharedInitialMetadata = Utils.preferSharedInitialMetadata(table, partition, versions.get(0) - 1);
             Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
@@ -726,10 +729,18 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 } else if (CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(publishTablets, txnInfos, carryForwardTablets,
                             startVersion - 1, endVersion, nodeToTablets, computeResource, compactionScores,
+<<<<<<< HEAD
                             tabletStats);
                 } else {
                     Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
                             compactionScores, nodeToTablets, computeResource, tabletStats);
+=======
+                            tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata);
+                } else {
+                    Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
+                            compactionScores, null, nodeToTablets, computeResource, tabletStats,
+                            vectorIndexBuildInfos, preferSharedInitialMetadata);
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
                 }
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
@@ -1089,6 +1100,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         long lockAcquiredMs = System.currentTimeMillis();
         boolean useAggregatePublish = Config.enable_file_bundling;
+        // Resolved under the lock below, where the physical partition is in scope.
+        boolean preferSharedInitialMetadata = false;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -1109,6 +1122,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return false;
             }
             baseVersion = partition.getVisibleVersion();
+            preferSharedInitialMetadata = Utils.preferSharedInitialMetadata(table, partition, baseVersion);
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedIndexes(table.getId(), partition);
             Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (MaterializedIndex index : indexes) {
@@ -1158,10 +1172,19 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(normalTablets, Lists.newArrayList(txnInfo), carryForwardTablets,
+<<<<<<< HEAD
                             baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats);
                 } else {
                     Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
                             computeResource, tabletStats, useAggregatePublish);
+=======
+                            baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats,
+                            vectorIndexBuildInfos, preferSharedInitialMetadata);
+                } else {
+                    Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
+                            null, computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos,
+                            preferSharedInitialMetadata);
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
                 }
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
@@ -1226,11 +1249,17 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                                  long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
                                                  ComputeResource computeResource,
                                                  Map<Long, Double> compactionScores,
+<<<<<<< HEAD
                                                  Map<Long, TabletStatPB> tabletStats)
+=======
+                                                 Map<Long, TabletStatPB> tabletStats,
+                                                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                 boolean preferSharedInitialMetadata)
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         Utils.createSubRequestForAggregatePublish(touchedTablets, txnInfos, baseVersion, newVersion,
-                nodeToTablets, computeResource, request);
+                nodeToTablets, computeResource, request, preferSharedInitialMetadata);
 
         List<TxnInfoPB> carryForwardTxnInfos = Lists.newArrayListWithCapacity(txnInfos.size());
         for (TxnInfoPB txnInfo : txnInfos) {
@@ -1244,10 +1273,18 @@ public class PublishVersionDaemon extends FrontendDaemon {
             carryForwardTxnInfos.add(emptyTxnInfo);
         }
         // The carry-forward tablets have no txn log to delete on success, so do not thread nodeToTablets here.
+        // They belong to the same physical partition as |touchedTablets|, so the version-1 layout hint applies
+        // to them identically.
         Utils.createSubRequestForAggregatePublish(carryForwardTablets, carryForwardTxnInfos, baseVersion, newVersion,
+<<<<<<< HEAD
                 null, computeResource, request);
         Utils.sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores,
                 tabletStats);
+=======
+                null, computeResource, request, preferSharedInitialMetadata);
+        Utils.sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
+                tabletStats, vectorIndexBuildInfos);
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
     }
 
     // Per-partition publishPartition phase breakdown for slow outliers.

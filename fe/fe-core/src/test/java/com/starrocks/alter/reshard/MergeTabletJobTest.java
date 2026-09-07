@@ -532,14 +532,20 @@ public class MergeTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+<<<<<<< HEAD
                                        boolean useAggregatePublish) throws Exception {
+=======
+                                       boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) throws Exception {
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
                 throw new RuntimeException("mock");
             }
         };
 
         Assertions.assertThrows(TabletReshardException.class,
                 () -> Deencapsulation.invoke(mergeJob, "publishVersion", List.of(), 2L, false,
-                        WarehouseManager.DEFAULT_RESOURCE));
+                        WarehouseManager.DEFAULT_RESOURCE, false));
     }
 
     @Test
@@ -558,6 +564,7 @@ public class MergeTabletJobTest {
             }
         };
 
+        AtomicReference<Boolean> actualPreferSharedInitialMetadata = new AtomicReference<>();
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
@@ -565,8 +572,15 @@ public class MergeTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+<<<<<<< HEAD
                                        boolean useAggregatePublish) {
+=======
+                                       boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) {
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
                 actualResource.set(computeResource);
+                actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }
         };
 
@@ -585,6 +599,14 @@ public class MergeTabletJobTest {
             mergeJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
             Assertions.assertSame(expectedResource, actualResource.get());
+            // The job must forward exactly what the predicate says for THIS partition at the publish's base
+            // version (visibleVersion == commitVersion - 1). The shared test table may already be past
+            // version 1 here; the positive case, on a fresh partition still at version 1, is
+            // SplitTabletJobTest.testRunRunningHintsSharedInitialMetadataAtVersionOne -- the merge job
+            // runs the identical wiring.
+            Assertions.assertEquals(
+                    Utils.preferSharedInitialMetadata(table, physicalPartition, physicalPartition.getVisibleVersion()),
+                    actualPreferSharedInitialMetadata.get());
         } finally {
             mergeJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);

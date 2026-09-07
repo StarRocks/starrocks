@@ -310,6 +310,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         rebuild_pindex_tablets.insert(id);
     }
     bool skip_write_tablet_metadata = request->has_enable_aggregate_publish() && request->enable_aggregate_publish();
+    // FE resolved this partition's version-1 layout from its own metadata and offers it as a lookup
+    // preference, so no tablet task -- normal or resharding -- has to discover it by 404ing on a
+    // per-tablet key that was never written. Applied per request and never remembered -- see
+    // lake::InitialMetadataOrder.
+    auto base_version_order = request->prefer_shared_initial_metadata() ? lake::InitialMetadataOrder::kSharedFirst
+                                                                        : lake::InitialMetadataOrder::kPerTabletFirst;
 
     for (const auto& tablet_info : publish_tablet_infos) {
         auto task = std::make_shared<CancellableRunnable>(
@@ -362,7 +368,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     StatusOr<TabletMetadataPtr> res;
                     if (std::chrono::system_clock::now() < timeout_deadline) {
                         res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
+<<<<<<< HEAD
                                                     skip_write_tablet_metadata);
+=======
+                                                    skip_write_tablet_metadata, fe_built_version, base_version_order);
+>>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
                     } else {
                         auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                         res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
@@ -492,7 +502,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         if (std::chrono::system_clock::now() < timeout_deadline) {
                             res = lake::publish_resharding_tablet(_tablet_mgr, resharding_tablet_info, base_version,
                                                                   new_version, txn_info, skip_write_tablet_metadata,
-                                                                  tablet_metadatas, tablet_ranges);
+                                                                  tablet_metadatas, tablet_ranges, base_version_order);
                         } else {
                             auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                             res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
