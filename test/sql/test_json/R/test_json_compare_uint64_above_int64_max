@@ -37,9 +37,6 @@ insert into t values
   (5, parse_json('{"a":1}'));
 -- result:
 -- !result
-set cbo_prune_json_subfield = false;
--- result:
--- !result
 select k from t where j->'$.a' = parse_json('{"a":18446744073709551615}')->'$.a' order by k;
 -- result:
 1

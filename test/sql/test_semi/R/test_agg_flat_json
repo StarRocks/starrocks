@@ -79,30 +79,30 @@ insert into ajs1 select * from ajs1;
 insert into ajs1 select * from ajs1;
 -- result:
 -- !result
-select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key3"), get_json_string(j2, "$.key4") from ajs1 order by v1 limit 2;
+select get_json_string(j1, "$.key2"), get_json_double(j2, "$.key3"), get_json_string(j2, "$.key4") from ajs1 order by v1 limit 2;
 -- result:
-None	None	value14
-None	None	value24
+value12	None	value14
+value22	None	value24
 -- !result
-select get_json_int(j1, "$.key8"), get_json_double(j2, "$.key9"), get_json_string(j2, "$.key10") from ajs1 order by v1 limit 2;
+select get_json_string(j1, "$.key8"), get_json_double(j2, "$.key9"), get_json_string(j2, "$.key10") from ajs1 order by v1 limit 2;
 -- result:
-None	None	None
+value18	None	None
 None	None	None
 -- !result
-select get_json_int(j1, "$.key12"), get_json_double(j2, "$.key13"), get_json_string(j2, "$") from ajs1 order by v1 limit 2;
+select get_json_string(j1, "$.key12"), get_json_double(j2, "$.key13"), get_json_string(j2, "$") from ajs1 order by v1 limit 2;
 -- result:
 None	None	{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}
 None	None	{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27", "key8": "value28"}
 -- !result
-select get_json_int(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from ajs1 order by v1 limit 2;
+select get_json_string(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from ajs1 order by v1 limit 2;
 -- result:
 None	None	value13
 None	None	value23
 -- !result
-select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key2.key3") from ajs1 order by v1 limit 2;
+select get_json_string(j1, "$.key2"), get_json_double(j2, "$.key2.key3") from ajs1 order by v1 limit 2;
 -- result:
-None	None
-None	None
+value12	None
+value22	None
 -- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from ajs1 order by v1 limit 2;
 -- result:
@@ -196,7 +196,7 @@ select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.
 0	0	0
 0	1	0
 -- !result
-select get_json_int(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from ajs1 order by v1 limit 2;
+select get_json_string(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from ajs1 order by v1 limit 2;
 -- result:
 None	None	value43
 None	None	value53
@@ -210,15 +210,15 @@ ALTER TABLE ajs1 ADD COLUMN j3 JSON REPLACE DEFAULT NULL AFTER j2;
 ALTER TABLE ajs1 ADD COLUMN j4 JSON REPLACE DEFAULT NULL AFTER j1;
 -- result:
 -- !result
-select get_json_int(j1, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from ajs1 order by v1 limit 2;
+select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from ajs1 order by v1 limit 2;
 -- result:
-None	None	None
-None	None	None
+value42	None	None
+value52	None	None
 -- !result
-select get_json_int(j1, "$.key2"), get_json_double(j3, "$.key2.key3") from ajs1 order by v1 limit 2;
+select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key2.key3") from ajs1 order by v1 limit 2;
 -- result:
-None	None
-None	None
+value42	None
+value52	None
 -- !result
 select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j3, "$.key13"), JSON_EXISTS(j3, "$") from ajs1 order by v1 limit 2;
 -- result:
@@ -252,12 +252,12 @@ select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from ajs1 where v1 = -1 order by v1 limit 2;
 -- result:
 -- !result
-select get_json_int(j4, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from ajs1 order by v1 limit 2;
+select get_json_string(j4, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from ajs1 order by v1 limit 2;
 -- result:
 None	None	None
 None	None	None
 -- !result
-select get_json_int(j4, "$.key2"), get_json_double(j3, "$.key2.key3") from ajs1 order by v1 limit 2;
+select get_json_string(j4, "$.key2"), get_json_double(j3, "$.key2.key3") from ajs1 order by v1 limit 2;
 -- result:
 None	None
 None	None
@@ -310,7 +310,7 @@ select JSON_LENGTH(j2, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.
 0	0	0
 1	1	0
 -- !result
-select get_json_int(j2, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from ajs1 order by v1 limit 2;
+select get_json_string(j2, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from ajs1 order by v1 limit 2;
 -- result:
 None	None	value43
 None	None	value53

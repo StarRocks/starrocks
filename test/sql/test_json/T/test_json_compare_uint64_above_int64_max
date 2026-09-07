@@ -13,9 +13,6 @@
 -- u64 read through int64 wraps to a negative number, which would sort a huge value below zero.
 -- The cross-type row is a control: integer against double is still compared as double, which is
 -- lossy above 2^53, and that is a separate defect this case must not silently change.
--- $.a is compared with cbo_prune_json_subfield off because a flattened UInt path currently reads
--- back as NULL through the pruned access path -- an unrelated, still unfixed defect that would
--- otherwise mask what is under test here.
 
 -- The pair that used to throw, with no storage involved.
 select parse_json('{"v":18446744073709551615}')->'$.v' = parse_json('{"v":18446744073709551615}')->'$.v' as eq_self;
@@ -40,7 +37,6 @@ insert into t values
   (3, parse_json('{"a":9223372036854775808}')),
   (4, parse_json('{"a":9223372036854775807}')),
   (5, parse_json('{"a":1}'));
-set cbo_prune_json_subfield = false;
 -- A predicate over a column is the shape that killed the process: the vectorized predicate compares
 -- every row with no handler above it, so the first large operand aborted the scan thread.
 select k from t where j->'$.a' = parse_json('{"a":18446744073709551615}')->'$.a' order by k;
