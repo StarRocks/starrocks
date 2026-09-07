@@ -20,9 +20,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -6663,6 +6665,85 @@ TEST_F(LakeServiceTest, test_publish_returns_tablet_stats) {
         ASSERT_NE(it, response.tablet_stats().end()) << "range tablet must have a tablet_stats entry";
         EXPECT_GT(it->second.data_size(), 0) << "data_size must be positive for range tablet";
     }
+}
+
+// FE's prefer_shared_initial_metadata hint, end to end through the RPC handler and the production
+// base-version read in lake::publish_version(). Every tablet of a `file_bundling` partition resolves
+// version 1 from the single partition-shared object: the per-tablet version-1 key, which such a
+// partition never writes, is not probed, and the shared object is fetched once for the whole request
+// rather than once per tablet -- publish reads with fill_meta_cache off, so this relies on the shared
+// object being cached and single-flighted regardless.
+TEST_F(LakeServiceTest, test_publish_version_prefer_shared_initial_metadata) {
+    // Two fresh tablets under one metadata root, i.e. one physical partition.
+    auto tablet_a = next_id();
+    auto tablet_b = next_id();
+    auto txn_id = next_id();
+
+    // Only the shared object exists, as DDL leaves a file_bundling partition.
+    auto shared = lake::generate_simple_tablet_metadata(DUP_KEYS);
+    shared->set_id(tablet_a);
+    shared->set_version(1);
+    const auto shared_location = _tablet_mgr->tablet_initial_metadata_location(tablet_a);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(shared, shared_location));
+    // put_tablet_metadata() caches what it wrote; a cold CN has nothing.
+    _tablet_mgr->metacache()->erase(shared_location);
+
+    for (auto tablet_id : {tablet_a, tablet_b}) {
+        TxnLog log;
+        log.set_tablet_id(tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(txn_id);
+        auto* rowset = log.mutable_op_write()->mutable_rowset();
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+        rowset->set_overlapped(false);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    // Publish tasks run on a thread pool, so the recorder must be thread-safe.
+    std::mutex read_paths_mtx;
+    std::vector<std::string> read_paths;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        std::lock_guard l(read_paths_mtx);
+        read_paths.emplace_back(*static_cast<std::string*>(arg));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    PublishVersionRequest request;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(tablet_a);
+    request.add_tablet_ids(tablet_b);
+    request.add_txn_ids(txn_id);
+    request.set_prefer_shared_initial_metadata(true);
+
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+    EXPECT_EQ(0, response.status().status_code()) << response.status().DebugString();
+
+    auto count_ending_with = [&](const std::string& suffix) {
+        std::lock_guard l(read_paths_mtx);
+        return std::count_if(read_paths.begin(), read_paths.end(), [&](const std::string& path) {
+            return path.size() >= suffix.size() &&
+                   path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0;
+        });
+    };
+    // Neither tablet probed its own version-1 key ...
+    EXPECT_EQ(0, count_ending_with(lake::tablet_metadata_filename(tablet_a, 1)));
+    EXPECT_EQ(0, count_ending_with(lake::tablet_metadata_filename(tablet_b, 1)));
+    // ... and the shared object was read from remote storage exactly once for both.
+    EXPECT_EQ(1, count_ending_with(lake::tablet_initial_metadata_filename()));
+
+    // Both tablets published under their own ids, not the id stored in the shared object.
+    ASSIGN_OR_ABORT(auto meta_a, _tablet_mgr->get_tablet_metadata(tablet_a, 2));
+    EXPECT_EQ(tablet_a, meta_a->id());
+    ASSIGN_OR_ABORT(auto meta_b, _tablet_mgr->get_tablet_metadata(tablet_b, 2));
+    EXPECT_EQ(tablet_b, meta_b->id());
 }
 
 } // namespace starrocks
