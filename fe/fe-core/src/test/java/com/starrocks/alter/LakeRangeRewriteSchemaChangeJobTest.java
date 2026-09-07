@@ -2408,10 +2408,10 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     /**
-     * Acceptance criterion 6: each retry of an aborted rewrite must journal a FRESH transaction id - BE
-     * forbids reusing an aborted one. Driven with executors that really allocate ids, because
-     * peekNextTransactionId() does not advance the counter, so a stub that allocates nothing would
-     * journal the same predicted id twice and could never prove this.
+     * Each retry of an aborted rewrite must journal a FRESH transaction id - BE forbids reusing an
+     * aborted one. Driven with executors that really allocate ids, because peekNextTransactionId() does
+     * not advance the counter, so a stub that allocates nothing would journal the same predicted id
+     * twice and could never prove this.
      */
     @Test
     public void testEachRetryOfAnAbortedRewriteJournalsAFreshTxnId() throws Exception {
@@ -2420,7 +2420,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         // Capture the journaled snapshots too, not just the live field: with the allocated id equal to
         // the peeked one the reconciliation branch writes nothing, so a live-field-only assertion would
-        // still pass if the pre-execution persistStateChange at :1109 were deleted (R3-3).
+        // still pass if the pre-execution persistStateChange were deleted.
         List<AlterJobV2> loggedSnapshots = new ArrayList<>();
         new MockUp<EditLog>() {
             @Mock

@@ -131,7 +131,7 @@ public abstract class LakeOnlineRewriteJobBase
     // runPartitionRewrite. Not serialized: the job's absolute deadline (createTimeMs + timeoutMs) is
     // already durable, so a replayed job simply starts its retry budget over - which is the right
     // behavior, since a failover re-runs the partition anyway.
-    private final transient Map<Long, Long> firstRewriteFailureTimeMs = new HashMap<>();
+    private final transient Map<Long, Long> firstRewriteFailureTimeMs = Maps.newHashMap();
 
     @Override
     protected void resetTransientState() {
