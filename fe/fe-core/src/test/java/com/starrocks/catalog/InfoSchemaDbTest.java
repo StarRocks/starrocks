@@ -89,8 +89,12 @@ public class InfoSchemaDbTest {
         // MetadataMgr, JMockit records it as an expected call and the case fails with a missing
         // invocation. A manual MV never refreshes on its own.
         starRocksAssert.withMaterializedView(
+<<<<<<< HEAD
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH DEFERRED MANUAL " +
                         "as select * from db.tbl");
+=======
+                "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ON_CHANGE as select * from db.tbl");
+>>>>>>> fd979c1df9b... [Feature] Introduce ON_CHANGE for base-table-change-triggered MV refresh (#62037)
 
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
         GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(new DefaultAuthorizationProvider()));

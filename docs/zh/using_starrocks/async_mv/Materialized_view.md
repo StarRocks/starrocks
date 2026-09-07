@@ -44,9 +44,10 @@ StarRocks v2.4 之前的版本提供了一种同步更新的同步物化视图�
 
   创建异步物化视图后，其中的数据仅反映创建时刻基表的状态。当基表中的数据发生变化时，需要通过刷新异步物化视图更新数据变化。
 
-  目前 StarRocks 支持两种异步刷新策略：
+  目前 StarRocks 支持三种异步刷新策略：
 
-  - ASYNC：异步刷新。物化视图可在基表中的数据发生变化时自动刷新，或根据指定的间隔定时刷新。
+  - ON_CHANGE：基表变更触发模式。每当基表数据发生变化时，物化视图会自动刷新。
+  - SCHEDULE：定时刷新模式。物化视图将按照定义的间隔定时刷新。
   - MANUAL：手动触发刷新。物化视图不会自动刷新，需要用户手动维护刷新任务。
 
 - **查询改写（Query Rewrite）**
@@ -162,7 +163,7 @@ GROUP BY order_id;
 ```SQL
 CREATE MATERIALIZED VIEW order_mv
 DISTRIBUTED BY HASH(`order_id`)
-REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2022-09-01 10:00:00') EVERY (interval 1 day)
 AS SELECT
     order_list.order_id,
     sum(goods.price) as total
@@ -182,7 +183,7 @@ GROUP BY order_id;
 
 - **异步物化视图刷新机制**
 
-  目前，StarRocks 支持两种 ON DEMAND 刷新策略，即异步刷新（ASYNC）和手动刷新（MANUAL）。
+  目前，StarRocks 支持三种 ON DEMAND 刷新策略，即基表变更触发刷新（ON_CHANGE）、定时刷新（SCHEDULE）和手动刷新（MANUAL）。
 
   在此基础上，异步物化视图支持多种刷新机制控制刷新开销并保证刷新成功率：
 
@@ -270,7 +271,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
 - 修改异步物化视图的最大刷新间隔为 2 天。
 
   ```SQL
-  ALTER MATERIALIZED VIEW order_mv REFRESH ASYNC EVERY(INTERVAL 2 DAY);
+  ALTER MATERIALIZED VIEW order_mv REFRESH SCHEDULE EVERY(INTERVAL 2 DAY);
   ```
 
 ### 查看异步物化视图

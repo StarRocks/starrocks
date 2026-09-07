@@ -73,7 +73,7 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
 
     private static String buildMV(Random rnd, List<MTable> tables, int mvIdx) {
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE MATERIALIZED VIEW test." + buildMVName(mvIdx) + " REFRESH ASYNC" +
+        sb.append("CREATE MATERIALIZED VIEW test." + buildMVName(mvIdx) + " REFRESH ON_CHANGE" +
                 " AS ");
 
         List<String> sqls = Lists.newArrayList();

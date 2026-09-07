@@ -45,6 +45,66 @@ DROP TABLE t;
 
 DROP DATABASE test_normal_column_schema_change;
 
+<<<<<<< HEAD
+=======
+-- name: test_materialized_column_in_materialized_view
+CREATE DATABASE test_materialized_column_in_materialized_view;
+USE test_materialized_column_in_materialized_view;
+
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(id) BUCKETS 10 REFRESH ON_CHANGE AS SELECT id, mc FROM t;
+
+INSERT INTO t VALUES (1);
+SELECT * FROM t;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT * FROM mv1;
+
+DROP MATERIALIZED VIEW mv1;
+DROP TABLE t;
+
+DROP DATABASE test_materialized_column_in_materialized_view;
+
+-- name: test_materialized_column_alter_table_with_concurrent_insert
+CREATE DATABASE test_materialized_column_alter_table_with_concurrent_insert;
+USE test_materialized_column_alter_table_with_concurrent_insert;
+
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+ALTER TABLE t MODIFY COLUMN mc BIGINT AS (id + 10);
+INSERT INTO t VALUES (1);
+INSERT INTO t VALUES (2);
+INSERT INTO t VALUES (3);
+INSERT INTO t VALUES (4);
+INSERT INTO t VALUES (5);
+function: wait_alter_table_finish()
+SELECT * FROM t ORDER BY id;
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+ALTER TABLE t DROP COLUMN mc;
+INSERT INTO t VALUES (1);
+INSERT INTO t VALUES (2);
+INSERT INTO t VALUES (3);
+INSERT INTO t VALUES (4);
+INSERT INTO t VALUES (5);
+function: wait_alter_table_finish()
+SELECT * FROM t ORDER BY id;
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+ALTER TABLE t ADD COLUMN name BIGINT AS (id + 10);
+INSERT INTO t VALUES (1);
+INSERT INTO t VALUES (2);
+INSERT INTO t VALUES (3);
+INSERT INTO t VALUES (4);
+INSERT INTO t VALUES (5);
+function: wait_alter_table_finish()
+SELECT * FROM t ORDER BY id;
+DROP TABLE t;
+
+DROP DATABASE test_materialized_column_alter_table_with_concurrent_insert;
+
+>>>>>>> fd979c1df9b... [Feature] Introduce ON_CHANGE for base-table-change-triggered MV refresh (#62037)
 -- name: test_add_multiple_column @native
 CREATE DATABASE test_add_multiple_column;
 USE test_add_multiple_column;

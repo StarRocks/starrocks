@@ -213,7 +213,7 @@ StarRocks 默认提供了一个系统定义的资源组 (`default_mv_wg`) 用于
 
     ```SQL
     CREATE MATERIALIZED VIEW mv_example
-    REFRESH ASYNC
+    REFRESH ON_CHANGE
     PROPERTIES (
         'resource_group' = 'rg_mv'
     )
