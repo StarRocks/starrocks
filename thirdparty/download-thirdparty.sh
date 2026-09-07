@@ -929,3 +929,14 @@ if [[ -d $TP_SOURCE_DIR/$HADOOPSRC_SOURCE ]] ; then
     cd -
     echo "Finished patching $HADOOPSRC_SOURCE"
 fi
+
+# snappy patch to prevent CMake from forcibly disabling RTTI (-fno-rtti), maintaining compiler flag and ABI consistency with StarRocks
+if [[ -d $TP_SOURCE_DIR/$SNAPPY_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$SNAPPY_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $SNAPPY_SOURCE == "snappy-1.2.1" ]] ; then
+        apply_patch -p1 "$TP_PATCH_DIR/snappy-1.2.1-rtti.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $SNAPPY_SOURCE"
+fi
