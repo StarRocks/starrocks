@@ -390,18 +390,25 @@ StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<Tablet
                 const auto& earlier = occurrences[j];
                 bool adjacent = true;
                 if (!incoming.rowset->has_delete_predicate()) {
-                    const bool equal =
-                            incoming.effective_range.SerializeAsString() == earlier.effective_range.SerializeAsString();
+                    TabletRange incoming_range;
+                    TabletRange earlier_range;
+                    RETURN_IF_ERROR(incoming_range.from_proto(incoming.effective_range));
+                    RETURN_IF_ERROR(earlier_range.from_proto(earlier.effective_range));
+                    // Encoding differences do not change ownership. Inclusion
+                    // flags on an unbounded endpoint have no semantic effect.
+                    const bool equal = incoming_range.lower_bound() == earlier_range.lower_bound() &&
+                                       incoming_range.upper_bound() == earlier_range.upper_bound() &&
+                                       (incoming_range.is_minimum() || incoming_range.lower_bound_included() ==
+                                                                               earlier_range.lower_bound_included()) &&
+                                       (incoming_range.is_maximum() ||
+                                        incoming_range.upper_bound_included() == earlier_range.upper_bound_included());
                     if (equal) {
                         RETURN_IF_ERROR(validate_exact_duplicate(*earlier.rowset, *incoming.rowset));
                         plan[incoming.context_index][incoming.rowset_index].role =
                                 RowsetOccurrenceRole::EXACT_DUPLICATE;
                     } else {
-                        ASSIGN_OR_RETURN(auto intersection, tablet_reshard_helper::intersect_range(
-                                                                    earlier.effective_range, incoming.effective_range));
-                        TabletRange decoded;
-                        RETURN_IF_ERROR(decoded.from_proto(intersection));
-                        if (!decoded.is_empty()) {
+                        ASSIGN_OR_RETURN(auto intersection, earlier_range.intersect(incoming_range));
+                        if (!intersection.is_empty()) {
                             return Status::Corruption("tablet merge same-uid rowset ranges strictly overlap");
                         }
                     }

@@ -13515,6 +13515,52 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_same_range_exact_duplicate_cou
     EXPECT_EQ(7, merged->rowsets(0).segment_metas(0).segment_idx());
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_equivalent_range_encodings_count_once) {
+    for (auto keys_type : {PRIMARY_KEYS, DUP_KEYS}) {
+        for (int encoding = 0; encoding < 3; ++encoding) {
+            SCOPED_TRACE(fmt::format("keys_type={}, encoding={}", static_cast<int>(keys_type), encoding));
+            auto first = make_allocator_source(next_id(), 20);
+            first->mutable_schema()->set_keys_type(keys_type);
+            auto* rowset = add_allocator_rowset(first.get(), 10, 1, "equivalent-range.dat", 7);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(100);
+            rowset->set_num_dels(3);
+            auto* range = first->mutable_range();
+            if (encoding == 2) {
+                *range->mutable_lower_bound() = generate_sort_key(0);
+                range->set_lower_bound_included(true);
+                *range->mutable_upper_bound() = generate_sort_key(20);
+                range->set_upper_bound_included(false);
+            }
+            auto second = std::make_shared<TabletMetadataPB>(*first);
+            second->set_id(next_id());
+            if (encoding < 2) {
+                // Flags on absent endpoints do not change an unbounded range.
+                second->mutable_range()->set_upper_bound_included(encoding == 1);
+            } else {
+                // NORMAL_VALUE is the default, whether explicit or absent.
+                second->mutable_range()->mutable_lower_bound()->mutable_values(0)->clear_variant_type();
+                second->mutable_range()->mutable_upper_bound()->mutable_values(0)->clear_variant_type();
+            }
+            ASSERT_NE(first->range().SerializeAsString(), second->range().SerializeAsString());
+            auto forward = publish_allocator_merge({first, second});
+            auto reverse = publish_allocator_merge({second, first});
+            EXPECT_OK(forward.status());
+            EXPECT_OK(reverse.status());
+            if (!forward.ok() || !reverse.ok()) continue;
+            ASSERT_EQ(1, forward.value()->rowsets_size());
+            ASSERT_EQ(1, reverse.value()->rowsets_size());
+            const auto& output = forward.value()->rowsets(0);
+            EXPECT_EQ(10, output.num_rows());
+            EXPECT_EQ(100, output.data_size());
+            EXPECT_EQ(3, output.num_dels());
+            EXPECT_EQ(7, output.segment_metas(0).segment_idx());
+            EXPECT_EQ(rowset->uid().SerializeAsString(), output.uid().SerializeAsString());
+            EXPECT_EQ(output.SerializeAsString(), reverse.value()->rowsets(0).SerializeAsString());
+        }
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_distinct_ranges_contribute_once) {
     auto first = make_allocator_source(next_id(), 20);
     auto* r = add_allocator_rowset(first.get(), 10, 1, "contributor.dat", 7);
