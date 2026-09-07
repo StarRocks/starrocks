@@ -15,16 +15,13 @@
 
 package com.starrocks.lake;
 
-<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.PublishTabletsInfo;
-import com.starrocks.catalog.Tablet;
-import com.starrocks.common.NoAliveBackendException;
-=======
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
->>>>>>> 91d076df102 ([BugFix] Read lake version-1 metadata from the partition-shared object (#61148))
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -151,7 +148,6 @@ public class UtilsTest {
                 "an empty request publishes no unshare compaction");
     }
 
-<<<<<<< HEAD
     // The aggregator turns every ComputeNodePB into a brpc stub via
     // LakeServiceBrpcStubCache::get_stub(), which has to resolve the host before it can look up its
     // (EndPoint-keyed) cache. Shipping a hostname there therefore costs one uncached getaddrinfo per
@@ -207,7 +203,8 @@ public class UtilsTest {
         // The node id must still be the real id: FE matches PBs back to ComputeNode objects by id
         // when choosing an aggregator.
         Assertions.assertEquals(1001L, (long) request.getComputeNodes().get(0).getId());
-=======
+    }
+
     // ---- prefer_shared_initial_metadata predicate ----------------------------------------
     //
     // This predicate decides whether the BE may skip probing a tablet's own version-1 metadata key
@@ -300,6 +297,5 @@ public class UtilsTest {
     public void testSharedInitialMetadataNullSafe() {
         Assertions.assertFalse(Utils.preferSharedInitialMetadata(null, singleIndexPartition(), 1L));
         Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(true), null, 1L));
->>>>>>> 91d076df102 ([BugFix] Read lake version-1 metadata from the partition-shared object (#61148))
     }
 }
