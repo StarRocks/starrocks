@@ -251,6 +251,43 @@ public:
     }
 };
 
+// A binary column is only well-formed when its offsets describe its byte payload: there is at least the
+// leading offset, the first one is zero, they never decrease, and the last one equals the payload size.
+// Consumers such as `append_selective` and `get_slice` index the byte buffer straight from the offsets,
+// so a buffer that violates any of this must be rejected here, at the boundary where it enters the process.
+static Status binary_column_corruption(const std::string& msg) {
+    if (config::enable_dcheck_on_serde_failure) {
+        DCHECK(false) << msg;
+    }
+    return Status::Corruption(msg);
+}
+
+template <typename T>
+static Status check_binary_offsets(const Buffer<T>& offsets, size_t bytes_size) {
+    if (UNLIKELY(offsets.empty())) {
+        return binary_column_corruption("binary column has no offsets");
+    }
+    if (UNLIKELY(offsets.front() != 0)) {
+        return binary_column_corruption(fmt::format("binary column first offset is {}, expected 0", offsets.front()));
+    }
+    if (UNLIKELY(offsets.back() != bytes_size)) {
+        return binary_column_corruption(fmt::format("binary column last offset {} does not match byte payload size {}",
+                                                    offsets.back(), bytes_size));
+    }
+    const T* data = offsets.data();
+    const size_t num_offsets = offsets.size();
+    bool non_decreasing = true;
+    for (size_t i = 1; i < num_offsets; ++i) {
+        non_decreasing &= (data[i - 1] <= data[i]);
+    }
+    if (UNLIKELY(!non_decreasing)) {
+        return binary_column_corruption(
+                fmt::format("binary column offsets are not non-decreasing, num_offsets: {}, byte payload size: {}",
+                            num_offsets, bytes_size));
+    }
+    return Status::OK();
+}
+
 class BinaryColumnSerde {
 public:
     template <typename T>
@@ -346,6 +383,15 @@ public:
         } else {
             ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &offset_bytes_size));
         }
+        // The bytes were already resized to the payload, so do not leave a rejected column half-built.
+        auto reject = [column](Status st) {
+            column->reset_column();
+            return st;
+        };
+        if (UNLIKELY(offset_bytes_size % sizeof(T) != 0)) {
+            return reject(binary_column_corruption(fmt::format(
+                    "binary column offset payload size {} is not a multiple of {}", offset_bytes_size, sizeof(T))));
+        }
         Buffer<T> offsets;
         raw::make_room(&offsets, offset_bytes_size / sizeof(T));
 
@@ -354,6 +400,9 @@ public:
             ASSIGN_OR_RETURN(buff, decode_integers<is_i32>(buff, end, offsets.data(), offset_bytes_size));
         } else {
             ASSIGN_OR_RETURN(buff, read_raw(buff, end, offsets.data(), offset_bytes_size));
+        }
+        if (auto st = check_binary_offsets<T>(offsets, bytes_size); !st.ok()) {
+            return reject(std::move(st));
         }
         if constexpr (std::is_same_v<T, uint32_t>) {
             column->get_offset().set_small_buffer(std::move(offsets));
