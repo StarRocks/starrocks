@@ -219,7 +219,7 @@ jobs:
         id: run_build
         shell: bash
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           # No --with-gcov / --with-trivy: INSPECTION PIPELINE passes both, but coverage
           # instrumentation is paid for by every PR that later deploys this package, and the
           # trivy scan belongs to the release pipeline rather than to a package refresh.

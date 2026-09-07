@@ -44,7 +44,11 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
-          cd ci-tool && (git pull >/dev/null 2>&1 || true)
+          # FAIL-CLOSED refresh (no `|| true`): this is the shared [ubuntu, ai] host, and the
+          # very next thing we run is bin/assign-reviewer.sh — the trust gate. It must come
+          # from a verified-fresh copy, not a possibly-tampered /var/lib/ci-tool. (Ordinary
+          # non-AI CI steps use the tolerant `(git pull || true)`.)
+          cd ci-tool && git pull >/dev/null 2>&1
           ./bin/assign-reviewer.sh --repo "${REPO}" --pr "${PR_NUMBER}" \
             2>&1 | tee "${RUNNER_TEMP}/ai_output.txt" || true
 

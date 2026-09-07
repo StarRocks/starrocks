@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: ori pr info
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           python3 ./lib/notify_backport.py ${BASE_REF} ${HEAD_REF} ${STATUS}
 
       - name: clean

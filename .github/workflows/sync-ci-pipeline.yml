@@ -191,7 +191,7 @@ jobs:
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/run-pr-update-image.sh
 
       - name: Upload Thirdparty Result
@@ -291,7 +291,7 @@ jobs:
         env:
           SKIP_OSS: 'true'
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           if [[ "${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}" != '' ]]; then
               export image_cache_id=${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -341,7 +341,7 @@ jobs:
         id: run_ut
         shell: bash
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER

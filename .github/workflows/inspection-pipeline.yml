@@ -171,7 +171,7 @@ jobs:
         env:
           build_type: ${{ matrix.build_type }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module be --build ${build_type} --linuxdistro ${LINUX} --with-gcov
 
       - name: clean ECI
@@ -238,7 +238,7 @@ jobs:
         shell: bash
         timeout-minutes: 60
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module fe --build Release --linuxdistro ubuntu
 
       - name: Clean ECI
@@ -308,7 +308,7 @@ jobs:
         shell: bash
         timeout-minutes: 120
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} \
             --build Release --linuxdistro ubuntu --be --clang-tidy --clang-tidy-mode full
 
@@ -357,7 +357,7 @@ jobs:
           if [[ "${WITH_FEATURE_COV}" == "true" ]]; then
             export SKIP_SYNC_TAR=true
           fi
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} \
             --build ${{ matrix.build_type }} --linuxdistro ${{ matrix.linux }} --with-trivy --with-gcov
 

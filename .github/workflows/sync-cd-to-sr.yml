@@ -86,6 +86,10 @@ jobs:
           FLAG="--dry-run"
           if [ "${MODE}" = "on" ]; then FLAG="--no-dry-run"; fi
 
+          # FAIL-CLOSED `git pull` (no `|| true`): this runs on the shared [ubuntu, ai] host
+          # with a write PAT and drives claude + dispatch — a failed/tampered ci-tool refresh
+          # must abort, not run the decision hub off a possibly-stale copy with the PAT.
+          # (Ordinary CI steps use the tolerant `(git pull || true)`.)
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
           # The hub reads the PR's base branch itself and picks main (node2) vs branch

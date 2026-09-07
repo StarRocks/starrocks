@@ -232,7 +232,7 @@ jobs:
         run: |
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           if [[ -e ${fe_path}/test.exec || -e ${fe_path}/test_admit.exec ]]; then
             if [[ -e ${fe_path}/test.exec ]]; then
               file_str="${fe_path}/test.exec"
@@ -495,7 +495,7 @@ jobs:
           && !contains(github.event.workflow_run.head_branch, '-sync-pr-')
           && !startsWith(github.event.workflow_run.head_branch, 'mergify/')
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
 
           export ECI_ID=`./bin/create_eci.sh ${BASE_REF} ${REPO}`
           export TOTAL_COV_XML=/var/local/env/be_total_coverage_${PR_NUMBER}.xml
@@ -863,7 +863,7 @@ jobs:
 
       - name: NOTIFY
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/notify.sh
 
       - name: Clean ENV

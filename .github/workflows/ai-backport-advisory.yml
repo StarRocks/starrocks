@@ -160,6 +160,10 @@ jobs:
           # Fresh ci-tool first (git pull resets tracked scripts to origin), so the validator
           # we run next is the trusted, version-controlled copy — not anything an injected
           # claude in the compute job might have left behind.
+          # NOTE: this write-PAT step deliberately keeps `git pull` FAIL-CLOSED (no `|| true`):
+          # the refresh is a trust control, not just a cache refresh, so a failed/ tampered
+          # refresh must abort rather than run the poster with the PAT. (Ordinary CI steps use
+          # the tolerant `(git pull || true)`.)
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
           # STRICT-validate the cross-job affected list (the sole datum crossing the

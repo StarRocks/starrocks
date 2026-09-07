@@ -114,7 +114,7 @@ jobs:
         shell: bash
         timeout-minutes: 110
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           # --branch is REQUIRED: elastic-build.sh hardcodes BRANCH=main by default
           # (ignores the env) and picks the build image via `eci_lib.py --image $BRANCH`.
           ./bin/elastic-build.sh --branch ${BRANCH} --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
@@ -156,7 +156,7 @@ jobs:
         id: apply
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
-          cd ci-tool && git pull && source lib/init.sh
+          cd ci-tool && (git pull || true) && source lib/init.sh
           # Always apply the `ci-admit` ECS template. `ci-admit-cloud` is a *deploy*
           # config, not an ECS-apply template — applying it fails with
           # `NoOptionError: 'RegionID' in section 'ci-admit-cloud'`. shared-data is
@@ -271,7 +271,7 @@ jobs:
 
       - name: Run SQL-Tester (fe=${{ needs.deploy.outputs.fe }})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/run-sql-tester.sh
 
       - name: Upload SQL-Tester XML

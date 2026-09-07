@@ -108,7 +108,7 @@ jobs:
       - name: Apply for resources
         id: apply_resource
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
           ./bin/elastic-cluster.sh --template ci-admit --linuxdistro ${LINUX_DISTRO} ${arm_arg}
           conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-${SYSTEM_TEST_MODE}-starrocks_deploy.conf
@@ -164,7 +164,7 @@ jobs:
       - name: Run Case (${{ needs.deploy.outputs.fe }})
         id: run_case
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/run-sql-tester.sh
 
       - name: Prepare Tools
@@ -219,7 +219,7 @@ jobs:
 
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/restart-fe.sh --repository ${{ github.repository }} --pr ${PR_NUMBER} --branch ${BRANCH} --build Release
 
       - name: Clean ENV
@@ -250,7 +250,7 @@ jobs:
 
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           [[ "${WITH_FEATURE_COV}" != "true" ]] && skip_gcov="--skip-gcov"
           ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} ${skip_gcov}
 
@@ -286,7 +286,7 @@ jobs:
       - name: Run Case
         run: |
           echo "FE: ${FE_NODE}, BE: ${BE_NODE}"
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
 
           cd ${{ github.workspace }}
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull

@@ -105,19 +105,19 @@ jobs:
 
       - name: update image - ubuntu
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER ubuntu
 
       - name: update image - centos7
         if: needs.thirdparty-filter.outputs.centos7 == 'true'
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER centos7
 
       - name: update image - rocky9
         if: needs.thirdparty-filter.outputs.rocky9 == 'true'
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER rocky9
 
       - name: Clean ENV

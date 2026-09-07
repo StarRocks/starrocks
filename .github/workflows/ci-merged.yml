@@ -139,7 +139,7 @@ jobs:
     steps:
       - name: fan-out dry-run
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
 
   # After a NATIVE main PR merges, snapshot the AI backport recommendation (advisory comment's
@@ -173,7 +173,7 @@ jobs:
     steps:
       - name: record AI backport recommendation vs author selection
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"; printf '%s' "${CI_METRICS_CA}" > "$CA"
           BACKPORT_METRICS_INGEST_URL="https://47.236.49.47:8080/ingest/backport-recommendations" \
           BACKPORT_METRICS_INGEST_TOKEN="${CI_METRICS_TOKEN}" \
@@ -248,19 +248,19 @@ jobs:
 
       - name: update image - ubuntu
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER ubuntu
 
       - name: update image - centos7
         if: needs.thirdparty-filter.outputs.centos7 == 'true'
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER centos7
 
       - name: update image - rocky9
         if: needs.thirdparty-filter.outputs.rocky9 == 'true'
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER rocky9
 
       - name: Clean ENV
@@ -294,7 +294,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/upload_cov_after_merge.sh --pr ${PR_NUMBER} --commit ${{ steps.commit_sha.outputs.commit_sha }}
 
       - name: Clean ENV

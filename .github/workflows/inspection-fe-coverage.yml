@@ -87,7 +87,7 @@ jobs:
           fe_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}
         run: |
           export PATH=$JAVA_HOME/bin:$PATH;
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           if [[ ! -e ${fe_path}/test.exec ]]; then
             echo "::error::System test result not exit!"
             exit 1
