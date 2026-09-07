@@ -130,7 +130,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                 FileSlice fileSlice = hoodieFileSliceIterator.next();
                 Optional<HoodieBaseFile> baseFile = fileSlice.getBaseFile().toJavaOptional();
                 String fileName = baseFile.map(BaseFile::getFileName).orElse("");
-                long fileLength = baseFile.map(BaseFile::getFileLen).orElse(-1L);
+                long fileLength = baseFile.map(BaseFile::getFileSize).orElse(-1L);
                 List<String> logs = fileSlice.getLogFiles().map(HoodieLogFile::getFileName).collect(Collectors.toList());
                 // The file name of HoodieBaseFile contains "instantTime", so we set the `modificationTime` to 0.
                 HudiRemoteFileDesc res = HudiRemoteFileDesc.createHudiRemoteFileDesc(fileName, fileLength,
