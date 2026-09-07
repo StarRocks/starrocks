@@ -56,6 +56,27 @@ SELECT k, v FROM test_mv_batch ORDER BY k;
 -- The delta was processed as multiple INCREMENTAL runs, not one.
 SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
 
+-- The IMV_SOURCE_* columns merge a batched job into one window: the first run's start and
+-- the last run's end. Asserted structurally -- the job's start must be the head of the run
+-- chain (a start that no run ends at) and its end the tail -- so the golden pins no snapshot
+-- id and does not depend on the second-granular CREATE_TIME ordering of the runs.
+WITH r AS (
+  SELECT regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) AS s,
+         regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"end": *"([0-9]+)"', 1) AS e
+  FROM information_schema.task_runs
+  WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange') != '{}'
+),
+j AS (
+  SELECT regexp_extract(IMV_SOURCE_VERSION_RANGE, '"start":"([0-9]+)"', 1) AS s,
+         regexp_extract(IMV_SOURCE_VERSION_RANGE, '"end":"([0-9]+)"', 1) AS e
+  FROM information_schema.materialized_view_refresh_jobs
+  WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv_batch' AND IMV_SOURCE_VERSION_RANGE IS NOT NULL
+)
+SELECT (SELECT count(*) FROM r) >= 2 AS batched,
+       (SELECT count(*) FROM j WHERE s IN (SELECT s FROM r) AND s NOT IN (SELECT e FROM r)) AS job_start_is_chain_head,
+       (SELECT count(*) FROM j WHERE e IN (SELECT e FROM r) AND e NOT IN (SELECT s FROM r)) AS job_end_is_chain_tail,
+       (SELECT count(*) FROM r a JOIN r b ON a.e = b.s) = (SELECT count(*) FROM r) - 1 AS runs_form_one_chain;
+
 admin set frontend config ("mv_max_rows_per_refresh" = "100000000");
 drop materialized view test_mv_batch;
 drop catalog mv_iceberg_${uuid0};

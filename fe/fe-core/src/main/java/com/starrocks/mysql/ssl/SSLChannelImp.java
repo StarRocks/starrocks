@@ -166,7 +166,7 @@ public class SSLChannelImp implements SSLChannel {
                     myNetData = enlargePacketBuffer(sslEngine, myNetData);
                     break;
                 case BUFFER_UNDERFLOW:
-                    throw new SSLException("Buffer underflow occured after a wrap. " +
+                    throw new SSLException("Buffer underflow occurred after a wrap. " +
                             "I don't think we should ever get here.");
                 case CLOSED:
                     throw new IOException("client closed the connection");
@@ -339,7 +339,7 @@ public class SSLChannelImp implements SSLChannel {
                             myNetData = enlargePacketBuffer(sslEngine, myNetData);
                             break;
                         case BUFFER_UNDERFLOW:
-                            throw new SSLException("Buffer underflow occured after a wrap. " +
+                            throw new SSLException("Buffer underflow occurred after a wrap. " +
                                     "I don't think we should ever get here.");
                         case CLOSED:
                             try {

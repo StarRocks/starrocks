@@ -63,10 +63,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class RollupJobV2Test extends DDLTestBase {
     private static AddRollupClause clause;
@@ -104,6 +112,37 @@ public class RollupJobV2Test extends DDLTestBase {
     @AfterEach
     public void tearDown() {
         GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
+
+    @Test
+    public void testRunAlterJobV2CleansUpCompletedJobAfterRunThrows() {
+        long dbId = Long.MAX_VALUE;
+        long tableId = Long.MAX_VALUE - 1;
+        long jobId = 1L;
+        AtomicBoolean done = new AtomicBoolean(false);
+        AlterJobV2 job = mock(AlterJobV2.class);
+        when(job.getDbId()).thenReturn(dbId);
+        when(job.getTableId()).thenReturn(tableId);
+        when(job.getJobId()).thenReturn(jobId);
+        when(job.getType()).thenReturn(AlterJobV2.JobType.ROLLUP);
+        when(job.getJobState()).thenReturn(AlterJobV2.JobState.RUNNING);
+        when(job.isDone()).thenAnswer(invocation -> done.get());
+        when(job.isTimeout()).thenReturn(false);
+        doAnswer(invocation -> {
+            done.set(true);
+            throw new RuntimeException("NORMAL");
+        }).when(job).run();
+
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        handler.getAlterJobsV2().put(jobId, job);
+        handler.getTableRunningJobMap().computeIfAbsent(tableId, key -> new HashSet<>()).add(jobId);
+        Map<Long, Set<Long>> tableNotFinalStateJobMap =
+                Deencapsulation.getField(handler, "tableNotFinalStateJobMap");
+        tableNotFinalStateJobMap.computeIfAbsent(tableId, key -> new HashSet<>()).add(jobId);
+
+        assertDoesNotThrow(() -> Deencapsulation.invoke(handler, "runAlterJobV2"));
+        assertFalse(handler.getTableRunningJobMap().getOrDefault(tableId, Set.of()).contains(jobId));
+        assertFalse(tableNotFinalStateJobMap.getOrDefault(tableId, Set.of()).contains(jobId));
     }
 
     @Test

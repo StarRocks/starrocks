@@ -47,6 +47,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.DmlType;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryWarning;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.RpcException;
@@ -130,14 +131,12 @@ public class TransactionStmtExecutor {
         // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
         String stmtLabel = stmt.getLabel();
         String label;
+        // A user-specified label must be unique in the cluster, align with INSERT statement behavior. The check
+        // is deferred to the registration below so that checking and publishing happen atomically.
+        boolean checkLabelConflict = false;
         if (stmtLabel != null && !stmtLabel.isEmpty()) {
             FeNameFormat.checkLabel(stmtLabel);
-            // Check if label is already used in any database, align with INSERT statement behavior
-            try {
-                globalTransactionMgr.checkLabelUsedInAnyDatabase(stmtLabel);
-            } catch (LabelAlreadyUsedException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            checkLabelConflict = true;
             label = stmtLabel;
         } else if (labelOverride != null && !labelOverride.isEmpty()) {
             label = labelOverride;
@@ -160,7 +159,15 @@ public class TransactionStmtExecutor {
 
         ExplicitTxnState explicitTxnState = new ExplicitTxnState();
         explicitTxnState.setTransactionState(transactionState);
-        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        if (checkLabelConflict) {
+            try {
+                globalTransactionMgr.addTransactionStateWithLabelCheck(transactionId, explicitTxnState);
+            } catch (LabelAlreadyUsedException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        } else {
+            globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        }
 
         context.setTxnId(transactionId);
         context.getState().setOk(0, 0,
@@ -177,20 +184,9 @@ public class TransactionStmtExecutor {
                 context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        TransactionState transactionState = explicitTxnState.getTransactionState();
-
         try {
-            if (transactionState.getDbId() == 0) {
-                transactionState.setDbId(database.getId());
-                DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getDatabaseTransactionMgr(database.getId());
-                databaseTransactionMgr.upsertTransactionState(transactionState);
-            }
-
-            if (database.getId() != transactionState.getDbId()) {
-                throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
-            }
+            TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                    context.getTxnId(), database.getId());
 
             Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
             for (Table table : m.values()) {
@@ -202,9 +198,8 @@ public class TransactionStmtExecutor {
                 }
             }
 
-            if (!transactionState.getTableIdList().contains(targetTable.getId())) {
-                transactionState.addTableIdList(targetTable.getId());
-            }
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(
+                    context.getTxnId(), database.getId(), targetTable.getId());
             // record modified table id in explicit txn state for later SELECT validation
             explicitTxnState.addModifiedTableId(targetTable.getId());
 
@@ -221,6 +216,15 @@ public class TransactionStmtExecutor {
                     load(database, targetTable, execPlan, dmlStmt, originStmt, context, coordinator);
             explicitTxnState.addTransactionItem(item);
 
+            if (item.getFilteredRows() > 0) {
+                // Mirror the autocommit path (StmtExecutor.handleDMLStmt): the OK packet below
+                // reports the filtered-row count, so record the matching session warning for
+                // SHOW WARNINGS. COMMIT and other no-table statements preserve the diagnostics
+                // area (see StmtExecutor.execute), so the warning stays readable both inside the
+                // transaction and right after COMMIT, until the next data statement.
+                context.addWarning(QueryWarning.filteredRowsWarning(item.getFilteredRows(),
+                        coordinator.getTrackingUrl()));
+            }
             context.getState().setOk(item.getLoadedRows(), Ints.saturatedCast(item.getFilteredRows()),
                     buildMessage(transactionState.getLabel(), TransactionStatus.PREPARE,
                             transactionState.getTransactionId(), database.getId()));
@@ -232,17 +236,10 @@ public class TransactionStmtExecutor {
     public static void loadData(long dbId, long tableId, ExplicitTxnState.ExplicitTxnStateItem item,
             ConnectContext context) throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        TransactionState transactionState = explicitTxnState.getTransactionState();
-
-        if (transactionState.getDbId() == 0) {
-            transactionState.setDbId(dbId);
-            DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getDatabaseTransactionMgr(dbId);
-            databaseTransactionMgr.upsertTransactionState(transactionState);
-        }
-
-        transactionState.addTableIdList(tableId);
+        TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                context.getTxnId(), dbId);
+        ExplicitTxnState explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(
+                context.getTxnId(), dbId, tableId);
 
         // record modified table id in explicit txn state for later SELECT validation
         explicitTxnState.addModifiedTableId(tableId);

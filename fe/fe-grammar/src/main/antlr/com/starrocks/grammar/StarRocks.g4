@@ -252,6 +252,7 @@ statement
     | cancelRestoreStatement
     | showRestoreStatement
     | showSnapshotStatement
+    | dropSnapshotStatement
     | createRepositoryStatement
     | dropRepositoryStatement
 
@@ -934,7 +935,7 @@ setDefaultStorageVolumeStatement
 
 updateFailPointStatusStatement
     : ADMIN (DISABLE | ENABLE) FAILPOINT string
-      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY | PAUSE))?
       (ON (BACKEND string | FRONTEND))?
     ;
 
@@ -981,6 +982,7 @@ alterClause
     : addFrontendClause
     | dropFrontendClause
     | modifyFrontendHostClause
+    | transferLeaderClause
     | addBackendClause
     | dropBackendClause
     | decommissionBackendClause
@@ -1005,6 +1007,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | alterTableDictColumnsClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
     | replacePartitionColumnClause
@@ -1051,6 +1054,10 @@ dropFrontendClause
 
 modifyFrontendHostClause
   : MODIFY FRONTEND HOST string TO string
+  ;
+
+transferLeaderClause
+  : TRANSFER LEADER TO string (FORCE)?
   ;
 
 addBackendClause
@@ -1165,6 +1172,10 @@ addColumnsClause
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+alterTableDictColumnsClause
+    : (ENABLE | DISABLE) DICTIONARY '(' identifier (',' identifier)* ')'
     ;
 
 dropPartitionColumnClause
@@ -2085,6 +2096,10 @@ createRepositoryStatement
 
 dropRepositoryStatement
     : DROP REPOSITORY identifier
+    ;
+
+dropSnapshotStatement
+    : DROP SNAPSHOT snapshotName=identifier ON repoName=identifier FORCE?
     ;
 
 // ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
@@ -3362,7 +3377,7 @@ nonReserved
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCLUDE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
+    | LABEL | LAST | LEADER | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
     | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | METADATA | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
@@ -3375,7 +3390,7 @@ nonReserved
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_KW | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
-    | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
+    | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRANSFER | TRACE | TRANSLATE
     | TRIM_SPACE | TRAILING | TRIM
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK

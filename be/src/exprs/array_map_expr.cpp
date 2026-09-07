@@ -170,7 +170,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 
         // if lambda expr doesn't rely on argument, we don't need to put it into cur_chunk
         if constexpr (!independent_lambda_expr) {
-            cur_chunk->append_column(elements_column, arguments_ids[i]);
+            // Move it in: when the same array column is passed as two lambda arguments
+            // (e.g. array_map((x, y) -> ..., a, a)), both iterations yield the same elements
+            // column, and Chunk requires its columns to be unique. The rvalue overload
+            // copy-on-writes the duplicate instead of aliasing one column to two slots.
+            cur_chunk->append_column(std::move(elements_column), arguments_ids[i]);
         }
     }
     DCHECK(aligned_offsets != nullptr);

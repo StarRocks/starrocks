@@ -49,6 +49,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.endpoint                     | S3 バケットにアクセスするためのエンドポイント URL です。例：`https://s3.us-west-2.amazonaws.com`。[プレビュー] v3.3.0 以降、Amazon S3 Express One Zone ストレージクラスがサポートされています。例：`https://s3express.us-west-2.amazonaws.com`。 <Beta />  |
 | aws.s3.use_aws_sdk_default_behavior | AWS SDK のデフォルト認証情報を使用するかどうか。有効な値は `true` と `false`（デフォルト）です。 |
 | aws.s3.use_instance_profile         | S3 にアクセスするための認証方法としてインスタンスプロファイルとアサインドロールを使用するかどうか。有効な値は `true` と `false`（デフォルト）です。<ul><li>IAM ユーザー認証（アクセスキーとシークレットキー）を使用して S3 にアクセスする場合、この項目を `false` に設定し、`aws.s3.access_key` と `aws.s3.secret_key` を指定する必要があります。</li><li>インスタンスプロファイルを使用して S3 にアクセスする場合、この項目を `true` に設定する必要があります。</li><li>アサインドロールを使用して S3 にアクセスする場合、この項目を `true` に設定し、`aws.s3.iam_role_arn` を指定する必要があります。</li><li>外部 AWS アカウントを使用する場合、この項目を `true` に設定し、`aws.s3.iam_role_arn` と `aws.s3.external_id` を指定する必要があります。</li></ul> |
+| aws.s3.use_web_identity_token_file  | Web Identity Token ファイルを使用して S3 にアクセスするかどうか。有効な値は `true` と `false`（デフォルト）です。有効にすると、各ワーカーの AWS SDK は環境変数 `AWS_WEB_IDENTITY_TOKEN_FILE` と `AWS_ROLE_ARN` から Token ファイルと IAM ロールを取得します。 |
 | aws.s3.access_key                   | S3 バケットにアクセスするためのアクセスキー ID です。             |
 | aws.s3.secret_key                   | S3 バケットにアクセスするためのシークレットアクセスキーです。         |
 | aws.s3.iam_role_arn                 | データファイルが保存されている S3 バケットに対して権限を持つ IAM ロールの ARN です。 |
@@ -82,6 +83,9 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 
 #### 認証情報
 
+FE とストレージボリュームでサポートされる認証情報の組み合わせについては、
+[ストレージボリュームの AWS 認証情報サポート](AWS_CREDENTIAL_SUPPORT.md) を参照してください。
+
 ##### AWS S3
 
 - AWS SDK のデフォルト認証情報を使用して S3 にアクセスする場合、次のプロパティを設定します：
@@ -114,6 +118,28 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
   "aws.s3.use_aws_sdk_default_behavior" = "false",
   "aws.s3.use_instance_profile" = "true"
   ```
+
+- Web Identity Token ファイル（EKS IAM Roles for Service Accounts、IRSA など）を使用する場合、次の
+  プロパティを設定します。また、ストレージボリュームにアクセスするすべてのワーカーの環境に
+  `AWS_WEB_IDENTITY_TOKEN_FILE` と `AWS_ROLE_ARN` を設定します。
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "aws.s3.region" = "<region>",
+  "aws.s3.endpoint" = "<endpoint_url>",
+  "aws.s3.use_aws_sdk_default_behavior" = "false",
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.use_web_identity_token_file" = "true"
+  ```
+
+  Web Identity で認証情報を取得した後に別の IAM ロールを引き受けるには、`aws.s3.iam_role_arn` も設定します。
+  クロスアカウントアクセスでは、`aws.s3.external_id` も設定できます。
+
+  :::caution
+  ストレージボリュームで Web Identity を使用する前に、クラスター内のすべての FE、StarManager、BE、CN が
+  この認証方法をサポートしていることを確認してください。ローリングアップグレード中は、すべてのノードの
+  アップグレードが完了するまで、このストレージボリュームを使用しないでください。
+  :::
 
 - アサインドロールを使用して S3 にアクセスする場合、次のプロパティを設定します：
 

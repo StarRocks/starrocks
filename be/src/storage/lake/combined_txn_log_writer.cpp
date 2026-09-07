@@ -30,9 +30,9 @@
 
 namespace starrocks {
 
-Status write_combined_txn_log(const CombinedTxnLogPB& logs) {
+Status write_combined_txn_log(const CombinedTxnLogPB& logs, const std::set<int64_t>& expected_tablet_ids) {
     auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
-    return tablet_mgr->put_combined_txn_log(logs);
+    return tablet_mgr->put_combined_txn_log(logs, expected_tablet_ids);
 }
 
 namespace {
@@ -47,13 +47,20 @@ void mark_failure(const Status& status, std::atomic<bool>* has_error, Status* fi
     }
 }
 
-std::function<void()> create_txn_log_task(const CombinedTxnLogPB* logs, lake::TabletManager* tablet_mgr,
-                                          std::atomic<bool>* has_error, Status* final_status, CountDownLatch* latch) {
-    return [logs, tablet_mgr, has_error, final_status, latch]() {
+std::function<void()> create_txn_log_task(const CombinedTxnLogPB* logs, const std::set<int64_t>* expected_tablet_ids,
+                                          lake::TabletManager* tablet_mgr, std::atomic<bool>* has_error,
+                                          Status* final_status, CountDownLatch* latch) {
+    return [logs, expected_tablet_ids, tablet_mgr, has_error, final_status, latch]() {
         try {
-            Status status = tablet_mgr->put_combined_txn_log(*logs);
+            static const std::set<int64_t> kNoExpectation;
+            Status status = tablet_mgr->put_combined_txn_log(
+                    *logs, expected_tablet_ids != nullptr ? *expected_tablet_ids : kNoExpectation);
             if (!status.ok()) {
-                throw std::runtime_error("Txn log write failed");
+                // Report the status as it came back. Throwing here instead would route it through
+                // the handler below and re-wrap it as an IOError, so an incomplete-coverage
+                // rejection -- an invariant violation, not a transient object-store failure --
+                // would reach the caller indistinguishable from one, both in code and in message.
+                mark_failure(status, has_error, final_status);
             }
         } catch (const std::exception& e) {
             mark_failure(Status::IOError(e.what()), has_error, final_status);
@@ -66,15 +73,19 @@ std::function<void()> create_txn_log_task(const CombinedTxnLogPB* logs, lake::Ta
 
 } // namespace
 
-Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map) {
+Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map,
+                                       const ExpectedTabletsByPartition& expected_by_partition) {
     CountDownLatch latch(txn_log_map.size());
     std::atomic<bool> has_error(false);
     Status final_status;
     {
         std::vector<std::shared_ptr<CancellableRunnable>> tasks;
         for (const auto& [partition_id, logs] : txn_log_map) {
-            auto task_logic = create_txn_log_task(&logs, StorageEnv::GetInstance()->lake_tablet_manager(), &has_error,
-                                                  &final_status, &latch);
+            auto expected_it = expected_by_partition.find(partition_id);
+            const std::set<int64_t>* expected =
+                    expected_it != expected_by_partition.end() ? &expected_it->second : nullptr;
+            auto task_logic = create_txn_log_task(&logs, expected, StorageEnv::GetInstance()->lake_tablet_manager(),
+                                                  &has_error, &final_status, &latch);
             auto task =
                     std::make_shared<CancellableRunnable>(std::move(task_logic), [&latch, &has_error, &final_status]() {
                         Status st = Status::Cancelled("Task cancelled before execution");

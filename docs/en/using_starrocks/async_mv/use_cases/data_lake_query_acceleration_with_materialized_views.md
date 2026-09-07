@@ -8,7 +8,7 @@ description: "How to use asynchronous materialized views in StarRocks to acceler
 
 This topic describes how to optimize query performance in your data lake using StarRocks' asynchronous materialized views.
 
-StarRocks offers out-of-the-box data lake query capabilities, which are highly effective for exploratory queries and analysis of data in the lake. In most scenarios, [Data Cache](../../../data_source/data_cache.md) can provide block-level file caching, avoiding performance degradation caused by remote storage jitter and a large number of I/O operations.
+StarRocks offers out-of-the-box data lake query capabilities, which are highly effective for exploratory queries and analysis of data in the lake. In most scenarios, [Data Cache](../../../data_source/data_cache/data_cache.md) can provide block-level file caching, avoiding performance degradation caused by remote storage jitter and a large number of I/O operations.
 
 However, when it comes to building complex and efficient reports using data from the lake or further accelerating these queries, you may still encounter performance challenges. With asynchronous materialized views, you can achieve higher concurrency and better query performance for reports and data applications on the lake.
 

@@ -15,6 +15,7 @@
 
 #include <cmath>
 
+#include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
@@ -69,16 +70,18 @@ public:
                 size_t row_num) const override {
         DCHECK(ctx->get_num_args() == 2);
 
-        const auto* column0 = down_cast<const InputColumnType*>(columns[0]);
-        const auto* column1 = down_cast<const InputColumnType*>(columns[1]);
-
+        // An argument may still be a constant column here: the analyzer only rejects arguments
+        // that are already constant in the AST, but the optimizer can fold one into a literal
+        // afterwards (e.g. `covar_samp(a, b)` over an inlined one-row subquery), and the
+        // aggregator keeps constant arguments other than the first one packed as ConstColumn.
+        // GetContainer unwraps const/nullable wrappers and picks the right row index.
         this->data(state).count += 1;
 
         double oldMeanX = this->data(state).meanX;
-        InputCppType rowX = column0->immutable_data()[row_num];
+        InputCppType rowX = GetContainer<LT>::get_data(columns[0], row_num);
 
         double oldMeanY = this->data(state).meanY;
-        InputCppType rowY = column1->immutable_data()[row_num];
+        InputCppType rowY = GetContainer<LT>::get_data(columns[1], row_num);
 
         double newMeanX = (oldMeanX + (rowX - oldMeanX) / this->data(state).count);
         double newMeanY = (oldMeanY + (rowY - oldMeanY) / this->data(state).count);
@@ -174,19 +177,20 @@ public:
         auto& offsets = dst_column->get_offset();
         offsets.resize(chunk_size + 1);
 
-        const auto* src_column0 = down_cast<const InputColumnType*>(src[0].get());
-        const auto* src_column1 = down_cast<const InputColumnType*>(src[1].get());
+        // `src` may hold constant columns, see the comment in `update`.
+        const bool src0_is_const = src[0]->is_constant();
+        const bool src1_is_const = src[1]->is_constant();
 
         double meanX = {};
         double meanY = {};
         double c2 = 0;
 
         int64_t count = 1;
-        const auto src0_data = src_column0->immutable_data();
-        const auto src1_data = src_column1->immutable_data();
+        const auto src0_data = GetContainer<LT>::get_data(src[0]);
+        const auto src1_data = GetContainer<LT>::get_data(src[1]);
         for (size_t i = 0; i < chunk_size; ++i) {
-            meanX = static_cast<double>(src0_data[i]);
-            meanY = static_cast<double>(src1_data[i]);
+            meanX = static_cast<double>(src0_data[src0_is_const ? 0 : i]);
+            meanY = static_cast<double>(src1_data[src1_is_const ? 0 : i]);
             memcpy(bytes.data() + old_size, &meanX, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double), &meanY, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double) * 2, &c2, sizeof(double));

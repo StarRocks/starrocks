@@ -397,6 +397,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
+                } else if (credentialInfo.hasWebIdentityCredential()) {
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "true");
+                    params.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN,
+                            credentialInfo.getWebIdentityCredential().getIamRoleArn());
+                    params.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID,
+                            credentialInfo.getWebIdentityCredential().getExternalId());
                 } else if (credentialInfo.hasDefaultCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
                 }

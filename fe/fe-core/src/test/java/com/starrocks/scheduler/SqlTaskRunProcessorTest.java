@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.alter.OptimizeTask;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
@@ -33,6 +34,24 @@ import java.util.UUID;
  * and that TaskRunContext propagates the remote host:port from the submitter.
  */
 public class SqlTaskRunProcessorTest {
+
+    @Test
+    public void testOptimizeTaskMarksRewriteContext() {
+        OptimizeTask task = new OptimizeTask("optimize-rewrite");
+        task.setSource(Constants.TaskSource.INSERT);
+        task.setCatalogName("internal");
+        task.setDbName("db1");
+        task.setDefinition("INSERT INTO t SELECT 1");
+
+        TaskRun taskRun = new TaskRun();
+        taskRun.setTask(task);
+        taskRun.setConnectContext(new ConnectContext(null));
+        taskRun.setProperties(new java.util.HashMap<>());
+        taskRun.initStatus(UUID.randomUUID().toString(), System.currentTimeMillis());
+
+        TaskRunContext context = taskRun.buildTaskRunContext();
+        Assertions.assertTrue(context.getCtx().isOptimizeRewrite());
+    }
 
     @Test
     public void testAuditClientIpSetForSubmitTaskInsert(@Mocked StatementBase mockStmt,

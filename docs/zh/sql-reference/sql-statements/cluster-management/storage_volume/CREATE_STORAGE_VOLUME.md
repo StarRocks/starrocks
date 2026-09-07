@@ -51,6 +51,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。[Preview] 自 v3.3.0 起，支持 Amazon S3 Express One Zone Storage，如 `https://s3express.us-west-2.amazonaws.com`。<Beta /> |
 | aws.s3.use_aws_sdk_default_behavior | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
 | aws.s3.use_instance_profile         | 是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。<ul><li>如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws.s3.access_key` 和 `aws.s3.secret_key`。</li><li>如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。</li><li>如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws.s3.iam_role_arn`。</li><li>如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要将此项设为 `true`，并额外指定 `aws.s3.iam_role_arn` 和 `aws.s3.external_id`。</li></ul> |
+| aws.s3.use_web_identity_token_file  | 是否使用 Web Identity Token 文件访问 S3。有效值：`true` 和 `false`（默认）。启用后，每个 Worker 上的 AWS SDK 从环境变量 `AWS_WEB_IDENTITY_TOKEN_FILE` 和 `AWS_ROLE_ARN` 中获取 Token 文件和 IAM Role。 |
 | aws.s3.access_key                   | 访问 S3 存储空间的 Access Key。                              |
 | aws.s3.secret_key                   | 访问 S3 存储空间的 Secret Key。                              |
 | aws.s3.iam_role_arn                 | 有访问 S3 存储空间权限 IAM Role 的 ARN。                     |
@@ -84,6 +85,8 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 
 #### 认证信息
 
+有关 FE 与存储卷支持的凭证组合对比，请参阅[存储卷 AWS 凭证支持情况](AWS_CREDENTIAL_SUPPORT.md)。
+
 ##### AWS S3
 
 - 如果您使用 AWS SDK 默认的认证凭证，请设置以下属性：
@@ -116,6 +119,26 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
   "aws.s3.use_aws_sdk_default_behavior" = "false",
   "aws.s3.use_instance_profile" = "true"
   ```
+
+- 如果您使用 Web Identity Token 文件（例如 EKS IAM Roles for Service Accounts，即 IRSA）进行认证，请设置以下
+  属性，并在每个需要访问该存储卷的 Worker 环境中设置 `AWS_WEB_IDENTITY_TOKEN_FILE` 和 `AWS_ROLE_ARN`。
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "aws.s3.region" = "<region>",
+  "aws.s3.endpoint" = "<endpoint_url>",
+  "aws.s3.use_aws_sdk_default_behavior" = "false",
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.use_web_identity_token_file" = "true"
+  ```
+
+  如果需要在通过 Web Identity 获取凭证后再 Assume 另一个 IAM Role，请额外设置 `aws.s3.iam_role_arn`。对于跨账户
+  访问，还可以设置 `aws.s3.external_id`。
+
+  :::caution
+  为存储卷启用 Web Identity 前，请确保集群中的所有 FE、StarManager、BE 和 CN 均支持此认证方式。滚动升级期间，
+  请等待所有节点升级完成后再使用该存储卷。
+  :::
 
 - 如果您使用 Assumed Role 认证，请设置以下属性：
 

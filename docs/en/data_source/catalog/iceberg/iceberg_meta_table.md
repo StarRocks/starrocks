@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "How to inspect Iceberg table metadata in StarRocks using metadata tables for snapshots, manifests, and file history."
 ---

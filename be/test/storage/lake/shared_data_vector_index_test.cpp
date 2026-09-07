@@ -25,8 +25,10 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
+#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_index_writer.h"
@@ -40,6 +42,7 @@
 #include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/storage_stats.h"
 
 #ifdef WITH_TENANN
 #include "storage/index/vector/tenann/tenann_index_utils.h"
@@ -600,7 +603,6 @@ TEST_F(SharedDataTabletWriterVITest, test_segment_writer_vi_fallback_to_index_de
 #ifdef WITH_TENANN
 
 // Test reading a vector index file from shared-data path using VectorIndexReaderFactory with FileSystem.
-// This verifies the FS-aware create_from_file overload works correctly.
 TEST_F(SharedDataVectorIndexTest, test_vector_index_read_shared_data_path) {
     // Set threshold low enough so that 5 rows triggers index build
     ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1);
@@ -626,20 +628,18 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_shared_data_path) {
     ASSERT_OK(vector_index_writer->finish(&index_size));
     ASSERT_GT(index_size, 0);
 
-    // Read vector index using FS-aware factory
     const auto& empty_meta = std::map<std::string, std::string>{};
-    ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, empty_meta));
-    auto index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
-
-    std::shared_ptr<VectorIndexReader> reader;
-    ASSERT_OK(VectorIndexReaderFactory::create_from_file(vector_index_path, index_meta, &reader, _fs.get()));
-    ASSERT_NE(reader, nullptr);
-
-    // init_searcher with FileSystem should succeed
-    ASSERT_OK(reader->init_searcher(*index_meta, vector_index_path, _fs.get()));
+    MemTracker cache_tracker(-1, "shared_data_vector_index_reader_test");
+    VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
+    VectorIndexReaderFactory factory(cache);
+    FileInfo vi_file{.path = vector_index_path, .fs = _fs};
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
+    ASSERT_EQ(VectorIndexReaderInitResult::kReady, result.state);
+    ASSERT_NE(result.reader, nullptr);
 }
 
-// Test that reading an empty mark .vi file via FS-aware path returns EmptyIndexReader.
+// Test that reading an empty mark .vi file via FS-aware path falls back.
 TEST_F(SharedDataVectorIndexTest, test_vector_index_read_empty_mark_shared_data_path) {
     ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 100);
 
@@ -656,28 +656,30 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_empty_mark_shared_data_
     ASSERT_OK(wfile->append(IndexDescriptor::mark_word));
     ASSERT_OK(wfile->close());
 
-    // Read via FS-aware factory — should detect empty mark
     const auto& empty_meta = std::map<std::string, std::string>{};
-    ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, empty_meta));
-    auto index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
-
-    std::shared_ptr<VectorIndexReader> reader;
-    ASSERT_OK(VectorIndexReaderFactory::create_from_file(vector_index_path, index_meta, &reader, _fs.get()));
-    ASSERT_NE(reader, nullptr);
-
-    // EmptyIndexReader.init_searcher returns NotSupported
-    auto status = reader->init_searcher(*index_meta, vector_index_path, _fs.get());
-    ASSERT_TRUE(status.is_not_supported());
+    MemTracker cache_tracker(-1, "shared_data_vector_index_reader_test");
+    VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
+    VectorIndexReaderFactory factory(cache);
+    FileInfo vi_file{.path = vector_index_path, .fs = _fs};
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
+    ASSERT_EQ(VectorIndexReaderInitResult::kFallback, result.state);
+    ASSERT_EQ(nullptr, result.reader);
 }
 
-// Test that FS-aware create_from_file returns NotFound for non-existent path.
+// A missing .vi file is an expected brute-force fallback, not an initialization error.
 TEST_F(SharedDataVectorIndexTest, test_vector_index_read_not_found) {
     std::string non_existent_path = _test_dir + "/data/non_existent.vi";
-    auto index_meta = std::make_shared<tenann::IndexMeta>();
-
-    std::shared_ptr<VectorIndexReader> reader;
-    auto status = VectorIndexReaderFactory::create_from_file(non_existent_path, index_meta, &reader, _fs.get());
-    ASSERT_TRUE(status.is_not_found());
+    auto tablet_index = create_tablet_index();
+    const auto& empty_meta = std::map<std::string, std::string>{};
+    MemTracker cache_tracker(-1, "shared_data_vector_index_reader_test");
+    VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
+    VectorIndexReaderFactory factory(cache);
+    FileInfo vi_file{.path = non_existent_path, .fs = _fs};
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
+    ASSERT_EQ(VectorIndexReaderInitResult::kFallback, result.state);
+    ASSERT_EQ(nullptr, result.reader);
 }
 
 #endif // WITH_TENANN

@@ -39,6 +39,10 @@ public:
     // Get schema with format v2 type containing short key columns from TabletSchema.
     static Schema get_short_key_schema(const TabletSchemaCSPtr& schema);
 
+    // Get schema with format v2 type containing ALL sort key columns (the full,
+    // untruncated sort key), used to encode/decode a full-key short key index.
+    static Schema get_full_sort_key_schema(const TabletSchemaCSPtr& schema);
+
     // Get schema with format v2 type containing sort key columns from TabletSchema.
     static Schema get_sort_key_schema(const TabletSchemaCSPtr& schema);
 
@@ -51,6 +55,17 @@ public:
 
     // Padding one char column
     static void padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column);
+
+    // Returns CapacityLimitExceed when a column in `chunk` holds more than it can address. A
+    // BinaryColumn addresses its bytes with uint32 offsets, so past 4GB they wrap and stop
+    // describing its own buffer, and a wrap is not reliably an error: reading the offsets throws
+    // when the span it produces goes negative, reads out of bounds when it does not, and copies
+    // the right number of bytes from an address 2^32 too low when the span stays inside a single
+    // wrap segment. Worth calling wherever a chunk's offsets are about to be read and the caller
+    // would rather refuse the chunk than find out which of those happens. `what` names the chunk
+    // in the message; the limit itself comes from the column, and is read from its byte size
+    // rather than from the offsets, so it stays meaningful once they have wrapped.
+    static Status reject_if_over_capacity(const Chunk& chunk, std::string_view what, int64_t tablet_id, int64_t txn_id);
 };
 
 class ChunkPipelineAccumulator {

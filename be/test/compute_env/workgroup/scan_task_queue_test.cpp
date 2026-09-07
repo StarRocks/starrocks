@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <future>
@@ -22,6 +23,7 @@
 #include <mutex>
 #include <thread>
 
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "compute_env/workgroup/priority_scan_task_queue.h"
@@ -111,6 +113,93 @@ PARALLEL_TEST(ScanExecutorTest, test_yield) {
     std::unique_lock lock(mutex);
     cv.wait(lock, [&]() { return submit_tasks == finished_tasks.load(); });
     ASSERT_EQ(submit_tasks, finished_tasks.load());
+}
+
+PARALLEL_TEST(ScanExecutorTest, test_thread_pool_metrics) {
+    constexpr int kNumThreads = 4;
+    // Declared before the registry so that the registry is destroyed first.
+    pipeline::ScanExecutorMetrics metrics;
+    MetricRegistry registry("test");
+    metrics.thread_pool.register_all_metrics(&registry, "pipe_scan_");
+
+    auto& expected_threads = metrics.thread_pool.expected_worker_threads;
+    auto& alive_threads = metrics.thread_pool.worker_threads;
+    ASSERT_TRUE(registry.get_metric("pipe_scan_expected_worker_threads") != nullptr);
+    ASSERT_TRUE(registry.get_metric("pipe_scan_worker_threads") != nullptr);
+
+    auto make_executor = [&]() {
+        std::unique_ptr<ThreadPool> thread_pool;
+        CHECK(ThreadPoolBuilder("scan_metrics")
+                      .set_min_threads(0)
+                      .set_max_threads(kNumThreads)
+                      .set_max_queue_size(100)
+                      .build(&thread_pool)
+                      .ok());
+        return std::make_unique<ScanExecutor>(std::move(thread_pool), std::make_unique<PriorityScanTaskQueue>(100),
+                                              &metrics);
+    };
+    // Workers are started asynchronously.
+    auto collect_until_alive = [&](uint64_t target) {
+        for (int i = 0; i < 500 && alive_threads.value() != target; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            registry.trigger_hook();
+        }
+    };
+
+    registry.trigger_hook();
+    ASSERT_EQ(0, expected_threads.value());
+    ASSERT_EQ(0, alive_threads.value());
+
+    {
+        auto executor = make_executor();
+
+        // No worker is expected before initialize(), even though the pool can already hold them.
+        registry.trigger_hook();
+        ASSERT_EQ(0, expected_threads.value());
+        ASSERT_EQ(0, alive_threads.value());
+
+        executor->initialize(kNumThreads);
+        collect_until_alive(kNumThreads);
+        ASSERT_EQ(kNumThreads, expected_threads.value());
+        ASSERT_EQ(kNumThreads, alive_threads.value());
+
+        // Shrinking the executor lowers the expectation immediately, so a resource group being
+        // resized cannot be mistaken for workers that went missing. The workers themselves only
+        // leave once they wake up for a task, so the count of alive ones may lag behind.
+        executor->change_num_threads(kNumThreads / 2);
+        registry.trigger_hook();
+        ASSERT_EQ(kNumThreads / 2, expected_threads.value());
+        ASSERT_GE(alive_threads.value(), expected_threads.value());
+
+        executor->close();
+        registry.trigger_hook();
+        ASSERT_EQ(0, expected_threads.value());
+        ASSERT_EQ(0, alive_threads.value());
+    }
+
+    // An executor destroyed without close() must stop being sampled as well: a sampler left behind
+    // would reach into freed memory on the next collection.
+    {
+        auto executor = make_executor();
+        registry.trigger_hook();
+    }
+    registry.trigger_hook();
+    ASSERT_EQ(0, expected_threads.value());
+    ASSERT_EQ(0, alive_threads.value());
+
+    // Every executor contributes, as a resource group with exclusive executors has its own.
+    auto first = make_executor();
+    auto second = make_executor();
+    first->initialize(kNumThreads);
+    second->initialize(kNumThreads);
+    collect_until_alive(2 * kNumThreads);
+    ASSERT_EQ(2 * kNumThreads, expected_threads.value());
+    ASSERT_EQ(2 * kNumThreads, alive_threads.value());
+    first->close();
+    second->close();
+    registry.trigger_hook();
+    ASSERT_EQ(0, expected_threads.value());
+    ASSERT_EQ(0, alive_threads.value());
 }
 
 PARALLEL_TEST(WorkGroupScanTaskQueueTest, test_should_yield_uses_injected_policy) {

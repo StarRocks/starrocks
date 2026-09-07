@@ -21,6 +21,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.JournalWriteException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
@@ -51,6 +52,16 @@ public class EditLogTest {
     @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+    }
+
+    @Test
+    public void testWaitForCommitThrowsOnAbort() {
+        // A journal task aborted before it committed can never succeed, so waitForCommit unwinds immediately
+        // with an (unchecked) EditLogException instead of retrying: a stale committer must not loop forever
+        // pinning the locks it holds and stalling the follower's journal replay.
+        JournalTask task = new JournalTask(System.nanoTime(), new DataOutputBuffer(), -1);
+        task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer sealed"));
+        Assertions.assertThrows(EditLogException.class, () -> EditLog.waitForCommit(task));
     }
 
     @Test

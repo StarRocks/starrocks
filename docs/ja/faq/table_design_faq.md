@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
 description: "テーブル設計時の VARCHAR 型長設定、パーティション戦略、インデックス設定に関するベストプラクティスを紹介します。"
 ---

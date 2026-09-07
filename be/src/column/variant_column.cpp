@@ -20,18 +20,22 @@
 #include <unordered_set>
 
 #include "base/coding.h"
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/map_column.h"
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/variant_builder.h"
 #include "column/variant_encoder.h"
 #include "column/variant_merger.h"
 #include "column/variant_path_parser.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "types/type_info.h"
 #include "types/variant_value.h"
 
 namespace starrocks {
@@ -54,21 +58,40 @@ VariantColumn::VariantColumn(size_t size) : SuperClass(0) {
 
 // Typed-only variant stores data in typed columns. Read paths still need row-level VariantRowValue.
 // encode_typed_row_as_variant is a shared helper for VariantColumn and VariantFunctions.
+static bool has_variant_descendant(const TypeDescriptor& type_desc) {
+    for (const auto& child : type_desc.children) {
+        if (child.type == TYPE_VARIANT || has_variant_descendant(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as_variant(
         const Column* typed_column, size_t typed_row, const TypeDescriptor& type_desc) {
     if (typed_column == nullptr) {
         return Status::InvalidArgument("typed column is null");
     }
 
-    if (typed_column->is_null(typed_row)) {
-        return EncodedVariantResult{
-                .state = EncodedVariantState::kNull,
-                .value = VariantRowValue::from_null(),
-        };
+    const Column* data_column = typed_column;
+    while (data_column->is_constant() || data_column->is_nullable()) {
+        if (data_column->is_constant()) {
+            data_column = down_cast<const ConstColumn*>(data_column)->data_column().get();
+            typed_row = 0;
+            continue;
+        }
+        const auto* nullable_column = down_cast<const NullableColumn*>(data_column);
+        if (nullable_column->is_null(typed_row)) {
+            return EncodedVariantResult{
+                    .state = EncodedVariantState::kNull,
+                    .value = VariantRowValue::from_null(),
+            };
+        }
+        data_column = nullable_column->data_column().get();
     }
 
     if (type_desc.type == TYPE_VARIANT) {
-        const auto* typed_variant_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(typed_column));
+        const auto* typed_variant_column = down_cast<const VariantColumn*>(data_column);
         if (typed_variant_column == nullptr) {
             return Status::InvalidArgument("typed variant column is null");
         }
@@ -83,8 +106,98 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
         };
     }
 
+    if (type_desc.type == TYPE_ARRAY && has_variant_descendant(type_desc)) {
+        if (type_desc.children.size() != 1) {
+            return Status::InvalidArgument("array type must have exactly one child");
+        }
+        const auto* array_column = down_cast<const ArrayColumn*>(data_column);
+        const auto [element_offset, element_size] = array_column->get_element_offset_size(typed_row);
+        VariantArrayBuilder builder;
+        for (size_t i = 0; i < element_size; ++i) {
+            ASSIGN_OR_RETURN(auto element, encode_typed_row_as_variant(array_column->elements_column_raw_ptr(),
+                                                                       element_offset + i, type_desc.children[0]));
+            if (element.state == EncodedVariantState::kNull) {
+                builder.add_null();
+            } else {
+                builder.add(std::move(element.value));
+            }
+        }
+        ASSIGN_OR_RETURN(auto value, builder.build());
+        return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(value)};
+    }
+
+    if (type_desc.type == TYPE_MAP && has_variant_descendant(type_desc)) {
+        if (type_desc.children.size() != 2) {
+            return Status::InvalidArgument("map type must have exactly two children");
+        }
+        if (type_desc.children[0].type == TYPE_VARIANT || has_variant_descendant(type_desc.children[0])) {
+            return Status::NotSupported("Variant map keys are not supported");
+        }
+        const auto* map_column = down_cast<const MapColumn*>(data_column);
+        const auto& offsets = map_column->offsets().get_data();
+        const size_t begin = offsets[typed_row];
+        const size_t end = offsets[typed_row + 1];
+        if (begin == end) {
+            std::string empty_object;
+            VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+            return EncodedVariantResult{
+                    .state = EncodedVariantState::kValue,
+                    .value = VariantRowValue(VariantMetadata::kEmptyMetadata, empty_object),
+            };
+        }
+
+        const TypeDescriptor& key_type = type_desc.children[0];
+        const TypeInfoPtr key_type_info = get_type_info(key_type);
+        if (key_type_info == nullptr) {
+            return Status::NotSupported("Unsupported Variant map key type");
+        }
+        std::vector<VariantBuilder::Overlay> overlays;
+        overlays.reserve(end - begin);
+        for (size_t i = begin; i < end; ++i) {
+            Datum key = map_column->keys_column_raw_ptr()->get(i);
+            if (key.is_null()) {
+                return Status::NotSupported("Map key is null");
+            }
+            ASSIGN_OR_RETURN(auto value, encode_typed_row_as_variant(map_column->values_column_raw_ptr(), i,
+                                                                     type_desc.children[1]));
+            VariantPath path;
+            path.segments.emplace_back(
+                    VariantSegment::make_object(VariantEncoder::map_key_to_string(key_type_info.get(), key)));
+            overlays.emplace_back(VariantBuilder::Overlay{
+                    .path = std::move(path),
+                    .value = value.state == EncodedVariantState::kNull ? VariantRowValue::from_null()
+                                                                       : std::move(value.value),
+            });
+        }
+        ASSIGN_OR_RETURN(auto value, VariantBuilder::build_row_from_overlays(std::nullopt, std::move(overlays)));
+        return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(value)};
+    }
+
+    if (type_desc.type == TYPE_STRUCT && has_variant_descendant(type_desc)) {
+        if (type_desc.children.size() != type_desc.field_names.size()) {
+            return Status::InvalidArgument("struct field names and children size mismatch");
+        }
+
+        const auto* struct_column = down_cast<const StructColumn*>(data_column);
+        std::vector<VariantBuilder::Overlay> overlays;
+        overlays.reserve(type_desc.children.size());
+        for (size_t i = 0; i < type_desc.children.size(); ++i) {
+            ASSIGN_OR_RETURN(auto field, encode_typed_row_as_variant(struct_column->field_column_raw_ptr(i), typed_row,
+                                                                     type_desc.children[i]));
+            VariantPath path;
+            path.segments.emplace_back(VariantSegment::make_object(type_desc.field_names[i]));
+            overlays.emplace_back(VariantBuilder::Overlay{
+                    .path = std::move(path),
+                    .value = field.state == EncodedVariantState::kNull ? VariantRowValue::from_null()
+                                                                       : std::move(field.value),
+            });
+        }
+        ASSIGN_OR_RETURN(auto value, VariantBuilder::build_row_from_overlays(std::nullopt, std::move(overlays)));
+        return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(value)};
+    }
+
     // Fast path: encode single Datum directly, avoiding column clone + full encode pipeline.
-    Datum datum = typed_column->get(typed_row);
+    Datum datum = data_column->get(typed_row);
     auto encoded = VariantEncoder::encode_datum(datum, type_desc);
     if (!encoded.ok()) {
         return encoded.status();
@@ -549,6 +662,31 @@ void VariantColumn::assign(size_t n, size_t idx) {
     for (auto& col : _typed_columns) {
         col->assign(n, idx);
     }
+}
+
+void VariantColumn::remove_first_n_values(size_t count) {
+    const size_t rows = size();
+    DCHECK_LE(count, rows);
+    if (count == 0) {
+        return;
+    }
+    if (count == rows) {
+        resize(0);
+        DCHECK(_is_shredded_row_aligned());
+        return;
+    }
+
+    if (_metadata_column != nullptr) {
+        DCHECK(_remain_value_column != nullptr);
+        _metadata_column->remove_first_n_values(count);
+        _remain_value_column->remove_first_n_values(count);
+    } else {
+        DCHECK(_remain_value_column == nullptr);
+    }
+    for (auto& col : _typed_columns) {
+        col->remove_first_n_values(count);
+    }
+    DCHECK(_is_shredded_row_aligned());
 }
 
 size_t VariantColumn::filter_range(const Filter& filter, size_t from, size_t to) {

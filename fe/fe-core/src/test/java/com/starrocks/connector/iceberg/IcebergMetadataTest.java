@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
@@ -100,6 +101,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -121,7 +123,10 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalAnalyzeJob;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TIcebergColumnStats;
@@ -142,6 +147,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
@@ -165,7 +171,9 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.CloseableIterable;
@@ -191,11 +199,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
@@ -577,6 +588,193 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testTruncateTableInvalidatesCachesAfterCommit() throws Exception {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return mockedNativeTableB;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName)))
+                .thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+
+        AtomicInteger refreshOtherFeCalls = new AtomicInteger();
+        AtomicReference<TableName> refreshedTable = new AtomicReference<>();
+        AtomicReference<List<String>> refreshedPartitions = new AtomicReference<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName table, List<String> partitionNames) {
+                refreshOtherFeCalls.incrementAndGet();
+                refreshedTable.set(table);
+                refreshedPartitions.set(partitionNames);
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        metadata.getTable(connectContext, dbName, tableName);
+
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                createTableRef(new TableName(CATALOG_NAME, dbName, tableName)));
+        metadata.truncateTable(stmt, connectContext);
+        metadata.getTable(connectContext, dbName, tableName);
+
+        mockedNativeTableB.refresh();
+        List<FileScanTask> remainingFiles = Lists.newArrayList(mockedNativeTableB.newScan().planFiles());
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(0, remainingFiles.size()),
+                () -> Assertions.assertEquals(3, catalogGetTableCalls.get(),
+                        "getTable must reload after the IcebergMetadata.tables entry is removed"),
+                () -> Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName),
+                () -> Mockito.verify(icebergCatalog).invalidatePartitionCache(dbName, tableName),
+                () -> Assertions.assertEquals(1, refreshOtherFeCalls.get()),
+                () -> Assertions.assertEquals(new TableName(CATALOG_NAME, dbName, tableName), refreshedTable.get()),
+                () -> Assertions.assertEquals(List.of(), refreshedPartitions.get()));
+    }
+
+    @Test
+    public void testTruncateTableInvalidatesCachesWhenCommitStateIsUnknown() throws Exception {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+        TestTables.TestTable stateUnknownTable = TestTables.tableWithCommitSucceedButStateUnknown(tableDir, "tb");
+
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return stateUnknownTable;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName)))
+                .thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+
+        AtomicInteger refreshOtherFeCalls = new AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName table, List<String> partitionNames) {
+                refreshOtherFeCalls.incrementAndGet();
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        metadata.getTable(connectContext, dbName, tableName);
+
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                createTableRef(new TableName(CATALOG_NAME, dbName, tableName)));
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.truncateTable(stmt, connectContext));
+        metadata.getTable(connectContext, dbName, tableName);
+
+        stateUnknownTable.refresh();
+        List<FileScanTask> remainingFiles = Lists.newArrayList(stateUnknownTable.newScan().planFiles());
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(exception.getCause() instanceof CommitStateUnknownException),
+                () -> Assertions.assertEquals(0, remainingFiles.size()),
+                () -> Assertions.assertEquals(3, catalogGetTableCalls.get(),
+                        "unknown commit state must reload the IcebergMetadata.tables entry"),
+                () -> Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName),
+                () -> Mockito.verify(icebergCatalog).invalidatePartitionCache(dbName, tableName),
+                () -> Assertions.assertEquals(1, refreshOtherFeCalls.get()));
+    }
+
+    @Test
+    public void testTruncateTableDoesNotInvalidateCachesWhenCommitFails() throws Exception {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        mockedNativeTableB.updateProperties().set(TableProperties.COMMIT_NUM_RETRIES, "0").commit();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return mockedNativeTableB;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName)))
+                .thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+
+        AtomicInteger refreshOtherFeCalls = new AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName table, List<String> partitionNames) {
+                refreshOtherFeCalls.incrementAndGet();
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        metadata.getTable(connectContext, dbName, tableName);
+        mockedNativeTableB.ops().failCommits(1);
+
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                createTableRef(new TableName(CATALOG_NAME, dbName, tableName)));
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.truncateTable(stmt, connectContext));
+        metadata.getTable(connectContext, dbName, tableName);
+
+        mockedNativeTableB.refresh();
+        List<FileScanTask> remainingFiles = Lists.newArrayList(mockedNativeTableB.newScan().planFiles());
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(exception.getMessage().contains("Failed to truncate iceberg table")),
+                () -> Assertions.assertEquals(1, remainingFiles.size()),
+                () -> Assertions.assertEquals(2, catalogGetTableCalls.get(),
+                        "failed commit must retain the IcebergMetadata.tables entry"),
+                () -> Mockito.verify(icebergCatalog, Mockito.never()).invalidateTableCache(dbName, tableName),
+                () -> Mockito.verify(icebergCatalog, Mockito.never()).invalidatePartitionCache(dbName, tableName),
+                () -> Assertions.assertEquals(0, refreshOtherFeCalls.get()));
+    }
+
+    @Test
     public void testNormalCreateDb() throws AlreadyExistsException, DdlException {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
@@ -705,6 +903,200 @@ public class IcebergMetadataTest extends TableTestBase {
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testDropTableWithMissingMetadataFile() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        String missingMetadata = "File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json";
+
+        // CachingIcebergCatalog wraps the load failure, so NotFoundException only shows up as a cause.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException(missingMetadata));
+                minTimes = 1;
+
+                // FORCE was asked for, but the fallback never purges: the table's files are unknown.
+                icebergHiveCatalog.dropTable((ConnectContext) any, "iceberg_db", "table1", false);
+                result = true;
+                times = 1;
+            }
+        };
+
+        metadata.dropTable(connectContext, new DropTableStmt(true,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                        "iceberg_db", "table1")), null, NodePosition.ZERO), true));
+    }
+
+    @Test
+    public void testDropTableWithMissingMetadataFileNotWrapped() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // Without the caching catalog the raw NotFoundException reaches IcebergMetadata.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new NotFoundException("File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json");
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, "iceberg_db", "table1", false);
+                result = true;
+                times = 1;
+            }
+        };
+
+        metadata.dropTable(connectContext, new DropTableStmt(false,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                        "iceberg_db", "table1")), null, NodePosition.ZERO), false));
+    }
+
+    @Test
+    public void testDropTableKeepsFailingWhenMetadataIsUnreadable() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // Unreadable, not missing: the metadata may be intact, so dropping the entry would orphan the data.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new IOException("Access denied"));
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, anyString, anyString, anyBoolean);
+                times = 0;
+            }
+        };
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                metadata.dropTable(connectContext, new DropTableStmt(true,
+                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                                "iceberg_db", "table1")), null, NodePosition.ZERO), true)));
+    }
+
+    @Test
+    public void testDropTableWithMissingMetadataFileDropsStatistics() throws AlreadyExistsException {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        String dbName = "iceberg_db";
+        String tableName = "table_missing_meta";
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return 1;
+            }
+
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(new ArrayBlockingQueue<>(100));
+            }
+        };
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAddAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
+                walApplier.apply(job);
+            }
+
+            @Mock
+            public void logRemoveAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
+                walApplier.apply(job);
+            }
+
+            @Mock
+            public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+
+            @Mock
+            public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+
+            @Mock
+            public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+
+            @Mock
+            public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+        };
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        analyzeMgr.addAnalyzeJob(new ExternalAnalyzeJob(CATALOG_NAME, dbName, tableName,
+                Lists.newArrayList(), Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN));
+        analyzeMgr.addExternalBasicStatsMeta(new ExternalBasicStatsMeta(CATALOG_NAME, dbName, tableName,
+                Lists.newArrayList(), StatsConstants.AnalyzeType.FULL, LocalDateTime.MIN, Maps.newHashMap()));
+        analyzeMgr.addExternalHistogramStatsMeta(new ExternalHistogramStatsMeta(CATALOG_NAME, dbName, tableName,
+                "c1", StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.MIN, Maps.newHashMap()));
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, dbName, tableName);
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException("File does not exist: oss://bucket/db/t/metadata/00000-abc.metadata.json"));
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, dbName, tableName, false);
+                result = true;
+                times = 1;
+            }
+        };
+
+        metadata.dropTable(connectContext, new DropTableStmt(true,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME, dbName, tableName)),
+                        null, NodePosition.ZERO), true));
+
+        // A table recreated under the same name must not inherit the leftovers of the broken one.
+        Assertions.assertTrue(analyzeMgr.getAllAnalyzeJobList().stream()
+                        .noneMatch(job -> tableName.equals(((ExternalAnalyzeJob) job).getTableName())),
+                "the analyze job of the dropped table should be gone");
+        Assertions.assertTrue(analyzeMgr.getExternalBasicStatsMetaMap().keySet().stream()
+                        .noneMatch(key -> tableName.equals(key.getTableName())),
+                "the basic stats meta of the dropped table should be gone");
+        Assertions.assertTrue(analyzeMgr.getExternalHistogramStatsMetaMap().keySet().stream()
+                        .noneMatch(key -> tableName.equals(key.getTableKey().getTableName())),
+                "the histogram stats meta of the dropped table should be gone");
+    }
+
+    @Test
+    public void testDropTableKeepsFailingWhenAnotherTableMetadataIsMissing() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // The table being dropped is healthy; the missing file belongs to a table its foreign key
+        // constraint refers to, which getTable() loads too.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException("File does not exist: oss://bucket/db/other/metadata/00000-abc.metadata.json"));
+                result = mockedNativeTableA;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, anyString, anyString, anyBoolean);
+                times = 0;
+            }
+        };
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                metadata.dropTable(connectContext, new DropTableStmt(true,
+                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                                "iceberg_db", "table1")), null, NodePosition.ZERO), true)));
     }
 
     @Test
@@ -2282,6 +2674,16 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(tableRenameClause);
         metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses));
 
+        new Verifications() {
+            {
+                List<ConnectContext> renameContexts = new ArrayList<>();
+                icebergHiveCatalog.renameTable(withCapture(renameContexts), anyString, anyString, anyString);
+                Assertions.assertFalse(renameContexts.isEmpty(), "renameTable should have been invoked");
+                renameContexts.forEach(renameContext ->
+                        Assertions.assertNotNull(renameContext, "rename must pass a non-null ConnectContext"));
+            }
+        };
+
         // modify table properties/comment
         clauses.clear();
         Map<String, String> newProperties = new HashMap<>();
@@ -3309,6 +3711,19 @@ public class IcebergMetadataTest extends TableTestBase {
         return deleteFile;
     }
 
+    private TIcebergDataFile buildRewriteOutputDataFile() {
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/rewritten.parquet");
+        dataFile.setFormat("parquet");
+        dataFile.setRecord_count(2);
+        dataFile.setSplit_offsets(Lists.newArrayList(4L));
+        dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        dataFile.setFile_size_in_bytes(512);
+        dataFile.setPartition_null_fingerprint("0");
+        dataFile.setColumn_stats(emptyColumnStats());
+        return dataFile;
+    }
+
     private TIcebergDataFile buildRowDeltaDataFile() {
         TIcebergDataFile dataFile = new TIcebergDataFile();
         dataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/new_after_update.parquet");
@@ -3362,6 +3777,91 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertNotNull(newSnapshot, "row-delta commit must produce a snapshot");
         Assertions.assertNotEquals(baseSnapshotId, newSnapshot.snapshotId(),
                 "row-delta commit must advance the snapshot id past the plan-time base");
+    }
+
+    @Test
+    public void testCommitRewriteDetectsDeleteLandedAfterPlanTime() throws Exception {
+        // S0 - the snapshot the rewrite planned against and read FILE_A from.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long planTimeSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        // S1 - a concurrent UPDATE/DELETE lands a position delete over FILE_A after the
+        // rewrite planned but before it commits. Replacing FILE_A now would strand that
+        // delete on a path no longer in the table and resurrect the row it removed.
+        mockedNativeTableA.newRowDelta().addDeletes(FILE_A_DELETES).commit();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo rewriteCommit = new TSinkCommitInfo();
+        rewriteCommit.setIs_rewrite(true);
+        rewriteCommit.setIceberg_data_file(buildRewriteOutputDataFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.addScannedDataFiles(Sets.newHashSet(FILE_A));
+        extra.setBaseSnapshotId(planTimeSnapshotId);
+
+        // Scoping validateFromSnapshot to the commit-time snapshot instead of the plan-time
+        // base makes the validation window empty, so this conflict commits silently and
+        // corrupts the table (StarRocksTest#11450 duplicates a row, #11396 resurrects one).
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(rewriteCommit), null, extra),
+                "rewrite must not commit over a delete that landed after it planned");
+        Assertions.assertTrue(e.getMessage().contains("found new delete for replaced data file"),
+                "expected Iceberg's replaced-data-file conflict error, got: " + e.getMessage());
+    }
+
+    @Test
+    public void testCommitRewriteFallsBackToCurrentSnapshotWhenBaseMissing() throws Exception {
+        // A rewrite whose sink extra carries no plan-time snapshot -- e.g. a plan that
+        // produced no IcebergScanNode to freeze one from. The commit must still scope
+        // validateFromSnapshot (falling back to the current snapshot) rather than skip it
+        // or fail, so an ordinary rewrite with nothing to conflict against still commits.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long snapshotBeforeRewrite = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo rewriteCommit = new TSinkCommitInfo();
+        rewriteCommit.setIs_rewrite(true);
+        rewriteCommit.setIceberg_data_file(buildRewriteOutputDataFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.addScannedDataFiles(Sets.newHashSet(FILE_A));
+        // deliberately no setBaseSnapshotId(...)
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(rewriteCommit), null, extra);
+
+        mockedNativeTableA.refresh();
+        Snapshot newSnapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(newSnapshot, "rewrite commit must produce a snapshot");
+        Assertions.assertNotEquals(snapshotBeforeRewrite, newSnapshot.snapshotId(),
+                "rewrite commit must advance the snapshot id past the pre-rewrite state");
     }
 
     private long mergeCounterValue(String name, String labelKey, String labelValue) {
@@ -3995,6 +4495,105 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(1, fileScanTasks.size(), "only the 2020-06-14 partition file should be deleted");
         Assertions.assertEquals("PartitionData{k2=2020-06-15}", fileScanTasks.get(0).file().partition().toString(),
                 "the non-matching 2020-06-15 partition must remain");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteStringDatePartitionCastStaleHandle() throws Exception {
+        // The FE serves the native table from a cross-query cache, so executeMetadataDelete can run against a
+        // handle that lags behind the real table. The cast-on-string-partition branch enumerates the files to
+        // delete (and decides whether to commit at all) from that handle, so it must refresh first: otherwise a
+        // file appended by an external writer after the handle was cached is silently left behind while the
+        // DELETE reports success.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable cachedHandle = create(SCHEMA_J, spec, "tbDeleteStrPartStale", 1);
+        cachedHandle.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/stale-0608.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-08").withRecordCount(3).build())
+                .commit();
+        cachedHandle.refresh();
+
+        // An external writer appends the partition the DELETE targets; the cached handle does not see it.
+        TestTables.TestTable writerHandle = TestTables.load(tableDir, "tbDeleteStrPartStale");
+        writerHandle.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/stale-0614.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-14").withRecordCount(4).build())
+                .commit();
+
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, cachedHandle, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        metadata.executeMetadataDelete(icebergTable, k2EqDate(2020, 6, 14), connectContext);
+
+        writerHandle.refresh();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(writerHandle.newScan().planFiles());
+        Assertions.assertEquals(1, fileScanTasks.size(),
+                "the externally appended 2020-06-14 file must be deleted despite the stale cached handle");
+        Assertions.assertEquals("PartitionData{k2=2020-06-08}", fileScanTasks.get(0).file().partition().toString(),
+                "only the pre-existing 2020-06-08 partition must remain");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteStringDatePartitionCastRefreshFailure() {
+        // If the pre-scan refresh in the residual branch fails (e.g. remote metadata unavailable), the delete
+        // must surface a StarRocksConnectorException carrying table context, consistent with the other failure
+        // paths in executeMetadataDelete, rather than propagating a raw Iceberg exception.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbDeleteStrPartRefreshFail", 1);
+        table.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/rf-0614.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-14").withRecordCount(3).build())
+                .commit();
+
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+        // Make the residual branch's pre-scan refresh fail.
+        new MockUp<BaseTable>() {
+            @Mock
+            public void refresh() {
+                throw new RuntimeException("mock metastore unavailable");
+            }
+        };
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.executeMetadataDelete(icebergTable, k2EqDate(2020, 6, 14), connectContext));
+        Assertions.assertTrue(e.getMessage().contains("Failed to refresh Iceberg table"),
+                "unexpected message: " + e.getMessage());
     }
 
     @Test

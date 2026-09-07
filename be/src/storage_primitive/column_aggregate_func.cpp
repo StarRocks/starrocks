@@ -33,6 +33,7 @@
 #include "storage_primitive/aggregate_type.h"
 #include "storage_primitive/column_aggregator.h"
 #include "types/percentile_value.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -252,22 +253,24 @@ private:
 
 class AggFuncBasedValueAggregator : public ValueColumnAggregatorBase {
 public:
-    AggFuncBasedValueAggregator(const AggregateFunction* agg_func) : _agg_func(agg_func) {
+    // |agg_func| must outlive this aggregator; it is either a resolver-owned singleton or the
+    // function object handed over through the AggStateDesc constructor below.
+    AggFuncBasedValueAggregator(const AggregateFunction* agg_func, const TypeDescriptor& return_type,
+                                const std::vector<TypeDescriptor>& arg_types)
+            : _agg_func(agg_func) {
+        _runtime_state = std::make_unique<RuntimeState>(TQueryGlobals());
+        _mem_pool = std::make_unique<MemPool>();
+        _func_ctx = FunctionContext::create_context(_runtime_state.get(), _mem_pool.get(), return_type, arg_types);
         _state = static_cast<AggDataPtr>(BitUtil::safe_aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
-        // TODO: create a new FunctionContext by using specific FunctionContext::create_context
-        _func_ctx = new FunctionContext();
         _agg_func->create(_func_ctx, _state);
     }
 
-    AggFuncBasedValueAggregator(AggStateDesc* agg_state_desc, std::unique_ptr<AggregateFunction> agg_state_unoin)
-            : _agg_func(agg_state_unoin.get()) {
-        _agg_state_unoin = std::move(agg_state_unoin);
-        _runtime_state = std::make_unique<RuntimeState>(TQueryGlobals());
-        _mem_pool = std::make_unique<MemPool>();
-        _func_ctx = FunctionContext::create_context(_runtime_state.get(), _mem_pool.get(),
-                                                    agg_state_desc->get_return_type(), agg_state_desc->get_arg_types());
-        _state = static_cast<AggDataPtr>(BitUtil::safe_aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
-        _agg_func->create(_func_ctx, _state);
+    AggFuncBasedValueAggregator(AggStateDesc* agg_state_desc, std::unique_ptr<AggregateFunction> agg_state_union)
+            : AggFuncBasedValueAggregator(agg_state_union.get(), agg_state_desc->get_return_type(),
+                                          agg_state_desc->get_arg_types()) {
+        // The delegated constructor has already run; |agg_state_union| still owns the function object
+        // throughout it, so taking ownership here is safe.
+        _agg_state_union = std::move(agg_state_union);
     }
 
     ~AggFuncBasedValueAggregator() override {
@@ -338,7 +341,7 @@ private:
     AggDataPtr _state{nullptr};
 
     // used for common aggregate functions
-    std::unique_ptr<AggregateFunction> _agg_state_unoin = nullptr;
+    std::unique_ptr<AggregateFunction> _agg_state_union = nullptr;
     std::unique_ptr<RuntimeState> _runtime_state = nullptr;
     std::unique_ptr<MemPool> _mem_pool = nullptr;
 };
@@ -496,7 +499,12 @@ StatusOr<ColumnAggregatorPtr> ColumnAggregatorFactory::create_value_column_aggre
             return Status::InternalError(fmt::format("Unknown aggregate function, name={}, type={}, is_nullable={}",
                                                      func_name, type, field->is_nullable()));
         }
-        return std::make_unique<AggFuncBasedValueAggregator>(agg_func);
+        // The storage aggregate functions above take the column type as both their argument and
+        // return type.
+        auto type_desc = TypeDescriptor::from_logical_type(normalized_tpe, TypeDescriptor::MAX_VARCHAR_LENGTH,
+                                                           field->type()->precision(), field->type()->scale());
+        return std::make_unique<AggFuncBasedValueAggregator>(agg_func, type_desc,
+                                                             std::vector<TypeDescriptor>{type_desc});
     }
 }
 } // namespace starrocks

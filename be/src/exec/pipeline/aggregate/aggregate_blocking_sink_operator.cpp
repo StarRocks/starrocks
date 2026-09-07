@@ -40,10 +40,22 @@ Status AggregateBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
     RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_aggregator->open(state));
 
-    _agg_group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&     // has group by keys
-                                _aggregator->limit() != -1 &&                 // has limit
-                                _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
-                                _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
+    // The limit optimization drops rows whose group-by key is not already in the hash map once the
+    // limit is reached. That is only sound because a key reaches exactly one hash map: the input is
+    // partitioned by the group-by key, so a key dropped here has no rows anywhere else. A pre-cache
+    // aggregator breaks that premise -- the query cache decomposes it into one lane per tablet, each
+    // lane with its own Aggregator, while the shared limit countdown lives on the factory and is
+    // consumed once per (lane, key). A key can then survive in one tablet and be dropped in another,
+    // and the truncated per-tablet result is populated into the cache as if it were complete.
+    // The post-cache merger keeps the optimization: it is one per driver over the tablets of that
+    // driver, a key reaches exactly one of them (a plan that did not guarantee that would emit
+    // duplicate rows for that key anyway), and its output is never populated into the cache. Leaving
+    // it on also keeps its hash map bounded by the limit instead of by the whole cardinality.
+    _agg_group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&      // has group by keys
+                                _aggregator->limit() != -1 &&                  // has limit
+                                _aggregator->conjunct_ctxs().empty() &&        // no 'having' clause
+                                _aggregator->get_aggr_phase() == AggrPhase2 && // phase 2, keep it to make things safe
+                                !_aggregator->is_pre_cache()); // not a per-tablet lane of the query cache
     return Status::OK();
 }
 

@@ -21,7 +21,6 @@ import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.SplittingTabletInfoPB;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -42,7 +41,7 @@ public class SplittingTablet implements ReshardingTablet {
     protected final long oldTabletId;
 
     @SerializedName(value = "newTabletIds")
-    protected final List<Long> newTabletIds;
+    protected volatile List<Long> newTabletIds;
 
     // Defaulted to empty list in the no-arg Gson constructor below so legacy
     // SplittingTablet records persisted before this field existed deserialize
@@ -51,30 +50,27 @@ public class SplittingTablet implements ReshardingTablet {
     // present in the JSON, so toProto / fallbackToIdenticalTablet never see
     // null even on an in-flight reshard job replayed from a pre-PR snapshot.
     @SerializedName(value = "newTabletRanges")
-    protected final List<TabletRange> newTabletRanges;
+    protected volatile List<TabletRange> newTabletRanges;
 
     // Used only by Gson deserialization; delegates to the validated 3-arg
     // constructor so the same wrapping / preconditions apply. Gson then
     // reflection-sets each field present in the JSON, leaving newTabletRanges
     // at the empty default for legacy records that predate the field.
     private SplittingTablet() {
-        this(0, Collections.emptyList(), Collections.emptyList());
+        this(0, List.of(), List.of());
     }
 
     public SplittingTablet(long oldTabletId, List<Long> newTabletIds) {
-        this(oldTabletId, newTabletIds, Collections.emptyList());
+        this(oldTabletId, newTabletIds, List.of());
     }
 
     public SplittingTablet(long oldTabletId, List<Long> newTabletIds, List<TabletRange> newTabletRanges) {
         this.oldTabletId = oldTabletId;
-        this.newTabletIds = newTabletIds;
         Preconditions.checkNotNull(newTabletRanges, "newTabletRanges must not be null");
         Preconditions.checkArgument(newTabletRanges.stream().allMatch(Objects::nonNull),
                 "newTabletRanges must not contain null elements");
-        // Always wrap in a mutable ArrayList: fallbackToIdenticalTablet() clears
-        // this list after a BE-side fallback, mirroring how newTabletIds is
-        // mutated via subList(...).clear().
-        this.newTabletRanges = new ArrayList<>(newTabletRanges);
+        this.newTabletIds = List.copyOf(newTabletIds);
+        this.newTabletRanges = List.copyOf(newTabletRanges);
         Preconditions.checkState(this.newTabletRanges.isEmpty()
                         || this.newTabletRanges.size() == newTabletIds.size(),
                 "newTabletRanges.size=%s must equal newTabletIds.size=%s when set",
@@ -131,24 +127,34 @@ public class SplittingTablet implements ReshardingTablet {
 
     @Override
     public ReshardingTabletInfoPB toProto() {
+        List<TabletRange> tabletRangesSnapshot = newTabletRanges;
+        List<Long> tabletIdsSnapshot = newTabletIds;
+        if (tabletIdsSnapshot.size() == 1) {
+            return new IdenticalTablet(oldTabletId, tabletIdsSnapshot.get(0)).toProto();
+        }
+
         ReshardingTabletInfoPB reshardingTabletInfoPB = new ReshardingTabletInfoPB();
         reshardingTabletInfoPB.splittingTabletInfo = new SplittingTabletInfoPB();
         reshardingTabletInfoPB.splittingTabletInfo.oldTabletId = oldTabletId;
-        reshardingTabletInfoPB.splittingTabletInfo.newTabletIds = newTabletIds;
-        if (!newTabletRanges.isEmpty()) {
+        reshardingTabletInfoPB.splittingTabletInfo.newTabletIds = new ArrayList<>(tabletIdsSnapshot);
+        if (!tabletRangesSnapshot.isEmpty()) {
             reshardingTabletInfoPB.splittingTabletInfo.newTabletRanges =
-                    newTabletRanges.stream().map(TabletRange::toProto).collect(Collectors.toList());
+                    tabletRangesSnapshot.stream().map(TabletRange::toProto).collect(Collectors.toList());
         }
         return reshardingTabletInfoPB;
     }
 
     public void fallbackToIdenticalTablet() {
-        Preconditions.checkState(!newTabletIds.isEmpty());
-        newTabletIds.subList(1, newTabletIds.size()).clear();
+        List<Long> tabletIdsSnapshot = newTabletIds;
+        Preconditions.checkState(!tabletIdsSnapshot.isEmpty());
+        // Publish IDs first and ranges second. Readers snapshot ranges before IDs,
+        // so observing cleared ranges guarantees singleton IDs; singleton IDs with stale ranges
+        // are safe because toProto() chooses identical and ignores ranges.
+        newTabletIds = List.of(tabletIdsSnapshot.get(0));
         // Drop stale FE-supplied ranges. After BE's identical fallback there is
         // a single inherited new tablet, not the K originally requested, so
         // the external-boundaries-style range list would be both mis-sized and meaningless.
-        newTabletRanges.clear();
+        newTabletRanges = List.of();
     }
 
     public boolean isIdenticalTablet() {

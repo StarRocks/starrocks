@@ -2461,6 +2461,13 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 "grant repository on system to test",
                 "revoke repository on system from test",
                 expectError);
+
+        // DROP SNAPSHOT STMT
+        verifyGrantRevoke(
+                "DROP SNAPSHOT snapshot_label ON oss_repo;",
+                "grant repository on system to test",
+                "revoke repository on system from test",
+                expectError);
     }
 
     @Test

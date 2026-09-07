@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -34,6 +35,7 @@ import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hudi.HudiMetadata;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
@@ -43,9 +45,12 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -68,8 +73,12 @@ import static com.starrocks.catalog.Table.TableType.PAIMON;
 import static com.starrocks.connector.unified.UnifiedMetadata.DELTA_LAKE_PROVIDER;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_NAME;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_VALUE;
+import static com.starrocks.connector.unified.UnifiedMetadata.PAIMON_STORAGE_HANDLER_KEY;
+import static com.starrocks.connector.unified.UnifiedMetadata.PAIMON_STORAGE_HANDLER_VALUE;
 import static com.starrocks.connector.unified.UnifiedMetadata.SPARK_TABLE_PROVIDER_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UnifiedMetadataTest {
@@ -579,6 +588,167 @@ public class UnifiedMetadataTest {
 
         TvrTableSnapshot actual = unifiedMetadata.acquireTvrSnapshot("test_db", icebergTable, mvId);
         assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testTruncateTableRoutesToIcebergConnector(@Mocked HiveTable hiveTable) throws DdlException {
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")), null, NodePosition.ZERO));
+
+        new Expectations() {
+            {
+                hiveTable.getProperties();
+                result = ImmutableMap.of(ICEBERG_TABLE_TYPE_NAME, ICEBERG_TABLE_TYPE_VALUE);
+                minTimes = 1;
+            }
+
+            {
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
+                result = hiveTable;
+                minTimes = 1;
+            }
+
+            {
+                icebergMetadata.truncateTable(stmt, connectContext);
+                times = 1;
+            }
+        };
+
+        unifiedMetadata.truncateTable(stmt, connectContext);
+    }
+
+    @Test
+    public void testTruncateTableRoutesToHiveConnector() throws DdlException {
+        HiveTable hiveTable = new HiveTable();
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")), null, NodePosition.ZERO));
+
+        new Expectations() {
+            {
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
+                result = hiveTable;
+                minTimes = 1;
+            }
+
+            {
+                hiveMetadata.truncateTable(stmt, connectContext);
+                times = 1;
+            }
+        };
+
+        unifiedMetadata.truncateTable(stmt, connectContext);
+    }
+
+    @Test
+    public void testTruncateTableRoutesToPaimonConnector(@Mocked HiveTable hiveTable) throws DdlException {
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")), null, NodePosition.ZERO));
+
+        new Expectations() {
+            {
+                hiveTable.getProperties();
+                result = ImmutableMap.of(PAIMON_STORAGE_HANDLER_KEY, PAIMON_STORAGE_HANDLER_VALUE);
+                minTimes = 1;
+            }
+
+            {
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
+                result = hiveTable;
+                minTimes = 1;
+            }
+
+            {
+                paimonMetadata.truncateTable(stmt, connectContext);
+                times = 1;
+            }
+        };
+
+        unifiedMetadata.truncateTable(stmt, connectContext);
+    }
+
+    @Test
+    public void testTruncateTableReportsUnconfiguredConnectorInsteadOfNpe(@Mocked HiveTable hiveTable) {
+        // A unified catalog created without "paimon.catalog.warehouse" has no PAIMON entry in the
+        // metadata map, yet a Paimon table in the shared metastore still resolves to TableType.PAIMON.
+        // The routing must report that clearly rather than dereference a null metadata.
+        UnifiedMetadata withoutPaimon = new UnifiedMetadata(ImmutableMap.of(
+                HIVE, hiveMetadata,
+                ICEBERG, icebergMetadata));
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")), null, NodePosition.ZERO));
+
+        new Expectations() {
+            {
+                hiveTable.getProperties();
+                result = ImmutableMap.of(PAIMON_STORAGE_HANDLER_KEY, PAIMON_STORAGE_HANDLER_VALUE);
+                minTimes = 1;
+            }
+
+            {
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
+                result = hiveTable;
+                minTimes = 1;
+            }
+        };
+
+        StarRocksConnectorException e = assertThrows(StarRocksConnectorException.class,
+                () -> withoutPaimon.truncateTable(stmt, connectContext));
+        assertTrue(e.getMessage().contains("PAIMON"));
+    }
+
+    @Test
+    public void testAlterTableRoutesToIcebergConnector(@Mocked HiveTable hiveTable) throws StarRocksException {
+        AlterTableStmt stmt = new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")), null, NodePosition.ZERO),
+                ImmutableList.of());
+        ShowResultSet expected = new ShowResultSet(null, ImmutableList.of());
+
+        new Expectations() {
+            {
+                hiveTable.getProperties();
+                result = ImmutableMap.of(ICEBERG_TABLE_TYPE_NAME, ICEBERG_TABLE_TYPE_VALUE);
+                minTimes = 1;
+            }
+
+            {
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
+                result = hiveTable;
+                minTimes = 1;
+            }
+
+            {
+                icebergMetadata.alterTable(connectContext, stmt);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        assertSame(expected, unifiedMetadata.alterTable(connectContext, stmt));
+    }
+
+    @Test
+    public void testAlterTableRoutesToHiveConnector() throws StarRocksException {
+        HiveTable hiveTable = new HiveTable();
+        AlterTableStmt stmt = new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")), null, NodePosition.ZERO),
+                ImmutableList.of());
+        ShowResultSet expected = new ShowResultSet(null, ImmutableList.of());
+
+        new Expectations() {
+            {
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_tbl");
+                result = hiveTable;
+                minTimes = 1;
+            }
+
+            {
+                hiveMetadata.alterTable(connectContext, stmt);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        assertSame(expected, unifiedMetadata.alterTable(connectContext, stmt));
     }
 
     @Test

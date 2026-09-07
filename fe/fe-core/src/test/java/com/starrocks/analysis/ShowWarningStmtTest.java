@@ -24,6 +24,7 @@ public class ShowWarningStmtTest {
                 "SHOW WARNINGS LIMIT 10",32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals(10L, stmt.getLimitNum());
+        Assertions.assertFalse(stmt.isShowErrors());
 
         Assertions.assertEquals( 3, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
         Assertions.assertEquals("Message", new ShowResultMetaFactory().getMetadata(stmt).getColumn(2).getName());
@@ -31,5 +32,6 @@ public class ShowWarningStmtTest {
         // show Error cases
         ShowWarningStmt stmt_e = (ShowWarningStmt) UtFrameUtils.parseStmtWithNewParser("SHOW ERRORS limit 10", ctx);
         Assertions.assertEquals(10L, stmt_e.getLimitNum());
+        Assertions.assertTrue(stmt_e.isShowErrors());
     }
 }

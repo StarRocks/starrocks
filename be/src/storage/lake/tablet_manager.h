@@ -29,6 +29,7 @@
 #include "gutil/macros.h"
 #include "platform/store_path.h"
 #include "storage/lake/metadata_iterator.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
@@ -46,7 +47,6 @@ class TGetTabletMetadataResponse;
 
 namespace starrocks::lake {
 
-struct CacheOptions;
 template <typename T>
 class MetadataIterator;
 class UpdateManager;
@@ -91,6 +91,38 @@ public:
     // Compact with pre-selected rowsets (for parallel compaction)
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context, std::vector<RowsetPtr> input_rowsets);
 
+    // Durable tablet-metadata layout contract:
+    //
+    // When file_bundling is disabled:
+    // - Version 1 is normally a standard lake protobuf file named with the tablet id and contains
+    //   one complete TabletMetadataPB for that tablet. For example, tablet 42 uses
+    //   `000000000000002A_0000000000000001.meta` with this content:
+    //       [optional protobuf checksum header][serialized TabletMetadataPB(42, version 1)]
+    // - Version 2 and later use the same per-tablet filename and standard TabletMetadataPB format.
+    //   For example, tablet 42 at version 7 uses
+    //   `000000000000002A_0000000000000007.meta` with this content:
+    //       [optional protobuf checksum header][serialized TabletMetadataPB(42, version 7)]
+    //
+    // When file_bundling is enabled for normal table creation and publish:
+    // - Version 1 is a single shared initial-metadata file for the physical partition. Its filename
+    //   uses tablet id 0, but its payload is still one complete, standard TabletMetadataPB, not a
+    //   BundleTabletMetadataPB. The embedded id can identify the tablet that wrote the shared file,
+    //   so an id-based read normalizes it to the requested tablet id. The filename and content are:
+    //       `0000000000000000_0000000000000001.meta`
+    //       [optional protobuf checksum header][serialized writer TabletMetadataPB(version 1)]
+    // - Version 2 and later use one bundle file per physical partition and version, also named with
+    //   tablet id 0. The file contains serialized per-tablet metadata pages followed by a
+    //   BundleTabletMetadataPB footer with page pointers, deduplicated schemas, and checksums. Each
+    //   read extracts and returns one tablet's TabletMetadataPB from that bundle. For version 7:
+    //       `0000000000000000_0000000000000007.meta`
+    //       [TabletMetadataPB(42) page][TabletMetadataPB(43) page]...[BundleTabletMetadataPB]
+    //       [optional bundle footer checksum][uint64 bundle footer size and flags]
+    //
+    // The actual version-1 write switch is TCreateTabletReq::enable_tablet_creation_optimization.
+    // For normal table creation FE enables it for a file-bundling table, but a standalone config,
+    // legacy data, or a specialized creation path can make the version-1 layout differ from the
+    // table's current file_bundling property. Readers must therefore retain both version-1
+    // fallbacks. The version-2+ bundled-metadata marker does not change the version-1 file encoding.
     Status put_tablet_metadata(const TabletMetadata& metadata);
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata);
@@ -129,18 +161,40 @@ public:
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_meta_cache,
                                                     bool fill_data_cache, int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, const CacheOptions& cache_opts,
-                                                    int64_t expected_gtid = 0,
-                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(
+            int64_t tablet_id, int64_t version, const CacheOptions& cache_opts, int64_t expected_gtid = 0,
+            const std::shared_ptr<FileSystem>& fs = nullptr,
+            InitialMetadataOrder initial_order = InitialMetadataOrder::kPerTabletFirst);
 
-    // Do not use this function except in a list dir
+    // Reads the tablet metadata named by |path|, but resolves it through this TabletManager's own
+    // LocationProvider: the tablet id comes from the filename, and a bundled partition is then read via
+    // bundle_tablet_metadata_location(tablet_id, version). The bundle path, the
+    // _bundle_tablet_metadata_group singleflight key, the metacache key, and the cn-free version-1
+    // fallback therefore all derive from the local provider, not from |path|. The one exception is
+    // the shared version-1 object, which is read from |path|'s own directory (every tablet of the
+    // partition resolves to that same directory) while its metacache entry is still keyed by the
+    // provider's real_location(), so siblings share one entry.
+    //
+    // Precondition: |path| must resolve into the same physical partition as that tablet id's metadata
+    // root. Paths obtained by listing a metadata root satisfy this, including sibling tablets' files:
+    // their virtual roots differ (staros://<shard>/meta) but real_location() maps them to one physical
+    // partition. A path under a different physical partition does not qualify -- it would be served the
+    // local partition's bundle on a tablet-id collision. Reads against storage this provider does not
+    // describe belong in a reader that takes its root explicitly; see build_source_tablet_meta() in
+    // lake_replication_txn_manager.cpp.
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true,
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, const CacheOptions& cache_opts,
-                                                    int64_t expected_gtid = 0,
-                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(
+            const std::string& path, const CacheOptions& cache_opts, int64_t expected_gtid = 0,
+            const std::shared_ptr<FileSystem>& fs = nullptr,
+            InitialMetadataOrder initial_order = InitialMetadataOrder::kPerTabletFirst);
 
+    // Extracts |tablet_id|'s metadata from its partition's BUNDLE object, never from the tablet's own
+    // key. Returns NotFound at version 1 without issuing any read: no bundle is written at that
+    // version, and the object that shares its name holds a plain TabletMetadataPB (see the format
+    // note below). Callers that may need version 1 must go through get_tablet_metadata(), which
+    // understands every layout.
     StatusOr<TabletMetadataPtr> get_single_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
                                                            int64_t expected_gtid = 0,
                                                            const std::shared_ptr<FileSystem>& fs = nullptr);
@@ -150,6 +204,51 @@ public:
 
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
                                                                           const std::string& serialized_string);
+
+    // A lake tablet's metadata at a given version lives in exactly one of three remote objects:
+    //
+    //   <tablet_id>_<version>.meta   its own object, written per tablet
+    //   0_<version>.meta, v >= 2     a BundleTabletMetadataPB carrying one page per tablet of an
+    //                                aggregated (`file_bundling`) partition
+    //   0_<version>.meta, v == 1     a plain TabletMetadataPB shared by every tablet of a partition
+    //                                created with TCreateTabletReq::enable_tablet_creation_optimization.
+    //                                It holds the id of whichever tablet FE picked to write it, so a
+    //                                reader must stamp its own id onto a copy.
+    //
+    // The last two share one name under tablet id 0 and are told apart only by version --
+    // tablet_initial_metadata_location(id) and bundle_tablet_metadata_location(id, 1) are literally
+    // the same path. A bundle parser must therefore never be pointed at version 1: the parse fails
+    // with Corruption, and the recovery it triggers -- corrupted_tablet_meta_handler() drops the
+    // local cache so the next read refetches -- cannot help, because the remote object is intact and
+    // simply is not a bundle, so the retry fails identically. get_single_tablet_metadata() avoids all
+    // of that by returning NotFound at kInitialVersion before it reads anything.
+    //
+    // "Exactly one" is per (tablet, version), not per directory. A rollup or schema-change shadow
+    // index ALWAYS gets per-tablet version-1 objects -- LakeRollupJob and LakeTableSchemaChangeJob
+    // opt out of the shared layout, since its tablet-0 name has no index discriminator and a second
+    // index writing it would clobber the base index's object. Those shadow tablets share a metadata
+    // directory with a base index that may own a shared object, so one directory routinely holds both
+    // layouts at version 1.
+    //
+    // Hence the ordering invariant in get_tablet_metadata(): a version-1 read asks for the tablet's
+    // OWN key first and only then falls back to the shared object. Reversing that for a shadow tablet
+    // returns the base index's schema, and because the shared object exists the read succeeds -- there
+    // is no NotFound to signal the mistake. Only FE may reverse the order, per request, and only for a
+    // partition it has confirmed holds a single index.
+    //
+    // The two `_with_meter` helpers below are the only sanctioned way to read any of the three:
+    // load_tablet_metadata_file_with_meter() for the per-tablet and shared version-1 objects (both
+    // plain TabletMetadataPB), read_bundle_metadata_file_with_meter() for the bundle. Both record
+    // NotFound outcomes into lake_tablet_metadata_get_not_found_total; reading a tablet metadata
+    // file through anything else makes that metric silently under-report.
+    //
+    // Note that txn logs deliberately do NOT go through these: they share the underlying
+    // protobuf loader but are not tablet metadata, so they must stay unmetered.
+    static Status load_tablet_metadata_file_with_meter(const std::string& path, TabletMetadataPB* metadata,
+                                                       bool fill_cache, const std::shared_ptr<FileSystem>& fs);
+
+    static StatusOr<std::string> read_bundle_metadata_file_with_meter(FileSystem* fs, const std::string& path,
+                                                                      bool skip_fill_local_cache);
 
     static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                               FileSystem* input_fs = nullptr);
@@ -174,7 +273,18 @@ public:
 
     Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
 
-    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+    // |expected_tablet_ids| is the set of tablets this combined txn log must cover. A combined txn
+    // log is the only record of those tablets' rowset metadata: publish looks each tablet up inside
+    // it and has no per-tablet fallback, so an object written short of an entry leaves the
+    // transaction permanently unpublishable once it commits.
+    //
+    // Mirrors put_bundle_tablet_metadata(): the set is only worth passing when it comes from a
+    // source independent of whatever produced |logs| -- deriving it from the collected logs would
+    // just compare that source against itself. Callers with no such source pass empty, which is
+    // what the single-argument overload does, leaving them exactly as they were.
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs, const std::set<int64_t>& expected_tablet_ids);
+
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs) { return put_combined_txn_log(logs, {}); }
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
@@ -224,6 +334,15 @@ public:
     std::string real_tablet_root_location(int64_t tablet_id) const;
 
     std::string tablet_metadata_root_location(int64_t tablet_id) const;
+
+    // Cache a process-local marker indicating that the tablet's physical partition uses bundled
+    // metadata. The marker key uses the resolved storage path so every tablet in the partition
+    // consults the same cache entry.
+    void cache_bundled_metadata_partition_marker(int64_t tablet_id);
+
+    // Check only the process-local metacache for the bundled-metadata marker. This does not inspect
+    // the local data cache or remote storage.
+    bool lookup_cached_bundled_metadata_partition_marker(int64_t tablet_id);
 
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
@@ -283,11 +402,10 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
-    // update cache size of the segment with the given key, optionally provide the segment address hint.
-    // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
-    // instance address matches the address provided by the segment_addr_hint. This is used to prevent
-    // updating the cache size where the cached object is not the one as expected.
-    void update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint = 0);
+    // Update the cache size of the segment with the given key. The update is applied only when the
+    // key still maps to `segment`, so that a cache entry replaced by a different instance in the
+    // meantime is not charged with this segment's memory cost.
+    void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
 
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
@@ -328,6 +446,17 @@ private:
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
+    // Read the physical partition's shared initial-metadata object (tablet id 0, version 1) and
+    // return it stamped with |tablet_id|. |sibling_path| is any per-tablet metadata path in that
+    // partition; only its directory is used.
+    //
+    // The object is per partition, not per tablet, so it is cached under its RESOLVED path whatever
+    // |cache_opts.fill_meta_cache| says, and concurrent misses on one partition collapse into a single
+    // remote read through _shared_initial_metadata_group. Only |skip_meta_cache| (bypass the lookup)
+    // and |fill_data_cache| are honored. The definition says why.
+    StatusOr<TabletMetadataPtr> load_shared_initial_metadata(const std::string& sibling_path, int64_t tablet_id,
+                                                             const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                             const std::shared_ptr<FileSystem>& fs);
     StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
     // Build version 1 TabletMetadataPB from a FE response. Exposed for unit tests.
     StatusOr<TabletMetadataPtr> build_initial_metadata(int64_t tablet_id, const TGetTabletMetadataResponse& resp);
@@ -359,6 +488,9 @@ private:
     bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
     bthreads::singleflight::Group<std::string, StatusOr<CombinedTxnLogPtr>> _combined_txn_log_group;
     bthreads::singleflight::Group<std::string, StatusOr<std::string>> _bundle_tablet_metadata_group;
+    // Keyed by the shared version-1 object's resolved path and the caller's expected gtid; see
+    // load_shared_initial_metadata().
+    bthreads::singleflight::Group<std::string, StatusOr<TabletMetadataPtr>> _shared_initial_metadata_group;
 };
 
 } // namespace starrocks::lake

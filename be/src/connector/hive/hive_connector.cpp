@@ -26,6 +26,7 @@
 #include "compute_env/query/query_runtime_state.h"
 #include "connector/hive/hive_chunk_sink.h"
 #include "connector/hive/iceberg_global_late_materialization_context.h"
+#include "connector/hive/paimon/paimon_cpp_loader.h"
 #include "connector/hive/scanner/cache_select_scanner.h"
 #include "connector/hive/scanner/hdfs_scanner_avro.h"
 #include "connector/hive/scanner/hdfs_scanner_json.h"
@@ -798,6 +799,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = std::string(_scanner_ctx.hive_table->get_base_path()) +
                            (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
+    if (scan_range.__isset.use_paimon_native_reader && scan_range.use_paimon_native_reader) {
+        // Paimon native scan ranges leave full_path unset so that HDFSBackendSelector hashes on the
+        // per-split relative_path. Build the FileSystem from the table path in the descriptor instead.
+        if (const auto* paimon_desc = dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx.hive_table);
+            paimon_desc != nullptr && !paimon_desc->get_paimon_table_path().empty()) {
+            native_file_path = paimon_desc->get_paimon_table_path();
+        }
+    }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     auto fsOptions =
@@ -823,6 +832,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     RETURN_IF_ERROR(_init_global_dicts(&_scanner_ctx));
     _scanner_ctx.runtime_filter_collector = _runtime_filters;
+    // ConnectorChunkSource calls DataSource::set_driver_sequence() in its constructor,
+    // well before open() reaches here, so this value is already final.  See
+    // HdfsScannerContext::driver_sequence for why it is carried at all.
+    _scanner_ctx.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
     _scanner_ctx.tuple_desc = _tuple_desc;
     if (const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_scanner_ctx.hive_table)) {
         _scanner_ctx.avro_schema_json = hdfs_desc->get_avro_schema_json();
@@ -881,6 +894,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
+    bool use_paimon_native_reader = false;
+    if (scan_range.__isset.use_paimon_native_reader) {
+        use_paimon_native_reader = scan_range.use_paimon_native_reader;
+    }
     bool use_odps_jni_reader = false;
     if (scan_range.__isset.use_odps_jni_reader) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
@@ -889,6 +906,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     bool use_iceberg_jni_metadata_reader = false;
     if (scan_range.__isset.use_iceberg_jni_metadata_reader) {
         use_iceberg_jni_metadata_reader = scan_range.use_iceberg_jni_metadata_reader;
+    }
+
+    bool use_fluss_jni_reader = false;
+    if (scan_range.__isset.use_fluss_jni_reader) {
+        use_fluss_jni_reader = scan_range.use_fluss_jni_reader;
     }
 
     bool use_kudu_jni_reader = false;
@@ -909,8 +931,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new CacheSelectScanner();
     } else if (_scanner_ctx.format_scan_context.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
+    } else if (use_paimon_native_reader) {
+        // Loads the paimon-cpp shim on first use; fails the query with an
+        // actionable error (suggesting paimon_reader_mode='JNI') when the
+        // paimon libraries are absent from be/lib/paimon-cpp-lib.
+        ASSIGN_OR_RETURN(scanner, create_paimon_cpp_scanner());
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
+    } else if (use_fluss_jni_reader) {
+        scanner = create_fluss_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {
         scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
@@ -946,7 +975,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 serde_lib = file_desc->get_serde_lib();
             }
             if (serde_lib == OPENXJSON_SERDE_LIB) {
-                scanner = new HdfsJsonScanner();
+                // TODO: FileTableDescriptor doesn't carry serde properties from FE yet, so
+                // column name mapping ("mapping.<column>") only works for HdfsTableDescriptor.
+                scanner = hdfs_desc != nullptr ? new HdfsJsonScanner(hdfs_desc->get_serde_properties())
+                                               : new HdfsJsonScanner();
             } else {
                 scanner = new HdfsTextScanner();
             }

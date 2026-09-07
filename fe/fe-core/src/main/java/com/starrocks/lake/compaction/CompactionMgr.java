@@ -107,6 +107,10 @@ public class CompactionMgr implements MemoryTrackable {
         return compactionScheduler.getRunningCompactions().size();
     }
 
+    public boolean isPartitionCompacting(PartitionIdentifier partition) {
+        return compactionScheduler != null && compactionScheduler.getRunningCompactions().containsKey(partition);
+    }
+
     // Total running tablet-level compaction tasks across all running jobs (one task == one tablet
     // still being compacted), the same unit bounded by Config.lake_compaction_max_tasks. This is
     // finer-grained than getRunningCompactionCount(), which counts jobs (one per partition).
@@ -222,6 +226,18 @@ public class CompactionMgr implements MemoryTrackable {
                 .mapToDouble(stat -> stat.getCompactionScore().getMax()).max().orElse(0);
     }
 
+    /**
+     * Drop a partition's compaction priority back to DEFAULT. Needed when a priority-carrying request is
+     * abandoned before it starts: the scheduler's own reset only covers partitions that reached
+     * runningCompactions, and ScoreSelector admits a non-DEFAULT priority unconditionally.
+     */
+    void resetPriority(PartitionIdentifier partition) {
+        partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
+            v.resetPriority();
+            return v;
+        });
+    }
+
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
         PartitionStatistics statistics = partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
             // FE's follower nodes may have a different timestamp with the leader node.
@@ -298,6 +314,23 @@ public class CompactionMgr implements MemoryTrackable {
             return v;
         });
         LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
+    }
+
+    public PartitionStatistics triggerUnshareCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            if (v.getCompactionScore() == null) {
+                // Score-based selectors discard null scores even for an explicit priority. A
+                // synthetic zero score lets UNSHARE run for an empty/new partition as well.
+                v.setCompactionScore(new Quantiles(0, 0, 0));
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
+            return v;
+        });
+        LOG.info("Trigger UNSHARE compaction, {}", statistics);
         return statistics;
     }
 

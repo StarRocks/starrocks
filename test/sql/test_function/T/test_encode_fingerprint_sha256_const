@@ -1,0 +1,33 @@
+-- name: test_encode_fingerprint_sha256_const_arg @sequential
+-- Regression: a constant argument reaches the BE as a ConstColumn reporting chunk_size
+-- rows over an inner data column holding exactly one element. get_data_column() strips
+-- the ConstColumn and returns that one-element column, which was then indexed by the
+-- per-row loop counter. For a string argument this handed a wild pointer and a huge
+-- length to SHA256_Update, crashing the BE (SIGSEGV). The fix reads constant arguments
+-- at index 0.
+--
+-- Three conditions are all required: a chunk of more than one row, at least one constant
+-- argument, and at least one non-constant argument. An all-constant call is folded in the
+-- FE and never reaches the BE, which is why the existing single-row tests never tripped it.
+CREATE TABLE t_fp_const (k INT, v INT)
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+INSERT INTO t_fp_const SELECT generate_series, generate_series FROM TABLE(generate_series(1, 5000));
+-- a constant string argument over a multi-row chunk must not crash the BE
+SELECT count(encode_fingerprint_sha256(v, 'x')) FROM t_fp_const;
+-- a constant integer argument, and a constant in first position
+SELECT count(encode_fingerprint_sha256(v, 7)) FROM t_fp_const;
+SELECT count(encode_fingerprint_sha256('x', v)) FROM t_fp_const;
+-- several constants mixed with non-constants
+SELECT count(encode_fingerprint_sha256(v, k, 'x', 7)) FROM t_fp_const;
+-- The digest of a constant argument must equal the digest of the same value materialised,
+-- which is what reading index 0 rather than the row index restores. The cast matters: a bare
+-- literal 7 is not an INT, and the argument's type is part of the digest.
+SELECT count(*) FROM t_fp_const WHERE encode_fingerprint_sha256(v, CAST(k AS INT)) = encode_fingerprint_sha256(v, k);
+SELECT count(*) FROM t_fp_const WHERE k = 7 AND encode_fingerprint_sha256(v, CAST(7 AS INT)) = encode_fingerprint_sha256(v, k);
+-- every row still yields a 32-byte digest
+SELECT DISTINCT length(encode_fingerprint_sha256(v, 'x')) FROM t_fp_const;
+-- the existing only-null guard is unaffected
+SELECT count(encode_fingerprint_sha256(v, CAST(NULL AS INT))) FROM t_fp_const;
+-- BE must still be serving queries
+SELECT count(*) FROM t_fp_const;

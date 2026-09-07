@@ -19,6 +19,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
+#include "storage/full_sort_key_codec.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -325,6 +326,15 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
             } else {
                 if (reader->eof()) {
                     break;
+                }
+
+                // Spark push admits new rows without going through a MemTable, so the sort key
+                // guard has to run here too.
+                st = check_sort_key_size(schema, tablet_schema->sort_key_idxes(), *chunk, 0, chunk->num_rows());
+                if (!st.ok()) {
+                    LOG(WARNING) << "reject chunk with over-limit sort key"
+                                 << ". res=" << st << ", tablet=" << cur_tablet->full_name();
+                    return st;
                 }
 
                 st = rowset_writer->add_chunk(*chunk);

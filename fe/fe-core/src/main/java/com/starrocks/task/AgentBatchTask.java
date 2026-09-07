@@ -171,7 +171,35 @@ public class AgentBatchTask implements Runnable {
 
     @Override
     public void run() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+            // A demoting/non-leader node must not dispatch BE agent tasks. The AgentTaskQueue.addTask
+            // guard only covers enqueue/tracking, but many callers submit an already-built AgentBatchTask
+            // without addTask, and a lingering leader-session thread can reach here during the follower
+            // window. Dispatching now would send stale-session RPCs against BE using this node's outdated
+            // metadata (e.g. a force-DROP that deletes replica files the next leader still references).
+            // Skip it; the re-elected leader re-drives from durable state. NOTE this NARROWS the race
+            // window, it does not close it: force-DROP (BE deletes files outright, no trash) and
+            // CLEAR_TRANSACTION (drops unpublished rowsets) are NOT idempotent-safe, and the gap between
+            // this check and the RPC remains. Fully closing it needs a leader-generation check on the BE
+            // side (leaderGeneration exists FE-side but is not carried in TAgentTaskRequest yet).
+            LOG.warn("skip dispatching {} agent task(s): node is not an active leader (feType={}, demoting={})",
+                    getTaskNum(), globalStateMgr.getFeType(), globalStateMgr.isLeaderDemoting());
+            return;
+        }
         for (Long backendId : this.backendIdToTasks.keySet()) {
+            // Re-check on every backend: the pre-loop check above is a single snapshot, but this loop makes one
+            // submit_tasks RPC per backend. Demotion (beginLeaderDemotion) may begin after that snapshot, so
+            // revalidate before each send and stop dispatching the moment this node is no longer the active
+            // leader -- otherwise a demotion racing this loop keeps sending stale leader-session RPCs (including
+            // destructive drop/alter tasks) to BE during the follower window. A small check-to-RPC window
+            // remains (see the pre-loop comment: narrowed, not closed); the re-elected leader re-drives the
+            // re-drivable task types from durable state.
+            if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+                LOG.warn("stop dispatching remaining agent task(s): node is no longer an active leader "
+                        + "(feType={}, demoting={})", globalStateMgr.getFeType(), globalStateMgr.isLeaderDemoting());
+                return;
+            }
             try {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 if (RunMode.isSharedDataMode() && computeNode == null) {

@@ -218,7 +218,6 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
 
-    auto workgroup = context->fragment_context()->workgroup();
     auto build_side_spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(num_right_partitions);
 
     if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() &&
@@ -347,21 +346,6 @@ StatusOr<pipeline::OpFactories> HashJoinNode::decompose_to_pipeline(pipeline::Pi
         return _decompose_to_pipeline<HashJoinerFactory, HashJoinBuildOperatorFactory, HashJoinProbeOperatorFactory>(
                 context);
     }
-}
-
-bool HashJoinNode::can_generate_global_runtime_filter() const {
-    return std::any_of(_build_runtime_filters.begin(), _build_runtime_filters.end(),
-                       [](const RuntimeFilterBuildDescriptor* rf) { return rf->has_remote_targets(); });
-}
-
-void HashJoinNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
-    if (collector->empty()) return;
-    if (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN ||
-        _join_type == TJoinOp::RIGHT_SEMI_JOIN) {
-        ExecNode::push_down_join_runtime_filter(state, collector);
-        return;
-    }
-    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
 }
 
 TJoinDistributionMode::type HashJoinNode::distribution_mode() const {

@@ -163,7 +163,7 @@ SELECT /*+ SET_VAR
 
 ### 设置变量为用户属性
 
-您可以通过 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
+您可以通过 [ALTER USER](./sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
 
 示例：
 
@@ -332,6 +332,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **类型**: Int
 * **引入版本**: v3.4.0, v3.5.0
 
+### cbo_push_down_count_aggregate
+
+* **描述**: 控制 `count(*)`/`count(col)` 聚合是否参与 `PushDownAggregateRule` 的下推优化，与已经支持下推的 `sum`/`max`/`min`/`hll_union`/`bitmap_union`/`percentile_union` 一样。启用（默认）时，优化器可以将 `count` 下推到 `INNER`/`CROSS` Join 一侧（仅限左侧/child-0，因为跨 Join 的 count 本质是笛卡尔积，无法通过对两侧的部分结果求和还原）上更窄的、仅按 Join key 分组的聚合，然后通过已有的 `COUNT -> SUM` rollup 逻辑重建顶层聚合；是否真正对某个查询应用下推，仍然由 `cbo_push_down_aggregate_mode` 的代价启发式规则决定，与其他可下推函数一致。当 `col` 来自 `CASE WHEN`/`IF()` 分支时，`count(col)` 不会被下推，因为对于 `count` 来说，一个从未命中的分支必须归零为 `0`（而不是像 `sum` 那样归为 `NULL`）。禁用该变量可回退到之前 `count` 始终留在 Join 之上的行为。
+* **范围**: Session
+* **默认值**: `true`
+* **数据类型**: boolean
+
 ### cbo_use_correlated_predicate_estimate
 
 * **描述**: 用于控制优化器在估算跨多列的合取相等谓词的选择性时，是否应用考虑相关性的启发式方法。当启用（默认）时，估算器会对主多列统计或最具选择性的谓词之外的附加列的选择性应用指数衰减权重，从而减少后续谓词的乘法影响（权重：对于最多三个附加列分别为 0.5、0.25、0.125）。当禁用时，不应用衰减（decay factor = 1），估算器会对这些列使用完整选择性相乘（更强的独立性假设）。StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity 会检查此标志，以在多列统计路径和回退路径中选择衰减因子，从而影响 CBO 使用的基数估算。
@@ -395,6 +402,33 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。
 * 默认值：1024
 * 引入版本：v2.5
+
+### count_distinct_implementation
+
+* 描述：控制 `COUNT(DISTINCT expr)` 仅包含一个参数时所使用的函数实现。有效值（不区分大小写）：
+  * `default`：保留 `COUNT(DISTINCT expr)` 的默认实现。优化器会根据查询形式、统计信息和成本选择合适的聚合执行计划。
+  * `multi_count_distinct`：将 `COUNT(DISTINCT expr)` 的实现方式更改为 `multi_distinct_count`，以进行精确计数。对于低基数和中等基数列的计数，该实现可以减少一次 Shuffle 和去重阶段，从而提升查询速度。但是，该实现会将 distinct 值保存在 HashSet 中，因此对于高基数列进行去重时，可能导致过高的内存消耗，甚至引发 OOM。在通过具有代表性的负载进行验证之前，请勿全局设置此值。
+  * `ndv`：将 `COUNT(DISTINCT expr)` 的实现方式更改为 `ndv(expr)`。该函数使用 HyperLogLog，以较低的内存开销返回近似结果。
+* 默认值：`default`
+* 引入版本：v3.3.6、v3.4.0
+
+:::note[`multi_distinct_count` 的使用说明]
+`multi_distinct_count()` 返回精确结果。
+
+对于大多数查询，建议使用 `COUNT(DISTINCT expr)`。将 `count_distinct_implementation` 设置为 `default`，以允许优化器选择合适的聚合执行计划。
+
+对低基数和中等基数的列进行去重时，可以测试并使用 `multi_distinct_count()`。该函数使用两阶段聚合，可以减少一次 Shuffle 和去重阶段，从而提升性能。但是，在对高基数列进行去重时，其 HashSet 状态以及最终合并过程可能导致过高的内存消耗，甚至引发 OOM。
+
+如果希望针对单个 `COUNT(DISTINCT expr)` 测试此实现，而不是更改整个 Session 的设置，可以在查询 Hint 中设置 `count_distinct_implementation`：
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+通过 Hint 设置此值时，仅对包含单个参数的 `COUNT(DISTINCT)` 生效。对于 `COUNT(DISTINCT expr1, expr2)` 等多列去重表达式，该设置不会产生影响。
+:::
 
 ### custom_query_id (session)
 
@@ -621,7 +655,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_insert_strict
 
-* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
+* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 * 默认值：true
 
 ### max_unknown_string_meta_length (global)
@@ -647,21 +681,21 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_lake_prepared_physical_split_scan
 
-* 描述：是否为存算分离集群中的云原生表开启 prepared physical split scan。开启后，每个 Segment 只裁剪一次，并在同一 Tablet 的各 split 子任务间共享裁剪后的读取状态，可加速大 Tablet 或数据倾斜 Tablet 的扫描。该优化按 Scan 节点决定是否生效，且要求表为云原生表并且未开启 Query Cache。仅在存算分离集群中生效。
+* 描述：是否为存算分离集群中的云原生表开启 Prepared Physical Split Scan。开启后，每个 Segment 只裁剪一次，并在同一 Tablet 的各 Split 子任务间共享裁剪后的读取状态，可加速大 Tablet 或数据倾斜 Tablet 的扫描。该优化按 Scan 节点决定是否生效，且要求表为云原生表并且未开启 Query Cache。仅在存算分离集群中生效。
 * 默认值：false
 * 类型：Boolean
 * 引入版本：v4.2
 
 ### lake_tablet_internal_parallel_skew_split_ratio
 
-* 描述：数据倾斜阈值。在 prepared physical split scan 下，即使 scan range 数量已达到 pipeline DOP，仍可据此将单个超大 lake Tablet 拆分。当某个 Tablet 的行数超过本比值乘以每 driver 的理想份额（总行数除以有效 DOP）时，该 Tablet 被视为倾斜的长尾 Tablet 并被拆分。值越大，越需要更极端的倾斜才会拆分；值越小，越倾向于拆分。必须为正且有限的数值。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
+* 描述：数据倾斜阈值。在 Prepared Physical Split Scan 下，即使 Scan Range 数量已达到 Pipeline DOP，仍可据此将单个超大 Lake Tablet 拆分。当某个 Tablet 的行数超过本比值乘以每 Driver 的理想份额（总行数除以有效 DOP）时，该 Tablet 被视为倾斜的长尾 Tablet 并被拆分。值越大，越需要更极端的倾斜才会拆分；值越小，越倾向于拆分。必须为正且有限的数值。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
 * 默认值：1.5
 * 类型：Double
 * 引入版本：v4.2
 
 ### enable_lake_prepared_split_on_dup_table_scan
 
-* 描述：对于在同一查询中被两个及以上 Scan 算子扫描的云原生（lake）表（例如自连接，或被多次引用的表），是否允许对其使用 prepared physical split scan。默认值为 `false`，此时这类重复扫描回退为普通扫描，因为该优化按 Scan 复用的 prepared 读取状态在同一张表的多个兄弟 Scan 之间共享是不安全的。设为 `true` 可让这些扫描重新启用该优化。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
+* 描述：对于在同一查询中被两个及以上 Scan 算子扫描的云原生（lake）表（例如自连接，或被多次引用的表），是否允许对其使用 Prepared Physical Split Scan。默认值为 `false`，此时这类重复扫描回退为普通扫描，因为该优化按 Scan 复用的 Prepared 读取状态在同一张表的多个兄弟 Scan 之间共享是不安全的。设为 `true` 可让这些扫描重新启用该优化。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
 * 默认值：false
 * 类型：Boolean
 * 引入版本：v4.2
@@ -890,7 +924,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_scan_datacache
 
-* 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
+* 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
 * 默认值：true
 * 引入版本：v2.5
 
@@ -1214,6 +1248,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 单位：Byte
 * 类型：Int
 
+### max_array_length
+
+* **作用域**: Session
+* **描述**: 数组函数生成的数组中最大的元素数量。当某个函数生成的数组超过该限制时，查询会直接失败，而不会返回超大数组。设置为 `0` 或负数表示不限制。该限制适用于所有生成数组的函数，但目前仅 [array_agg](sql-functions/array-functions/array_agg.md) 会校验该限制。
+* **默认值**: 0
+* **数据类型**: Long
+* **引入版本**: v4.2
+
 ### max_pipeline_dop
 
 * **范围**: Session
@@ -1228,13 +1270,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### max_pushdown_conditions_per_column
 
-* 描述：该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_pushdown_conditions_per_column` 的说明。
+* 描述：该变量的具体含义请参阅 BE 配置项中 `max_pushdown_conditions_per_column` 的说明。
 * 默认值：`-1`，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 * 类型：Int
 
 ### max_scan_key_num
 
-* 描述：该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_scan_key_num` 的说明。
+* 描述：该变量的具体含义请参阅 BE 配置项中 `max_scan_key_num` 的说明。
 * 默认值：`-1`，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### metadata_collect_query_timeout
@@ -1279,7 +1321,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### one_tablet_opt_max_tablet_rows
 
-* 描述：按 tablet 大小控制单 tablet 优化。当查询被裁剪到单个 tablet 时，StarRocks 可将聚合合并为一阶段并在单个节点上汇聚结果，从而跳过 shuffle。这对小 tablet 很高效，但当 tablet 很大时会把整个查询串行化到单个节点上。如果所选单个 tablet 的行数超过该阈值，则禁用该优化，改用常规的分布式（shuffle）计划。设置为 `-1` 可禁用该门控，无论 tablet 大小都始终应用单 tablet 优化。
+* 描述：按 Tablet 大小控制单 Tablet 优化。当查询被裁剪到单个 Tablet 时，StarRocks 可将聚合合并为一阶段并在单个节点上汇聚结果，从而跳过 Shuffle。这对小 Tablet 很高效，但当 Tablet 很大时会把整个查询串行化到单个节点上。如果所选单个 Tablet 的行数超过该阈值，则禁用该优化，改用常规的分布式（Shuffle）计划。设置为 `-1` 可禁用该门控，无论 Tablet 大小都始终应用单 Tablet 优化。
 * 默认值：10000000
 * 类型：Long
 * 引入版本：v4.2
@@ -1295,6 +1337,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
 * 引入版本：v3.1.10
+
+### paimon_reader_mode
+
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
+* 默认值：AUTO
+* 类型：String
+* 引入版本：v4.2
 
 ### parallel_exchange_instance_num
 
@@ -1365,7 +1414,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### plan_mode
 
-* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg.md#附录-a周期性元数据刷新策略)。有效值：
   * `auto`：系统自动选择方案。
   * `local`：由 FE 在本地解析 Iceberg manifest 文件，并在解析过程中将 scan range 增量下发给 BE，无需等待所有 manifest 解析完成，可降低内存占用和首包延迟。
   * `distributed`：将 manifest 解析任务分发给多个 BE 并行处理，但 FE 需等待所有 BE 返回结果后才能下发 scan range，对于 manifest 文件较多的大表，可能导致较高内存占用和较长等待时间。仅在 FE CPU 成为瓶颈且 manifest 数量极多时建议使用。

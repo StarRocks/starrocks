@@ -224,6 +224,19 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
+    RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_init_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_searcher_init_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_miss_counter = nullptr;
+    RuntimeProfile::Counter* _vector_search_timer = nullptr;
+    RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
 
     // Gin filter Statistics
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
@@ -257,6 +270,19 @@ private:
     RuntimeProfile::Counter* _lake_seed_io_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_io_count_counter = nullptr;
     RuntimeProfile::Counter* _lake_seed_segment_init_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_load_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_cache_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_file_open_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_init_index_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_searcher_init_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_cache_miss_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_search_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_process_vector_distance_and_id_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_filtered_counter = nullptr;
     RuntimeProfile::Counter* _lake_seed_zonemap_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_zonemap_filtered_counter = nullptr;
     RuntimeProfile::Counter* _lake_seed_bf_timer = nullptr;

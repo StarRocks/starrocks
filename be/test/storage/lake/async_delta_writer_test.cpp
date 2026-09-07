@@ -580,6 +580,44 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open_after_close) {
     ASSERT_EQ("AsyncDeltaWriter has been closed", st.message());
 }
 
+// A writer closed after being cancelled must report the cancel reason instead of the generic
+// "closed" message: the reason carries the root cause that the load coordinator has to surface.
+TEST_F(LakeAsyncDeltaWriterTest, test_open_and_write_after_cancel_and_close) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    delta_writer->cancel(Status::Cancelled("Division by zero"));
+    delta_writer->close();
+
+    auto st = delta_writer->open();
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    ASSERT_TRUE(st.message().find("Division by zero") != std::string::npos) << st;
+
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& write_st) {
+        ASSERT_TRUE(write_st.is_cancelled()) << write_st;
+        ASSERT_TRUE(write_st.message().find("Division by zero") != std::string::npos) << write_st;
+        write_latch.count_down();
+    });
+    write_latch.wait();
+}
+
 TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
     // Prepare data for writing
     static const int kChunkSize = 128;

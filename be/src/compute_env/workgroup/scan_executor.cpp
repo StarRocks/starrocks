@@ -14,6 +14,8 @@
 
 #include "compute_env/workgroup/scan_executor.h"
 
+#include <algorithm>
+
 #include "common/thread/thread.h"
 #include "compute_env/workgroup/scan_task_queue.h"
 #include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
@@ -23,12 +25,34 @@ namespace starrocks::workgroup {
 
 ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
                            pipeline::ScanExecutorMetrics* metrics)
-        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)), _metrics(metrics) {}
+        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)), _metrics(metrics) {
+    _metrics->thread_pool.monitor(this, [this] {
+        // The target follows configuration changes right away, whereas the pool was sized once at
+        // startup; workers submitted beyond that size only queue up and never become live threads,
+        // so the target is capped by it.
+        const int32_t expected = std::min(_num_threads_setter.expect_num(), _thread_pool->max_threads());
+        return pipeline::ScanThreadPoolMetrics::Sample{static_cast<uint64_t>(std::max(0, expected)),
+                                                       static_cast<uint64_t>(std::max(0, _thread_pool->num_threads()))};
+    });
+}
+
+ScanExecutor::~ScanExecutor() {
+    // The executors of a resource group with exclusive ones are destroyed when the group goes
+    // away, while the metrics instance is process-wide, so the pool must not be left behind in it.
+    _stop_monitoring();
+}
 
 void ScanExecutor::close() {
     _task_queue->close();
     _thread_pool->shutdown();
-    _metrics = nullptr;
+    _stop_monitoring();
+}
+
+void ScanExecutor::_stop_monitoring() {
+    if (_metrics != nullptr) {
+        _metrics->thread_pool.unmonitor(this);
+        _metrics = nullptr;
+    }
 }
 
 void ScanExecutor::initialize(int num_threads) {

@@ -105,27 +105,23 @@ public class HistogramUtils {
         JsonObject root = new JsonObject();
 
         JsonArray bucketsArray = new JsonArray();
-        if (histogram.getBuckets() != null) {
-            for (Bucket bucket : histogram.getBuckets()) {
-                JsonArray bucketArray = new JsonArray();
-                bucketArray.add(Double.toString(bucket.getLower()));
-                bucketArray.add(Double.toString(bucket.getUpper()));
-                bucketArray.add(Long.toString(bucket.getCount()));
-                bucketArray.add(Long.toString(bucket.getUpperRepeats()));
-                bucket.getDistinctCount().ifPresent(distinctCount -> bucketArray.add(Long.toString(distinctCount)));
-                bucketsArray.add(bucketArray);
-            }
+        for (Bucket bucket : histogram.getBuckets()) {
+            JsonArray bucketArray = new JsonArray();
+            bucketArray.add(Double.toString(bucket.getLower()));
+            bucketArray.add(Double.toString(bucket.getUpper()));
+            bucketArray.add(Long.toString(bucket.getCount()));
+            bucketArray.add(Long.toString(bucket.getUpperRepeats()));
+            bucket.getDistinctCount().ifPresent(distinctCount -> bucketArray.add(Long.toString(distinctCount)));
+            bucketsArray.add(bucketArray);
         }
         root.add("buckets", bucketsArray);
 
         JsonArray mcvArray = new JsonArray();
-        if (histogram.getMCV() != null) {
-            for (Map.Entry<String, Long> entry : histogram.getMCV().entrySet()) {
-                JsonArray mcvEntry = new JsonArray();
-                mcvEntry.add(entry.getKey());
-                mcvEntry.add(Long.toString(entry.getValue()));
-                mcvArray.add(mcvEntry);
-            }
+        for (Map.Entry<String, Long> entry : histogram.getMCV().entrySet()) {
+            JsonArray mcvEntry = new JsonArray();
+            mcvEntry.add(entry.getKey());
+            mcvEntry.add(Long.toString(entry.getValue()));
+            mcvArray.add(mcvEntry);
         }
         root.add("mcv", mcvArray);
 

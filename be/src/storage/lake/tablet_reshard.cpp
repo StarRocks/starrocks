@@ -19,6 +19,7 @@
 
 #include <unordered_map>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "gutil/strings/join.h"
@@ -81,10 +82,22 @@ std::ostream& operator<<(std::ostream& out, const std::vector<int64_t>& tablet_i
     return out;
 }
 
+// The old tablets' |base_version| metadata is read once here and superseded by |new_version|, so it
+// stays out of the metacache -- except the partition-shared version-1 object, which TabletManager
+// caches on its own because every tablet of the partition reads it. |order| is FE's hint; see
+// publish_resharding_tablet().
+static StatusOr<TabletMetadataPtr> get_old_tablet_base_metadata(TabletManager* tablet_manager, int64_t tablet_id,
+                                                                int64_t base_version, InitialMetadataOrder order) {
+    return tablet_manager->get_tablet_metadata(tablet_id, base_version,
+                                               CacheOptions{.fill_meta_cache = false, .fill_data_cache = false},
+                                               /*expected_gtid=*/0, /*fs=*/nullptr, order);
+}
+
 Status handle_splitting_tablet(TabletManager* tablet_manager, const SplittingTabletInfoPB& splitting_tablet,
                                int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
-                               std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
+                               std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
+                               InitialMetadataOrder base_version_order) {
     {
         auto old_tablet_new_metadata_location =
                 tablet_manager->tablet_metadata_location(splitting_tablet.old_tablet_id(), new_version);
@@ -114,8 +127,8 @@ Status handle_splitting_tablet(TabletManager* tablet_manager, const SplittingTab
 CONTINUE_HANDLE_SPLITTING_TABLET:
     g_tablet_reshard_split_total << 1;
 
-    auto old_tablet_old_metadata_or =
-            tablet_manager->get_tablet_metadata(splitting_tablet.old_tablet_id(), base_version, false);
+    auto old_tablet_old_metadata_or = get_old_tablet_base_metadata(tablet_manager, splitting_tablet.old_tablet_id(),
+                                                                   base_version, base_version_order);
     if (old_tablet_old_metadata_or.status().is_not_found()) {
         auto old_tablet_new_metadata_or =
                 tablet_manager->get_tablet_metadata(splitting_tablet.old_tablet_id(), new_version, txn_info.gtid());
@@ -175,7 +188,8 @@ CONTINUE_HANDLE_SPLITTING_TABLET:
 Status handle_merging_tablet(TabletManager* tablet_manager, const MergingTabletInfoPB& merging_tablet,
                              int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                              std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
-                             std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
+                             std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
+                             InitialMetadataOrder base_version_order) {
     {
         for (auto old_tablet_id : merging_tablet.old_tablet_ids()) {
             auto old_tablet_new_metadata_location =
@@ -208,7 +222,8 @@ CONTINUE_HANDLE_MERGING_TABLET:
     std::vector<TabletMetadataPtr> old_tablet_metadatas;
     old_tablet_metadatas.reserve(merging_tablet.old_tablet_ids_size());
     for (auto old_tablet_id : merging_tablet.old_tablet_ids()) {
-        auto old_tablet_old_metadata_or = tablet_manager->get_tablet_metadata(old_tablet_id, base_version, false);
+        auto old_tablet_old_metadata_or =
+                get_old_tablet_base_metadata(tablet_manager, old_tablet_id, base_version, base_version_order);
         if (old_tablet_old_metadata_or.status().is_not_found()) {
             new_metadatas.clear();
             for (auto retry_tablet_id : merging_tablet.old_tablet_ids()) {
@@ -264,9 +279,11 @@ CONTINUE_HANDLE_MERGING_TABLET:
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(tablet_reshard_after_identical_pk_flush);
 Status handle_identical_tablet(TabletManager* tablet_manager, const IdenticalTabletInfoPB& identical_tablet,
                                int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
-                               std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas) {
+                               std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
+                               InitialMetadataOrder base_version_order) {
     {
         auto old_tablet_new_metadata_location =
                 tablet_manager->tablet_metadata_location(identical_tablet.old_tablet_id(), new_version);
@@ -294,8 +311,8 @@ Status handle_identical_tablet(TabletManager* tablet_manager, const IdenticalTab
 CONTINUE_HANDLE_IDENTICAL_TABLET:
     g_tablet_reshard_identical_total << 1;
 
-    auto old_tablet_old_metadata_or =
-            tablet_manager->get_tablet_metadata(identical_tablet.old_tablet_id(), base_version, false);
+    auto old_tablet_old_metadata_or = get_old_tablet_base_metadata(tablet_manager, identical_tablet.old_tablet_id(),
+                                                                   base_version, base_version_order);
     if (old_tablet_old_metadata_or.status().is_not_found()) {
         auto old_tablet_new_metadata_or =
                 tablet_manager->get_tablet_metadata(identical_tablet.old_tablet_id(), new_version, txn_info.gtid());
@@ -336,6 +353,14 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
         return flushed_old_metadata_or.status();
     }
     const auto& old_tablet_old_metadata = flushed_old_metadata_or.value();
+
+    // The identical path's only file write is the PK-index flush above, so this is its only
+    // orphan-file window: the flushed sstables exist but no metadata references them yet. Armed
+    // WITH PAUSE, a thread parks here holding no data, index or metacache mutex -- the flush released
+    // its sharded PK-index lock before returning -- and the only lake serialization state it still
+    // holds is this reshard's publish token. (libfiu holds its own read lock across the callback; see
+    // fail_point.h.) Armed ENABLE, the publish fails and the frontend retries.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_reshard_after_identical_pk_flush);
 
     auto old_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_old_metadata);
     old_tablet_new_metadata->set_version(new_version);
@@ -533,11 +558,13 @@ StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetada
     return new_txn_log;
 }
 
+DEFINE_FAIL_POINT(tablet_reshard_between_metadata_writes);
 Status publish_resharding_tablet(TabletManager* tablet_manager, const ReshardingTabletInfoPB& resharding_tablet,
                                  int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                  bool skip_write_tablet_metadata,
                                  std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
-                                 std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
+                                 std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
+                                 InitialMetadataOrder base_version_order) {
     g_tablet_reshard_total << 1;
     auto reshard_start_ts = butil::gettimeofday_us();
 
@@ -561,14 +588,16 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
 
     auto handle_status = Status::OK();
     if (resharding_tablet.has_splitting_tablet_info()) {
-        handle_status = handle_splitting_tablet(tablet_manager, resharding_tablet.splitting_tablet_info(), base_version,
-                                                new_version, txn_info, tablet_metadatas, tablet_ranges);
+        handle_status =
+                handle_splitting_tablet(tablet_manager, resharding_tablet.splitting_tablet_info(), base_version,
+                                        new_version, txn_info, tablet_metadatas, tablet_ranges, base_version_order);
     } else if (resharding_tablet.has_merging_tablet_info()) {
-        handle_status = handle_merging_tablet(tablet_manager, resharding_tablet.merging_tablet_info(), base_version,
-                                              new_version, txn_info, tablet_metadatas, tablet_ranges);
+        handle_status =
+                handle_merging_tablet(tablet_manager, resharding_tablet.merging_tablet_info(), base_version,
+                                      new_version, txn_info, tablet_metadatas, tablet_ranges, base_version_order);
     } else if (resharding_tablet.has_identical_tablet_info()) {
         handle_status = handle_identical_tablet(tablet_manager, resharding_tablet.identical_tablet_info(), base_version,
-                                                new_version, txn_info, tablet_metadatas);
+                                                new_version, txn_info, tablet_metadatas, base_version_order);
     }
 
     if (!handle_status.ok()) {
@@ -589,9 +618,18 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                 g_tablet_reshard_failed << 1;
                 return st;
             }
-            tablet_manager->metacache()->cache_aggregation_partition(
-                    tablet_manager->tablet_metadata_root_location(tablet_id), true);
+            tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
         }
+        // Deliberately at the END of the body: one tablet is now switched to the new version and the
+        // rest are not, which is the partial-switch state a reshard has to recover from. At the top of
+        // the loop this would instead stop before any write, and a released pause would then let the
+        // whole loop finish.
+        //
+        // Two caveats for a consumer. |tablet_metadatas| is an unordered_map, so WHICH tablet lands
+        // first is unspecified -- assert "some but not all", never a specific id. And under aggregate
+        // publish (skip_write_tablet_metadata) the loop only populates the metacache, so the partial
+        // state is a partial CACHE population rather than a durable one.
+        FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_reshard_between_metadata_writes);
     }
 
     g_tablet_reshard_latency << (butil::gettimeofday_us() - reshard_start_ts);

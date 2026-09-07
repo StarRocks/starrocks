@@ -3446,6 +3446,20 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "verbose plan of sql (%s) assert expect %s is not found in plan: %s" % (query, expect, plan_string),
             )
 
+    def assert_explain_verbose_not_contains(self, query, *expects):
+        """
+        assert explain verbose result does NOT contain expect string
+        """
+        sql = "explain verbose %s" % (query)
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
+        plan_string = "\n".join(item[0] for item in res["result"])
+        for expect in expects:
+            tools.assert_true(
+                plan_string.find(expect) == -1,
+                "verbose plan of sql (%s) assert expect %s is found in plan: %s" % (query, expect, plan_string),
+            )
+
     def assert_explain_costs_contains(self, query, *expects):
         """
         assert explain costs result contains expect string

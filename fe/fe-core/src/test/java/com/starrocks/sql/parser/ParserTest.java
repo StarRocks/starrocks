@@ -965,4 +965,34 @@ class ParserTest {
                     exception.getMessage());
         }
     }
+
+    @Test
+    public void testPartitionByDateArithmeticFunction() {
+        // date_add and its siblings are rewritten into a TimestampArithmeticExpr while being parsed,
+        // so the partition paths that cast a function call to FunctionCallExpr used to leak a
+        // ClassCastException to the client instead of reporting an unsupported partition expression.
+        List<String> sqls = Lists.newArrayList(
+                // CREATE TABLE, single expression
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY date_add(d, 1)",
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY adddate(d, 1)",
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY date_sub(d, 1)",
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY subdate(d, 1)",
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY days_sub(d, 1)",
+                // CREATE TABLE, expression inside a multi-column partition list
+                "CREATE TABLE t(id bigint, d datetime, e datetime) PARTITION BY (e, date_add(d, 1))",
+                // CREATE TABLE AS SELECT reaches the same casts through visitPartitionDesc
+                "CREATE TABLE t PARTITION BY date_add(d, 1) AS SELECT id, d FROM src",
+                "CREATE TABLE t PARTITION BY (e, date_add(d, 1)) AS SELECT id, d, e FROM src");
+
+        for (String sql : sqls) {
+            ParsingException exception = Assertions.assertThrows(ParsingException.class,
+                    () -> SqlParser.parse(sql, new SessionVariable()), sql);
+            Assertions.assertTrue(exception.getMessage().contains("PARTITION BY"),
+                    sql + " => " + exception.getMessage());
+        }
+
+        // a genuine function call of the same shape still parses
+        SqlParser.parse("CREATE TABLE t(id bigint, d datetime) PARTITION BY days_add(d, 1)", new SessionVariable());
+        SqlParser.parse("CREATE TABLE t(id bigint, d date) PARTITION BY years_add(d, 1)", new SessionVariable());
+    }
 }

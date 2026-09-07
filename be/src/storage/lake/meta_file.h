@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -61,6 +63,27 @@ uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 int64_t del_op_offset_or_unset(const TxnLogPB_OpWrite& op_write, int del_id);
 
 uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta);
+
+// Verify a del file's just-read content against the masked CRC32C recorded in its metadata, which is
+// carried identically by the txn log's FileMetaPB and the persisted DelfileWithRowsetId. `content` is
+// the plaintext buffer returned by the read (already decrypted), matching what the writer checksummed.
+//
+// A del file is immutable once written, so a recorded checksum always describes the content read back
+// here and a mismatch is genuine corruption -> Status::Corruption. Verification is skipped when the
+// checksum is absent -- a del file written before the field existed, or by a producer that cannot
+// compute it (the replication transcode path) -- and when lake_enable_del_file_crc_check is off.
+Status verify_del_file_crc32c(const FileMetaPB& del_meta, int64_t tablet_id, std::string_view content);
+Status verify_del_file_crc32c(const DelfileWithRowsetId& del_meta, int64_t tablet_id, std::string_view content);
+
+// Read a del file's whole content through |rf| and verify it with verify_del_file_crc32c(). On a
+// checksum mismatch, drop the file's local data cache and read once more before failing: a del file is
+// immutable, so the bytes are most likely corrupt in the local cache rather than in remote storage, and
+// the retry reads through to the remote object. Falls back to reporting the original Corruption when
+// there is no cache to drop (non-shared-data build, or lake_clear_corrupted_cache_data turned off).
+// Segment pages and persistent-index sstables recover from cache corruption the same way.
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const FileMetaPB& del_meta, int64_t tablet_id);
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const DelfileWithRowsetId& del_meta,
+                                               int64_t tablet_id);
 
 class MetaFileBuilder {
 public:
@@ -148,15 +171,13 @@ private:
     // collect del files which are above cloud native index's rebuild point
     void _collect_del_files_above_rebuild_point(RowsetMetadataPB* rowset,
                                                 std::vector<DelfileWithRowsetId>* collect_del_files);
-    // clean sstable meta after alter type
-    void _sstable_meta_clean_after_alter_type();
 
 private:
     struct PendingRowsetData {
         RowsetMetadataPB rowset_pb;
         std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
-        // Per-del metadata: name + shared + encryption_meta carried together so the
+        // Per-del metadata: name + shared + encryption_meta + crc32c carried together so the
         // parallel-array invariant between filename / shared / encryption can't drift.
         // FileMetaPB.size is intentionally unused here (DelfileWithRowsetId has no size).
         std::vector<FileMetaPB> dels;
@@ -183,25 +204,25 @@ private:
     PendingRowsetData _pending_rowset_data;
 };
 
-struct DelvecFileInfo {
+// One byte-range page from a plaintext delvec object.  The page declaration is
+// kept with its file declaration because a compacted MERGE output copies only
+// the live page ranges, rather than whole source objects.
+struct DelvecPageInfo {
     int64_t tablet_id;
     FileMetaPB delvec_file;
+    DelvecPagePB page;
 };
 
-Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
-                          int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
-                          std::vector<uint64_t>* offsets, const Slice& extra_data = {},
-                          uint64_t* extra_data_offset = nullptr);
+// A target page is either copied byte-for-byte from an existing plaintext
+// source page, or is the already serialized result of a delvec union.
+struct DelvecOutputPage {
+    std::optional<DelvecPageInfo> raw_page;
+    std::string serialized_page;
+};
 
-// Write a brand-new delvec file containing only |buffer|. Used by tablet merge
-// when the only contributor is a synthesized gap delvec and there are no
-// existing source delvec files to concatenate with — sidesteps
-// merge_delvec_files's DCHECK on (empty old_files + non-empty extra_data) and
-// avoids generating an empty file by mistake. Buffer is written at offset 0;
-// the resulting FileMetaPB is shared=false, encryption is per-call when
-// |buffer| is non-empty.
-Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tablet_id, int64_t txn_id,
-                                     const Slice& buffer, FileMetaPB* new_delvec_file);
+Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector<DelvecOutputPage>& pages,
+                                    int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
+                                    std::vector<uint64_t>* page_offsets);
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
                    bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);

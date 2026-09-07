@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
@@ -24,10 +25,14 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,13 +42,41 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.persist.gson.GsonUtils.GSON;
 import static com.starrocks.statistic.StatsConstants.INIT_SAMPLE_STATS_JOB;
 
 public class BasicStatsMetaTest extends PlanTestBase {
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        starRocksAssert.withTable("CREATE TABLE `stats_health_parts` (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `dt` date NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY RANGE(`dt`) (\n" +
+                "  PARTITION p1 VALUES LESS THAN (\"2024-02-01\"),\n" +
+                "  PARTITION p2 VALUES LESS THAN (\"2024-03-01\"),\n" +
+                "  PARTITION p3 VALUES LESS THAN (\"2024-04-01\"),\n" +
+                "  PARTITION p4 VALUES LESS THAN (\"2024-05-01\"),\n" +
+                "  PARTITION p5 VALUES LESS THAN (\"2024-06-01\"),\n" +
+                "  PARTITION p6 VALUES LESS THAN (\"2024-07-01\"),\n" +
+                "  PARTITION p7 VALUES LESS THAN (\"2024-08-01\"),\n" +
+                "  PARTITION p8 VALUES LESS THAN (\"2024-09-01\"),\n" +
+                "  PARTITION p9 VALUES LESS THAN (\"2024-10-01\"),\n" +
+                "  PARTITION p10 VALUES LESS THAN (\"2024-11-01\"),\n" +
+                "  PARTITION p11 VALUES LESS THAN (\"2024-12-01\"),\n" +
+                "  PARTITION p12 VALUES LESS THAN (\"2025-01-01\")\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+    }
 
     @BeforeEach
     public void before() {
@@ -99,6 +132,49 @@ public class BasicStatsMetaTest extends PlanTestBase {
             basicStatsMeta.setTotalRows(10000L);
             Assertions.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
         }
+    }
+
+    @Test
+    public void testHealthyWithManyStalePartitions() {
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(new ConnectContext(), "default_catalog", "test");
+        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), "default_catalog", "test", "stats_health_parts");
+        List<Partition> partitions = Lists.newArrayList(tbl.getPartitions());
+
+        new MockUp<Partition>() {
+            @Mock
+            public boolean hasData() {
+                return true;
+            }
+
+            @Mock
+            public long getRowCount() {
+                return 100000L;
+            }
+        };
+
+        Map<Long, Optional<Long>> tableStatistics = Maps.newHashMap();
+        for (Partition partition : partitions) {
+            tableStatistics.put(partition.getId(), Optional.empty());
+        }
+        tableStatistics.put(partitions.get(0).getId(), Optional.of(100000L));
+
+        StatisticStorage storage = GlobalStateMgr.getCurrentState().getStatisticStorage();
+        new Expectations(storage) {
+            {
+                storage.getTableStatistics(tbl.getId(), (Collection<Partition>) any);
+                result = tableStatistics;
+            }
+        };
+
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 1200000);
+        double healthy = basicStatsMeta.getHealthy();
+        Assertions.assertTrue(healthy < 0.5,
+                "health must be low when most rows sit in stale partitions, but was " + healthy);
+        Assertions.assertEquals(0.08, healthy, 0.01);
     }
 
     @Test

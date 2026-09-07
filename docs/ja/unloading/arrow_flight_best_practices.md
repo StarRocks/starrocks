@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocksでArrow Flight SQLを使用して最速の大規模結果セット読み取りを実現するための、ベストプラクティスとクライアント側のコードパターン。"
 keywords: ['arrow flight sql', 'performance', 'best practices', 'optimization', 'parquet', 'jdbc']

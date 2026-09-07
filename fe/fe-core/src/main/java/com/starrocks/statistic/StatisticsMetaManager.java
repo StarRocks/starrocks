@@ -33,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -65,6 +66,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTI
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.PARTITION_ACCESS_TIME_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
@@ -146,6 +148,10 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private static final List<String> MULTI_COLUMN_STATISTICS_KEY_COLUMNS = ImmutableList.of(
             "table_id", "column_ids"
+    );
+
+    private static final List<String> PARTITION_ACCESS_TIME_KEY_COLUMNS = ImmutableList.of(
+            "db_id", "table_id", "partition_id"
     );
 
     private boolean createSampleStatisticsTable(ConnectContext context) {
@@ -432,6 +438,43 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return checkTableExist(QUERY_HISTORY_TABLE_NAME);
     }
 
+    private boolean createPartitionAccessTimeTable(ConnectContext context) {
+        LOG.info("create {} table start", PARTITION_ACCESS_TIME_TABLE_NAME);
+        // Aggregate table with last_access_time_ms MAX-aggregated: the periodic flush is a blind INSERT, so
+        // letting the storage engine keep the larger value on write makes the persisted timestamp monotonic --
+        // a late/stale batch from a rejoining FE can never move it backwards. Works in both run modes.
+        KeysType keysType = KeysType.AGG_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+        try {
+            List<ColumnDef> columns = ImmutableList.of(
+                    new ColumnDef("db_id", new TypeDef(BIGINT)),
+                    new ColumnDef("table_id", new TypeDef(BIGINT)),
+                    new ColumnDef("partition_id", new TypeDef(BIGINT)),
+                    new ColumnDef("last_access_time_ms", new TypeDef(BIGINT), false, AggregateType.MAX, null,
+                            false, ColumnDef.DefaultValueDef.NOT_SET, "")
+            );
+
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName =
+                    QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, PARTITION_ACCESS_TIME_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableRef, columns, EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, PARTITION_ACCESS_TIME_KEY_COLUMNS), null,
+                    new HashDistributionDesc(10, PARTITION_ACCESS_TIME_KEY_COLUMNS),
+                    properties, null, "");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create {} table", PARTITION_ACCESS_TIME_TABLE_NAME, e);
+            return false;
+        }
+        LOG.info("create {} table done", PARTITION_ACCESS_TIME_TABLE_NAME);
+        return checkTableExist(PARTITION_ACCESS_TIME_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -446,16 +489,15 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
-    /**
-     * Sleep for {@code millis} ms. Re-throws {@link InterruptedException} so the caller can stop
-     * the current leader-session cycle promptly. Callers running inside {@link #runAfterLeaseValid}
-     * must propagate the exception (or otherwise return) instead of swallowing it, so that
-     * {@link LeaderDaemon#stopGracefully(long)} can drain the worker on demotion. The interrupt
-     * flag is intentionally cleared by {@link Thread#sleep}; we let the exception itself signal
-     * stop.
-     */
     private void trySleep(long millis) throws InterruptedException {
-        Thread.sleep(millis);
+        long deadline = System.currentTimeMillis() + millis;
+        while (!isStopRequested()) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                return;
+            }
+            Thread.sleep(Math.min(remaining, 100L));
+        }
     }
 
     private boolean createTable(String tableName) {
@@ -477,6 +519,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 return createSPMBaselinesTable(context);
             } else if (QUERY_HISTORY_TABLE_NAME.equals(tableName)) {
                 return createQueryHistoryTable(context);
+            } else if (PARTITION_ACCESS_TIME_TABLE_NAME.equals(tableName)) {
+                return createPartitionAccessTimeTable(context);
             } else {
                 throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
             }
@@ -522,7 +566,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                     }
 
                     while (table.getColumn(columnName) == null) {
-                        if (isStopped()) {
+                        if (isStopRequested()) {
                             return false;
                         }
                         // `alter table` may be sync in the shared-nothing cluster. So we need to check if job is done.
@@ -553,21 +597,21 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     private void refreshStatisticsTable(String tableName) throws InterruptedException {
-        while (!isStopped() && !checkTableExist(tableName)) {
+        while (!isStopRequested() && !checkTableExist(tableName)) {
             if (createTable(tableName)) {
                 break;
             }
             LOG.warn("create statistics table " + tableName + " failed");
             trySleep(10000);
         }
-        if (isStopped()) {
+        if (isStopRequested()) {
             return;
         }
         if (checkTableExist(tableName)) {
             StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName);
         }
 
-        while (!isStopped() && !checkTableCompatible(tableName)) {
+        while (!isStopRequested() && !checkTableCompatible(tableName)) {
             if (alterTable(tableName)) {
                 break;
             }
@@ -580,13 +624,13 @@ public class StatisticsMetaManager extends LeaderDaemon {
     protected void runAfterLeaseValid() throws InterruptedException {
         // To make UT pass, some UT will create database and table
         trySleep(Config.statistic_manager_sleep_time_sec * 1000);
-        while (!isStopped() && !checkDatabaseExist()) {
+        while (!isStopRequested() && !checkDatabaseExist()) {
             if (createDatabase()) {
                 break;
             }
             trySleep(10000);
         }
-        if (isStopped()) {
+        if (isStopRequested()) {
             return;
         }
 
@@ -598,7 +642,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
         refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
-        if (isStopped()) {
+        refreshStatisticsTable(PARTITION_ACCESS_TIME_TABLE_NAME);
+        if (isStopRequested()) {
             return;
         }
 

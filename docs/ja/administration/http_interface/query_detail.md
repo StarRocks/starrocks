@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "Query detail API は FE メモリにキャッシュされている最近実行されたクエリの詳細情報を返します。"
 ---

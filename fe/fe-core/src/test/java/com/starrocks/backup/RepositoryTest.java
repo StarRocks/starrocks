@@ -38,10 +38,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
+import com.starrocks.sql.ast.ShowSnapshotStmt;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -328,12 +330,146 @@ public class RepositoryTest {
         String snapshotName = "";
         String timestamp = "";
         try {
-            List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp, null);
+            List<List<String>> infos =
+                    repo.getSnapshotInfos(snapshotName, timestamp, null, new SnapshotRetentionCache());
             Assertions.assertEquals(2, infos.size());
 
         } catch (SemanticException e) {
             e.printStackTrace();
             Assertions.fail();
         }
+    }
+
+    private static final String MD5 = "12345678123456781234567812345678";
+    private static final String TS = "2026-01-01-10-00-00-000";
+
+    /** Stubs the storage listing with whatever {@code files} the test wants under any path. */
+    private void expectList(Status status, RemoteFile... files) {
+        List<RemoteFile> listed = Lists.newArrayList(files);
+        new Expectations() {
+            {
+                storage.list(anyString, (List<RemoteFile>) any);
+                minTimes = 0;
+                result = new Delegate<Status>() {
+                    public Status list(String remotePath, List<RemoteFile> result) {
+                        result.addAll(listed);
+                        return status;
+                    }
+                };
+            }
+        };
+    }
+
+    @Test
+    public void testFindJobInfoFileWhenTheListingFails() {
+        expectList(new Status(Status.ErrCode.COMMON_ERROR, "broker is down"));
+        repo = new Repository(10000, "repo", false, location, storage);
+
+        Assertions.assertNull(repo.findJobInfoFile("snap"));
+        Assertions.assertNull(repo.getSnapshotTimestamp("snap"));
+    }
+
+    @Test
+    public void testFindJobInfoFileSkipsAnUnfinishedUpload() {
+        // What an interrupted upload leaves behind, followed by the file of a finished backup.
+        expectList(Status.OK,
+                new RemoteFile(Repository.PREFIX_JOB_INFO + TS + ".part", true, 100),
+                new RemoteFile(Repository.PREFIX_JOB_INFO + TS + "." + MD5, true, 100));
+        repo = new Repository(10000, "repo", false, location, storage);
+
+        RemoteFile jobInfoFile = repo.findJobInfoFile("snap");
+        Assertions.assertNotNull(jobInfoFile);
+        Assertions.assertEquals(Repository.PREFIX_JOB_INFO + TS + "." + MD5, jobInfoFile.getName());
+        Assertions.assertEquals(TS, Repository.jobInfoBackupTimestamp(jobInfoFile));
+        Assertions.assertEquals(TS, repo.getSnapshotTimestamp("snap"));
+    }
+
+    @Test
+    public void testFindJobInfoFileOfADirectoryWithoutOne() {
+        // A directory of the same name, and a job info file of a backup that has not finished.
+        expectList(Status.OK,
+                new RemoteFile(Repository.PREFIX_JOB_INFO + TS + "." + MD5, false, 100),
+                new RemoteFile(Repository.PREFIX_JOB_INFO + TS + ".part", true, 100));
+        repo = new Repository(10000, "repo", false, location, storage);
+
+        Assertions.assertNull(repo.findJobInfoFile("snap"));
+        Assertions.assertNull(repo.getSnapshotTimestamp("snap"));
+    }
+
+    @Test
+    public void testDeleteSnapshotRefusesALabelThatIsNotOne() {
+        repo = new Repository(10000, "repo", false, location, storage);
+
+        Assertions.assertFalse(repo.deleteSnapshot(null).ok());
+        Assertions.assertFalse(repo.deleteSnapshot("").ok());
+        Status st = repo.deleteSnapshot("snap/../other");
+        Assertions.assertFalse(st.ok());
+        Assertions.assertTrue(st.getErrMsg().contains("path separator"));
+    }
+
+    @Test
+    public void testDeleteSnapshot() {
+        new Expectations() {
+            {
+                storage.delete(anyString);
+                minTimes = 0;
+                result = new Delegate<Status>() {
+                    public Status delete(String remotePath) {
+                        return remotePath.endsWith(Repository.PREFIX_SNAPSHOT_DIR + "gone")
+                                ? Status.OK
+                                : new Status(Status.ErrCode.COMMON_ERROR, "delete failed");
+                    }
+                };
+            }
+        };
+
+        repo = new Repository(10000, "repo", false, location, storage);
+        Assertions.assertEquals(location + "/" + repo.prefixRepo + name + "/"
+                + Repository.PREFIX_SNAPSHOT_DIR + "gone", repo.assembleSnapshotDirPath("gone"));
+        Assertions.assertTrue(repo.deleteSnapshot("gone").ok());
+        Assertions.assertFalse(repo.deleteSnapshot("stubborn").ok());
+    }
+
+    @Test
+    public void testGetSnapshotInfosOfOneSnapshotThatCannotBeListed() {
+        expectList(new Status(Status.ErrCode.COMMON_ERROR, "broker is down"));
+        repo = new Repository(10000, "repo", false, location, storage);
+
+        List<List<String>> infos = repo.getSnapshotInfos("snap", null, null, new SnapshotRetentionCache());
+        Assertions.assertEquals(1, infos.size());
+        List<String> info = infos.get(0);
+        Assertions.assertEquals(ShowSnapshotStmt.SNAPSHOT_ALL.size(), info.size());
+        Assertions.assertTrue(info.get(2).startsWith("ERROR"));
+        // The retention columns of a snapshot that could not be read are all empty.
+        for (int i = 3; i < info.size(); i++) {
+            Assertions.assertEquals(FeConstants.NULL_STRING, info.get(i));
+        }
+    }
+
+    @Test
+    public void testGetSnapshotInfoOfATimestampThatCannotBeDownloaded() {
+        expectList(Status.OK);
+        repo = new Repository(10000, "repo", false, location, storage);
+
+        List<List<String>> infos = repo.getSnapshotInfos("snap", TS, null, new SnapshotRetentionCache());
+        Assertions.assertEquals(1, infos.size());
+        List<String> info = infos.get(0);
+        Assertions.assertEquals(ShowSnapshotStmt.SNAPSHOT_DETAIL.size(), info.size());
+        Assertions.assertEquals("snap", info.get(0));
+        Assertions.assertEquals(TS, info.get(1));
+        Assertions.assertTrue(info.get(4).startsWith("Failed to get info"));
+        for (int i = 5; i < info.size(); i++) {
+            Assertions.assertEquals(FeConstants.NULL_STRING, info.get(i));
+        }
+    }
+
+    @Test
+    public void testDownloadRefusesAFileWithoutAChecksum() {
+        expectList(Status.OK, new RemoteFile("__meta", true, 100));
+        repo = new Repository(10000, "repo", false, location, storage);
+
+        Status st = repo.download(location + "/__meta", "/tmp/does-not-matter");
+        Assertions.assertFalse(st.ok());
+        Assertions.assertTrue(st.getErrMsg().contains("checksum"));
     }
 }

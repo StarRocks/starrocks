@@ -27,6 +27,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/full_sort_key_codec.h"
 #include "storage/lake/add_index_schema_change.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
@@ -260,6 +261,8 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         }
 
         ChunkHelper::padding_char_columns(_char_field_indexes, _new_schema, _new_tablet_schema, _new_chunk.get());
+        RETURN_IF_ERROR(check_sort_key_size(_new_schema, _new_tablet_schema->sort_key_idxes(), *_new_chunk, 0,
+                                            _new_chunk->num_rows()));
         RETURN_IF_ERROR(writer->write(*_new_chunk));
     }
 

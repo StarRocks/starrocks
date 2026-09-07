@@ -105,6 +105,35 @@ public class CTEPlanTest extends PlanTestBase {
                 "    RANDOM"));
     }
 
+    @Test
+    public void testNestedCTEReuseUnderForceInlineLimit() throws Exception {
+        // Regression: when the number of distinct reused CTE moulds exceeds cbo_cte_max_limit,
+        // isForceInline() flips true partway through transform (and stays true). A nested CTE (x2)
+        // that was already registered/anchored must keep being re-anchored in every duplicated copy
+        // of its enclosing CTE's (x1) definition. Otherwise the later copies emit consumes for x2
+        // with no matching anchor in that copy, leaving unclosed CTE ids at the memo root and
+        // failing with "no executable plan for this sql".
+        int oldLimit = connectContext.getSessionVariable().getCboCTEMaxLimit();
+        connectContext.getSessionVariable().setCboCTEMaxLimit(1);
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        try {
+            String sql = "WITH x1 as (" +
+                    "   WITH x2 as (SELECT * FROM t0)" +
+                    "   SELECT * from x2 " +
+                    "   UNION ALL " +
+                    "   SELECT * from x2 " +
+                    ") \n" +
+                    "SELECT * from x1 " +
+                    "UNION ALL " +
+                    "SELECT * from x1 ";
+            // Must produce an executable plan (no "no executable plan for this sql").
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains("TABLE: t0"), plan);
+        } finally {
+            connectContext.getSessionVariable().setCboCTEMaxLimit(oldLimit);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {0, 1})
     public void testFromUseCte(int forceReuseNodeCount) throws Exception {

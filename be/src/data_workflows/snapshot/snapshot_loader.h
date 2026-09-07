@@ -121,6 +121,23 @@ private:
 
     Status _report_every(int report_threshold, int* counter, int finished_num, int total_num, TTaskType::type type);
 
+    // Write a manifest file into the tablet's remote snapshot dir listing every uploaded file name.
+    // Called after all of a tablet's files are uploaded; the manifest is the authoritative "which
+    // files must exist" record used to detect a missing file at restore time.
+    Status _write_snapshot_manifest(FileSystem* fs, const std::string& remote_dir,
+                                    const std::vector<std::string>& file_names);
+
+    // Read the tablet's remote snapshot manifest. Sets *found to false (and returns OK) when the
+    // manifest is absent, which keeps snapshots taken before this feature on the legacy path.
+    Status _read_snapshot_manifest(FileSystem* fs, const std::string& remote_dir, std::vector<std::string>* file_names,
+                                   bool* found);
+
+    // Read the tablet's manifest and check the remote listing against it: every name recorded in
+    // the manifest must be present (per-file content integrity is covered separately by the md5
+    // check at download time). No-op (OK) when the manifest is absent (legacy snapshot).
+    Status _verify_snapshot_manifest(FileSystem* fs, const std::string& remote_path,
+                                     const std::map<std::string, FileStat>& remote_files);
+
 private:
     ExecEnv* _env;
     int64_t _job_id;

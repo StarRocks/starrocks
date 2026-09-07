@@ -1,4 +1,5 @@
 ---
+sidebar_position: 90
 displayed_sidebar: docs
 keywords: ['Stream Load']
 description: "How to use the Stream Load transaction interface (two-phase commit) in StarRocks for highly concurrent stream loads from Flink or Kafka with multi-table..."
@@ -19,7 +20,7 @@ This topic describes the Stream Load transaction interface and how to load data 
 The Stream Load transaction interface supports using an HTTP protocol-compatible tool or language to call API operations. This topic uses curl as an example to explain how to use this interface. This interface provides various features, such as transaction management, data write, transaction pre-commit, transaction deduplication, and transaction timeout management.
 
 :::note
-Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB. Stream Load does not support Parquet file format. If you need to load data from Parquet files, use [INSERT+files()](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
+Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB. Stream Load does not support Parquet file format. If you need to load data from Parquet files, use [INSERT+files()](./InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
 :::
 
 ### Transaction management
@@ -63,11 +64,11 @@ The Stream Load transaction interface carries over the labeling mechanism of Sta
 
 ### Transaction timeout management
 
-When you begin a transaction, you can use the `timeout` field in the HTTP request header to specify a timeout period (in seconds) for the transaction from `PREPARE` to `PREPARED` state. If the transaction has not been prepared after this period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second) (Default: 600 seconds).
+When you begin a transaction, you can use the `timeout` field in the HTTP request header to specify a timeout period (in seconds) for the transaction from `PREPARE` to `PREPARED` state. If the transaction has not been prepared after this period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`stream_load_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#stream_load_default_timeout_second) (Default: 600 seconds).
 
 When you begin a transaction, you can also use the `idle_transaction_timeout` field in the HTTP request header to specify a timeout period (in seconds) within which the transaction can stay idle. If no data is written within this period, the transaction will be automatically rolled back.
 
-When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period (in seconds) for the transaction from `PREPARED` to `COMMITTED` state. If the transaction has not been committed after this period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) (Default: 86400 seconds). `prepared_timeout` is supported from v3.5.4 onwards.
+When you prepare a transaction, you can use the `prepared_timeout` field in the HTTP request header to specify a timeout period (in seconds) for the transaction from `PREPARED` to `COMMITTED` state. If the transaction has not been committed after this period, it will be automatically aborted. If this field is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#prepared_transaction_default_timeout_second) (Default: 86400 seconds). `prepared_timeout` is supported from v3.5.4 onwards.
 
 ## Benefits
 
@@ -109,7 +110,7 @@ The Stream Load transaction interface has the following limits:
 
 #### Check network configuration
 
-Make sure that the machine on which the data you want to load resides can access the FE and BE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`) , respectively.
+Make sure that the machine on which the data you want to load resides can access the FE and BE nodes of the StarRocks cluster via the [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) (default: `8030`) and [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port) (default: `8040`) , respectively.
 
 ## Basic operations
 
@@ -319,7 +320,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **NOTE**
 >
-> The `prepared_timeout` field is optional. If it is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) (Default: 86400 seconds). `prepared_timeout` is supported from v3.5.4 onwards.
+> The `prepared_timeout` field is optional. If it is not specified, the default value is determined by the FE configuration [`prepared_transaction_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#prepared_transaction_default_timeout_second) (Default: 86400 seconds). `prepared_timeout` is supported from v3.5.4 onwards.
 
 #### Return result
 
@@ -543,6 +544,6 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ## References
 
-For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Loading from a local file system via Stream Load](../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
+For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Loading from a local file system via Stream Load](./StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
 
 For information about the syntax and parameters for creating Stream Load jobs, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).

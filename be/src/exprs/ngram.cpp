@@ -76,6 +76,18 @@ public:
         const auto& needle_column = columns[1];
         const auto& gram_num_column = columns[2];
 
+        // Defence in depth: the FE analyzer already requires a positive integer literal here, and
+        // get_const_value() casts the data column straight to an Int32Column, so anything else
+        // would be a wild read rather than an error.
+        //
+        // Test what get_const_value actually needs -- a ConstColumn over a non-nullable column -- rather
+        // than asking the FunctionContext whether it registered a constant. Those are not the same thing:
+        // a caller can hand over a perfectly good ConstColumn without registering it, which is exactly
+        // what the non-constant-needle tests do, and keying off the registry rejected all of them.
+        if (!gram_num_column->is_constant() ||
+            down_cast<const ConstColumn*>(gram_num_column.get())->data_column()->is_nullable()) {
+            return Status::InvalidArgument("ngram search's third parameter must be a non-null constant integer");
+        }
         int gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
         if (gram_num <= 0) {
             return Status::NotSupported("ngram search's third parameter must be a positive number");

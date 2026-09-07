@@ -1,0 +1,49 @@
+-- name: test_lowcard_late_materialize
+CREATE TABLE `lm_dict` (
+  `k1` bigint NULL,
+  `v1` varchar(255) NULL,
+  `v2` varchar(255) NULL,
+  `v3` varchar(255) NULL,
+  `v9` varchar(255) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO lm_dict VALUES
+(1, 'a1', 'x', 'c1', 'm1'),
+(2, 'a2', 'x', 'c2', 'm2'),
+(3, 'a3', 'y', 'c3', 'm3'),
+(4, 'a4', 'y', 'c4', 'm4'),
+(5, 'a5', 'x', 'c5', 'm5'),
+(6, 'a6', 'z', 'c6', 'm6'),
+(7, 'a7', 'z', 'c7', 'm7'),
+(8, 'a8', 'x', 'c8', 'm8'),
+(9, 'a9', 'y', 'c9', 'm9'),
+(10, 'a10', 'z', 'c10', 'm10');
+-- The columns are low-cardinality, so the frontend collects a global dictionary for them and
+-- the plan rewrites them to dictionary codes. Touch them first: collection is asynchronous.
+select v1, count(*) from lm_dict group by v1 order by v1;
+select v2, count(*) from lm_dict group by v2 order by v2;
+select v3, count(*) from lm_dict group by v3 order by v3;
+-- Late materialization defers a column and fetches it back by row position. Both are on by
+-- default; the CTE has to be materialised rather than inlined, and the cost gate is turned off
+-- so the choice does not depend on statistics.
+set cbo_cte_reuse_rate = 0;
+set enable_global_late_materialization = true;
+set enable_global_late_materialization_cost_based = false;
+-- The deferred column is dictionary-encoded, so the plan types its fetch slot as INT while
+-- storage holds the string. The dictionary shipped with the lookup used to be keyed by the
+-- scan's column id rather than the id the lookup asks with, so the backend found no dictionary,
+-- silently read the raw string into that INT slot, and died -- as a decode failure against a
+-- "key" that was really string bytes, as an out-of-bounds read while sorting the fetched chunk,
+-- or as a 32-byte heap write while deserializing the fetch response.
+with c as (select k1, v1, v2, v3 from lm_dict),
+     d as (select count(*) as n from c where v2 = 'x')
+select a.k1, a.v1, d.n from c a cross join d order by a.k1 limit 5;
+-- A NOT NULL dictionary column: no NullableColumn wraps it, so nothing caught the mismatch and
+-- the fetched chunk went straight into the sort.
+with c as (select k1, v1, v3 from lm_dict)
+select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
+-- Both consumers of the shared CTE ask for the same dictionary column.
+with c as (select k1, v1 from lm_dict)
+select x.k1, x.v1, y.v1 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;

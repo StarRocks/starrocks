@@ -54,6 +54,11 @@ public class AlterJobV2HookTest {
         }
 
         @Override
+        protected void resetTransientState() {
+            // Mock: nothing transient to reset.
+        }
+
+        @Override
         protected void runPendingJob() throws AlterCancelException {
         }
 

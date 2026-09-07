@@ -66,9 +66,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -232,6 +233,46 @@ public abstract class AlterJobV2 implements Writable {
     public void setFinishedTimeMs(long finishedTimeMs) {
         this.finishedTimeMs = finishedTimeMs;
     }
+
+    /**
+     * Reset this job's in-memory state to its last durable (journaled) equivalent. Historically
+     * "FE restart or master changed" reloaded jobs from the image/journal, which implicitly
+     * discarded in-memory-only progress (the deliberately unlogged WAITING_TXN -&gt; RUNNING
+     * transitions) and leader-session transients (batch tasks, latches, futures). An in-place
+     * leader demote / re-elect cycle keeps the very same objects alive, so this hook performs
+     * that normalization explicitly. Invoked from AlterHandler.onStopped() during demotion
+     * (start() deliberately does not reset: the re-activation cleanliness gate guarantees the
+     * previous session's worker already ran onStopped before start() can run). Idempotent.
+     *
+     * Synchronized on the job: run() uses the same monitor, so a scheduling cycle cannot
+     * interleave with the reset. cancel()'s isCancelling flag and latch countDown are
+     * deliberately OUTSIDE the monitor, so a reset may clear a not-yet-processed user cancel;
+     * that matches a genuine restart (the flags are not persisted) and the user simply retries
+     * the CANCEL. Final states are left untouched. Must NOT write to the journal - it is
+     * already sealed when this runs.
+     */
+    public synchronized void resetToLastDurableState() {
+        if (jobState.isFinalState()) {
+            return;
+        }
+        if (publishVersionFuture != null) {
+            publishVersionFuture.cancel(false);
+            publishVersionFuture = null;
+        }
+        resetTransientState();
+    }
+
+    /**
+     * Subclass hook for {@link #resetToLastDurableState()}: map in-memory-only job states back
+     * to their last durable predecessor and recreate/clear leader-session transients (batch
+     * tasks, latches, flags, futures). Runs under the job monitor with the journal sealed.
+     *
+     * Abstract on purpose - an empty default let subclasses miss the hook silently (a job family
+     * whose rewrite re-runs after a leader handoff can DUPLICATE user data, see
+     * OnlineOptimizeJobV2). Every concrete job must state its reset explicitly; an intentionally
+     * empty implementation must say why in a comment.
+     */
+    protected abstract void resetTransientState();
 
     public void setComputeResource(ComputeResource computeResource) {
         this.computeResource = computeResource;
@@ -519,17 +560,25 @@ public abstract class AlterJobV2 implements Writable {
 
     protected boolean publishVersion() {
         if (publishVersionFuture == null) {
-            Callable<Boolean> task = () -> {
-                return lakePublishVersion();
-            };
-            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
+            try {
+                publishVersionFuture = executor.submit(this::lakePublishVersion);
+            } catch (RejectedExecutionException e) {
+                LOG.warn("failed to submit publish task for job: {}: activeCount={}, poolSize={}, maximumPoolSize={}",
+                        jobId, executor.getActiveCount(), executor.getPoolSize(), executor.getMaximumPoolSize(), e);
+                return false;
+            }
             LOG.info("submit publish task for job: {}", jobId);
             return false;
         } else {
             if (publishVersionFuture.isDone()) {
                 try {
                     return publishVersionFuture.get();
-                } catch (InterruptedException | ExecutionException e) {
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                } catch (ExecutionException e) {
+                    LOG.warn("failed to publish version for job: {}", jobId, e.getCause());
                     return false;
                 } finally {
                     publishVersionFuture = null;

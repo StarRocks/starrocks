@@ -81,3 +81,37 @@ bugfix-only
   - 5.3 处于 `bugfix-only` 状态
   - 5.2 也处于 `bugfix-only` 状态
   - 5.1 处于 `code-freeze` 状态
+
+## JDK 支持策略
+
+StarRocks 的 FE、BE 和 CN 节点依赖 JDK 运行。StarRocks 要求和推荐的 JDK 版本遵循 [Eclipse Adoptium](https://adoptium.net/support) 发布的 Java LTS 日历，而不是 StarRocks 的版本号。各 StarRocks 版本对应的 JDK 版本，请参阅[环境配置](../deployment/preparation/environment_configurations.md)。
+
+每个 StarRocks 次版本定义两个 JDK 版本：
+
+- **最低 JDK**：Adoptium 仍在构建的最旧 Java LTS 版本。FE 无法在更低版本的 JDK 上启动。BE 和 CN 在更低版本的 JDK 上会记录错误，且 Java UDF、基于 JNI 的 Connector 等依赖 Java 的功能不受支持。
+- **推荐 JDK**：下一个 Java LTS 版本。官方容器镜像使用该 JDK，并且在下一次变更时它将成为最低 JDK。使用低于推荐 JDK 的版本启动时，会打印弃用警告并指明推荐的 JDK 版本。
+
+比推荐 JDK 更新的 Java LTS 版本尚不在本策略覆盖范围内。它们通常可以正常运行，但未经测试。非 LTS 的 Java 版本不受支持。
+
+当前最低 JDK 为 JDK 17，推荐 JDK 为 JDK 21。
+
+### 最低 JDK 何时变更
+
+- 当前最低 JDK 在 Adoptium 上到达可用期结束（End of Availability）时，最低 JDK 发生变更。此时，原推荐 JDK 成为最低 JDK，下一个 Java LTS 版本成为推荐 JDK。
+- 推荐 JDK 会在成为最低 JDK 之前整整一个周期公布，因此您可以通过本策略、JDK 版本对照表和启动警告获得约两年的提前通知。
+- 变更在该日期之后发布的第一个次版本中生效，且前提是上一个次版本已经针对新的最低 JDK 打印了启动警告。否则，变更推迟到下一个次版本。
+- 一个次版本在其整个生命周期内保持相同的最低 JDK 和推荐 JDK。补丁版本永不提高最低 JDK，因此升级补丁版本永不需要升级 JDK。对更新 JDK 的支持可以通过补丁版本添加到现有次版本中。
+
+### 时间表
+
+| 生效时间 | 最低 JDK | 推荐 JDK | 原因 |
+| --- | --- | --- | --- |
+| 2027 年 10 月 | JDK 21 | JDK 25 | Java 17 可用期结束 |
+| 2029 年 12 月 | JDK 25 | JDK 29 | Java 21 可用期结束 |
+| 2031 年 9 月 | JDK 29 | JDK 33 | Java 25 可用期结束 |
+
+以上日期为 Adoptium 公布的可用期结束日期（Adoptium 注明为 "at least"，即不早于该日期）。这些日期是固定的：即使 Adoptium 之后延长某个 Java 版本的可用期，时间表也不会改变。Java 29 和 Java 33 假定 Adoptium 继续每两年指定一个 LTS 版本。
+
+### 在其他 JVM 中运行的组件
+
+Spark Load 的 DPP 库、Hive Bitmap UDF 库和 Broker 运行在其他系统的 JVM 中。它们以 Java 8 为目标，遵循所在系统的 JDK 要求，不适用本策略。

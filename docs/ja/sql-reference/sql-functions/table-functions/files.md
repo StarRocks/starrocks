@@ -389,7 +389,7 @@ AWS S3 をストレージシステムとして選択する場合、次のいず�
 | `aws.s3.access_key`           | いいえ       | IAM ユーザーのアクセスキー。AWS S3 へのアクセスの資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 | `aws.s3.secret_key`           | いいえ       | IAM ユーザーのシークレットキー。AWS S3 へのアクセスの資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 
-AWS S3 へのアクセスのための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+AWS S3 へのアクセスのための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 ###### AWS STS リージョナルエンドポイント
 

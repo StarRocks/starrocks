@@ -111,6 +111,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -206,6 +207,8 @@ public class PropertyAnalyzer {
     public static final String ENABLE_LOW_CARD_DICT_TYPE = "enable_low_card_dict";
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
+    // Comma-separated column names whose low-cardinality global dict is forbidden (column-level).
+    public static final String PROPERTIES_NO_DICT_COLUMNS = "no_dict_columns";
 
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
@@ -748,7 +751,7 @@ public class PropertyAnalyzer {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
             MaterializedView.RefreshMode parsed;
             try {
-                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
                         ". Only INCREMENTAL, PCT are supported.");

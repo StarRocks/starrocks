@@ -172,6 +172,31 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         return rewriteTasks;
     }
 
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled ("tasks will be send again if FE
+        // restart or master changed"); map it back so the re-elected leader re-enters
+        // runWaitingTxnJob and rebuilds + re-registers the rewrite tasks.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // runWaitingTxnJob APPENDS to rewriteTasks (a stale list would double the tasks), and the
+        // WAITING_TXN replay path restores the tmp-partition mappings / watershedTxnId /
+        // optimizeOperation but never rewriteTasks, so clearing matches a restarted FE.
+        rewriteTasks.clear();
+        progress = 0;
+        if (jobState == JobState.PENDING) {
+            // Undo a partially executed runPendingJob: a fenced attempt may have appended tmp
+            // partition mappings that the durable PENDING image does not have.
+            tempPartitionIdToSourcePartitionIds.clear();
+            tempPartitionNameToSourcePartitionNames.clear();
+            watershedTxnId = -1;
+        }
+        // optimizeClause is deliberately KEPT: like OptimizeJobV2 (and unlike OnlineOptimizeJobV2),
+        // a re-run self-cancels on the TaskManager task-name collision, so keeping it is safe and
+        // strictly better than the reload behavior (a real reload nulls it and self-cancels).
+    }
+
     private OlapTable checkAndGetTable(Database db, long tableId) throws AlterCancelException {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
@@ -516,7 +541,9 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             Collection<String> sourcePartitionNames = tempPartitionNameToSourcePartitionNames.get(tmpPartitionName);
             final String finalPartitionName = tmpPartitionName;
             String rewriteSql = "insert into " + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
-                        + ParseUtil.backquote(finalPartitionName) + ") select " + Joiner.on(", ").join(finalTableColumnNames)
+                        + ParseUtil.backquote(finalPartitionName) + ") ("
+                        + Joiner.on(", ").join(finalTableColumnNames) + ") select "
+                        + Joiner.on(", ").join(finalTableColumnNames)
                         + " from " + ParseUtil.backquote(tableName) + " partition ("
                         + Joiner.on(", ").join(sourcePartitionNames.stream()
                             .map(name -> ParseUtil.backquote(name))

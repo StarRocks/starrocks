@@ -1,4 +1,5 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 description: "Flinkジョブのマルチテーブルトランザクションを有効にして、1回の処理サイクルで同じデータベース内の複数のテーブルに書き込みます。"
 ---

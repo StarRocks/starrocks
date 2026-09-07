@@ -494,8 +494,15 @@ public class CreateTableAnalyzer {
                 }
 
                 if (keysType == KeysType.PRIMARY_KEYS && !keyColIdxes.equals(sortKeyIdxes)) {
-                    throw new SemanticException("The sort columns must be same with primary key columns " +
-                                                "and the order must be consistent");
+                    Map<String, String> properties = stmt.getProperties();
+                    boolean fileBundling = properties == null ? Config.enable_file_bundling
+                            : Boolean.parseBoolean(properties.getOrDefault(
+                                    PropertyAnalyzer.PROPERTIES_FILE_BUNDLING,
+                                    Boolean.toString(Config.enable_file_bundling)));
+                    if (!fileBundling) {
+                        throw new SemanticException("Range-distributed primary key tables with ORDER BY different "
+                                + "from the primary key require file_bundling=true");
+                    }
                 } else if (keysType != KeysType.PRIMARY_KEYS &&
                                 !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
                     throw new SemanticException("The sort columns must be same with key columns");
@@ -888,6 +895,8 @@ public class CreateTableAnalyzer {
                         new RelationFields(columns.stream().map(col -> new Field(
                                         col.getName(), col.getType(), tableNameObject, null))
                                 .collect(Collectors.toList()))), context);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();

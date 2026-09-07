@@ -1,4 +1,5 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 description: "StarRocks 运维相关常见问题解答。"
 ---

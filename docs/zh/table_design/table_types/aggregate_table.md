@@ -416,6 +416,6 @@ WHERE dt >= '2024-01-01';
 
 ## 下一步
 
-创建表后，您可以使用各种数据摄取方法将数据导入 StarRocks。有关 StarRocks 支持的数据摄取方法的信息，请参见 [Loading options](../../loading/Loading_intro.md)。
+创建表后，您可以使用各种数据摄取方法将数据导入 StarRocks。有关 StarRocks 支持的数据摄取方法的信息，请参见 [Loading options](../../loading/loading_introduction/loading_introduction.mdx)。
 
 > 注意：当您将数据导入使用聚合表的表时，您只能更新表的所有列。例如，当您更新前面的 `example_db.aggregate_tbl` 表时，必须更新其所有列，即 `site_id`、`date`、`city_code` 和 `pv`。

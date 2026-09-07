@@ -1,0 +1,49 @@
+-- name: test_runtime_filter_range_prune_wraparound
+-- A join whose probe key is `column +/- constant` must not lose rows when the column reaches the
+-- limits of its type: the runtime filter's bounds are pushed to the probe scan's index, and the
+-- zone map spans the whole column, so one row near BIGINT_MIN makes `a - 4000` wrap there and both
+-- ends of the range compare false, skipping the segment and every matching row in it.
+CREATE TABLE p (a bigint NULL)
+DUPLICATE KEY(a)
+DISTRIBUTED BY HASH(a) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+-- ONE insert, so the matching rows and the two extremes share a segment and a zone map. Split
+-- across several inserts the matching rows get a zone map that no longer reaches the type limits,
+-- and this passes even unfixed.
+INSERT INTO p
+SELECT generate_series FROM TABLE(generate_series(1, 100))
+UNION ALL SELECT -9223372036854775800
+UNION ALL SELECT 9223372036854775800;
+
+CREATE TABLE b_minus (k bigint NULL)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+INSERT INTO b_minus SELECT generate_series - 4000 FROM TABLE(generate_series(1, 100));
+
+CREATE TABLE b_plus (k bigint NULL)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+INSERT INTO b_plus SELECT generate_series + 4000 FROM TABLE(generate_series(1, 100));
+
+CREATE TABLE b_mul (k bigint NULL)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+INSERT INTO b_mul SELECT generate_series * 2 FROM TABLE(generate_series(1, 100));
+
+-- Wraps at the low end: both ends of `a - 4000 <= max_key` come out false.
+SELECT count(*) FROM (SELECT a - 4000 AS a FROM p) x JOIN [broadcast] b_minus b ON x.a = b.k;
+
+-- Same defect from the other side: `a + 4000` wraps at the high end.
+SELECT count(*) FROM (SELECT a + 4000 AS a FROM p) x JOIN [broadcast] b_plus b ON x.a = b.k;
+
+-- 101, not 100: -9223372036854775800 * 2 wraps to 16, a real key on the build side. Dividing the
+-- bounds to recover a column range would give [1, 100] and drop that row.
+SELECT count(*) FROM (SELECT a * 2 AS a FROM p) x JOIN [broadcast] b_mul b ON x.a = b.k;
+
+-- Controls: arithmetic on the build side, and a bare probe key. Neither takes the expression path.
+SELECT count(*) FROM p JOIN [broadcast] b_minus b ON p.a = b.k + 4000;
+SELECT count(*) FROM p JOIN [broadcast] (SELECT generate_series AS k FROM TABLE(generate_series(1, 100))) b ON p.a = b.k;

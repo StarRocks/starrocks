@@ -100,7 +100,15 @@ struct OlapReaderStatistics {
 
     int64_t rows_bitmap_index_filtered = 0;
     int64_t bitmap_index_filter_timer = 0;
+    int64_t vector_index_load_ns = 0;
     int64_t get_row_ranges_by_vector_index_timer = 0;
+    int64_t vector_index_cache_lookup_ns = 0;
+    int64_t vector_index_file_open_ns = 0;
+    int64_t vector_index_read_file_ns = 0;
+    int64_t vector_index_init_index_ns = 0;
+    int64_t vector_index_searcher_init_ns = 0;
+    int64_t vector_index_cache_hit_count = 0;
+    int64_t vector_index_cache_miss_count = 0;
     int64_t vector_search_timer = 0;
     int64_t process_vector_distance_and_id_timer = 0;
 
@@ -165,6 +173,18 @@ struct OlapReaderStatistics {
     int64_t lake_prepared_seed_io_ns = 0;
     int64_t lake_prepared_seed_io_count = 0;
     int64_t lake_prepared_seed_segment_init_ns = 0;
+    int64_t lake_prepared_seed_vector_index_load_ns = 0;
+    int64_t lake_prepared_seed_get_row_ranges_by_vector_index_ns = 0;
+    int64_t lake_prepared_seed_vector_index_cache_lookup_ns = 0;
+    int64_t lake_prepared_seed_vector_index_file_open_ns = 0;
+    int64_t lake_prepared_seed_vector_index_read_file_ns = 0;
+    int64_t lake_prepared_seed_vector_index_init_index_ns = 0;
+    int64_t lake_prepared_seed_vector_index_searcher_init_ns = 0;
+    int64_t lake_prepared_seed_vector_index_cache_hit_count = 0;
+    int64_t lake_prepared_seed_vector_index_cache_miss_count = 0;
+    int64_t lake_prepared_seed_vector_search_ns = 0;
+    int64_t lake_prepared_seed_process_vector_distance_and_id_ns = 0;
+    int64_t lake_prepared_seed_rows_vector_index_filtered = 0;
     int64_t lake_prepared_seed_zonemap_ns = 0;
     int64_t lake_prepared_seed_zonemap_filtered_rows = 0;
     int64_t lake_prepared_seed_bf_ns = 0;

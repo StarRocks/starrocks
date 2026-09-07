@@ -7,7 +7,7 @@ description: "現在のクラスターの設定を表示します（現在は FE
 
 ## 説明
 
-現在のクラスターの設定を表示します（現在は FE の設定項目のみ表示可能です）。これらの設定項目の詳細については、[Configuration](../../../../administration/management/FE_configuration.md) を参照してください。
+現在のクラスターの設定を表示します（現在は FE の設定項目のみ表示可能です）。これらの設定項目の詳細については、[Configuration](../../../../administration/configuration/FE_parameters/FE_parameters.md) を参照してください。
 
 設定項目を設定または変更したい場合は、[ADMIN SET CONFIG](ADMIN_SET_CONFIG.md) を使用してください。
 

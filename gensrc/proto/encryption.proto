@@ -18,6 +18,12 @@ option java_package = "com.starrocks.proto";
 
 enum EncryptionKeyTypePB {
     NORMAL_KEY = 0; // store just algorithm and raw key bytes, mainly used internally for low level KEK and DEK
+    // Values 21-23 are occupied by downstream distributions and already persisted
+    // in downstream metadata. Placeholders are declared here (unused by upstream)
+    // so that no upstream value is ever allocated on these numbers.
+    PLACEHOLDER_21 = 21;
+    PLACEHOLDER_22 = 22;
+    PLACEHOLDER_23 = 23;
 }
 
 enum EncryptionAlgorithmPB {

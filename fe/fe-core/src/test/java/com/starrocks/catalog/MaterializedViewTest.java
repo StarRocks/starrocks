@@ -1802,6 +1802,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
     public void testIsStalenessSatisfiedWithPositiveStalenessWithinBudget() {
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
         refreshScheme.setLastRefreshTime(1_000_000L);
+        refreshScheme.setLastFreshnessConfirmedAt(1_000_000L);
         MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_test2", columns, KeysType.AGG_KEYS,
                 null, null, refreshScheme);
         mv.setMaxMVRewriteStaleness(600);
@@ -1810,6 +1811,168 @@ public class MaterializedViewTest extends StarRocksTestBase {
             @Mock
             public Optional<Long> maxBaseTableRefreshTimestamp() {
                 return Optional.of(1_000_000L + 500 * 1000L);
+            }
+        };
+        Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * Core regression for cross-partition staleness masking: a chained partial run renews
+     * lastRefreshTime with one recently-committed partition's visible version time, but the freshness
+     * baseline must be the last CONFIRMED complete refresh. gap(baseTs, lastRefreshTime)=500s is within
+     * the 600s budget (old semantics would return true), while gap(baseTs, confirmedAt)=1500s exceeds it.
+     */
+    @Test
+    public void testIsStalenessSatisfiedUsesConfirmedFreshnessNotLastRefreshTime() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(1_000_000L);
+        refreshScheme.setLastRefreshTime(2_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_1", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(2_000_000L + 500 * 1000L);
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * Confirmed-freshness gap within budget when lastFreshnessConfirmedAt differs from lastRefreshTime
+     * (i.e. a partial refresh ran after the last confirmed complete batch): the rollback guard compares
+     * baseTs against lastRefreshTime (1_500_000 < 1_200_000 is false, so it does not fire), and the
+     * staleness gap is measured against lastFreshnessConfirmedAt (500s within the 600s budget).
+     */
+    @Test
+    public void testIsStalenessSatisfiedConfirmedWithinBudget() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(1_000_000L);
+        refreshScheme.setLastRefreshTime(1_200_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_2", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_500_000L);
+            }
+        };
+        Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * Quiet MV: no base commits since the confirmed batch started (baseTs < confirmedAt). The negative
+     * gap means fresh — must NOT be treated as the rollback case (which is detected against
+     * lastRefreshTime, not confirmedAt).
+     */
+    @Test
+    public void testIsStalenessSatisfiedQuietMvNegativeGapIsFresh() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(2_000_000L);
+        refreshScheme.setLastRefreshTime(1_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_3", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                // == lastRefreshTime (no regression), < confirmedAt (no commits since batch start)
+                return Optional.of(1_000_000L);
+            }
+        };
+        Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * Freshness never confirmed by a complete refresh (new MV / only partial refreshes / upgraded FE):
+     * conservative false, even though the lastRefreshTime-based gap (100s) is within the 600s budget.
+     */
+    @Test
+    public void testIsStalenessSatisfiedNotConfirmedYet() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastRefreshTime(1_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_4", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_100_000L);
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    @Test
+    public void testIsStalenessSatisfiedZeroStalenessConfig() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(1_000_000L);
+        refreshScheme.setLastRefreshTime(1_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_5", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(0);
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * The rollback guard must fire on a genuine base-time regression even when the base records its
+     * modified time in a coarser unit than the live millis max: Hive uses epoch seconds, normalized by
+     * magnitude in the guard. Absorbed T+100s (epoch seconds) vs a live max that regressed to T (millis).
+     */
+    @Test
+    public void testIsStalenessSatisfiedRollbackGuardNormalizesHiveSeconds() {
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        scheme.setLastFreshnessConfirmedAt(1_700_000_050_000L);
+        scheme.setLastRefreshTime(1_700_000_100L); // epoch seconds == 1_700_000_100_000 ms (absorbed)
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_guard_hive", columns,
+                KeysType.AGG_KEYS, null, null, scheme);
+        mv.setMaxMVRewriteStaleness(600);
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_700_000_000_000L); // epoch millis, earlier than absorbed -> regression
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    /** Same as above but Iceberg records epoch micros; magnitude normalization must still detect it. */
+    @Test
+    public void testIsStalenessSatisfiedRollbackGuardNormalizesIcebergMicros() {
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        scheme.setLastFreshnessConfirmedAt(1_700_000_050_000L);
+        scheme.setLastRefreshTime(1_700_000_100_000_000L); // epoch micros == 1_700_000_100_000 ms (absorbed)
+        MaterializedView mv = new MaterializedView(1001, 101, "mv_guard_iceberg", columns,
+                KeysType.AGG_KEYS, null, null, scheme);
+        mv.setMaxMVRewriteStaleness(600);
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_700_000_000_000L); // millis, earlier -> regression
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    /** No regression (same instant, Hive seconds vs live millis): the guard must NOT fire; served. */
+    @Test
+    public void testIsStalenessSatisfiedHiveNoRegressionServed() {
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        scheme.setLastFreshnessConfirmedAt(1_700_000_000_000L);
+        scheme.setLastRefreshTime(1_700_000_000L); // epoch seconds == 1_700_000_000_000 ms (same instant)
+        MaterializedView mv = new MaterializedView(1002, 102, "mv_guard_hive_ok", columns,
+                KeysType.AGG_KEYS, null, null, scheme);
+        mv.setMaxMVRewriteStaleness(600);
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_700_000_000_000L); // millis, same instant -> no regression
             }
         };
         Assertions.assertTrue(mv.isStalenessSatisfied());

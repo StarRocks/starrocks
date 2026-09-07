@@ -20,7 +20,6 @@ import com.starrocks.authorization.MockedLocalMetaStore;
 import com.starrocks.authorization.RBACMockedMetadataMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,7 +31,9 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -40,10 +41,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
 
 /**
  * Test cases for MysqlProto.changeUser function
@@ -51,15 +48,24 @@ import static org.mockito.Mockito.spy;
  * authentication failures, database switching, and error recovery.
  */
 public class MysqlProtoChangeUserTest {
+
+    @BeforeAll
+    public static void setUpPersistJournal() throws Exception {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory.
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterAll
+    public static void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     private ConnectContext context;
     private AuthenticationMgr authMgr;
 
     @BeforeEach
     public void setUp() throws Exception {
-        // Mock EditLog to prevent NullPointerException
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
         
         // Initialize test context
         context = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);

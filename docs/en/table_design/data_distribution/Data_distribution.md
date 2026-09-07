@@ -779,13 +779,14 @@ Practically speaking, you can use one or two bucketing columns based on your bus
 
 ### Range-based bucketing
 
-From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic**, controlled by the FE configuration `enable_range_distribution`. In shared-data mode it is enabled by default. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic**, controlled by the FE configuration `enable_range_distribution`. In shared-data clusters, it is enabled by default. Range-based Distribution semantic addresses the performance issue for small-tenant, customer-facing scenarios, and allows an adaptive mechanism for handling data skew. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range. For existing tables, you can split or merge tablets to achieve dynamic management of tablet size. Colocate Join is supported when creating a table with Range-based Distribution semantic.
 
 The range-based distribution semantic is different from the default semantic in the following aspects:
 - If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
 - If none of the key type, a DISTRIBUTED BY clause, or an ORDER BY is specified, a Duplicate Key table with the random bucketing strategy will be created.
 - If the key type and a DISTRIBUTED BY clause are not specified, but an ORDER BY clause is specified, a Duplicate Key table with the range-based distribution strategy will be created. In this case, DUPLICATE KEY is equivalent to an ORDER BY clause, and vice versa.
 - If both DUPLICATE KEY and an ORDER BY clause are specified, only the ORDER BY clause will take effect, and DUPLICATE KEY will be ignored.
+- When the `colocate_with` property is specified, you must also specify the colocated columns in addition to the colocation group. The colocated columns must be a prefix of the sort columns, and the default colocated columns are the sort columns.
 
 #### Advantages
 
@@ -814,6 +815,8 @@ The range-based distribution semantic is different from the default semantic in 
 - To disable it and fall back to the previous default distribution, set the FE configuration `enable_range_distribution` to `false`. It has no effect in shared-nothing mode.
 
 #### Examples
+
+##### Create new tables with Range-based Distribution semantic
 
 The following examples omit the partition syntax.
 
@@ -861,22 +864,59 @@ CREATE TABLE pk_table (
 PRIMARY KEY (tenant_id, created_time, id);
 ```
 
+**Tables with Colocate Join:**
+
+:::note
+In addition to the colocation group, you must also specify the colocated columns in the `colocate_with` property in the format `<colocation_group>:<colocated_column>[,<colocated_column>]`:
+- The colocated columns must be a prefix of the sort columns.
+- Tables in the same colocation group must have the same type, number, and order of colocated columns.
+- Default colocated columns are the sort columns.
+:::
+
+```SQL
+-- When the colocate_with property is specified, 
+-- data with the same value in the colocated columns will be distributed to the same set of BE/CN.
+CREATE TABLE pk_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+PRIMARY KEY (tenant_id, created_time, id)
+PROPERTIES(
+    "colocate_with" = "colocation_group1:tenant_id,created_time"
+)
+```
+
+##### Optimize existing tables by splitting or merging tablets
+
+For detailed instructions on splitting and merging tablets, see [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size).
+
+- Split all tablets that meet the conditions in the table to a target size of 10 GB (Default).
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- Merge all tablets that meet the conditions in the table to a target size of 2 GB.
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
 #### Limitations
 
-The following operations are not supported on tables with range distribution:
+The following operations are not supported on tables with Range-based Distribution:
 
 | DDL | Reason |
-|---|---|
-| `ALTER TABLE ... ADD ROLLUP ...` without an `ORDER BY` clause | A plain synchronous rollup assumes 1-to-1 base/rollup tablet pairing with the same row order, which range distribution does not provide. Use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead: on shared-data range tables (from v4.2) it builds an independent-sort-key rollup, and multiple such rollups are supported (one per `ALTER TABLE` statement). |
+| --- | ------ |
+| `ALTER TABLE ... ADD ROLLUP ...` without an `ORDER BY` clause | A plain synchronous rollup assumes 1-to-1 base/rollup tablet pairing with the same row order, which range distribution semantic does not provide. Use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead: on range tables in shared-data clusters, this statement builds an independent-sort-key rollup, and you can add multiple rollups (one per `ALTER TABLE` statement). |
 | `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | A synchronous materialized view is internally a plain synchronous rollup and shares the same limitation. |
-| `ALTER TABLE ... ORDER BY (...)` (modify sort key) | The sort key defines tablet boundaries, so modifying it would invalidate existing range tablets. |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE redistributes / rebuckets a partition, which is incompatible with range tablet boundaries. |
-| `ALTER TABLE ... ADD COLUMN <col> KEY ...` | New key columns auto-append to the (derived) range sort key on AGG/UNIQUE tables or tables without explicit `ORDER BY`. |
-| `ALTER TABLE ... DROP COLUMN <col>` where `<col>` is in the range sort key | Removing a sort-key column invalidates the stored 1:1-copied range tablet boundary values. |
-| `ALTER TABLE ... MODIFY COLUMN <col> ...` where `<col>` is in the range sort key | Changes the type/semantics under which the stored range tablet boundary values were recorded. |
-| `ALTER TABLE ... MODIFY COLUMN <col> ... KEY` (or value-column promotion in any keys-type) that flips keyness | A keyness flip shifts the key-derived range sort key on AGG/UNIQUE / no-explicit-ORDER-BY tables. |
 
-For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, e.g.:
+For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, for example:
 
 ```sql
 CREATE MATERIALIZED VIEW mv

@@ -56,7 +56,7 @@ public:
 
 private:
     template <bool IN_TREE>
-    void _merge_impl(size_t rows);
+    void _merge_impl(size_t rows, JsonColumn& json_result, NullColumn& null_result);
 
     template <bool IN_TREE>
     void _merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
@@ -77,10 +77,6 @@ private:
     std::vector<std::string> _exclude_paths;
     std::vector<std::string> _level_paths;
     bool _output_nullable = false;
-
-    MutableColumnPtr _result;
-    JsonColumn* _json_result;
-    NullColumn* _null_result;
 };
 
 } // namespace starrocks

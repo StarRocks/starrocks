@@ -1,0 +1,39 @@
+-- name: test_gin_mv_index @native
+create database test_gin_mv_index_${uuid0};
+use test_gin_mv_index_${uuid0};
+
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+
+CREATE TABLE `base_t` (
+    `id` int(11) NOT NULL COMMENT "",
+    `content` varchar(200) NOT NULL COMMENT "",
+    `content2` varchar(200) NOT NULL COMMENT ""
+)
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Two GIN indexes on one materialized view. In shared-nothing mode imp_lib defaults to
+-- clucene, whose index lives in a standalone {rowset}_{segment}_{index_id}.ivt directory,
+-- so the two indexes must get distinct index ids or they clobber each other.
+CREATE MATERIALIZED VIEW mv_two_gin
+(id, content, content2,
+ INDEX gin_idx1 (`content`) USING GIN,
+ INDEX gin_idx2 (`content2`) USING GIN)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+REFRESH MANUAL
+PROPERTIES ("replication_num" = "1")
+AS SELECT id, content, content2 FROM base_t;
+
+INSERT INTO base_t VALUES (1, "alpha beta", "red green"), (2, "gamma delta", "blue cyan");
+REFRESH MATERIALIZED VIEW mv_two_gin WITH SYNC MODE;
+
+-- Both filters must be answered correctly. Before the fix the first one returned 0 rows,
+-- because gin_idx2 had overwritten gin_idx1 index directory.
+select id, content from mv_two_gin where content = "alpha beta";
+select id, content2 from mv_two_gin where content2 = "red green";
+select id from mv_two_gin order by id;
+
+drop database test_gin_mv_index_${uuid0};

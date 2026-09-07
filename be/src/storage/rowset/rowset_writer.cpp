@@ -61,6 +61,7 @@
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/metadata_util.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
@@ -554,6 +555,9 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 for (int i = 0; i < _num_segment; i++) {
                     for (const auto& index : indexes) {
                         if (index.index_type() == GIN) {
+                            if (is_builtin_inverted_index(index)) {
+                                continue;
+                            }
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
                             auto index_st = _fs->delete_dir_recursive(index_path);
@@ -1249,6 +1253,9 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
                 if (!indexes->empty()) {
                     for (const auto& index : *indexes) {
                         if (index.index_type() == GIN) {
+                            if (is_builtin_inverted_index(index)) {
+                                continue;
+                            }
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
                             auto index_st = _fs->delete_dir_recursive(index_path);

@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.Pair;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -34,6 +35,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -148,6 +150,16 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         TNormalNestLoopJoinNode nlJoinNode = new TNormalNestLoopJoinNode();
         nlJoinNode.setJoin_op(ExprToThrift.joinOperatorToThrift(getJoinOp()));
         nlJoinNode.setJoin_conjuncts(normalizer.normalizeExprs(otherJoinConjuncts));
+        // join_conjuncts above reference the predicate's common sub-expressions by slot id, so the
+        // definitions have to be normalized too -- otherwise `(t.ts % 7) > s.a and (t.ts % 7) < s.b`
+        // and the same predicate with % 9 produce the same digest, and since isTransformJoin() is
+        // unconditionally true for a NestLoopJoinNode this node sits inside the digested subtree and
+        // decides which rows the cached per-tablet aggregate is built from.
+        if (commonSlotMap != null) {
+            Pair<List<Integer>, List<ByteBuffer>> cse = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
+            nlJoinNode.setCse_slot_ids(cse.first);
+            nlJoinNode.setCse_exprs(cse.second);
+        }
         planNode.setNestloop_join_node(nlJoinNode);
         planNode.setNode_type(TPlanNodeType.NESTLOOP_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);

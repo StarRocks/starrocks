@@ -42,10 +42,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
@@ -55,7 +53,6 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WAREHOUSE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class BatchWriteMgrTest extends BatchWriteTestBase {
@@ -590,24 +587,4 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 "threadPoolExecutor must still be shut down even when assigner.stop() throws");
     }
 
-    @Test
-    public void testStartRefusesToRestartBeforePreviousPoolTerminates() throws Exception {
-        ThreadPoolExecutor blockedPool = new ThreadPoolExecutor(
-                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
-        blockedPool.execute(() -> {
-            try {
-                Thread.sleep(30_000L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        blockedPool.shutdown();
-        FieldUtils.writeField(batchWriteMgr, "threadPoolExecutor", blockedPool, true);
-
-        try {
-            assertThrows(IllegalStateException.class, batchWriteMgr::start);
-        } finally {
-            blockedPool.shutdownNow();
-        }
-    }
 }

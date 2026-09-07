@@ -16,6 +16,7 @@
 
 #include <fmt/core.h>
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -135,7 +136,24 @@ Status LogBlockContainer::open() {
         opt.sync_on_close = false;
     }
     opt.direct_write = _direct_io;
-    ASSIGN_OR_RETURN(_writable_file, _dir->fs()->new_writable_file(opt, file_path));
+    auto wf = _dir->fs()->new_writable_file(opt, file_path);
+    if (!wf.ok() && _direct_io) {
+        // O_DIRECT is not supported on every spill filesystem (tmpfs, some overlay/network FS).
+        // Until direct IO was actually wired up it was a silent no-op, so a deployment may run
+        // with spill_enable_direct_io=true on such an FS and depend on spilling "working" (as
+        // buffered). Fall back to a buffered open instead of failing every spill query; warn once.
+        static std::atomic<bool> warned{false};
+        if (!warned.exchange(true)) {
+            LOG(WARNING) << "spill O_DIRECT open failed (" << wf.status()
+                         << "); this filesystem does not support direct IO, falling back to "
+                            "buffered spill writes";
+        }
+        _direct_io = false;
+        opt.direct_write = false;
+        wf = _dir->fs()->new_writable_file(opt, file_path);
+    }
+    RETURN_IF_ERROR(wf.status());
+    _writable_file = std::move(wf).value();
     TRACE_SPILL_LOG << "create new container file: " << file_path;
     _has_open = true;
     return Status::OK();

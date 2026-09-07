@@ -1,0 +1,15 @@
+-- name: test_corvariance_constant_args
+-- The analyzer rejects corr/covar_pop/covar_samp arguments that are already constant in the
+-- AST, but the optimizer can fold an argument into a literal afterwards. Such an argument
+-- reaches the BE as a constant column, which used to be read as a plain typed column.
+select covar_samp(a, b) from (select 1 as a, 10 as b) t;
+select covar_pop(a, b) from (select 1 as a, 10 as b) t;
+select corr(a, b) from (select 1 as a, 10 as b) t;
+with w1 as (select t.column_0 as c1, t.column_1 as c2 from (values(1, 10)) t(column_0, column_1))
+select round(covar_samp(w1.c1, w1.c2), 3) from w1;
+-- Only the second argument is folded into a constant, over a multi-row input.
+select round(covar_pop(k, c), 3) from (select k, 1 as c from (values(2), (3), (4)) t(k)) s;
+select round(covar_samp(k, c), 3) from (select k, 1 as c from (values(2), (3), (4)) t(k)) s;
+-- Non-integer input types.
+select round(covar_samp(a, b), 3) from (select 1.5 as a, 2.5 as b) t;
+select round(covar_pop(a, b), 3) from (select cast(1 as double) as a, cast(10 as double) as b) t;

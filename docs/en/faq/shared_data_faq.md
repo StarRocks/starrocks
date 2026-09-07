@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "FAQ for common StarRocks shared-data cluster questions."
 ---

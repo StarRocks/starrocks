@@ -416,7 +416,7 @@ WHERE dt >= '2024-01-01';
 
 ## 次に行うこと
 
-テーブルが作成された後、さまざまなデータ取り込み方法を使用して StarRocks にデータをロードできます。StarRocks がサポートするデータ取り込み方法については、[Loading options](../../loading/Loading_intro.md) を参照してください。
+テーブルが作成された後、さまざまなデータ取り込み方法を使用して StarRocks にデータをロードできます。StarRocks がサポートするデータ取り込み方法については、[Loading options](../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 > 注: 集計テーブルを使用するテーブルにデータをロードする際には、テーブルのすべてのカラムを更新する必要があります。たとえば、前述の `example_db.aggregate_tbl` テーブルを更新する場合、`site_id`、`date`、`city_code`、および `pv` のすべてのカラムを更新する必要があります。
 ```

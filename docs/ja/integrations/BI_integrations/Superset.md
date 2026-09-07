@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "Apache Superset で StarRocks の内部・外部データをクエリし可視化するための Python クライアントのインストール方法を説明します。"
 ---

@@ -23,18 +23,25 @@
 namespace starrocks {
 class HdfsJsonReader {
 public:
-    HdfsJsonReader(RandomAccessFile* file, const std::vector<SlotDescriptor*>& slot_descs);
+    HdfsJsonReader(RandomAccessFile* file, const std::vector<SlotDescriptor*>& slot_descs,
+                   const std::map<std::string, std::string>& serde_properties = {});
     Status init();
     Status next_record(Chunk* chunk, int32_t rows_to_read);
 
+    // A single json key can be mapped to more than one Hive column (e.g. mapping.c1=x and
+    // mapping.c2=x both point at json field "x"), so a key resolves to a list of targets.
+    struct ColumnTarget {
+        size_t column_index;
+        TypeDescriptor type;
+    };
+
     struct PreviousParsedItem {
-        explicit PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}
-        PreviousParsedItem(const std::string_view& key, int column_index, TypeDescriptor type)
-                : key(key), type(std::move(type)), column_index(column_index) {}
+        PreviousParsedItem(const std::string_view& key, std::vector<ColumnTarget> targets = {})
+                : key(key), targets(std::move(targets)) {}
 
         std::string key;
-        TypeDescriptor type;
-        int column_index;
+        // Empty means this key (at this position in the row) matches no column.
+        std::vector<ColumnTarget> targets;
     };
 
 private:
@@ -44,6 +51,15 @@ private:
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
     static Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                                     const std::string& col_name);
+    // The OpenX JSON SerDe declares a column-to-json-field mapping via properties shaped like
+    // "mapping.<column_name>" = "<json_field_name>". Parse those into column_name -> json_field_name,
+    // i.e. the reverse of what a mapped column should be looked up by when it appears in the document.
+    static std::map<std::string, std::string> _parse_column_name_mapping(
+            const std::map<std::string, std::string>& serde_properties);
+    // Multiple Hive columns fanning out from the same json key must share the same type: the
+    // first target is decoded from json and the rest are cloned from it, so a type mismatch
+    // would silently corrupt data instead of decoding independently.
+    Status _validate_fan_out_targets() const;
 
 #ifdef BE_TEST
     const int64_t INIT_BUF_SIZE = 1024;
@@ -52,7 +68,13 @@ private:
 #endif
 
     RandomAccessFile* _file = nullptr;
-    std::unordered_map<std::string_view, std::pair<const SlotDescriptor*, TypeDescriptor>> _desc_dict;
+    // column_name -> json_field_name. Backing storage for the string_view keys of _desc_dict
+    // that correspond to mapped columns; must outlive _desc_dict.
+    std::map<std::string, std::string> _column_to_json_field;
+    // A json key can resolve to more than one column; column_index isn't known until a
+    // Chunk is available, so this stores (slot, type) and _prev_parsed_position caches the
+    // resolved ColumnTarget list once column_index has been looked up.
+    std::unordered_map<std::string_view, std::vector<std::pair<const SlotDescriptor*, TypeDescriptor>>> _desc_dict;
     std::vector<bool> _parsed_columns;
     std::vector<PreviousParsedItem> _prev_parsed_position;
 
@@ -70,6 +92,7 @@ private:
 class HdfsJsonScanner final : public HdfsScanner {
 public:
     HdfsJsonScanner() = default;
+    explicit HdfsJsonScanner(const std::map<std::string, std::string>& serde_properties);
     ~HdfsJsonScanner() override = default;
 
     Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) override;
@@ -82,5 +105,6 @@ private:
 
     bool _no_data = false;
     std::unique_ptr<HdfsJsonReader> _reader;
+    std::map<std::string, std::string> _serde_properties;
 };
 } // namespace starrocks

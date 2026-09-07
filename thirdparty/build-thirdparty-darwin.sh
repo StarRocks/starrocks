@@ -62,6 +62,11 @@ Usage: $0 [options...] [packages...]
     --clean                Clean extracted source before building
     --continue <package>   Continue building from specified package
     -h, --help             Show this help message
+
+  Notes:
+    When packages are given (also with --continue), only the archives those
+    packages are built from are downloaded, unpacked and patched. A full build
+    still processes every archive.
 EOF
 }
 
@@ -3006,6 +3011,14 @@ if [[ "${CONTINUE}" -eq 1 ]] && ([[ -z "${start_package}" ]] || [[ "${#packages[
 fi
 if [[ "${CONTINUE}" -eq 1 ]]; then
     validate_requested_package "${start_package}"
+fi
+
+# A partial build only needs its own archives, so limit the download/unpack/patch
+# pass accordingly. Must happen before packages defaults to the full list below.
+if [[ "${#packages[@]}" -ne 0 ]]; then
+    starrocks_restrict_archives "${packages[@]}"
+elif [[ "${CONTINUE}" -eq 1 ]]; then
+    starrocks_restrict_archives_from "${start_package}"
 fi
 
 if [[ "${#packages[@]}" -eq 0 ]]; then

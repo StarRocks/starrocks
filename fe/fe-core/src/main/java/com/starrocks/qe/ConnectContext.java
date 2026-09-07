@@ -37,9 +37,11 @@ package com.starrocks.qe;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
@@ -245,6 +247,13 @@ public class ConnectContext {
     // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
     private final Set<String> viewExpansionPath = Sets.newHashSet();
 
+    // Names of the recursive CTEs whose recursive member is currently being analyzed. Like
+    // viewExpansionPath it lives on the session (not on a single QueryAnalyzer.Visitor) so it is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // recursive reference routed through such a subquery would otherwise not see the enclosing
+    // recursive CTE, fall through to the optimizer and expand without end (StackOverflowError).
+    private final Set<String> recursiveCteAnalysisPath = Sets.newHashSet();
+
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     // Control whether to read Iceberg caches without populating/updating them for the current execution.
@@ -259,6 +268,12 @@ public class ConnectContext {
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
+
+    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
+    // its per-statement timings here so the eventual profile can attach them. Broker Load instead
+    // uses a job-owned collector because its asynchronous work must not depend on this context's
+    // statement-level reset or on a reused client context.
+    private volatile PreSplitProfile preSplitProfile;
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -286,11 +301,28 @@ public class ConnectContext {
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
 
+    // Upper bound on the entries the diagnostics area below keeps, so that it stays bounded for
+    // the lifetime of the connection whatever a statement records into it. The value is the
+    // MySQL default for max_error_count, and the entries kept are the first ones, as MySQL does
+    // once the limit is reached.
+    private static final int MAX_WARNING_COUNT = 64;
+
+    // Session-level SQL warning buffer (MySQL diagnostics area). Holds the diagnostics produced
+    // by the most recent statement that generated any, so they can be read back via
+    // SHOW WARNINGS / SHOW ERRORS. Cleared at the start of the next statement, except for SET,
+    // transaction control and SHOW statements, which leave it unchanged while they succeed and
+    // replace it with their own error when they fail (see StmtExecutor.execute).
+    private final List<QueryWarning> warnings = Lists.newArrayList();
+
     private boolean skipFinishSink = false;
     private FinishSinkHandler handler = null;
 
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
+
+    // An optimize rewrite copies logical rows into a temporary partition and must not
+    // include unrelated schema-change shadow columns in its sink tuple.
+    private boolean optimizeRewrite = false;
 
     // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
     // instead of physicalPartition.getVisibleVersion() for each entry in this map.
@@ -303,6 +335,14 @@ public class ConnectContext {
 
     public Map<Long, Long> getScanVersionOverride() {
         return scanVersionOverride;
+    }
+
+    public void setOptimizeRewrite(boolean optimizeRewrite) {
+        this.optimizeRewrite = optimizeRewrite;
+    }
+
+    public boolean isOptimizeRewrite() {
+        return optimizeRewrite;
     }
 
     public void setTxnId(long txnId) {
@@ -778,6 +818,7 @@ public class ConnectContext {
         startTime = Instant.now();
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
     }
 
     @VisibleForTesting
@@ -785,6 +826,24 @@ public class ConnectContext {
         startTime = start;
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
+    }
+
+    public PreSplitProfile getPreSplitProfile() {
+        return preSplitProfile;
+    }
+
+    public PreSplitProfile getOrCreatePreSplitProfile() {
+        PreSplitProfile current = preSplitProfile;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (preSplitProfile == null) {
+                preSplitProfile = new PreSplitProfile();
+            }
+            return preSplitProfile;
+        }
     }
 
     public void setEndTime() {
@@ -939,6 +998,24 @@ public class ConnectContext {
 
     public boolean isKilled() {
         return (parent != null && parent.isKilled()) || isKilled;
+    }
+
+    /**
+     * Whether this statement has been cancelled by any route, as opposed to {@link #isKilled()}, which
+     * only covers connection-scoped kills. {@code KILL QUERY}, a cancelled TaskRun and a closed client
+     * all call {@code kill(false, ...)}, which reaches only {@link StmtExecutor#cancel(String)} and
+     * leaves {@code isKilled} false. Use this wherever work outside query execution needs to notice
+     * cancellation -- by then the coordinator {@code cancel()} targets has usually already finished.
+     */
+    public boolean isStatementCancelled() {
+        if (isKilled()) {
+            return true;
+        }
+        StmtExecutor executorRef = executor;
+        if (executorRef != null && executorRef.isCancelled()) {
+            return true;
+        }
+        return parent != null && parent.isStatementCancelled();
     }
 
     // Set kill flag to true;
@@ -1305,6 +1382,10 @@ public class ConnectContext {
 
     public Set<String> getViewExpansionPath() {
         return viewExpansionPath;
+    }
+
+    public Set<String> getRecursiveCteAnalysisPath() {
+        return recursiveCteAnalysisPath;
     }
 
     public void setForwardTimes(int forwardTimes) {
@@ -1944,6 +2025,24 @@ public class ConnectContext {
 
     public List<Listener> getListeners() {
         return listeners;
+    }
+
+    // Every failure path replaces the buffer before recording its error (StmtExecutor.execute and
+    // ConnectProcessor.recordPreExecutionFailureDiagnostics), so the error a client just received
+    // in the ERR packet is never the entry dropped once the limit is reached.
+    public void addWarning(QueryWarning warning) {
+        if (warnings.size() >= MAX_WARNING_COUNT) {
+            return;
+        }
+        this.warnings.add(warning);
+    }
+
+    public List<QueryWarning> getWarnings() {
+        return ImmutableList.copyOf(warnings);
+    }
+
+    public void clearWarnings() {
+        this.warnings.clear();
     }
 
     public void onQueryFinished() {

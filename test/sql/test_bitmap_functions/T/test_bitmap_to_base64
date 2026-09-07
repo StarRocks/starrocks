@@ -1,5 +1,0 @@
--- name: test_bitmap_to_base64
-
--- null
-select bitmap_to_base64(null);
-select bitmap_to_base64(bitmap_from_string("abc"));

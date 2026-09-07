@@ -76,8 +76,18 @@ public:
     // Returns true if version is strictly equal with other_version
     bool VersionEq(const ApplicationVersion& other_version) const;
 
+    // Returns true if the writer is one that computes statistics correctly for all types:
+    // parquet-cpp from 1.3.0 and parquet-mr from 1.10.0 onwards. A writer we do not recognise
+    // keeps the benefit of the doubt, since VersionLt() only compares like with like.
+    bool HasFixedStatsVersion() const;
+
     // Checks if the Version has the correct statistics for a given column
     bool HasCorrectStatistics(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
+
+    // Checks if the Version computes `null_count` correctly. `null_count` is a plain counter, so
+    // none of the sort-order or byte-array concerns that HasCorrectStatistics() weighs on top of
+    // the writer version apply to it -- only the writer version itself does.
+    bool HasCorrectNullCount() const;
 
     // ARROW-17100: [C++][Parquet] Fix backwards compatibility for ParquetV2 data pages written prior to 3.0.0 per ARROW-10353 #13665
     // https://github.com/apache/arrow/pull/13665/files

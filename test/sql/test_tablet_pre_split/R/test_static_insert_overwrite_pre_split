@@ -1,0 +1,72 @@
+-- name: test_static_insert_overwrite_pre_split @cloud @sequential
+admin set frontend config ("tablet_pre_split_target_size" = "1048576");
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table src (k int, v bigint) properties('replication_num' = '1');
+-- result:
+-- !result
+insert into src select x, x from table(generate_series(1, 100000)) as g(x);
+-- result:
+-- !result
+select count(*), sum(v) from src;
+-- result:
+100000	5000050000
+-- !result
+set enable_range_distribution = true;
+-- result:
+-- !result
+create table dst (k int, v bigint) order by (k) properties('replication_num' = '1');
+-- result:
+-- !result
+set enable_range_distribution = false;
+-- result:
+-- !result
+SELECT BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst' AND IS_TEMP = false;
+-- result:
+1
+-- !result
+insert overwrite dst select k, v from src;
+-- result:
+-- !result
+SELECT BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst' AND IS_TEMP = false;
+-- result:
+1
+-- !result
+select count(*), count(distinct k), sum(v), min(k), max(k) from dst;
+-- result:
+100000	100000	5000050000	1	100000
+-- !result
+insert overwrite dst select k, v * 2 from src;
+-- result:
+-- !result
+select count(*), sum(v) from dst;
+-- result:
+100000	10000100000
+-- !result
+SELECT BUCKETS > 1 AS still_split
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst' AND IS_TEMP = false;
+-- result:
+1
+-- !result
+admin set frontend config ("tablet_pre_split_target_size" = "0");
+-- result:
+-- !result
+drop table dst;
+-- result:
+-- !result
+drop table src;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

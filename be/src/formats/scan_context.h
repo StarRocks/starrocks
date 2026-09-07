@@ -43,6 +43,7 @@ namespace starrocks {
 
 class ExprContext;
 class PredicateTree;
+class RuntimeFilterPredicates;
 class RuntimeScanRangePruner;
 struct FileScanSplitContext;
 class TIcebergSchema;
@@ -71,6 +72,12 @@ struct FormatScannerStats {
     // Parquet lazy materialization: row groups where every lazy slot was triggered
     // on-demand (suggests active/lazy classification could be improved).
     int64_t parquet_lazy_full_trigger_count = 0;
+
+    // Join runtime filters evaluated against decoded rows. Names mirror the OLAP
+    // storage layer's rf_cond_* stats so profiles diff directly against an OLAP run.
+    int64_t rf_cond_input_rows = 0;
+    int64_t rf_cond_output_rows = 0;
+    int64_t rf_cond_evaluate_ns = 0;
 
     int64_t io_ns = 0;
     int64_t io_count = 0;
@@ -280,6 +287,19 @@ struct FormatScanContext {
     // Non-owning predicate state built by upper scan orchestration.
     const PredicateTree* predicate_tree = nullptr;
     RuntimeScanRangePruner* runtime_filter_scan_range_pruner = nullptr;
+
+    // Non-owning. Join runtime filters to probe against decoded rows, so rows are
+    // dropped before lazy columns are materialized. Owned by the scanner context
+    // (HdfsScannerContext::predicates). nullptr when the feature is disabled, when no
+    // runtime filter targets a pushdown-able slot, or for non-hive scanners.
+    //
+    // Readers must NOT call evaluate() on this instance directly: it carries mutable
+    // adaptive-sampling state, and its predicate list is not restricted to the columns
+    // any particular reader can supply. Take a per-reader copy holding only the subset
+    // you can serve -- see GroupReader::_setup_runtime_filter_predicates().
+    RuntimeFilterPredicates* runtime_filter_preds = nullptr;
+    // Driver sequence needed to resolve group-colocate runtime filters.
+    int32_t driver_sequence = -1;
 
     // TODO: probably should be removed in later version.
     std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;

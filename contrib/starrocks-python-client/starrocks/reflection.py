@@ -27,6 +27,7 @@ from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.schema import Table
 
 from starrocks.common.consts import TableConfigKey
+from starrocks.common.defaults import ReflectionMVDefaults
 from starrocks.common.params import (
     ColumnAggInfoKeyWithPrefix,
     SRKwargsPrefix,
@@ -707,15 +708,38 @@ class StarRocksTableDefinitionParser(object):
         # logger.debug("partial parsed mv state. mv: %s, state: %s", mv_fqn, parsed_state)
 
         # 2. Augment/overwrite with more reliable info from other sources.
-        parsed_state.table_options.update(self._parse_common_table_options(TableKind.MATERIALIZED_VIEW, table_row))
+        self._merge_table_options(
+            parsed_state.table_options,
+            self._parse_common_table_options(TableKind.MATERIALIZED_VIEW, table_row),
+        )
 
         if config_row:
             general_options = self._parse_general_table_options(mv_name, schema, table_config=config_row)
             logger.debug("parsed general table options for mv: %s, options: %s", mv_fqn, general_options)
-            parsed_state.table_options.update(general_options)
+            self._merge_table_options(parsed_state.table_options, general_options)
 
         logger.debug("parsed mv state. mv: %s, state: %s", mv_fqn, parsed_state)
         return parsed_state
+
+    def _merge_table_options(self, table_options: Dict[str, Any], new_options: Dict[str, Any]) -> None:
+        """
+        Merges `new_options` into `table_options` in place, with `new_options` taking precedence.
+
+        This is `dict.update()` except for PROPERTIES, whose value is itself a dict: those are
+        merged key by key instead of being replaced wholesale, so a property reported by only
+        one source survives a source that does not report it. Callers are expected to pass
+        options in increasing order of reliability.
+
+        This matters because no single source reports every property of a materialized view:
+        information_schema.tables_config is authoritative for what it does report, but omits
+        some properties (see ReflectionMVDefaults._DDL_ONLY_PROPERTY_KEYS) that are only available
+        from the CREATE MATERIALIZED VIEW ddl. Which properties are trusted from which source is
+        decided when they are parsed, not here.
+        """
+        for key, value in new_options.items():
+            if key == TableInfoKeyWithPrefix.PROPERTIES and table_options.get(key):
+                value = hashdict({**table_options[key], **value}.items())
+            table_options[key] = value
 
     def _parse_mv_ddl(
         self,
@@ -761,12 +785,19 @@ class StarRocksTableDefinitionParser(object):
             # Fallback to simple regex if lark parsing fails
             self._parse_mv_refresh_with_regex(clauses_str, state)
 
-        # NOTE: currently, it uses properties from information_schema.tables_config, not from the DDL.
-        # properties_match = self._MV_PROPERTIES_PATTERN.search(clauses_str)
-        # if properties_match:
-        #     # Use string instead of dictionary now.
-        #     # state.mv_options.properties = self._parse_properties(properties_match.group(1))
-        #     state.table_options[TableInfoKeyWithPrefix.PROPERTIES] = properties_match.group(1).strip()
+        # NOTE: properties come from information_schema.tables_config, except for the few that
+        # tables_config does not report for MVs. Only those are taken from the DDL here;
+        # parse_mv() merges tables_config on top. See ReflectionMVDefaults._DDL_ONLY_PROPERTY_KEYS.
+        properties_match = self._MV_PROPERTIES_PATTERN.search(clauses_str)
+        if properties_match:
+            ddl_properties = self._parse_properties(properties_match.group(1))
+            ddl_only_properties = {
+                key: value for key, value in ddl_properties.items()
+                if key.lower() in ReflectionMVDefaults.ddl_only_property_keys()
+            }
+            if ddl_only_properties:
+                logger.debug("mv: %r, ddl-only properties: %s", mv_name, ddl_only_properties)
+                state.table_options[TableInfoKeyWithPrefix.PROPERTIES] = hashdict(ddl_only_properties.items())
 
         return state
 

@@ -33,7 +33,7 @@ class Tablet;
 class Schema;
 class Column;
 class PrimaryKeyDump;
-class ParallelPublishContext;
+class ParallelUpsertContext;
 
 class TabletLoader {
 public:
@@ -61,10 +61,6 @@ protected:
     size_t _total_segments = 0;
     size_t _rowset_num = 0;
 };
-
-namespace lake {
-class LakeLocalPersistentIndex;
-}
 
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
@@ -419,7 +415,6 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakeLocalPersistentIndex;
 
     template <int N>
     void _init_loop_helper();
@@ -526,7 +521,6 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakeLocalPersistentIndex;
     friend class ImmutableIndexWriter;
 
     Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
@@ -730,7 +724,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr, ParallelPublishContext* ctx = nullptr);
+                          IOStat* stat = nullptr, ParallelUpsertContext* ctx = nullptr);
 
     // batch replace without return old values
     // |n|: size of key/value array

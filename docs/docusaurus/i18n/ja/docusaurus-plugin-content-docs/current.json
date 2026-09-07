@@ -15,10 +15,6 @@
     "message": "ベストプラクティス",
     "description": "The label for category Best Practices in sidebar docs"
   },
-  "sidebar.docs.category.Project Help": {
-    "message": "プロジェクトヘルプ",
-    "description": "The label for category Project Help in sidebar docs"
-  },
   "sidebar.docs.category.Deployment": {
     "message": "デプロイ",
     "description": "The label for category Deployment in sidebar docs"
@@ -471,14 +467,6 @@
     "message": "クエリチューニング",
     "description": "The label for category Query Tuning in sidebar docs"
   },
-  "sidebar.docs.category.Query Tuning.link.generated-index.title": {
-    "message": "クエリチューニングのベストプラクティス",
-    "description": "The generated-index page title for category Query Tuning in sidebar docs"
-  },
-  "sidebar.docs.category.Query Tuning.link.generated-index.description": {
-    "message": "StarRocks でクエリを分析、チューニング、最適化する方法を学びます。",
-    "description": "The generated-index page description for category Query Tuning in sidebar docs"
-  },
   "sidebar.docs.category.データ分散": {
     "message": "データ分散",
     "description": "The label for category データ分散 in sidebar docs"
@@ -494,5 +482,25 @@
   "sidebar.docs.category.システムメタデータベース": {
     "message": "システムメタデータベース",
     "description": "The label for category システムメタデータベース in sidebar docs"
+  },
+  "sidebar.docs.category.datasource-catalog": {
+    "message": "Catalog",
+    "description": "The label for category 'Catalog' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.migration-loading": {
+    "message": "データロード",
+    "description": "The label for category 'Data Loading' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.root-loading": {
+    "message": "データロード",
+    "description": "The label for category 'Data Loading' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.sql-data-type-string": {
+    "message": "文字列",
+    "description": "The label for category 'String' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.sql-fxn-string": {
+    "message": "文字列関数",
+    "description": "The label for category 'String' in sidebar 'docs'"
   }
 }

@@ -34,6 +34,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/chunk_accumulator.h"
 #include "storage/tablet_schema.h"
 #include "types/olap_type_infra.h"
@@ -58,6 +59,12 @@ starrocks::Schema ChunkHelper::get_short_key_schema(const starrocks::TabletSchem
         short_key_cids.push_back(sort_key_idxes[i]);
     }
     return starrocks::Schema(schema->schema(), short_key_cids);
+}
+
+starrocks::Schema ChunkHelper::get_full_sort_key_schema(const starrocks::TabletSchemaCSPtr& schema) {
+    const auto& sort_key_idxes = schema->sort_key_idxes();
+    std::vector<ColumnId> full_sort_key_cids(sort_key_idxes.begin(), sort_key_idxes.end());
+    return starrocks::Schema(schema->schema(), full_sort_key_cids);
 }
 
 starrocks::Schema ChunkHelper::get_sort_key_schema(const starrocks::TabletSchemaCSPtr& schema) {
@@ -152,6 +159,18 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     } else {
         new_binary->swap_column(*column);
     }
+}
+
+Status ChunkHelper::reject_if_over_capacity(const Chunk& chunk, std::string_view what, int64_t tablet_id,
+                                            int64_t txn_id) {
+    Status st = chunk.capacity_limit_reached();
+    if (st.ok()) {
+        return st;
+    }
+    return Status::CapacityLimitExceed(
+            strings::Substitute("$0 is too large for tablet:$1 txn:$2, $3. Reduce the amount of data in a single "
+                                "statement.",
+                                std::string(what), tablet_id, txn_id, std::string(st.message())));
 }
 
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,

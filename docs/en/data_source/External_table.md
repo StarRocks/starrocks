@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "The External Table feature is no longer recommended except for certain corner usage cases, and might be deprecated in future releases."
 ---
@@ -9,11 +10,11 @@ description: "The External Table feature is no longer recommended except for cer
 
 The External Table feature is no longer recommended except for certain corner usage cases, and might be deprecated in future releases. To manage and query data from external data sources in general scenarios, [External Catalog](./catalog/catalog_overview.md) is recommended.
 
-- From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](./catalog/iceberg/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
+- From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](./catalog/hive_catalog.md), [Iceberg catalog](./catalog/iceberg/iceberg.md), and [Hudi catalog](./catalog/hudi_catalog.md).
 
-- From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
+- From v3.1 onwards, we recommend that you use [JDBC catalog](./catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](./catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
 
-- From v3.2.9 and v3.3.1, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from Oracle and SQL Server.
+- From v3.2.9 and v3.3.1, we recommend that you use [JDBC catalog](./catalog/jdbc_catalog.md) to query data from Oracle and SQL Server.
 
 - The External Table feature was designed to help with loading data into StarRocks, NOT to perform efficient queries against external systems as a normal operation. A more performant solution would be to load the data into StarRocks.
 
@@ -21,7 +22,7 @@ The External Table feature is no longer recommended except for certain corner us
 
 StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. Currently, except StarRocks external table, all other external tables are deprecated. **You can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
 
-From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
+From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](./data_cache/data_cache.md).
 
 ## StarRocks external table
 

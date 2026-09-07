@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Data-tier {@link SampleSubqueryExecutor} for the INSERT-from-OLAP-table path.
+ * Data-tier {@link SampleSubqueryExecutor} for the INSERT-from-table path.
  * Synthesizes a {@code SELECT <sort_key_cols>[, <partition_source_cols>] FROM
  * <source_table> [WHERE (<user_pred>) AND] rand(...) < rate ORDER BY rand(...)
  * LIMIT N} sub-query and decodes the JSON result rows using the TARGET column
@@ -54,12 +54,14 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
         return new SampleSpec(
                 context.sourceFromSql(),
                 context.wherePredicateSql(),
-                Math.max(0L, context.sourceTable().getDataSize()),
+                context.sourceTotalBytes(),
                 context.computeResource(),
                 identsOf(mapToSource(request.getSortKey(), context.targetToSourceColumnNames())),
                 identsOf(mapToSource(request.getPartitionSourceColumns(), context.targetToSourceColumnNames())),
                 request.getSortKey(),
-                request.getPartitionSourceColumns());
+                request.getPartitionSourceColumns(),
+                context.sourceTotalRows(),
+                context.wherePredicateSql() != null);
     }
 
     /**

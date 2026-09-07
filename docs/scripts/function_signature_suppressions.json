@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "_comment": [
+    "Suppressions for docs/scripts/check_function_signatures.py.",
+    "",
+    "'suppressions' entries silence one finding kind for one function. Use them for",
+    "deliberate editorial choices, not to hide real drift — e.g. a page that shows one",
+    "representative overload on purpose rather than all twelve widths of abs().",
+    "Each entry: {function, kind, reason} and optionally 'versions' (a list of",
+    "major.minor strings). Omit 'versions' for a suppression that holds on every branch,",
+    "mirroring the scoping convention in sql_verify_suppressions.json.",
+    "",
+    "'name_aliases' maps a doc page stem to the function name registered in",
+    "gensrc/script/functions.py, for pages named differently from the registered",
+    "function or documenting a group of related functions on one page.",
+    "",
+    "Both start empty on purpose: the first run's report is the input to filling them in,",
+    "and an entry added without a reason is indistinguishable from hidden drift."
+  ],
+  "name_aliases": {},
+  "suppressions": []
+}

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "External tables are no longer recommended in StarRocks; use External Catalog instead for querying Hive, Iceberg, and Hudi data sources."
 ---
@@ -9,11 +10,11 @@ description: "External tables are no longer recommended in StarRocks; use Extern
 
 外部表功能除特定边缘使用场景外已不推荐使用，未来版本可能弃用。在常规场景中管理和查询外部数据源的数据时，建议使用 [External Catalog](./catalog/catalog_overview.md)。
 
-- 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)。
+- 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](./catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg.md)、[Hudi catalog](./catalog/hudi_catalog.md)。
 
-- 从 3.1 版本起，对于查询 MySQL、PostgreSQL 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)，对于查询 Elasticsearch 的场景推荐使用 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md)。
+- 从 3.1 版本起，对于查询 MySQL、PostgreSQL 的场景推荐使用 [JDBC catalog](./catalog/jdbc_catalog.md)，对于查询 Elasticsearch 的场景推荐使用 [Elasticsearch catalog](./catalog/elasticsearch_catalog.md)。
 
-- 从 3.2.9、3.3.1 版本起，对于查询 Oracle 和 SQLServer 的场景推荐使用 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)。
+- 从 3.2.9、3.3.1 版本起，对于查询 Oracle 和 SQLServer 的场景推荐使用 [JDBC catalog](./catalog/jdbc_catalog.md)。
 
 - 外部表功能的设计初衷是协助将数据导入至 StarRocks，而非作为常规操作对外部系统执行高效查询。更高效的解决方案是将数据直接导入至 StarRocks。
 
@@ -21,7 +22,7 @@ description: "External tables are no longer recommended in StarRocks; use Extern
 
 StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前，除 StarRocks 外部表外，其他外部表功能已经废弃。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
-从 2.5 版本开始，查询外部数据源时支持 Data Cache，提升对热数据的查询性能。参见 [Data Cache](data_cache.md)。
+从 2.5 版本开始，查询外部数据源时支持 Data Cache，提升对热数据的查询性能。参见 [Data Cache](./data_cache/data_cache.md)。
 
 ## StarRocks 外部表
 

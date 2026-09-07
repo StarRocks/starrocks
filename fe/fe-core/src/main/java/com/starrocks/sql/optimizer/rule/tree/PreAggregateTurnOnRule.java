@@ -339,6 +339,17 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                                                 Column column,
                                                 PhysicalOlapScanOperator scan) {
             String queryAggFuncName = queryAggFunc.getFnName();
+            if (column.getAggregationType() == null) {
+                // A scan column without an aggregation type is not a stored column of this table. The JSON
+                // subfield pushdown adds a synthetic column per `get_json_xxx(col, '<constant path>')` to the
+                // scan, and a derived subfield carries no aggregation semantics of its own -- nothing can be
+                // pre-aggregated through it, so turn pre-aggregation off. Reading the missing type instead
+                // threw, and the raw NullPointerException reached the client as ERROR 1064 for every
+                // aggregate over a JSON subfield of an AGGREGATE KEY table. Key columns never get here; they
+                // are handled by the caller.
+                scan.setTurnOffReason("Column " + column.getName() + " has no aggregate type");
+                return true;
+            }
             if (FunctionSet.HLL_UNION_AGG.equalsIgnoreCase(queryAggFuncName) ||
                     FunctionSet.HLL_RAW_AGG.equalsIgnoreCase(queryAggFuncName)) {
                 return false;

@@ -116,14 +116,25 @@ CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
 // The jemalloc runtime options applied via the JEMALLOC_CONF environment variable when the
 // process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak) and JEMALLOC_CONF is not already set.
-// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so this config does not
-// reconfigure jemalloc at runtime; it is exported by bin/start_backend.sh and surfaced here purely
-// for observability via information_schema.be_configs. It is ignored under the jemalloc_debug and
-// check_mem_leak modes, which force their own JEMALLOC_CONF.
+// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so it is exported by
+// bin/start_backend.sh. It is ignored under the jemalloc_debug and check_mem_leak modes, which
+// force their own JEMALLOC_CONF.
+// Updating this config at runtime only re-applies the options that jemalloc itself allows to be
+// changed after init, namely dirty_decay_ms, muzzy_decay_ms and prof_active. Adding, removing or
+// changing any other option is rejected, because the corresponding `opt.*` mallctl nodes are
+// read-only; those need a restart. Note that prof_active can only be turned on when the process
+// was started with prof:true.
+// `oversize_threshold` sends every allocation of at least that many bytes to jemalloc's
+// dedicated huge arena, which is purged eagerly. Keeping the large buffers out of the
+// per-CPU arenas lets them be reused across threads and stops them from dominating the decay
+// bookkeeping of the ordinary arenas, where they otherwise drag small and medium extents into
+// being purged with them and cost a soft page fault each on the next use. It is set above
+// jemalloc's own 8MB default because the huge arena is a single shared arena, so a lower
+// threshold funnels more allocations through its lock.
 // NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
-CONF_String(jemalloc_conf,
-            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
-            "background_thread:true,prof:true,prof_active:false");
+CONF_mString(jemalloc_conf,
+             "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+             "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
 
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
@@ -361,9 +372,29 @@ CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 // writer. Samples are consumed by tablet split and range-split parallel
 // compaction to accurately estimate row distribution for overlapping segments.
 // Setting to 0 disables sampling. The per-segment value is persisted in
-// SegmentMetadataPB.sort_key_sample_row_interval so that a runtime change
+// SegmentMetadataPB.deprecated_sort_key_sample_row_interval so that a runtime change
 // does not break cross-version readers.
 CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
+// Write-time gate. When true, the segment writer ADDITIONALLY writes a full, untruncated,
+// all-sort-column order-preserving sort key index page (alongside the always-written legacy
+// truncated short key page) and stops writing the metadata sort-key samples. When false, only the
+// legacy short key page + metadata samples are written. Default true.
+CONF_mBool(enable_full_sort_key_index, "true");
+// Read-time gate (rollback valve). When true, query read paths (segment seek + logical split) USE
+// the full sort key index page when a segment has one. When false, they fall back to the legacy
+// truncated short key page for ALL segments (including ones that already carry a full page) --
+// go-forward rollback with no data rewrite. Tablet split / range-split compaction are NOT gated by
+// this switch (they consume the full page by presence). Default true.
+CONF_mBool(enable_full_sort_key_index_read, "true");
+
+// Maximum size in bytes of one row's encoded full sort key. Mirrors primary_key_limit_size. A load,
+// Spark push, or schema change that would admit a row with a wider sort key fails with a
+// non-retryable error, which bounds the size of the full sort key index page and the memory it
+// occupies once loaded. Compaction and post-commit segment rewrites are not checked, because a
+// failure there runs after commit and would put the tablet into an error state. The check applies
+// whenever the sort key can be encoded, independently of enable_full_sort_key_index, so that
+// admission and segment writing cannot disagree. A non-positive value disables it.
+CONF_mInt32(sort_key_limit_size, "1024");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
@@ -1212,6 +1243,10 @@ CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
+// `window_fun(... ) IGNORE NULLS` can be evaluated in streaming mode with
+// watermark-based eviction of the input buffer instead of materializing the whole partition.
+// Set to false to fall back to the legacy whole-partition materializing behavior.
+CONF_mBool(pipeline_analytic_enable_ignore_nulls_streaming, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
 // only used in DCHECK
@@ -1273,14 +1308,18 @@ CONF_Bool(object_storage_endpoint_path_style_access, "false");
 // Default is -1, indicate to use the default value in sdk (1000ms)
 // Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
 CONF_Int64(object_storage_connect_timeout_ms, "-1");
-// Request timeout for object storage
-// Default is -1, indicate to use the default value in sdk.
-// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
-// below "lowSpeedLimit" for the library to consider it too slow and abort.
-// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
-// value is greater than 0 and less than 1000.
-// When it's 0, low speed limit check will be disabled.
-CONF_mInt64(object_storage_request_timeout_ms, "-1");
+// Request timeout for object storage.
+//
+// 10 s by default. It is not a deadline on the request: for Curl it is the low speed time, the
+// number of milliseconds the transfer may stay below "lowSpeedLimit" (1 byte/s) before the library
+// gives up, and for the Poco client it is the socket send/receive timeout. Either way a transfer
+// that keeps making progress is never cut off, however long it runs -- only one that has stopped
+// moving entirely. Curl rounds the value down to whole seconds; 0 disables the check, and a
+// negative value leaves the client on its own default.
+//
+// Leaving it unset is what made a stalled read wait out the HTTP client's built-in default:
+// measured on shared-data cold scans, 1.3% of queries hung for ~59 s each.
+CONF_mInt64(object_storage_request_timeout_ms, "10000");
 // Request timeout for object storage specialized for rename_file operation.
 // if this parameter is 0, use object_storage_request_timeout_ms instead.
 CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
@@ -1330,6 +1369,11 @@ CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 CONF_mBool(parquet_fast_timezone_conversion, "false");
 CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
+// Evaluate join runtime filters against decoded rows inside the parquet reader, so
+// non-matching rows are dropped before lazy columns are materialized. When disabled,
+// runtime filters are only used for row group / page statistics pruning and the
+// row-level probe happens in the downstream scan operator instead.
+CONF_mBool(parquet_runtime_filter_push_down_enable, "true");
 
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
 CONF_Double(parquet_page_cache_decompress_threshold, "1.5");
@@ -1373,7 +1417,7 @@ CONF_String(aws_sdk_logging_trace_level, "trace");
 CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
 
 // use poco client to replace default curl client
-CONF_Bool(enable_poco_client_for_aws_sdk, "true");
+CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
@@ -1456,6 +1500,28 @@ CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
+// Object-store upload thresholds, forwarded to the starlet gflags of the same name without the
+// `starlet_` prefix. For each backend, an object larger than `*_max_single_part_size` is uploaded
+// with a multipart upload instead of a single request, and `*_min_upload_part_size` is the
+// multipart part size. GCS has no part-size knob: above its threshold starlet switches to a
+// streaming upload. Defaults equal starlet's own gflag defaults, so leaving these alone changes
+// nothing.
+//
+// Memory: starlet buffers in memory up to `*_max_single_part_size` before switching to multipart,
+// then up to `*_min_upload_part_size` between part flushes, so the per-output-stream high-water
+// mark is roughly the larger of the two, multiplied by the number of concurrent output streams on
+// the node. Raising either value raises memory usage.
+//
+// Values must be greater than 0. A dynamic update to a non-positive value is rejected and nothing
+// changes. At startup a non-positive value is not applied and a warning is logged, leaving the
+// previously effective value in force: a valid value here overrides a `--fslib_*` gflag passed on
+// the BE command line, but a rejected one leaves that command-line value active while this config
+// still reports the rejected number.
+CONF_mInt64(starlet_fslib_s3_max_single_part_size, "104857600");
+CONF_mInt64(starlet_fslib_s3_min_upload_part_size, "5242880");
+CONF_mInt64(starlet_fslib_gcs_max_single_part_size, "104857600");
+CONF_mInt64(starlet_fslib_azure_storage_max_single_part_size, "104857600");
+CONF_mInt64(starlet_fslib_azure_storage_min_upload_part_size, "5242880");
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
@@ -1466,10 +1532,21 @@ CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+// Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
+// MemTracker accounting granularity. New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_memory_limit_bytes, "268435456");
+// Maximum bytes in the complete JSON response for one dump_tablet_metadata request.
+// New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_json_size_limit_bytes, "33554432");
+// Maximum number of admitted dump_tablet_metadata requests. A lower value does not cancel requests already admitted.
+// New requests fail closed when the value is non-positive.
+CONF_mInt32(lake_dump_tablet_metadata_max_concurrency, "1");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
+// Minimum elapsed time in milliseconds for logging a completed lake compaction attempt or parallel subtask profile.
+CONF_mInt64(lake_compact_slow_log_ms, "5000");
 
 // Maximum data volume (bytes) per parallel compaction subtask.
 // If total picked rowsets data size is less than this threshold, parallel compaction
@@ -1591,6 +1668,12 @@ CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 CONF_mBool(enable_strict_delvec_crc_check, "true");
+// When true, a shared-data del file (.del) read back during publish or primary-key index rebuild is
+// verified against the CRC32C recorded in its metadata, and a mismatch fails the operation with
+// Corruption instead of erasing the wrong primary keys. Del files written before the checksum
+// existed (or by the replication path, which cannot compute it) carry none and are always accepted.
+// Writing the checksum is unconditional; this only controls verification, as an escape hatch.
+CONF_mBool(lake_enable_del_file_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
@@ -1870,6 +1953,11 @@ CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 // the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
 CONF_mString(vector_query_cache_capacity, "20%");
 
+// Idle time before an unused vector index cache entry expires. The timer starts
+// when the last cache handle is released. IVF-PQ list blocks are released with
+// their owning index entry instead of expiring independently. <= 0 disables TTL.
+CONF_mInt32(vector_index_cache_expire_sec, "900");
+
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
@@ -2000,6 +2088,14 @@ CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
+// Whether horizontal compaction fills the local data cache with the input segments it reads.
+// Unlike vertical compaction, which scans the input once per column group, horizontal compaction
+// reads every input byte exactly once and the input rowsets are replaced right afterwards, so
+// caching them mostly evicts query-hot data and adds an inline local-disk write on each cache miss.
+// Defaults to false, matching the other full-scan background paths under storage/lake (schema
+// change, tablet merge, ADD INDEX). Set to true to restore the previous always-fill behavior.
+CONF_mBool(lake_enable_horizontal_compaction_fill_data_cache, "false");
+
 // If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
 // If set to false, skip LIST and use approximate tablet size (base_size=0).
 CONF_mBool(allow_list_object_for_random_bucketing_on_cache_miss, "true");
@@ -2110,6 +2206,15 @@ CONF_mInt32(python_udf_rpc_timeout_ms, "0");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+// If the fatal-signal (crash) handler hangs, e.g. a jemalloc deadlock while releasing resources
+// before the core dump (https://github.com/StarRocks/starrocks/issues/59226), force the process to
+// exit after this many seconds so orchestrators can restart it. The crash flag is still set first,
+// so the FE keeps seeing SHUTDOWN heartbeats during the grace window; this only bounds how long a
+// crashing process can linger while alive (https://github.com/StarRocks/starrocks/issues/76441).
+// Disabled by default (0) so an upgrade keeps the existing crash/core-dump behavior unchanged; set a
+// positive value to opt in and force-exit after that many seconds. A value <= 0 keeps it disabled.
+// Read once at startup: the watchdog thread is only launched when the value is positive.
+CONF_Int64(process_force_exit_after_crash_handler_hang_second, "0");
 // Current supported modules:
 // 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
 // 2. connector_scan_executor
@@ -2132,7 +2237,38 @@ CONF_mBool(lake_enable_alter_struct, "true");
 
 // vector index
 // Enable caching index blocks for IVF-family vector indexes
-CONF_mBool(enable_vector_index_block_cache, "true");
+CONF_mBool(enable_vector_index_block_cache, "false");
+
+// On a top-level vector index cache miss, let the current query fall back to
+// brute-force search and load the index into the cache in the background.
+// A runtime update affects readers initialized after the update.
+CONF_mBool(enable_vector_index_cache_async_load_on_miss, "false");
+
+// Maximum number of workers in the vector index cache background-load pool.
+// Workers are created on demand and retire after being idle. Read once when
+// StorageEnv initializes the pool.
+CONF_Int32(vector_index_cache_async_load_threads, "8");
+
+// Maximum time each synchronous cache caller waits for an in-progress vector
+// index load. On timeout the caller returns a cache miss so query paths can
+// fall back to brute-force search; the existing loader keeps running. <= 0
+// disables waiting. A runtime update affects later waits.
+CONF_mInt32(vector_index_cache_loading_wait_timeout_ms, "5000");
+
+// Whether index build also populates the vector index cache with the index it
+// just built. Off by default: the cache is sized for the query working set, and
+// letting loads/compactions push freshly built indexes into it evicts entries
+// queries are actually using, in exchange for warming indexes nobody may query.
+// The query path (TenANNReader::init_searcher) populates the cache on demand.
+// Turn on when index build and query run on the same node and the build output
+// is queried immediately, to skip the first read-back from disk/object storage.
+// Read when a builder is created, so a runtime change applies to later builds only.
+CONF_mBool(enable_vector_index_cache_on_build, "false");
+
+// Physical backend used when building cosine HNSW Flat and IVF indexes. "l2"
+// preserves the historical index format. Quantized HNSW cosine indexes always
+// use "inner_product".
+CONF_String_enum(vector_index_cosine_backend, "l2", "l2,inner_product");
 
 // concurrency of building index
 CONF_mInt32(config_vector_index_build_concurrency, "8");
@@ -2163,6 +2299,14 @@ CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 // Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
 // ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
 CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
+
+// Protect top-k vector searches from underfill with exact scoring. When enabled, route queries whose
+// predicates or runtime filters must be evaluated after per-segment ANN to brute-force, and rescore
+// matched candidates if filtered ANN returns fewer rows than the candidate bitmap can supply.
+// Disabled by default because exact scoring can be expensive. The result-count gate does not apply
+// to range searches, where fewer results can legitimately mean that no more candidates satisfy the
+// requested radius. A runtime update applies to subsequent searches.
+CONF_mBool(enable_vector_index_topk_underfill_fallback, "false");
 
 // Per-builder in-memory row buffer cap before tenann does an intermediate
 // add into the faiss in-memory index. Bounds peak memory during HNSWFlat
@@ -2293,6 +2437,21 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
 
+// AI function runtime configuration. Values are validated and published as complete runtime snapshots before use.
+// A zero request timeout leaves the live query lifecycle as the only deadline.
+CONF_mInt64(ai_function_request_timeout_ms, "600000");
+// A zero connect timeout disables the independent connection cap.
+CONF_mInt64(ai_function_connect_timeout_ms, "10000");
+CONF_mInt64(ai_function_max_response_bytes, "8388608");
+CONF_mInt32(ai_function_worker_thread_num, "16");
+CONF_mInt32(ai_function_sub_chunk_size, "64");
+CONF_mInt32(ai_function_max_retries, "3");
+CONF_mInt32(ai_function_max_retries_on_throttle, "5");
+CONF_mString(ai_function_on_error, "ignore");
+CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
+CONF_mInt32(ai_function_max_inflight, "512");
+
+// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
 CONF_Int32(llm_max_queue_size, "4096");
 
 CONF_Int32(llm_max_concurrent_queries, "8");

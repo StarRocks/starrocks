@@ -14,9 +14,12 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <algorithm>
+#include <numeric>
 #include <unordered_map>
 
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
@@ -24,6 +27,7 @@
 #include "column/serde/column_array_serde.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
 #include "platform/key_cache.h"
@@ -33,25 +37,28 @@
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/lake_persistent_index_size_tiered_compaction_strategy.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/persistent_index_sstable_fileset.h"
+#include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
-#include "storage/persistent_index_parallel_publish_context.h"
+#include "storage/parallel_upsert_context.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
-        : PersistentIndex(""), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
+        : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
 LakePersistentIndex::~LakePersistentIndex() {
     if (_memtable) {
@@ -73,18 +80,13 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
     const int num_sstables = sstable_meta.sstables_size();
     std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
 
-    std::mutex mutex;
-    Status shared_status;
-    auto open_one = [&](int idx) {
+    // Each task writes only its own sstables[] element, so there is no shared state to guard.
+    auto open_one = [&](int idx) -> Status {
         auto& pb = sstable_meta.sstables(idx);
-        auto res = PersistentIndexSstable::new_sstable(pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
-                                                       true /* need filter */, nullptr, metadata, tablet_mgr);
-        if (res.ok()) {
-            sstables[idx] = std::move(res.value());
-        } else {
-            std::lock_guard<std::mutex> lock(mutex);
-            shared_status.update(res.status());
-        }
+        ASSIGN_OR_RETURN(sstables[idx], PersistentIndexSstable::new_sstable(
+                                                pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
+                                                true /* need filter */, nullptr, metadata, tablet_mgr));
+        return Status::OK();
     };
 
     std::unique_ptr<ThreadPoolToken> token;
@@ -92,21 +94,11 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
+    ParallelTaskRunner runner(token.get());
     for (int i = 0; i < num_sstables; i++) {
-        if (token) {
-            auto st = token->submit_func([&open_one, i]() { open_one(i); });
-            if (!st.ok()) {
-                open_one(i);
-            }
-        } else {
-            open_one(i);
-        }
+        runner.run([&open_one, i]() { return open_one(i); });
     }
-    if (token) {
-        token->wait();
-    }
-
-    RETURN_IF_ERROR(shared_status);
+    RETURN_IF_ERROR(runner.join());
     return std::move(sstables);
 }
 
@@ -267,8 +259,10 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     sstable_pb.mutable_range()->CopyFrom(sst_range);
     RETURN_IF_ERROR(
             sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */, std::move(delvec)));
+    const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
     // try to merge to a existing fileset
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+    _memtable->advance_max_rss_rowid(direct_max_rss_rowid);
     TRACE_COUNTER_INCREMENT("ingest_sst_times", 1);
     return Status::OK();
 }
@@ -420,42 +414,38 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                   IOStat* stat, ParallelPublishContext* ctx) {
+                                   IOStat* stat, ParallelUpsertContext* ctx) {
+    // The active-memtable write stays on the caller thread: the memtable is not safe for concurrent
+    // writes, and this is also what fixes the order of an upsert against the deletes around it.
     std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
     size_t num_found;
-    RETURN_IF_ERROR(
-            _memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _version.major_number()));
-    if (ctx == nullptr || ctx->token == nullptr) {
+    RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _publish_version));
+
+    // Resolving what those keys previously mapped to is the expensive remote-IO half, and it is
+    // read-only, so it is the part that can be deferred.
+    auto resolve_old_values = [this, n, keys, old_values, not_founds]() -> Status {
         RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, not_founds.get(), -1));
-        RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, not_founds.get(), -1));
-        RETURN_IF_ERROR(flush_memtable());
-    } else {
-        Trace* trace = Trace::CurrentTrace();
-        auto st = ctx->token->submit_func([this, n, keys, old_values, not_founds, ctx, trace]() {
-            ADOPT_TRACE(trace);
-            auto st = get_from_inactive_memtables(n, keys, old_values, not_founds.get(), -1);
-            if (st.ok()) {
-                st = get_from_sstables(n, keys, old_values, not_founds.get(), -1);
-            }
-            if (st.ok()) {
-                std::lock_guard<std::mutex> lg(*ctx->mutex);
-                for (int i = 0; i < n; ++i) {
-                    auto old = old_values[i].get_value();
-                    if (old != NullIndexValue) {
-                        (*ctx->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    }
-                }
-            } else {
-                std::lock_guard<std::mutex> lg(*ctx->mutex);
-                ctx->status->update(st);
-            }
-        });
-        if (!st.ok()) {
-            std::lock_guard<std::mutex> lg(*ctx->mutex);
-            ctx->status->update(st);
+        return get_from_sstables(n, keys, old_values, not_founds.get(), -1);
+    };
+
+    if (ctx == nullptr || !ctx->defers_lookup()) {
+        RETURN_IF_ERROR(resolve_old_values());
+        if (ctx != nullptr) {
+            ctx->add_replaced(old_values, n);
         }
+        // Flushed per call on this path: nobody is going to join and flush on our behalf, and a large
+        // serial upsert would otherwise let the memtable grow unbounded.
+        return flush_memtable();
     }
 
+    // Deferred. The task appends the replaced rowids itself, because `old_values` is not complete
+    // until it has run -- see ParallelUpsertContext::defers_lookup() for the other half of that rule.
+    // The caller joins the runner and flushes once every chunk has been submitted.
+    ctx->runner()->run([resolve_old_values, ctx, old_values, n]() -> Status {
+        RETURN_IF_ERROR(resolve_old_values());
+        ctx->add_replaced(old_values, n);
+        return Status::OK();
+    });
     return Status::OK();
 }
 
@@ -476,14 +466,156 @@ Status LakePersistentIndex::replay_erase(size_t n, const Slice* keys, const std:
     return Status::OK();
 }
 
+Status LakePersistentIndex::parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values,
+                                                    size_t num_tasks,
+                                                    const std::function<KeyIndexSet(size_t)>& make_subset,
+                                                    bool parallel_worthwhile) {
+    // Reverse-look up task i's positions from the immutable inactive memtables + sstables into old_values.
+    // Read-only and each subset touches disjoint positions of old_values, so there is no shared state to
+    // guard. get_from_* consume the key-index set (erasing resolved entries), so each task owns its copy.
+    auto run = [&](size_t i) -> Status {
+        KeyIndexSet key_indexes = make_subset(i);
+        RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1));
+        return get_from_sstables(n, keys, old_values, &key_indexes, -1);
+    };
+
+    std::unique_ptr<ThreadPoolToken> token;
+    if (parallel_worthwhile) {
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+    }
+    ParallelTaskRunner runner(token.get());
+    for (size_t i = 0; i < num_tasks; ++i) {
+        runner.run([&run, i]() { return run(i); });
+    }
+    return runner.join();
+}
+
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid) {
     KeyIndexSet not_founds;
     size_t num_found;
-    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), del_rssid));
-    KeyIndexSet& key_indexes = not_founds;
-    RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1));
-    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
+    // Writing the tombstones into the active memtable must stay on the caller thread: it mutates the
+    // memtable (not safe for concurrent writes) and preserves the in-transaction upsert/delete order.
+    // `not_founds` collects the keys the active memtable could not resolve; their previous rss_rowid
+    // still has to be read back from the inactive memtables and sstables to build the delete vector.
+    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _publish_version, del_rssid));
+
+    // The reverse lookup above is the expensive remote-IO part of a delete publish. For a large delete
+    // it dominates, so parallelise it across disjoint key-index subsets when worthwhile, mirroring
+    // parallel_upsert. Task granularity is governed by the same config the upsert side uses:
+    // SegmentPKIterator splits each segment into pk_index_parallel_execution_min_rows-row chunks (one
+    // task each), so use that as both the per-task subset size and the serial/parallel threshold.
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
+    const bool have_backing_store = !_sstable_filesets.empty() || !_inactive_memtables.empty();
+    const bool parallel_worthwhile =
+            config::enable_pk_index_parallel_execution && have_backing_store && not_founds.size() > min_rows_per_task;
+
+    // Split not_founds into min_rows_per_task-sized subsets (or one whole-set subset when running serial).
+    std::vector<KeyIndexSet> subsets;
+    if (parallel_worthwhile) {
+        KeyIndexSet cur;
+        for (auto idx : not_founds) {
+            cur.insert(idx);
+            if (cur.size() >= min_rows_per_task) {
+                subsets.push_back(std::move(cur));
+                cur.clear();
+            }
+        }
+        if (!cur.empty()) {
+            subsets.push_back(std::move(cur));
+        }
+    } else {
+        subsets.push_back(std::move(not_founds));
+    }
+
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_erase_wait_us");
+        // Each subset is consumed by exactly one task, so hand it over by move.
+        RETURN_IF_ERROR(parallel_reverse_lookup(
+                n, keys, old_values, subsets.size(), [&subsets](size_t i) { return std::move(subsets[i]); },
+                parallel_worthwhile));
+    }
+
+    // Flush only after every reverse lookup has finished: flush_memtable may merge a flushed memtable
+    // into _sstable_filesets, which the concurrent readers above must not race with.
     RETURN_IF_ERROR(flush_memtable());
+    return Status::OK();
+}
+
+Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid,
+                                       const FileMetaPB& del_sst_meta,
+                                       const PersistentIndexSstableRangePB& del_sst_range, int64_t version) {
+    if (n == 0) {
+        return Status::OK();
+    }
+    TRACE_COUNTER_SCOPE_LATENCY_US("bulk_erase_us");
+    // 1. Flush the active + inactive memtables so every live value sits in an sstable. The tombstone
+    //    sstable ingested below carries max_rss_rowid = del_rssid<<32|UINT32_MAX, and del_rssid uses this
+    //    publish's freshly-allocated (largest) rowset id, so it becomes the newest layer and correctly
+    //    shadows those sstables. Idempotent: a no-op once the memtable is already empty, so calling this
+    //    once per del file within the same pure-delete publish only flushes on the first call.
+    RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+
+    // 2. Reverse-lookup each key's current rss_rowid from the sstables (memtables are now empty) into
+    //    old_values so the caller can build the delete vector. Read-only, so parallelise it across
+    //    contiguous key-index chunks. Each task builds its own small KeyIndexSet inside the task (avoiding
+    //    one giant not_founds set for a large delete).
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
+    const bool parallel_worthwhile = config::enable_pk_index_parallel_execution && n > min_rows_per_task &&
+                                     (!_sstable_filesets.empty() || !_inactive_memtables.empty());
+    const size_t num_tasks = (n + min_rows_per_task - 1) / min_rows_per_task;
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("bulk_erase_lookup_wait_us");
+        RETURN_IF_ERROR(parallel_reverse_lookup(
+                n, keys, old_values, num_tasks,
+                [min_rows_per_task, n](size_t i) {
+                    KeyIndexSet key_indexes;
+                    for (size_t j = i * min_rows_per_task, e = std::min(j + min_rows_per_task, n); j < e; ++j) {
+                        key_indexes.insert(j);
+                    }
+                    return key_indexes;
+                },
+                parallel_worthwhile));
+    }
+
+    // 3. Ingest the tombstone sstable that was pre-built at import time (see PkTabletWriter::flush_del_file).
+    //    This bypasses the active memtable, preventing large deletes from accumulating tombstones and causing
+    //    additional flushes. The sstable was written with entry version 0; stamp the publish version at read
+    //    time via shared_version (PersistentIndexSstable::multi_get projects it onto tombstones while
+    //    preserving the rssid/rowid sentinel). shared_version>0 requires shared_rssid, which tombstones
+    //    ignore. max_rss_rowid = del_rssid<<32|UINT32_MAX (delete-row sentinel; del_rssid uses this
+    //    publish's largest rowset id) makes the tombstone sstable the newest fileset layer so it shadows
+    //    the existing rows -- ordering identical to a memtable-flushed tombstone.
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
+    RandomAccessFileOptions ropts;
+    if (!del_sst_meta.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(ropts.encryption_info,
+                         KeyCache::instance().unwrap_encryption_meta(del_sst_meta.encryption_meta()));
+    }
+    auto location = _tablet_mgr->sst_location(_tablet_id, del_sst_meta.name());
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, location));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(del_sst_meta.name());
+    sstable_pb.set_filesize(del_sst_meta.size());
+    sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(del_rssid) << 32) | static_cast<uint64_t>(UINT32_MAX));
+    sstable_pb.set_encryption_meta(del_sst_meta.encryption_meta());
+    sstable_pb.set_shared_version(version);
+    sstable_pb.set_shared_rssid(del_rssid);
+    // Preserve the shared flag from del_sst_meta (mirrors the normal ingest path above). During tablet
+    // split cross-publish every child ingests the same tombstone sstable; dropping the flag would record
+    // the shared file as private, letting one child's compaction/vacuum delete a file the siblings still
+    // reference.
+    sstable_pb.set_shared(del_sst_meta.shared());
+    sstable_pb.mutable_range()->CopyFrom(del_sst_range);
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
+    RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+    _memtable->advance_max_rss_rowid(direct_max_rss_rowid);
+    TRACE_COUNTER_INCREMENT("bulk_erase_keys", n);
     return Status::OK();
 }
 
@@ -501,7 +633,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
-    RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _version.major_number()));
+    RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
@@ -509,7 +641,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
 Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
                                     const std::vector<uint32_t>& replace_indexes) {
     std::vector<size_t> tmp_replace_idxes(replace_indexes.begin(), replace_indexes.end());
-    RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _version.major_number()));
+    RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
@@ -597,6 +729,13 @@ Status LakePersistentIndex::prepare_merging_iterator(
         // no need to do merge
         return Status::OK();
     }
+    // Record the full picked input set before opening anything: if an open below fails
+    // with corruption, the caller's cleanup handler walks this list to drop every
+    // input's local cache (the failing file itself never makes it into
+    // `merging_sstables`).
+    for (const auto& sstable_pb : sstables_to_merge) {
+        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(sstable_pb);
+    }
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
         ASSIGN_OR_RETURN(auto sstable,
@@ -613,8 +752,6 @@ Status LakePersistentIndex::prepare_merging_iterator(
         read_options.delvec = merging_sstable->delvec();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
-        // add input sstable.
-        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merging_sstable->sstable_pb());
         ss_debug << sstable_pb.filename() << " | ";
 
         if (sstable_pb.shared()) {
@@ -758,19 +895,47 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     std::unique_ptr<sstable::Iterator> merging_iter_ptr;
     bool merge_base_level = false;
     bool contain_shared_sstables = false;
+    // Corrupted bytes usually come from the local cache copy of an input sstable. Drop
+    // those cache entries so the next compaction round re-reads from remote storage,
+    // instead of hitting the same bad blocks and failing forever. The handler walks the
+    // input list in `txn_log`, which prepare_merging_iterator fills with the full picked
+    // set before opening anything, so corruption hit while opening an input is covered
+    // too (the failing file never makes it into `sstable_vec`).
+    auto drop_input_cache_on_corruption = [&](const Status& st) {
+        if (!st.is_corruption()) {
+            return;
+        }
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "PK index sst compaction hit corruption, dropping local cache of "
+                     << txn_log->op_compaction().input_sstables_size()
+                     << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
+        for (const auto& sstable_pb : txn_log->op_compaction().input_sstables()) {
+            (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()));
+        }
+    };
     // build merge iterator
-    RETURN_IF_ERROR(prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
-                                             &merge_base_level, &contain_shared_sstables));
+    auto prepare_st = prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
+                                               &merge_base_level, &contain_shared_sstables);
+    if (!prepare_st.ok()) {
+        drop_input_cache_on_corruption(prepare_st);
+        return prepare_st;
+    }
     if (merging_iter_ptr == nullptr) {
         // no need to do merge
         return Status::OK();
     }
     if (!merging_iter_ptr->Valid()) {
+        drop_input_cache_on_corruption(merging_iter_ptr->status());
         return merging_iter_ptr->status();
     }
     // merge sstable files.
-    ASSIGN_OR_RETURN(auto merge_results, merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr,
-                                                        metadata, contain_shared_sstables));
+    auto merge_results_or = merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr, metadata,
+                                           contain_shared_sstables);
+    if (!merge_results_or.ok()) {
+        drop_input_cache_on_corruption(merge_results_or.status());
+        return merge_results_or.status();
+    }
+    auto& merge_results = merge_results_or.value();
     if (merge_results.empty()) {
         // no output file generated.
         return Status::OK();
@@ -910,6 +1075,12 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
         // we need to do flush to reduce index rebuild cost later.
         RETURN_IF_ERROR(flush_memtable(true));
     }
+    const bool first_nonempty_checkpoint =
+            builder->tablet_meta()->sstable_meta().sstables().empty() && !_sstable_filesets.empty();
+    const bool has_pending_memtable = !_inactive_memtables.empty() || (_memtable != nullptr && !_memtable->empty());
+    if (first_nonempty_checkpoint && has_pending_memtable) {
+        RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+    }
     PersistentIndexSstableMetaPB sstable_meta;
     int64_t last_max_rss_rowid = 0;
     for (auto& sstable_fileset : _sstable_filesets) {
@@ -977,7 +1148,9 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
         }
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
-        ASSIGN_OR_RETURN(auto buf, rf->read_all());
+        // Verify before decoding: a corrupt del file that still deserializes cleanly would erase the
+        // wrong primary keys from the index. Drops the local data cache and re-reads once on a mismatch.
+        ASSIGN_OR_RETURN(auto buf, read_and_verify_del_file(rf.get(), del, _tablet_id));
         auto pkc = pk_column->clone();
         const auto* data = reinterpret_cast<const uint8_t*>(buf.data());
         RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(data, data + buf.size(), pkc.get()));
@@ -1101,35 +1274,17 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // K untouched so B sees the same value the serial path would. Either way the final index equals
     // serial, so running every non-origin get() up-front against the same pre-erase snapshot is safe.
     std::vector<DecodedDel> decoded(num_del_files);
-    std::mutex shared_mutex;
-    Status shared_status;
-    auto record_err = [&](const Status& s) {
-        std::lock_guard<std::mutex> l(shared_mutex);
-        shared_status.update(s);
-    };
-    Trace* trace = Trace::CurrentTrace();
-    auto run_one = [&](int del_idx) {
-        ADOPT_TRACE(trace);
-        auto st = load_one(del_idx, &decoded[del_idx]);
-        if (!st.ok()) {
-            record_err(st);
-        }
-    };
 
     auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
             ThreadPool::ExecutionMode::CONCURRENT);
+    ParallelTaskRunner runner(token.get());
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
-        // Count attempted files here on the orchestrator thread; TRACE_COUNTER_INCREMENT reads
-        // a thread-local current trace that worker threads don't inherit, so incrementing from
-        // inside the submitted closure would silently drop the count.
+        // Counted on the orchestrator thread so it reads as "files attempted" in iteration order.
         TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
-        auto st = token->submit_func([&run_one, del_idx]() { run_one(del_idx); });
-        if (!st.ok()) {
-            run_one(del_idx);
-        }
+        // Each task writes only its own decoded[] element.
+        runner.run([&decoded, del_idx, &load_one]() { return load_one(del_idx, &decoded[del_idx]); });
     }
-    token->wait();
-    RETURN_IF_ERROR(shared_status);
+    RETURN_IF_ERROR(runner.join());
 
     // Phase 2 (sequential): order-dependent memtable erases.
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
@@ -1302,8 +1457,6 @@ struct RebuildScanContext {
     bool need_encode; // build a per-row pk-encoder column (multi-column PK or V2 encoding)
     size_t key_size;  // fixed encoded key size, used by the non-binary key path
     uint64_t rebuild_rss_rowid_point;
-    std::mutex* err_mutex;
-    Status* scan_status;
 };
 
 // Merge the IO fields the rebuild traces from one segment's stats into the aggregate (the only fields
@@ -1448,15 +1601,11 @@ StatusOr<RebuildScanPlan> build_rebuild_scan_units(TabletManager* tablet_mgr, co
 // `emit` is invoked once per decoded chunk-batch: the parallel path buffers it (inserted later in
 // version order), the serial path inserts it immediately so only one chunk is held at a time. An emit
 // error stops the scan and is recorded like any scan error.
-void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext& ctx,
-                           const std::function<Status(RebuildInsertBatch&)>& emit) {
+Status scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext& ctx,
+                             const std::function<Status(RebuildInsertBatch&)>& emit) {
     auto* itr = unit.itr;
     DeferOp close_iter([&] { itr->close(); });
     const uint32_t rssid = unit.rssid;
-    const auto record_err = [&](const Status& s) {
-        std::lock_guard<std::mutex> l(*ctx.err_mutex);
-        ctx.scan_status->update(s);
-    };
 
     // Worker-local scratch: the pk-encoder column is NOT thread-safe, so each task gets its own
     // chunk/rowids/pk-encoder column. IO accounting is task-local too: each unit's iterator was created
@@ -1481,8 +1630,7 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         if (st.is_end_of_file()) {
             break;
         } else if (!st.ok()) {
-            record_err(st);
-            break;
+            return st;
         }
         // On the encoded path, encode into a FRESH column per batch so the batch can own it; on the
         // non-encoded path the keys come straight from the chunk's single key column.
@@ -1520,11 +1668,7 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
             ColumnHelper::build_slices(pkc, batch.keys);
         } else {
             RawBytesVisitor visitor;
-            auto vst = pkc->accept(&visitor);
-            if (!vst.ok()) {
-                record_err(vst);
-                break;
-            }
+            RETURN_IF_ERROR(pkc->accept(&visitor));
             const auto* fkeys = visitor.result();
             for (size_t k = 0; k < pkc->size(); ++k) {
                 batch.keys.emplace_back(fkeys, ctx.key_size);
@@ -1536,11 +1680,9 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         } else {
             batch.chunk = std::move(local_chunk_sp); // hand the chunk's key column to the batch
         }
-        if (auto es = emit(batch); !es.ok()) {
-            record_err(es);
-            break;
-        }
+        RETURN_IF_ERROR(emit(batch));
     }
+    return Status::OK();
 }
 
 } // namespace
@@ -1571,16 +1713,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     OlapReaderStatistics stats;
     const bool need_encode = pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
 
-    // Mutex-guarded status sink so parallel workers can report the first scan error without serializing.
-    std::mutex scan_err_mutex;
-    Status scan_status;
     const RebuildScanContext ctx{.pkey_schema = pkey_schema,
                                  .pk_encoding_type = pk_encoding_type,
                                  .need_encode = need_encode,
                                  .key_size = static_cast<size_t>(_key_size),
-                                 .rebuild_rss_rowid_point = rebuild_rss_rowid_point,
-                                 .err_mutex = &scan_err_mutex,
-                                 .scan_status = &scan_status};
+                                 .rebuild_rss_rowid_point = rebuild_rss_rowid_point};
 
     // Count the rebuild scan units (one per eligible (rowset, segment)) from metadata, so we can pick
     // the path WITHOUT building any iterators -- the serial fallback must not materialize them all.
@@ -1599,6 +1736,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const bool use_parallel = should_parallel_rebuild_prefetch(rebuild_unit_count);
 
     if (use_parallel) {
+        TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::load_from_lake_tablet:parallel", nullptr);
         // Phase A: build all rebuild rowsets' iterators + flat scan units (each segment with its own
         // stats), since the parallel scan needs them all alive concurrently.
         ASSIGN_OR_RETURN(auto plan, build_rebuild_scan_units(tablet_mgr, metadata, base_version, builder, pkey_schema,
@@ -1612,6 +1750,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // is the only parallel layer; Phase A's get_each_segment_iterator stays serial (own pool).
         auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
+        ParallelTaskRunner runner(token.get());
         for (const auto& unit : scan_units) {
             const auto* unit_ptr = &unit;
             auto* result = &unit_results[unit.global_seq];
@@ -1620,16 +1759,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 result->batches.emplace_back(std::move(batch));
                 return Status::OK();
             };
-            auto st = token->submit_func(
-                    [unit_ptr, &ctx, buffer_emit]() { scan_one_rebuild_unit(*unit_ptr, ctx, buffer_emit); });
-            if (!st.ok()) {
-                // Fall back to inline scan for this unit on submit failure.
-                scan_one_rebuild_unit(unit, ctx, buffer_emit);
-            }
+            runner.run([unit_ptr, &ctx, buffer_emit]() { return scan_one_rebuild_unit(*unit_ptr, ctx, buffer_emit); });
         }
-        token->wait();
         // Propagate the first scan error before mutating the shared index.
-        RETURN_IF_ERROR(scan_status);
+        RETURN_IF_ERROR(runner.join());
         // Fold the per-segment IO stats back into the aggregate for tracing.
         for (const auto& seg_vec : plan.rowset_seg_stats) {
             for (const auto& s : seg_vec) {
@@ -1662,6 +1795,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             }
         }
     } else {
+        TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::load_from_lake_tablet:serial", nullptr);
         // Serial fallback: build, scan-and-insert, and release ONE rowset at a time, so peak memory is
         // bounded to a single rowset's iterators plus one decoded chunk. Inserts each chunk straight
         // away (at most one chunk held), and applies a rowset's del files after its segments.
@@ -1682,8 +1816,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     return insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
                                   batch.values.data(), unit.rowset_version);
                 };
-                scan_one_rebuild_unit(unit, ctx, insert_emit);
-                RETURN_IF_ERROR(scan_status);
+                RETURN_IF_ERROR(scan_one_rebuild_unit(unit, ctx, insert_emit));
                 TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", unit_rows);
             }
             if (one->has_del_files) {

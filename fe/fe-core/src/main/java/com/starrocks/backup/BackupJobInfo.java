@@ -87,6 +87,14 @@ public class BackupJobInfo implements Writable {
     public long dbId;
     @SerializedName(value = "backupTime")
     public long backupTime;
+    @SerializedName(value = "clusterId")
+    public Integer clusterId;
+    @SerializedName(value = "finishTime")
+    public Long finishTime;
+    @SerializedName(value = "ttl")
+    public String ttl;
+    @SerializedName(value = "expireTime")
+    public Long expireTime;
     @SerializedName(value = "tables")
     public Map<String, BackupTableInfo> tables = Maps.newHashMap();
     public boolean success;
@@ -424,6 +432,29 @@ public class BackupJobInfo implements Writable {
             // starrocks_meta_version does not exist
             jobInfo.starrocksMetaVersion = FeConstants.STARROCKS_META_VERSION;
         }
+        // Each retention key is read on its own and left null when it is not there: a file written
+        // before this feature existed has none of them, and a snapshot kept forever has no ttl or
+        // expiration while still recording its cluster and finish time.
+        try {
+            jobInfo.clusterId = root.getInt("cluster_id");
+        } catch (JSONException e) {
+            // cluster_id does not exist, so the snapshot has no known owner
+        }
+        try {
+            jobInfo.finishTime = root.getLong("finish_time");
+        } catch (JSONException e) {
+            // finish_time does not exist
+        }
+        try {
+            jobInfo.ttl = root.getString("ttl");
+        } catch (JSONException e) {
+            // ttl does not exist
+        }
+        try {
+            jobInfo.expireTime = root.getLong("expire_time");
+        } catch (JSONException e) {
+            // expire_time does not exist
+        }
 
         JSONObject backupObjs = root.getJSONObject("backup_objects");
         String[] tblNames = JSONObject.getNames(backupObjs);
@@ -581,6 +612,11 @@ public class BackupJobInfo implements Writable {
             root.put("id", dbId);
         }
         root.put("backup_time", backupTime);
+        // org.json drops a key whose value is null, which is how an unset retention stays absent.
+        root.put("cluster_id", clusterId);
+        root.put("finish_time", finishTime);
+        root.put("ttl", ttl);
+        root.put("expire_time", expireTime);
         JSONObject backupObj = new JSONObject();
         root.put("backup_objects", backupObj);
         root.put("meta_version", FeConstants.META_VERSION);

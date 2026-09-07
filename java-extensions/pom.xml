@@ -16,6 +16,7 @@
         <module>udf-examples</module>
         <module>hudi-reader</module>
         <module>paimon-reader</module>
+        <module>fluss-reader</module>
         <module>hive-reader</module>
         <module>hadoop-ext</module>
         <module>odps-reader</module>
@@ -42,7 +43,7 @@
         <jni-connector.version>1.0.0</jni-connector.version>
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
-        <io.netty.version>4.1.136.Final</io.netty.version>
+        <io.netty.version>4.1.137.Final</io.netty.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <commons-io.version>2.14.0</commons-io.version>
@@ -64,6 +65,7 @@
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
         <bouncycastle.version>1.84</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
     </properties>
@@ -693,6 +695,24 @@
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
                 <version>${httpclient5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-reactive</artifactId>
+                <version>${httpcore5.version}</version>
             </dependency>
 
         </dependencies>

@@ -25,9 +25,11 @@ import java.util.List;
 public class ShowSnapshotStmt extends ShowStmt {
     public static final ImmutableList<String> SNAPSHOT_ALL = new ImmutableList.Builder<String>()
             .add("Snapshot").add("Timestamp").add("Status")
+            .add("ClusterId").add("FinishTime").add("TTL").add("ExpireTime")
             .build();
     public static final ImmutableList<String> SNAPSHOT_DETAIL = new ImmutableList.Builder<String>()
             .add("Snapshot").add("Timestamp").add("Database").add("Details").add("Status")
+            .add("ClusterId").add("FinishTime").add("TTL").add("ExpireTime")
             .build();
 
     private final String repoName;

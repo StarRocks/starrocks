@@ -101,6 +101,20 @@ TEST(QueryRuntimeStateTest, TracksReadStats) {
 
     EXPECT_EQ(10, state.get_read_local_cnt());
     EXPECT_EQ(16, state.get_read_remote_cnt());
+
+    // Deltas drain once consumed, while totals stay intact.
+    EXPECT_EQ(10, state.consume_delta_read_local_cnt());
+    EXPECT_EQ(16, state.consume_delta_read_remote_cnt());
+    EXPECT_EQ(0, state.consume_delta_read_local_cnt());
+    EXPECT_EQ(0, state.consume_delta_read_remote_cnt());
+    EXPECT_EQ(10, state.get_read_local_cnt());
+    EXPECT_EQ(16, state.get_read_remote_cnt());
+
+    state.incr_read_stats(2, 4);
+    EXPECT_EQ(2, state.consume_delta_read_local_cnt());
+    EXPECT_EQ(4, state.consume_delta_read_remote_cnt());
+    EXPECT_EQ(12, state.get_read_local_cnt());
+    EXPECT_EQ(20, state.get_read_remote_cnt());
 }
 
 TEST(QueryRuntimeStateTest, ProfileControlsDefaultToDisabledMergeProfile) {
@@ -175,6 +189,40 @@ TEST(QueryRuntimeStateTest, TracksQueryAndDeliveryExpiry) {
 
     EXPECT_FALSE(state.is_delivery_expired());
     EXPECT_FALSE(state.is_query_expired());
+}
+
+TEST(QueryRuntimeStateTest, ExposesAbsoluteMonotonicQueryDeadlineInNanoseconds) {
+    QueryRuntimeState state;
+    state.set_query_expire_seconds(1);
+
+    const int64_t before_ns = MonotonicNanos();
+    state.extend_query_lifetime();
+    const int64_t deadline_ns = state.query_deadline_ns();
+    const int64_t after_ns = MonotonicNanos();
+
+    constexpr int64_t kNanosPerMillisecond = 1'000'000;
+    constexpr int64_t kNanosPerSecond = 1'000'000'000;
+    EXPECT_GE(deadline_ns, before_ns + kNanosPerSecond);
+    EXPECT_LE(deadline_ns, after_ns + kNanosPerSecond + kNanosPerMillisecond);
+    EXPECT_EQ(0, deadline_ns % kNanosPerMillisecond);
+    EXPECT_FALSE(state.is_query_expired());
+}
+
+TEST(QueryRuntimeStateTest, PreservesStrictMillisecondExpiryBoundaryForNanosecondConsumers) {
+    QueryRuntimeState state;
+    state._query_deadline_ms.store(1234);
+
+    EXPECT_EQ(1'235'000'000, state.query_deadline_ns());
+}
+
+TEST(QueryRuntimeStateTest, QueryDeadlineConversionFailsClosedAndSaturates) {
+    QueryRuntimeState state;
+    state._query_deadline_ms.store(-1);
+    EXPECT_EQ(0, state.query_deadline_ns());
+
+    constexpr int64_t kNanosPerMillisecond = 1'000'000;
+    state._query_deadline_ms.store(std::numeric_limits<int64_t>::max() / kNanosPerMillisecond);
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), state.query_deadline_ns());
 }
 
 TEST(QueryRuntimeStateTest, ExpiresDeliveryAndQueryIndependently) {

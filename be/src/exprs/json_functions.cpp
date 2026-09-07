@@ -645,7 +645,7 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_exists(FunctionContext* context, c
             VLOG(2) << "parse json path failed: " << path_str;
             continue;
         }
-        VLOG(2) << "json_exists for  " << path_str << " of " << json_value->to_string().value();
+        VLOG(2) << "json_exists for  " << path_str << " of " << json_value->to_string_uncheck();
         vpack::Builder builder;
         vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
         result.append(!slice.isNone());
@@ -756,12 +756,12 @@ StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const C
                 DCHECK(field_name != nullptr);
 
                 if (!field_name_slice.isString()) {
-                    VLOG(2) << "nonstring json field name" << field_name->to_string().value();
+                    VLOG(2) << "nonstring json field name" << field_name->to_string_uncheck();
                     ok = false;
                     break;
                 }
                 if (field_name_slice.stringRef().length() == 0) {
-                    VLOG(2) << "json field name could not be empty string" << field_name->to_string().value();
+                    VLOG(2) << "json field name could not be empty string" << field_name->to_string_uncheck();
                     ok = false;
                     break;
                 }
@@ -770,7 +770,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const C
                     DCHECK(field_value != nullptr);
                     builder.add(field_name->to_vslice().stringRef(), field_value->to_vslice());
                 } else {
-                    VLOG(2) << "field value not exists, patch a null value" << field_name->to_string().value();
+                    VLOG(2) << "field value not exists, patch a null value" << field_name->to_string_uncheck();
                     builder.add(field_name->to_vslice().stringRef(), vpack::Value(vpack::ValueType::Null));
                 }
                 ok = true;

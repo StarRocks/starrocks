@@ -19,6 +19,7 @@ endif()
 
 add_executable(orchestration_test
     ${BE_TEST_MACOS_LINK_STUBS}
+    orchestration_test_main.cpp
     external_scan_context_mgr_test.cpp
     external_scan_orchestrator_test.cpp
     fragment_executor_test.cpp
@@ -27,5 +28,5 @@ add_executable(orchestration_test
     query_orchestrator_test.cpp
     stream_load_orchestrator_test.cpp
 )
-target_link_libraries(orchestration_test Orchestration ${TEST_LINK_LIBS} gtest_main)
+target_link_libraries(orchestration_test Orchestration ${TEST_LINK_LIBS})
 set_target_properties(orchestration_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

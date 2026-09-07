@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -2390,6 +2391,433 @@ public class ExpressionStatisticsCalculatorTest {
 
         // THEN
         Assertions.assertNull(result.getHistogram());
+    }
+
+    @Test
+    public void testConvertTzWidensRangeAndUsesProductOfNdvsWhenBelowRowCount() {
+        final int rowCount = 100;
+        final double dtNdv = 2;
+        final double fromTzNdv = 1;
+        final double toTzNdv = 2;
+        final double nullsFraction = 0.1;
+        final LocalDateTime minDt = LocalDateTime.of(2021, 1, 10, 8, 30, 0);
+        final LocalDateTime maxDt = LocalDateTime.of(2021, 12, 25, 23, 59, 59);
+        final double minEpoch = getLongFromDateTime(minDt);
+        final double maxEpoch = getLongFromDateTime(maxDt);
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(minEpoch)
+                        .setMaxValue(maxEpoch)
+                        .setNullsFraction(nullsFraction)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(dtNdv)
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(fromTzNdv)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(toTzNdv)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertFalse(actual.isUnknown());
+        // Variable zones: estimated range must cover conversions under near-extreme offsets.
+        assertConvertTzStatRangeCovers(actual, "UTC", "Asia/Shanghai", minDt, maxDt);
+        assertConvertTzStatRangeCovers(actual, "Pacific/Kiritimati", "Etc/GMT+12", minDt, maxDt);
+        Assertions.assertEquals(nullsFraction, actual.getNullsFraction(), 0.001);
+        Assertions.assertEquals(4, actual.getDistinctValuesCount(), 0.001); // min(100*(1-0.1), 2*1*2)
+        Assertions.assertEquals(DateType.DATETIME.getTypeSize(), actual.getAverageRowSize(), 0.001);
+        Assertions.assertNull(actual.getHistogram());
+    }
+
+    @Test
+    public void testConvertTzCapsDistinctValuesAtRowCount() {
+        final int rowCount = 5;
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 1, 0, 0, 0)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 3, 0, 0, 0)))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(3)
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(5, actual.getDistinctValuesCount(), 0.001); // min(5*(1-0), 3*2*2)
+    }
+
+    @Test
+    public void testConvertTzCapsDistinctValuesAtNonNullRowCount() {
+        final int rowCount = 10;
+        final double dtNulls = 0.4;
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 1, 0, 0, 0)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 3, 0, 0, 0)))
+                        .setNullsFraction(dtNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(3)
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        // min(10*(1-0.4), 3*2*2) = min(6, 12) = 6
+        Assertions.assertEquals(6, actual.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testConvertTzCombinesNullsFractionFromAllArguments() {
+        // convert_tz is null if any argument is null:
+        // 1 - (1-0.2)*(1-0.5)*(1-0.4) = 1 - 0.8*0.5*0.6 = 0.76
+        final double dtNulls = 0.2;
+        final double fromTzNulls = 0.5;
+        final double toTzNulls = 0.4;
+        final double expectedNulls = 1.0 - (1.0 - dtNulls) * (1.0 - fromTzNulls) * (1.0 - toTzNulls);
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(100)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 1, 0, 0, 0)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 3, 0, 0, 0)))
+                        .setNullsFraction(dtNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(3)
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(fromTzNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(toTzNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(expectedNulls, actual.getNullsFraction(), 0.001);
+        Assertions.assertEquals(0.76, actual.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testConvertTzNullsFractionWithConstantTimezonesUsesOnlyDatetimeNulls() {
+        // Constant timezones have nullsFraction 0, so result nulls = dt nulls.
+        final double dtNulls = 0.3;
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0)))
+                        .setNullsFraction(dtNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("UTC"),
+                        ConstantOperator.createVarchar("Asia/Shanghai")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(dtNulls, actual.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testConvertTzMcvPropagationWithConstantTimezones() {
+        final String fromTz = "UTC";
+        final String toTz = "Asia/Shanghai";
+        final String dt1 = "2024-01-15 10:20:30";
+        final String dt2 = "2024-01-15 14:45:00";
+        final Map<String, Long> inputMcv = Map.of(dt1, 100L, dt2, 200L);
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnStatistic dtStat = ColumnStatistic.builder()
+                .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0)))
+                .setNullsFraction(0)
+                .setAverageRowSize(8)
+                .setDistinctValuesCount(2)
+                .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
+                .build();
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, dtStat)
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar(fromTz),
+                        ConstantOperator.createVarchar(toTz)));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertNotNull(actual.getHistogram());
+        Assertions.assertEquals(1, actual.getHistogram().getBuckets().size());
+        final Bucket bucket = actual.getHistogram().getBuckets().get(0);
+        Assertions.assertEquals(actual.getMinValue(), bucket.getLower(), 0.001);
+        Assertions.assertEquals(actual.getMaxValue(), bucket.getUpper(), 0.001);
+        Assertions.assertEquals(700L, bucket.getCount()); // 1000 - (100 + 200)
+        Assertions.assertEquals(0L, bucket.getUpperRepeats());
+        final Map<String, Long> mcv = actual.getHistogram().getMCV();
+        Assertions.assertEquals(2, mcv.size());
+        Assertions.assertEquals(100L, mcv.get(convertTzMcvKey(dt1, fromTz, toTz)));
+        Assertions.assertEquals(200L, mcv.get(convertTzMcvKey(dt2, fromTz, toTz)));
+        assertConvertTzStatRangeCovers(actual, fromTz, toTz,
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 1, 15, 14, 45, 0));
+    }
+
+    @Test
+    public void testConvertTzRangeCoversSamplesForConstantTimezones() {
+        final String fromTz = "UTC";
+        final String toTz = "Asia/Shanghai";
+        final LocalDateTime minDt = LocalDateTime.of(2024, 1, 15, 10, 20, 30);
+        final LocalDateTime maxDt = LocalDateTime.of(2024, 1, 15, 14, 45, 0);
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(minDt))
+                        .setMaxValue(getLongFromDateTime(maxDt))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar(fromTz),
+                        ConstantOperator.createVarchar(toTz)));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        assertConvertTzStatRangeCoversEveryMinute(actual, fromTz, toTz, minDt, maxDt);
+        Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testConvertTzRangeCoversSamplesAcrossDstTransition() {
+        // Europe/Berlin falls back on 2024-10-27. Endpoint-only conversion under-ranges because
+        // UTC 00:59 -> Berlin 02:59 lies outside convert(00:30)/convert(01:30).
+        final String fromTz = "UTC";
+        final String toTz = "Europe/Berlin";
+        final LocalDateTime minDt = LocalDateTime.of(2024, 10, 27, 0, 30, 0);
+        final LocalDateTime maxDt = LocalDateTime.of(2024, 10, 27, 1, 30, 0);
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(minDt))
+                        .setMaxValue(getLongFromDateTime(maxDt))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(3)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar(fromTz),
+                        ConstantOperator.createVarchar(toTz)));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        assertConvertTzStatRangeCoversEveryMinute(actual, fromTz, toTz, minDt, maxDt);
+    }
+
+    @Test
+    public void testConvertTzRangeCoversSamplesWhenOffsetShiftsEarlier() {
+        final String fromTz = "Asia/Shanghai";
+        final String toTz = "UTC";
+        final LocalDateTime minDt = LocalDateTime.of(2024, 1, 15, 10, 20, 30);
+        final LocalDateTime maxDt = LocalDateTime.of(2024, 1, 15, 14, 45, 0);
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(minDt))
+                        .setMaxValue(getLongFromDateTime(maxDt))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar(fromTz),
+                        ConstantOperator.createVarchar(toTz)));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertTrue(actual.getMinValue() <= actual.getMaxValue());
+        assertConvertTzStatRangeCoversEveryMinute(actual, fromTz, toTz, minDt, maxDt);
+    }
+
+    @Test
+    public void testConvertTzIsAllNullWhenConstantTimezoneInvalid() {
+        final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
+        final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(minValue)
+                        .setMaxValue(maxValue)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("Not/AZone"),
+                        ConstantOperator.createVarchar("UTC")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(1.0, actual.getNullsFraction(), 0.001);
+        Assertions.assertEquals(0, actual.getDistinctValuesCount(), 0.001);
+        Assertions.assertNull(actual.getHistogram());
+    }
+
+    @Test
+    public void testConvertTzKeepsWidenedRangeWhenChildRangeIsInfinite() {
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("UTC"),
+                        ConstantOperator.createVarchar("Asia/Shanghai")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertTrue(actual.isInfiniteRange());
+        Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
+    }
+
+    private static void assertConvertTzStatRangeCovers(ColumnStatistic actual, String fromTz, String toTz,
+                                                       LocalDateTime... samples) {
+        for (LocalDateTime sample : samples) {
+            final double converted = convertTzDateTimeValue(getLongFromDateTime(sample), fromTz, toTz);
+            Assertions.assertTrue(
+                    converted >= actual.getMinValue() - 0.001 && converted <= actual.getMaxValue() + 0.001,
+                    () -> "convert_tz(" + sample + ", " + fromTz + ", " + toTz + ") = " + converted
+                            + " outside estimated range [" + actual.getMinValue() + ", " + actual.getMaxValue() + "]");
+        }
+    }
+
+    private static void assertConvertTzStatRangeCoversEveryMinute(ColumnStatistic actual, String fromTz, String toTz,
+                                                                  LocalDateTime start, LocalDateTime end) {
+        for (LocalDateTime sample = start; !sample.isAfter(end); sample = sample.plusMinutes(1)) {
+            assertConvertTzStatRangeCovers(actual, fromTz, toTz, sample);
+        }
+    }
+
+    private static String convertTzMcvKey(String datetime, String fromTz, String toTz) {
+        final ConstantOperator converted = ScalarOperatorFunctions.convert_tz(
+                ConstantOperator.createVarchar(datetime).castTo(DateType.DATETIME).get(),
+                ConstantOperator.createVarchar(fromTz),
+                ConstantOperator.createVarchar(toTz));
+        return converted.castTo(VarcharType.VARCHAR).get().getVarchar();
+    }
+
+    private static double convertTzDateTimeValue(double dateTimeValue, String fromTz, String toTz) {
+        final ConstantOperator converted = ScalarOperatorFunctions.convert_tz(
+                ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) dateTimeValue)),
+                ConstantOperator.createVarchar(fromTz),
+                ConstantOperator.createVarchar(toTz));
+        return Utils.getLongFromDateTime(converted.getDatetime());
     }
 
     @Test

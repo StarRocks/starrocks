@@ -229,7 +229,19 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
     }
 
     @Override
+    public Void visitPhysicalAIProject(OptExpression optExpression, Void context) {
+        inheritFromSingleChild(optExpression, context);
+        return null;
+    }
+
+    @Override
     public Void visitLogicalProject(OptExpression optExpression, Void context) {
+        inheritFromSingleChild(optExpression, context);
+        return null;
+    }
+
+    @Override
+    public Void visitLogicalAIProject(OptExpression optExpression, Void context) {
         inheritFromSingleChild(optExpression, context);
         return null;
     }

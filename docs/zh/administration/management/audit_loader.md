@@ -1,4 +1,5 @@
 ---
+sidebar_position: 80
 displayed_sidebar: docs
 description: "AuditLoader 插件实现 StarRocks 审计日志的数据库存储和 SQL 查询管理。"
 ---

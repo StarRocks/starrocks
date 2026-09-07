@@ -1,3 +1,9 @@
+---
+displayed_sidebar: docs
+sidebar_position: 50
+description: "StarRocks 版本命名约定：MAJOR.MINOR.PATCH 格式、预发布版本标识以及版本号的解读方式。"
+---
+
 # 版本命名
 
 目的：提供对StarRocks软件包当前命名约定的统一和清晰的解释。

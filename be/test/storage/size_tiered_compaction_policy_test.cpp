@@ -285,6 +285,17 @@ public:
     }
 
     void SetUp() override {
+        // The test binary shares one process and gtest runs all value-parameterized suites after the
+        // TEST_F ones, so anything left here reaches them. A leaked size_tiered_min_level_size=10240
+        // in particular changes how PrimaryCompactionPolicy groups rowsets into levels.
+        _saved_tablet_max_versions = config::tablet_max_versions;
+        _saved_min_cumulative_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _saved_max_cumulative_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+        _saved_max_compaction_concurrency = config::max_compaction_concurrency;
+        _saved_min_base_deltas = config::min_base_compaction_num_singleton_deltas;
+        _saved_base_compaction_interval = config::base_compaction_interval_seconds_since_last_operation;
+        _saved_size_tiered_min_level_size = config::size_tiered_min_level_size;
+
         config::tablet_max_versions = 1000;
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         config::max_cumulative_compaction_num_singleton_deltas = 5;
@@ -329,9 +340,26 @@ public:
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         config::storage_root_path = _default_storage_root_path;
+
+        config::tablet_max_versions = _saved_tablet_max_versions;
+        config::min_cumulative_compaction_num_singleton_deltas = _saved_min_cumulative_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _saved_max_cumulative_deltas;
+        config::max_compaction_concurrency = _saved_max_compaction_concurrency;
+        config::min_base_compaction_num_singleton_deltas = _saved_min_base_deltas;
+        config::base_compaction_interval_seconds_since_last_operation = _saved_base_compaction_interval;
+        config::size_tiered_min_level_size = _saved_size_tiered_min_level_size;
     }
 
 protected:
+    // Captured in SetUp, put back in TearDown.
+    int16_t _saved_tablet_max_versions = 0;
+    int64_t _saved_min_cumulative_deltas = 0;
+    int64_t _saved_max_cumulative_deltas = 0;
+    int32_t _saved_max_compaction_concurrency = 0;
+    int64_t _saved_min_base_deltas = 0;
+    int64_t _saved_base_compaction_interval = 0;
+    int64_t _saved_size_tiered_min_level_size = 0;
+
     StorageEngine* _engine = nullptr;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::string _schema_hash_path;

@@ -69,10 +69,13 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -310,6 +313,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "hasForbitGlobalDict")
     private boolean hasForbiddenGlobalDict = false;
 
+    // Column-level global-dictionary forbid list: names of low-cardinality string columns whose global
+    // dictionary should not be collected (e.g. "rolling low-cardinality" columns whose dictionary keeps
+    // getting invalidated). Persisted so the decision survives FE restart / leader failover. This is a
+    // pure optimization hint: forbidding a column only skips dict encoding, never affects correctness.
+    @SerializedName(value = "noDictColumns")
+    private Set<String> noDictColumns = new HashSet<>();
+
     @SerializedName(value = "storageInfo")
     private StorageInfo storageInfo;
 
@@ -410,6 +420,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.baseCompactionForbiddenTimeRanges = other.baseCompactionForbiddenTimeRanges;
         this.hasDelete = other.hasDelete;
         this.hasForbiddenGlobalDict = other.hasForbiddenGlobalDict;
+        this.noDictColumns = other.noDictColumns == null ? new HashSet<>() : new HashSet<>(other.noDictColumns);
         if (other.storageInfo != null) {
             this.storageInfo = new StorageInfo(other.storageInfo.getFilePathInfo(), other.storageInfo.getCacheInfo());
         }
@@ -1368,6 +1379,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setHasForbiddenGlobalDict(boolean hasForbiddenGlobalDict) {
         this.hasForbiddenGlobalDict = hasForbiddenGlobalDict;
+    }
+
+    public Set<String> getNoDictColumns() {
+        return noDictColumns == null ? Collections.emptySet() : noDictColumns;
+    }
+
+    public boolean isNoDictColumn(String columnName) {
+        return noDictColumns != null && noDictColumns.contains(columnName);
+    }
+
+    public void setNoDictColumns(Set<String> noDictColumns) {
+        this.noDictColumns = noDictColumns == null ? new HashSet<>() : new HashSet<>(noDictColumns);
     }
 
     public void setStorageInfo(StorageInfo storageInfo) {

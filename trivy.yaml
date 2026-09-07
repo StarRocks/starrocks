@@ -24,8 +24,6 @@ scan:
     - "**/gcs-connector-hadoop3-2.2.26-shaded.jar"
     # parquet hadoop bundle
     - "**/parquet-hadoop-bundle-1.15.2.jar"
-    # io.grpc:grpc-netty-shaded (grpc-netty-shaded-1.63.0.jar) CVE-2025-55163
-    - "**/grpc-netty-shaded-1.63.0.jar"
     # from java extension
     - "**/parquet-jackson-1.15.2.jar"
     # from fe

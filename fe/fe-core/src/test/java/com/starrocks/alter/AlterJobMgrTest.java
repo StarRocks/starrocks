@@ -91,128 +91,83 @@ public class AlterJobMgrTest {
     }
 
     @Test
-    public void testStopGracefullyDrainsAllHandlers() {
-        // AlterJobMgr is an aggregator; stopGracefully(timeoutMs) must reach every wired
-        // handler so each one's worker thread exits and onStopped() runs. LeaderDaemon's
-        // stopGracefully is final, so we observe the contract via the onStopped() hook
-        // it invokes for an unstarted daemon (worker=null path).
-        boolean[] schemaChangeStopped = new boolean[1];
-        boolean[] mvStopped = new boolean[1];
-        boolean[] systemStopped = new boolean[1];
-
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler() {
-            @Override
-            protected void onStopped() {
-                schemaChangeStopped[0] = true;
-            }
-        };
-        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler() {
-            @Override
-            protected void onStopped() {
-                mvStopped[0] = true;
-            }
-        };
-        SystemHandler systemHandler = new SystemHandler() {
-            @Override
-            protected void onStopped() {
-                systemStopped[0] = true;
-            }
-        };
+    public void testStopBestEffortStopsAllHandlers() {
+        // AlterJobMgr is an aggregator; stopBestEffort() must reach every wired handler so each one's
+        // worker is asked to stop. Observe via isStopRequested(), which the stop request sets and which
+        // needs no started worker.
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
+        SystemHandler systemHandler = new SystemHandler();
         AlterJobMgr alterJobMgr = new AlterJobMgr(schemaChangeHandler, materializedViewHandler, systemHandler);
 
-        alterJobMgr.stopGracefully(1000L);
+        alterJobMgr.stopBestEffort();
 
-        Assertions.assertTrue(schemaChangeStopped[0], "schemaChangeHandler must be stopped");
-        Assertions.assertTrue(mvStopped[0], "materializedViewHandler must be stopped");
-        Assertions.assertTrue(systemStopped[0], "clusterHandler must be stopped");
+        Assertions.assertTrue(schemaChangeHandler.isStopRequested(), "schemaChangeHandler must be stopped");
+        Assertions.assertTrue(materializedViewHandler.isStopRequested(), "materializedViewHandler must be stopped");
+        Assertions.assertTrue(systemHandler.isStopRequested(), "clusterHandler must be stopped");
     }
 
     @Test
-    public void testStopGracefullyContinuesWhenOneHandlerThrows() {
-        // A misbehaving handler must not abort the demotion drain; the remaining handlers
-        // still need to be stopped. setStop() runs before stopGracefully's internal
-        // try/catch around onStopped, so a throwing setStop propagates - AlterJobMgr's
-        // own per-handler try/catch is the safety net we exercise here.
-        boolean[] mvStopped = new boolean[1];
-        boolean[] systemStopped = new boolean[1];
+    public void testStopBestEffortContinuesWhenOneHandlerThrows() {
+        // A misbehaving handler must not abort the demotion stop; the remaining handlers still need to
+        // be stopped. stopBestEffort() evaluates interruptOnStop(), so a throwing interruptOnStop bubbles
+        // out of that handler's stopBestEffort - AlterJobMgr's per-handler try/catch is the safety net.
+        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
+        SystemHandler systemHandler = new SystemHandler();
 
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler() {
             @Override
-            public void setStop() {
+            protected boolean interruptOnStop() {
                 throw new RuntimeException("simulated handler stop failure");
             }
         };
-        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler() {
-            @Override
-            protected void onStopped() {
-                mvStopped[0] = true;
-            }
-        };
-        SystemHandler systemHandler = new SystemHandler() {
-            @Override
-            protected void onStopped() {
-                systemStopped[0] = true;
-            }
-        };
         AlterJobMgr alterJobMgr = new AlterJobMgr(schemaChangeHandler, materializedViewHandler, systemHandler);
 
-        alterJobMgr.stopGracefully(1000L);
+        alterJobMgr.stopBestEffort();
 
-        Assertions.assertTrue(mvStopped[0], "materializedViewHandler must still be stopped");
-        Assertions.assertTrue(systemStopped[0], "clusterHandler must still be stopped");
+        Assertions.assertTrue(materializedViewHandler.isStopRequested(), "materializedViewHandler must still be stopped");
+        Assertions.assertTrue(systemHandler.isStopRequested(), "clusterHandler must still be stopped");
     }
 
     @Test
-    public void testStopGracefullyContinuesWhenMaterializedViewHandlerThrows() {
-        // Mirror of the previous test, but the middle handler is the one that misbehaves.
-        // Covers the materializedViewHandler-specific try/catch arm in stopGracefully so a
-        // failure there does not skip the SystemHandler drain.
-        boolean[] schemaChangeStopped = new boolean[1];
-        boolean[] systemStopped = new boolean[1];
+    public void testStopBestEffortContinuesWhenMaterializedViewHandlerThrows() {
+        // Mirror of the previous test, but the middle handler is the one that misbehaves. Covers the
+        // materializedViewHandler-specific try/catch arm so a failure there does not skip the
+        // SystemHandler stop.
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        SystemHandler systemHandler = new SystemHandler();
 
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler() {
-            @Override
-            protected void onStopped() {
-                schemaChangeStopped[0] = true;
-            }
-        };
         MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler() {
             @Override
-            public void setStop() {
+            protected boolean interruptOnStop() {
                 throw new RuntimeException("simulated materializedView stop failure");
             }
         };
-        SystemHandler systemHandler = new SystemHandler() {
-            @Override
-            protected void onStopped() {
-                systemStopped[0] = true;
-            }
-        };
         AlterJobMgr alterJobMgr = new AlterJobMgr(schemaChangeHandler, materializedViewHandler, systemHandler);
 
-        alterJobMgr.stopGracefully(1000L);
+        alterJobMgr.stopBestEffort();
 
-        Assertions.assertTrue(schemaChangeStopped[0], "schemaChangeHandler must still be stopped");
-        Assertions.assertTrue(systemStopped[0], "clusterHandler must still be stopped");
+        Assertions.assertTrue(schemaChangeHandler.isStopRequested(), "schemaChangeHandler must still be stopped");
+        Assertions.assertTrue(systemHandler.isStopRequested(), "clusterHandler must still be stopped");
     }
 
     @Test
-    public void testStopGracefullyToleratesClusterHandlerThrowing() {
-        // The last handler in the fan-out is SystemHandler (a.k.a. clusterHandler). Its
-        // try/catch arm has no successor to verify, so we just assert the call completes
-        // without propagating the exception - the safety net must absorb it.
+    public void testStopBestEffortToleratesClusterHandlerThrowing() {
+        // The last handler in the fan-out is SystemHandler (a.k.a. clusterHandler). Its try/catch arm
+        // has no successor to verify, so we just assert the call completes without propagating the
+        // exception - the safety net must absorb it.
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
         SystemHandler systemHandler = new SystemHandler() {
             @Override
-            public void setStop() {
+            protected boolean interruptOnStop() {
                 throw new RuntimeException("simulated cluster stop failure");
             }
         };
         AlterJobMgr alterJobMgr = new AlterJobMgr(schemaChangeHandler, materializedViewHandler, systemHandler);
 
         // Should not throw - the SystemHandler-arm catch swallows.
-        Assertions.assertDoesNotThrow(() -> alterJobMgr.stopGracefully(1000L));
+        Assertions.assertDoesNotThrow(() -> alterJobMgr.stopBestEffort());
     }
 
     private RollupJobV2 buildRollupJob(long id) {

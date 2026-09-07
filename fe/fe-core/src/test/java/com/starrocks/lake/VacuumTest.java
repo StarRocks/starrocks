@@ -64,7 +64,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -274,6 +273,97 @@ public class VacuumTest {
         partition.setLastMinActiveTxnId(Long.MAX_VALUE);
         List<VacuumRequest> round3 = runVacuumCaptureRequests();
         Assertions.assertTrue(round3.isEmpty(), "regression round must be skipped entirely");
+    }
+
+    /**
+     * A tablet split/merge installs a new index generation at the reshard commit version, and its
+     * tablets hold no metadata below that version. The retain floor must therefore never be sent
+     * below the base generation's takeoverVersion, however low the configured floor is.
+     */
+    @Test
+    public void testAutovacuumClampsMinRetainVersionToBaseTakeoverVersion() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        partition.setVisibleVersion(100L, System.currentTimeMillis());
+        // No explicit pin, so the floor comes from the config alone.
+        partition.setMinRetainVersion(0L);
+        partition.setLastSuccVacuumVersion(0L);
+
+        MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+        long savedTakeover = baseIndex.getTakeoverVersion();
+        int savedMaxPrevious = Config.lake_autovacuum_max_previous_versions;
+        try {
+            // Floor becomes max(1, 100 - 80) = 20, i.e. below the reshard commit version below.
+            Config.lake_autovacuum_max_previous_versions = 80;
+
+            baseIndex.setTakeoverVersion(30L);
+            Assertions.assertEquals(30L, captureMinRetainVersion(),
+                    "the floor must be raised to the takeover: version 20 does not exist for these tablets");
+
+            baseIndex.setTakeoverVersion(0L);
+            Assertions.assertEquals(20L, captureMinRetainVersion(),
+                    "a generation that was not installed by a reshard must leave the floor alone");
+        } finally {
+            Config.lake_autovacuum_max_previous_versions = savedMaxPrevious;
+            baseIndex.setTakeoverVersion(savedTakeover);
+            partition.setLastVacuumTime(0L);
+        }
+    }
+
+    /**
+     * The scheduling check must use the clamped floor too. A partition whose lastSuccVacuumVersion has
+     * already caught up with the lower unclamped floor would otherwise be rejected before any round
+     * carrying the takeover floor is ever sent.
+     */
+    @Test
+    public void testShouldVacuumUsesTheClampedRetainFloor() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        partition.setVisibleVersion(100L, System.currentTimeMillis());
+        partition.setMinRetainVersion(0L);
+        partition.setLastVacuumTime(0L);
+        // Vacuum has already reached the unclamped floor of max(1, 100 - 80) = 20.
+        partition.setLastSuccVacuumVersion(20L);
+
+        MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+        long savedTakeover = baseIndex.getTakeoverVersion();
+        int savedMaxPrevious = Config.lake_autovacuum_max_previous_versions;
+        boolean savedDetect = Config.lake_autovacuum_detect_vaccumed_version;
+        try {
+            Config.lake_autovacuum_max_previous_versions = 80;
+            Config.lake_autovacuum_detect_vaccumed_version = true;
+            AutovacuumDaemon daemon = new AutovacuumDaemon();
+
+            baseIndex.setTakeoverVersion(0L);
+            Assertions.assertFalse(daemon.shouldVacuum(partition),
+                    "with the floor already vacuumed and no reshard, the partition must stay unscheduled");
+
+            baseIndex.setTakeoverVersion(30L);
+            Assertions.assertTrue(daemon.shouldVacuum(partition),
+                    "the takeover raises the floor above lastSuccVacuumVersion, so a round is still owed");
+        } finally {
+            Config.lake_autovacuum_detect_vaccumed_version = savedDetect;
+            Config.lake_autovacuum_max_previous_versions = savedMaxPrevious;
+            baseIndex.setTakeoverVersion(savedTakeover);
+            partition.setLastSuccVacuumVersion(0L);
+            partition.setLastVacuumTime(0L);
+        }
+    }
+
+    /**
+     * Runs one vacuum round and returns the minRetainVersion it sent. The first round only seeds
+     * lastMinActiveTxnId; a round runs for real once that value has a confirmed, non-decreasing
+     * predecessor, so the seeding round is discarded here.
+     */
+    private long captureMinRetainVersion() throws Exception {
+        partition.setLastVacuumTime(0L);
+        partition.setLastMinActiveTxnId(0L);
+        runVacuumCaptureRequests();
+        partition.setLastMinActiveTxnId(Math.max(1L, partition.getLastMinActiveTxnId() - 1));
+        partition.setLastVacuumTime(0L);
+        List<VacuumRequest> requests = runVacuumCaptureRequests();
+        Assertions.assertFalse(requests.isEmpty(), "the vacuum round must have sent a request");
+        return requests.get(0).minRetainVersion;
     }
 
     private List<VacuumRequest> runVacuumCaptureRequests() throws Exception {
@@ -503,7 +593,7 @@ public class VacuumTest {
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
@@ -630,7 +720,7 @@ public class VacuumTest {
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
@@ -926,71 +1016,6 @@ public class VacuumTest {
     }
 
     @Test
-    public void testOnStoppedReleasesLeaderSessionState() throws Exception {
-        // On leader demotion onStopped() must shut down and dereference the executor (so it is
-        // recreated on re-election) and release the reservations of queued-but-never-run tasks.
-        // A still-running task keeps its reservation until its own finally releases it: dropping
-        // it early would let a re-elected session vacuum the same partition concurrently with the
-        // straggler, and the straggler's late finally would then drop the new session's live entry.
-        int oldParallel = Config.lake_autovacuum_parallel_partitions;
-        try {
-            // Single-threaded pool: the first task occupies the worker, the second stays queued.
-            Config.lake_autovacuum_parallel_partitions = 1;
-            AutovacuumDaemon daemon = new AutovacuumDaemon();
-            ThreadPoolExecutor pool = Deencapsulation.invoke(daemon, "getExecutorService");
-            Set<Long> vacuumingPartitions = Deencapsulation.getField(daemon, "vacuumingPartitions");
-
-            long runningPartition = 123L;
-            long queuedPartition = 456L;
-            vacuumingPartitions.add(runningPartition);
-            vacuumingPartitions.add(queuedPartition);
-
-            CountDownLatch started = new CountDownLatch(1);
-            CountDownLatch release = new CountDownLatch(1);
-            // Emulates vacuumPartition() for a straggler stuck in a non-interruptible section: it
-            // survives the shutdownNow() interrupt and only its finally releases its reservation.
-            pool.execute(() -> {
-                try {
-                    started.countDown();
-                    boolean released = false;
-                    while (!released) {
-                        try {
-                            release.await();
-                            released = true;
-                        } catch (InterruptedException ignored) {
-                            // Swallow the shutdownNow() interrupt and keep running.
-                        }
-                    }
-                } finally {
-                    vacuumingPartitions.remove(runningPartition);
-                }
-            });
-            Assertions.assertTrue(started.await(5, TimeUnit.SECONDS));
-            pool.execute(newVacuumTask(queuedPartition, () -> vacuumingPartitions.remove(queuedPartition)));
-
-            Deencapsulation.setField(daemon, "nextCollectTimeMs", 999L);
-            Deencapsulation.invoke(daemon, "onStopped");
-
-            Assertions.assertTrue(pool.isShutdown());
-            Assertions.assertNull(Deencapsulation.getField(daemon, "executorService"));
-            Assertions.assertTrue(
-                    ((java.util.Collection<?>) Deencapsulation.getField(daemon, "pendingCandidates")).isEmpty());
-            Assertions.assertEquals(0L, (long) Deencapsulation.getField(daemon, "nextCollectTimeMs"));
-            // The queued task will never run its finally, so onStopped() released its reservation...
-            Assertions.assertFalse(vacuumingPartitions.contains(queuedPartition));
-            // ...while the running task's reservation survives, so a re-elected session skips it.
-            Assertions.assertTrue(vacuumingPartitions.contains(runningPartition));
-
-            // The straggler eventually finishes and releases its own reservation.
-            release.countDown();
-            Assertions.assertTrue(pool.awaitTermination(5, TimeUnit.SECONDS));
-            Assertions.assertTrue(vacuumingPartitions.isEmpty());
-        } finally {
-            Config.lake_autovacuum_parallel_partitions = oldParallel;
-        }
-    }
-
-    @Test
     public void testScheduleVacuumRoundGatesAndRejectionRollback() throws Exception {
         long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
         boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
@@ -1086,15 +1111,6 @@ public class VacuumTest {
             Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
             Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
         }
-    }
-
-    // VacuumTask is private to AutovacuumDaemon; construct it reflectively so the test can put a
-    // task carrying a partition id into the pool queue exactly as submitPendingCandidates() does.
-    private static Runnable newVacuumTask(long partitionId, Runnable work) throws Exception {
-        Class<?> clazz = Class.forName("com.starrocks.lake.vacuum.AutovacuumDaemon$VacuumTask");
-        java.lang.reflect.Constructor<?> ctor = clazz.getDeclaredConstructor(long.class, Runnable.class);
-        ctor.setAccessible(true);
-        return (Runnable) ctor.newInstance(partitionId, work);
     }
 
     private static Object findCandidate(List<Object> candidates, long partitionId) throws Exception {

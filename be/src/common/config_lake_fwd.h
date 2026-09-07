@@ -70,6 +70,18 @@ CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 
+// Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
+// MemTracker accounting granularity. New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_memory_limit_bytes, "268435456");
+
+// Maximum bytes in the complete JSON response for one dump_tablet_metadata request.
+// New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_json_size_limit_bytes, "33554432");
+
+// Maximum number of admitted dump_tablet_metadata requests. A lower value does not cancel requests already admitted.
+// New requests fail closed when the value is non-positive.
+CONF_mInt32(lake_dump_tablet_metadata_max_concurrency, "1");
+
 CONF_mBool(lake_print_delete_log, "false");
 
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
@@ -106,6 +118,13 @@ CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 
+// When true, a shared-data del file (.del) read back during publish or primary-key index rebuild is
+// verified against the CRC32C recorded in its metadata, and a mismatch fails the operation with
+// Corruption instead of erasing the wrong primary keys. Del files written before the checksum
+// existed (or by the replication path, which cannot compute it) carry none and are always accepted.
+// Writing the checksum is unconditional; this only controls verification, as an escape hatch.
+CONF_mBool(lake_enable_del_file_crc_check, "true");
+
 // When true, shared-data (lake) tablet metadata and txn log files are written with an
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
@@ -139,6 +158,14 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
+
+// Whether horizontal compaction fills the local data cache with the input segments it reads.
+// Unlike vertical compaction, which scans the input once per column group, horizontal compaction
+// reads every input byte exactly once and the input rowsets are replaced right afterwards, so
+// caching them mostly evicts query-hot data and adds an inline local-disk write on each cache miss.
+// Defaults to false, matching the other full-scan background paths under storage/lake (schema
+// change, tablet merge, ADD INDEX). Set to true to restore the previous always-fill behavior.
+CONF_mBool(lake_enable_horizontal_compaction_fill_data_cache, "false");
 
 // If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
 // If set to false, skip LIST and use approximate tablet size (base_size=0).

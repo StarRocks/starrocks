@@ -66,6 +66,9 @@ Status BlockSpillOutputDataStream::_prepare_block(RuntimeState* state, size_t wr
         opts.plan_node_id = _spiller->options().plan_node_id;
         opts.name = _spiller->options().name;
         opts.block_size = write_size;
+        // BUGFIX: direct_io was never propagated, so spill_enable_direct_io only aligned
+        // payloads while files stayed buffered -- O_DIRECT never actually engaged.
+        opts.direct_io = state->spill_enable_direct_io();
         opts.affinity_group = _block_group->get_affinity_group();
         ASSIGN_OR_RETURN(auto block, _block_manager->acquire_block(opts));
         // update metrics

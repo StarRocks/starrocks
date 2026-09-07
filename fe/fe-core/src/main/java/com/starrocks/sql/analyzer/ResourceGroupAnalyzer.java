@@ -305,6 +305,23 @@ public class ResourceGroupAnalyzer {
                     continue;
                 }
 
+                if (key.equalsIgnoreCase(ResourceGroup.MEM_USED_PCT_LIMIT)) {
+                    double memUsedPctLimit;
+                    if (value.endsWith("%")) {
+                        value = value.substring(0, value.length() - 1);
+                        memUsedPctLimit = Double.parseDouble(value) / 100;
+                    } else {
+                        memUsedPctLimit = Double.parseDouble(value);
+                    }
+                    if (!Double.isFinite(memUsedPctLimit) || memUsedPctLimit < 0.0 || memUsedPctLimit > 1.0) {
+                        throw new SemanticException(
+                                "mem_used_pct_limit should range from 0.00(include) to 1.00(include), " +
+                                        "takes effect when greater than 0.00 ");
+                    }
+                    resourceGroup.setMemUsedPctLimit(memUsedPctLimit);
+                    continue;
+                }
+
                 if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
                     try {
                         resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
@@ -399,11 +416,12 @@ public class ResourceGroupAnalyzer {
                     tempResourceGroup.getBigQueryMemLimit() == null &&
                     tempResourceGroup.getBigQueryScanRowsLimit() == null &&
                     tempResourceGroup.getSpillMemLimitThreshold() == null &&
+                    tempResourceGroup.getMemUsedPctLimit() == null &&
                     tempResourceGroup.getWarehouses() == null) {
                 throw new SemanticException("At least one of ('cpu_weight','cpu_weight_percent'," +
                         "'exclusive_cpu_cores','exclusive_cpu_percent','mem_limit','max_cpu_cores','concurrency_limit'," +
                         "'big_query_mem_limit', 'big_query_scan_rows_limit','big_query_cpu_second_limit'," +
-                        "'spill_mem_limit_threshold','warehouses') should be specified");
+                        "'spill_mem_limit_threshold','mem_used_pct_limit','warehouses') should be specified");
             }
 
             List<String> warehouses = tempResourceGroup.getWarehouses();

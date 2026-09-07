@@ -68,6 +68,12 @@ public:
 
     void full_encode_ascending(const Datum& value, std::string* buf) const { _full_encode_ascending_datum(value, buf); }
 
+    // Number of bytes full_encode_ascending() appends for this type, or 0 for the variable-length
+    // types (CHAR/VARCHAR/VARBINARY). Lets callers size an encoded key without encoding it. The
+    // value comes from KeyCoderTraits, beside the encoder itself, and KeyCoder's constructor reads
+    // it -- so a new traits specialization that omits kFullEncodeSize fails to compile.
+    size_t full_encode_size() const { return _full_encode_size; }
+
     // similar to `full_encode_ascending`, but only encode part (the first `index_size` bytes) of the value.
     // only applicable to string type
     void encode_ascending(const void* value, size_t index_size, std::string* buf) const {
@@ -88,6 +94,7 @@ private:
     DecodeAscendingFunc _decode_ascending;
     FullEncodeAscendingFuncDatum _full_encode_ascending_datum;
     EncodeAscendingFuncDatum _encode_ascending_datum;
+    size_t _full_encode_size;
 };
 
 extern const KeyCoder* get_key_coder(LogicalType type);
@@ -101,6 +108,9 @@ class KeyCoderTraits<field_type, typename std::enable_if_t<std::is_integral_v<St
 public:
     using CppType = StorageCppType<field_type>;
     using UnsignedCppType = StorageUnsignedCppType<field_type>;
+
+    // Bytes full_encode_ascending() appends. Declared beside the encoder so the two cannot drift.
+    static constexpr size_t kFullEncodeSize = sizeof(UnsignedCppType);
 
     static void full_encode_ascending(const void* value, std::string* buf) {
         UnsignedCppType unsigned_val;
@@ -152,6 +162,8 @@ class KeyCoderTraits<TYPE_BOOLEAN> {
 public:
     using CppType = StorageCppType<TYPE_BOOLEAN>;
 
+    static constexpr size_t kFullEncodeSize = 1;
+
     static void full_encode_ascending(const void* value, std::string* buf) {
         bool v = *reinterpret_cast<const bool*>(value);
         static_assert(!std::is_signed_v<bool>);
@@ -179,7 +191,8 @@ public:
             return Status::InvalidArgument(
                     Substitute("Key too short, need=$0 vs real=$1", sizeof(bool), encoded_key->size));
         }
-        bool v = reinterpret_cast<const bool*>(encoded_key->data);
+        bool v;
+        memcpy(&v, encoded_key->data, sizeof(v));
         memcpy(cell_ptr, &v, sizeof(v));
         encoded_key->remove_prefix(sizeof(v));
         return Status::OK();
@@ -191,6 +204,8 @@ class KeyCoderTraits<TYPE_DATE_V1> {
 public:
     using CppType = StorageCppType<TYPE_DATE_V1>;
     using UnsignedCppType = StorageUnsignedCppType<TYPE_DATE_V1>;
+
+    static constexpr size_t kFullEncodeSize = sizeof(UnsignedCppType);
 
     static void full_encode_ascending(const void* value, std::string* buf) {
         UnsignedCppType unsigned_val;
@@ -231,6 +246,10 @@ public:
 template <>
 class KeyCoderTraits<TYPE_DECIMAL> {
 public:
+    // Encodes the integer part then the fraction part, so its width is the sum of theirs.
+    static constexpr size_t kFullEncodeSize =
+            KeyCoderTraits<TYPE_BIGINT>::kFullEncodeSize + KeyCoderTraits<TYPE_INT>::kFullEncodeSize;
+
     static void full_encode_ascending(const void* value, std::string* buf) {
         decimal12_t decimal_val;
         memcpy((void*)&decimal_val, value, sizeof(decimal12_t));
@@ -267,6 +286,8 @@ public:
 template <>
 class KeyCoderTraits<TYPE_DECIMALV2> {
 public:
+    static constexpr size_t kFullEncodeSize = KeyCoderTraits<TYPE_LARGEINT>::kFullEncodeSize;
+
     static void full_encode_ascending(const void* value, std::string* buf) {
         KeyCoderTraits<TYPE_LARGEINT>::full_encode_ascending(value, buf);
     }
@@ -293,21 +314,49 @@ public:
     }
 };
 
-// TODO (stephen): implement this trait later. because we can't test it in the current patch.
 template <>
 class KeyCoderTraits<TYPE_INT256> {
 public:
     using CppType = int256_t;
 
-    static void full_encode_ascending(const void* value, std::string* buf) {}
+    // Appends a fixed 32-byte big-endian buffer (16 bytes high + 16 bytes low).
+    static constexpr size_t kFullEncodeSize = 32;
 
-    static void full_encode_ascending_datum(const Datum& value, std::string* buf) {}
+    static void full_encode_ascending(const void* value, std::string* buf) {
+        int256_t v;
+        memcpy(&v, value, sizeof(v));
+        uint128_t hi = static_cast<uint128_t>(v.high) ^ (static_cast<uint128_t>(1) << 127);
+        uint128_t lo = v.low;
+        char tmp[32];
+        for (int i = 0; i < 16; i++) tmp[i] = static_cast<char>(hi >> (8 * (15 - i)));
+        for (int i = 0; i < 16; i++) tmp[16 + i] = static_cast<char>(lo >> (8 * (15 - i)));
+        buf->append(tmp, 32);
+    }
 
+    static void full_encode_ascending_datum(const Datum& value, std::string* buf) {
+        int256_t raw = value.get_int256();
+        full_encode_ascending(&raw, buf);
+    }
+
+    // legacy short-key path: unchanged (empty) to preserve the on-disk encoding of
+    // existing version-0 segments with a decimal256 short-key column.
     static void encode_ascending(const void* value, size_t index_size, std::string* buf) {}
 
     static void encode_ascending_datum(const Datum& value, size_t index_size, std::string* buf) {}
 
-    static Status decode_ascending(Slice* encoded_key, size_t index_size, uint8_t* cell_ptr, MemPool* pool) {
+    static Status decode_ascending(Slice* encoded_key, size_t index_size __attribute__((unused)), uint8_t* cell_ptr,
+                                   MemPool* pool __attribute__((unused))) {
+        if (encoded_key->size < 32) {
+            return Status::InvalidArgument(Substitute("Key too short, need=$0 vs real=$1", 32, encoded_key->size));
+        }
+        const auto* p = reinterpret_cast<const uint8_t*>(encoded_key->data);
+        uint128_t hi = 0, lo = 0;
+        for (int i = 0; i < 16; i++) hi = (hi << 8) | p[i];
+        for (int i = 0; i < 16; i++) lo = (lo << 8) | p[16 + i];
+        hi ^= (static_cast<uint128_t>(1) << 127);
+        int256_t out(static_cast<int128_t>(hi), lo);
+        memcpy(cell_ptr, &out, sizeof(out));
+        encoded_key->remove_prefix(32);
         return Status::OK();
     }
 };
@@ -327,6 +376,9 @@ class KeyCoderTraits<TYPE_DECIMAL256> : KeyCoderTraits<TYPE_INT256> {};
 template <>
 class KeyCoderTraits<TYPE_CHAR> {
 public:
+    // Variable length: the encoded size depends on the value, so callers must measure it.
+    static constexpr size_t kFullEncodeSize = 0;
+
     static void full_encode_ascending(const void* value, std::string* buf) {
         auto slice = reinterpret_cast<const Slice*>(value);
         buf->append(slice->get_data(), slice->get_size());
@@ -368,6 +420,9 @@ public:
 template <>
 class KeyCoderTraits<TYPE_VARCHAR> {
 public:
+    // Variable length: the encoded size depends on the value, so callers must measure it.
+    static constexpr size_t kFullEncodeSize = 0;
+
     static void full_encode_ascending(const void* value, std::string* buf) {
         auto slice = reinterpret_cast<const Slice*>(value);
         buf->append(slice->get_data(), slice->get_size());

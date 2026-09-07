@@ -20,6 +20,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.optimizer.statistics.Bucket;
@@ -33,10 +34,10 @@ import java.util.Map;
 
 /**
  * Replays real query dumps captured from a cluster with {@code mock=false} on columns that carry a histogram.
- * It guards the histogram round-trip end to end: the cluster serializes the histogram into the
- * {@code column_histogram} section (QueryDumpSerializer), and replay here reconstructs it
- * (QueryDumpDeserializer + HistogramUtils) and injects it back into the statistics storage
- * (UtFrameUtils.initMockEnv) so it drives cardinality estimation.
+ * It guards the histogram round-trip end to end. The frozen dumps use the legacy
+ * {@code column_histogram} side channel, which QueryDumpDeserializer still accepts; newly serialized dumps embed
+ * the histogram in the structured column-statistics model. Replay injects either representation back into the
+ * statistics storage (UtFrameUtils.initMockEnv) so it drives cardinality estimation.
  *
  * Three columns of different types are covered so both encodings and both histogram shapes are exercised:
  *   - DATE  (l_shipdate): buckets whose bounds are long-encoded timestamps stored as double, plus MCV.
@@ -60,7 +61,7 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
                 replayPair.first.getTableStatisticsMap().get("tpch_100g.lineitem").get(column);
         Assertions.assertNotNull(columnStatistic, column + " column statistic should exist after replay");
         Histogram histogram = columnStatistic.getHistogram();
-        Assertions.assertNotNull(histogram, column + " histogram should be reconstructed from column_histogram");
+        Assertions.assertNotNull(histogram, column + " histogram should be reconstructed from the query dump");
         return histogram;
     }
 
@@ -133,10 +134,9 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testDesensitizedDumpDoesNotLeakHistogramMcv() throws Exception {
-        // A histogram's MCV holds raw column values. On the desensitized dump path the histogram must not
-        // reach the output at all: column_histogram is skipped, and column_statistics must render the base
-        // statistic only (ColumnStatistic.toString() would otherwise emit the MCV preview).
+    public void testDesensitizedDumpDoesNotLeakRawStatisticValues() throws Exception {
+        // A histogram's MCV and string min/max fields hold raw column values. On the desensitized dump path,
+        // column_statistics strips those raw-value fields before writing the dump DTO.
         connectContext.setThreadLocalInfo();
         starRocksAssert.withDatabase("hist_leak_db").useDatabase("hist_leak_db");
         starRocksAssert.withTable("CREATE TABLE t_hist (k1 int, k2 date) DUPLICATE KEY(k1) "
@@ -147,7 +147,10 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
                 ImmutableMap.of("SENSITIVE_MCV_VALUE", 50L));
         ColumnStatistic stat = ColumnStatistic.builder()
                 .setMinValue(1).setMaxValue(10).setNullsFraction(0).setAverageRowSize(4)
-                .setDistinctValuesCount(10).setHistogram(histogram).build();
+                .setDistinctValuesCount(10).setHistogram(histogram)
+                .setMinString("SENSITIVE_MIN_STRING")
+                .setMaxString("SENSITIVE_MAX_STRING")
+                .build();
 
         QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
         dumpInfo.addTable("hist_leak_db", table);
@@ -160,21 +163,39 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
                 .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpSerializer())
                 .create();
 
-        // Non-desensitized dump: the full histogram (including its MCV) is emitted in column_histogram.
+        // Non-desensitized dump: the full histogram (including its MCV) is embedded in the structured model.
         String normalDump = gson.toJson(dumpInfo, QueryDumpInfo.class);
-        Assertions.assertTrue(normalDump.contains("column_histogram"),
-                "non-desensitized dump should carry column_histogram");
+        Assertions.assertTrue(normalDump.contains("\"histogram\""),
+                "non-desensitized dump should carry the structured histogram model");
+        Assertions.assertFalse(normalDump.contains("column_histogram"),
+                "new dumps should not duplicate histograms in the legacy side channel");
         Assertions.assertTrue(normalDump.contains("SENSITIVE_MCV_VALUE"),
                 "non-desensitized dump carries the real MCV value");
+        Assertions.assertTrue(normalDump.contains("SENSITIVE_MIN_STRING"),
+                "non-desensitized dump preserves raw minString values for replay");
+        Assertions.assertTrue(normalDump.contains("SENSITIVE_MAX_STRING"),
+                "non-desensitized dump preserves raw maxString values for replay");
+        QueryDumpInfo replayedDump = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
+                .create().fromJson(normalDump, QueryDumpInfo.class);
+        ColumnStatistic replayedStat = replayedDump.getTableStatisticsMap().get("hist_leak_db.t_hist").get("k1");
+        Assertions.assertEquals(histogram.getBuckets().size(), replayedStat.getHistogram().getBuckets().size());
+        Assertions.assertEquals(histogram.getMCV(), replayedStat.getHistogram().getMCV());
+        Assertions.assertEquals("SENSITIVE_MIN_STRING", replayedStat.getMinString());
+        Assertions.assertEquals("SENSITIVE_MAX_STRING", replayedStat.getMaxString());
 
-        // Desensitized dump: no histogram section, and the raw MCV value must not leak via column_statistics.
+        // Desensitized dump: no embedded histogram, and the raw MCV value must not leak via column_statistics.
         dumpInfo.setDesensitizedInfo(true);
         String desensitizedDump = gson.toJson(dumpInfo, QueryDumpInfo.class);
-        Assertions.assertFalse(desensitizedDump.contains("column_histogram"),
-                "desensitized dump must not carry column_histogram");
+        Assertions.assertFalse(desensitizedDump.contains("\"histogram\""),
+                "desensitized dump must not carry the structured histogram model");
         Assertions.assertFalse(desensitizedDump.contains("MCV:"),
                 "desensitized dump must not carry the histogram MCV preview");
         Assertions.assertFalse(desensitizedDump.contains("SENSITIVE_MCV_VALUE"),
                 "desensitized dump must not leak raw MCV values");
+        Assertions.assertFalse(desensitizedDump.contains("SENSITIVE_MIN_STRING"),
+                "desensitized dump must not leak raw minString values");
+        Assertions.assertFalse(desensitizedDump.contains("SENSITIVE_MAX_STRING"),
+                "desensitized dump must not leak raw maxString values");
     }
 }

@@ -11,7 +11,7 @@ import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 ## 説明
 
-StarRocks は、MySQL ベースのロード方法である Broker Load を提供します。ロードジョブを送信すると、StarRocks は非同期でジョブを実行します。`SELECT * FROM information_schema.loads` を使用してジョブの結果をクエリすることができます。この機能は v3.1 以降でサポートされています。背景情報、原則、サポートされているデータファイル形式、単一テーブルロードと複数テーブルロードの実行方法、ジョブ結果の表示方法については、[loading overview](../../../loading/Loading_intro.md) を参照してください。
+StarRocks は、MySQL ベースのロード方法である Broker Load を提供します。ロードジョブを送信すると、StarRocks は非同期でジョブを実行します。`SELECT * FROM information_schema.loads` を使用してジョブの結果をクエリすることができます。この機能は v3.1 以降でサポートされています。背景情報、原則、サポートされているデータファイル形式、単一テーブルロードと複数テーブルロードの実行方法、ジョブ結果の表示方法については、[loading overview](../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 <InsertPrivNote />
 
@@ -223,7 +223,7 @@ CSV 形式のデータファイルでフィールド値を [RFC4180](https://www
   >
   > データファイルの列が StarRocks テーブルの列に順番にマッピングされる場合、`column_list` を指定する必要はありません。
 
-  データファイルの特定の列をスキップしたい場合、その列を一時的に StarRocks テーブルの列とは異なる名前にするだけで済みます。詳細については、[loading overview](../../../loading/Loading_intro.md) を参照してください。
+  データファイルの特定の列をスキップしたい場合、その列を一時的に StarRocks テーブルの列とは異なる名前にするだけで済みます。詳細については、[loading overview](../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 - `COLUMNS FROM PATH AS`
 
@@ -371,7 +371,7 @@ StarRocks がストレージシステムにアクセスするために使用す�
 | aws.s3.access_key           | No       | IAM ユーザーのアクセスキー。AWS S3 にアクセスするための資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | No       | IAM ユーザーのシークレットキー。AWS S3 にアクセスするための資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 
-AWS S3 へのアクセスのための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+AWS S3 へのアクセスのための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[Authentication parameters for accessing AWS S3](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 #### Google GCS
 
@@ -659,7 +659,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `strict_mode`
 
-  [strict mode](../../../loading/load_concept/strict_mode.md) を有効にするかどうかを指定します。有効な値：`true` および `false`。デフォルト値：`false`。`true` は strict mode を有効にし、`false` は strict mode を無効にします。
+  [strict mode](../../../loading/strict_mode.md) を有効にするかどうかを指定します。有効な値：`true` および `false`。デフォルト値：`false`。`true` は strict mode を有効にし、`false` は strict mode を無効にします。
 
 - `timezone`
 

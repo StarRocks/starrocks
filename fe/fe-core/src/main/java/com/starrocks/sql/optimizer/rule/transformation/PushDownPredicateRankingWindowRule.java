@@ -178,6 +178,19 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         ConstantOperator rightChild = lessPredicate.getChild(1).cast();
         long limitValue = rightChild.getBigint();
 
+        // Ranking window functions start from 1, so a non-positive bound makes the predicate unsatisfiable and
+        // there is nothing worth pushing down. Turning such a bound into a TopN goes wrong three ways:
+        //   0  breaks the `limit != 0` invariant of LogicalTopNOperator, and reaches the BE as
+        //      `partition_limit = 0`, where creating the sorter of the first partition fails a CHECK;
+        //   -1 is indistinguishable from Operator.DEFAULT_LIMIT, the value a plan without a partition limit
+        //      already carries;
+        //   every negative value wraps around into a SIZE_MAX-ish limit once the BE sorter takes it as a
+        //      size_t, so the partition TopN silently prunes nothing.
+        // Leave the filter where it is, it produces the empty result on its own.
+        if (limitValue <= 0) {
+            return Collections.emptyList();
+        }
+
         List<ColumnRefOperator> partitionByColumns = rankRelatedWindowOperator.getPartitionExpressions().stream()
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());

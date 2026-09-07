@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "Apache Superset supports querying and visualizing both internal data and external data in StarRocks."
 ---

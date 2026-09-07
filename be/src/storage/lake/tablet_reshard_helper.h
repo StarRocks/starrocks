@@ -205,9 +205,7 @@ std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log
 //     remainder. Preserves Σ exactly.
 //
 // Used by per-rowset stat anchoring during tablet split (see
-// `tablet_splitter.cpp`'s `apply_rowset_anchor`). The future
-// cross-publish (P2) refactor of `update_txn_log_data_stats` is expected
-// to reuse this helper for sibling-wide range-aware allocation.
+// `tablet_splitter.cpp`'s `apply_rowset_anchor`).
 void allocate_proportionally(int64_t total, const std::vector<int64_t>& weights, std::vector<int64_t>* out);
 
 // Given per-bucket row counts and a pre-allocated per-bucket num_dels vector,

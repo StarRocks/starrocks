@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "从 HDFS 导入数据到 StarRocks，支持 Parquet、ORC 和 CSV 等格式。"
 toc_max_heading_level: 4

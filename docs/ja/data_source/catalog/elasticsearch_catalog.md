@@ -1,4 +1,5 @@
 ---
+sidebar_position: 90
 displayed_sidebar: docs
 description: "StarRocks v3.1 以降は Elasticsearch catalog をサポートし、Elasticsearch データの統合分析が可能。"
 toc_max_heading_level: 4

@@ -373,6 +373,9 @@ public enum ErrorCode {
     ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
             "The interval of the Multi-Range Partition must be greater than 0"),
 
+    ERR_GET_PARTITION_ACCESS_TIME(5704, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Failed to get partition access time: %s"),
+
     /**
      * 5800 - 5899: Pipe
      */

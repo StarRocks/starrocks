@@ -7,7 +7,7 @@ description: "Broker Load、INSERT、Spark Load で作成されたロードジ�
 
 ## 説明
 
-データベース内のすべてのロードジョブまたは指定されたロードジョブの情報を表示します。このステートメントは、Broker Load、INSERT、および SPARK_LOAD を使用して作成されたロードジョブのみを表示できます。`curl` コマンドを使用してロードジョブ情報を表示することもできます。v3.1以降、`information_schema` データベースの `loads` テーブルから Broker Load または Insert ジョブの結果をクエリするために SELECT ステートメントを使用することをお勧めします。詳細については、[Loading](../../../loading/Loading_intro.md)を参照してください。
+データベース内のすべてのロードジョブまたは指定されたロードジョブの情報を表示します。このステートメントは、Broker Load、INSERT、および SPARK_LOAD を使用して作成されたロードジョブのみを表示できます。`curl` コマンドを使用してロードジョブ情報を表示することもできます。v3.1以降、`information_schema` データベースの `loads` テーブルから Broker Load または Insert ジョブの結果をクエリするために SELECT ステートメントを使用することをお勧めします。詳細については、[Loading](../../../loading/loading_introduction/loading_introduction.mdx)を参照してください。
 
 前述のロード方法に加えて、StarRocks は Stream Load および Routine Load を使用してデータをロードすることをサポートしています。Stream Load は同期操作であり、Stream Load ジョブの情報を直接返します。Routine Load は非同期操作であり、[SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) ステートメントを使用して Routine Load ジョブの情報を表示できます。
 

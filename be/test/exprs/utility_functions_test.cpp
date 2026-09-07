@@ -391,4 +391,77 @@ TEST_F(UtilityFunctionsTest, encodeSortKeyStringEscaping) {
     ASSERT_NE(k0.to_string(), k1.to_string());
 }
 
+TEST_F(UtilityFunctionsTest, encodeSortKeyConstColumn) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    // Size > 1: a one-row constant column encodes correctly even with the defect present.
+    constexpr int kRows = 4096;
+
+    auto const_case_ids = Int64Column::create();
+    auto column_case_ids = Int64Column::create();
+    auto column_case_tag = Int64Column::create();
+    for (int i = 0; i < kRows; i++) {
+        const_case_ids->append(i + 1);
+        column_case_ids->append(i + 1);
+        column_case_tag->append(7);
+    }
+
+    Columns const_case;
+    const_case.emplace_back(ColumnHelper::create_const_column<TYPE_BIGINT>(7, kRows));
+    const_case.emplace_back(const_case_ids);
+
+    Columns column_case;
+    column_case.emplace_back(column_case_tag);
+    column_case.emplace_back(column_case_ids);
+
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr const_out, UtilityFunctions::encode_sort_key(ctx, const_case));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr column_out, UtilityFunctions::encode_sort_key(ctx, column_case));
+
+    auto* const_bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(const_out);
+    auto* column_bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(column_out);
+    ASSERT_EQ(kRows, const_bin->size());
+    ASSERT_EQ(kRows, column_bin->size());
+
+    for (int i = 0; i < kRows; i++) {
+        ASSERT_EQ(column_bin->get_slice(i).to_string(), const_bin->get_slice(i).to_string()) << "row " << i;
+    }
+}
+
+TEST_F(UtilityFunctionsTest, encodeSortKeyConstNullColumn) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    constexpr int kRows = 4096;
+
+    auto const_case_ids = Int64Column::create();
+    auto column_case_ids = Int64Column::create();
+    auto column_case_tag = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    for (int i = 0; i < kRows; i++) {
+        const_case_ids->append(i + 1);
+        column_case_ids->append(i + 1);
+        column_case_tag->append_nulls(1);
+    }
+
+    Columns const_case;
+    const_case.emplace_back(ColumnHelper::create_const_null_column(kRows));
+    const_case.emplace_back(const_case_ids);
+
+    Columns column_case;
+    column_case.emplace_back(column_case_tag);
+    column_case.emplace_back(column_case_ids);
+
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr const_out, UtilityFunctions::encode_sort_key(ctx, const_case));
+    ASSIGN_OR_ASSERT_FAIL(ColumnPtr column_out, UtilityFunctions::encode_sort_key(ctx, column_case));
+
+    auto* const_bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(const_out);
+    auto* column_bin = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(column_out);
+    ASSERT_EQ(kRows, const_bin->size());
+    ASSERT_EQ(kRows, column_bin->size());
+
+    for (int i = 0; i < kRows; i++) {
+        ASSERT_EQ(column_bin->get_slice(i).to_string(), const_bin->get_slice(i).to_string()) << "row " << i;
+    }
+}
+
 } // namespace starrocks

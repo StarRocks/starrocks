@@ -1,4 +1,5 @@
 ---
+sidebar_position: 80
 displayed_sidebar: docs
 description: "StarRocks stores its audit logs in the local file fe/log/fe.audit.log rather than an internal database."
 ---

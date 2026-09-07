@@ -22,6 +22,7 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.exceptions.CommitFailedException;
@@ -164,6 +165,87 @@ public class CommitRateLimiterTest {
         CommitFailedException e1 =
                 Assertions.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
         Assertions.assertTrue(e1.getMessage().contains("timed out"));
+    }
+
+    @Test
+    public void testPreparedTransactionUsesPreparedDeadline() {
+        long partitionId = 54321;
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - timeoutMs);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setWriteDurationMs(1_000);
+        transactionState.setTransactionStatus(TransactionStatus.PREPARED);
+        transactionState.setPreparedTimeAndTimeout(currentTimeMs, timeoutMs);
+
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
+
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+
+        Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+    }
+
+    @Test
+    public void testPreparedTransactionAbortedAtPreparedDeadline() {
+        long partitionId = 54321;
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - 100);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setWriteDurationMs(1_000);
+        transactionState.setTransactionStatus(TransactionStatus.PREPARED);
+        transactionState.setPreparedTimeAndTimeout(currentTimeMs - timeoutMs, timeoutMs);
+
+        Assertions.assertTrue(ratio > 0.01);
+        Assertions.assertTrue(threshold > 0);
+
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+
+        CommitFailedException e =
+                Assertions.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertTrue(e.getMessage().contains("timed out"));
+    }
+
+    @Test
+    public void testOnePhasePreparedTransactionUsesOriginalDeadline() {
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - timeoutMs + 1_000);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setWriteDurationMs(1_000);
+        transactionState.setAllowCommitTimeMs(currentTimeMs + 2_000);
+        transactionState.setTransactionStatus(TransactionStatus.PREPARED);
+        transactionState.setPreparedTimeAndTimeout(
+                currentTimeMs, timeoutMs, TransactionState.TxnPrepareMode.INTERNAL_ONE_PHASE);
+
+        CommitFailedException e = Assertions.assertThrows(
+                CommitFailedException.class, () -> limiter.check(Collections.emptySet(), currentTimeMs));
+        Assertions.assertTrue(e.getMessage().contains("timed out"));
+    }
+
+    @Test
+    public void testSuccessfulRetryClearsTemporaryReason() throws CommitRateExceededException {
+        long partitionId = 54321;
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - 100);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setReason("unrelated reason");
+
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+
+        CommitRateExceededException e = Assertions.assertThrows(
+                CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertTrue(transactionState.getReason().contains("delay commit"));
+
+        limiter.check(partitions, e.getAllowCommitTime());
+        Assertions.assertEquals("unrelated reason", transactionState.getReason());
     }
 
     @Test

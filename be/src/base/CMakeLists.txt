@@ -23,6 +23,7 @@ ADD_BE_LIB(Base
   compression/lzo_decompressor_registry.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
+  compression/zstd_dict.cpp
   concurrency/await.cpp
   concurrency/core_local.cpp
   concurrency/spinlock.cpp

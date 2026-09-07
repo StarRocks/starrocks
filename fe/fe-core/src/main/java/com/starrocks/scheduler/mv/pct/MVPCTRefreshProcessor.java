@@ -350,6 +350,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             long processStartTime = mvContext.getStatus().getProcessStartTime();
             newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
                     mvRefreshParams.isCompleteRefresh() && processStartTime > 0
+                            && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
         // warehouse

@@ -16,8 +16,12 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.thrift.TFunction;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyMapType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
@@ -25,12 +29,16 @@ import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.InvalidType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Comparator;
+import java.util.List;
 
 public class FunctionSetTest {
 
@@ -379,5 +387,75 @@ public class FunctionSetTest {
         Assertions.assertEquals(2, tableFunction.getTableFnReturnTypes().size());
         Assertions.assertEquals(IntegerType.BIGINT, tableFunction.getTableFnReturnTypes().get(0));
         Assertions.assertEquals(VarcharType.VARCHAR, tableFunction.getTableFnReturnTypes().get(1));
+    }
+
+    @Test
+    public void testAICompleteBuiltinMetadata() {
+        List<Function> aiCompleteFunctions = functionSet.getBuiltinFunctions().stream()
+                .filter(fn -> "ai_complete".equals(fn.functionName()))
+                .sorted(Comparator.comparingLong(Function::getFunctionId))
+                .toList();
+
+        long[] expectedIds = {200100L, 200101L, 200102L, 200103L};
+        Type[][] expectedArgs = {
+                {VarcharType.VARCHAR},
+                {VarcharType.VARCHAR, AnyMapType.ANY_MAP},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, AnyMapType.ANY_MAP}
+        };
+
+        Assertions.assertEquals(expectedIds.length, aiCompleteFunctions.size());
+        for (int i = 0; i < expectedIds.length; i++) {
+            Function fn = aiCompleteFunctions.get(i);
+            Assertions.assertEquals(expectedIds[i], fn.getFunctionId());
+            Assertions.assertArrayEquals(expectedArgs[i], fn.getArgs());
+            Assertions.assertEquals(expectedArgs[i].length, fn.getNumArgs());
+            Assertions.assertEquals(VarcharType.VARCHAR, fn.getReturnType());
+            Assertions.assertTrue(fn.isNullable());
+            Assertions.assertTrue(fn.isAi());
+            Assertions.assertEquals(TFunctionBinaryType.AI, fn.getBinaryType());
+            Assertions.assertEquals(TAIModelSource.SYSTEM, fn.getAiModelSource());
+
+            // ANY_MAP is a catalog-only pseudo type and must be instantiated by the analyzer before serialization.
+            if (!fn.isPolymorphic()) {
+                TFunction thriftFunction = fn.toThrift();
+                Assertions.assertEquals(TFunctionBinaryType.AI, thriftFunction.getBinary_type());
+                Assertions.assertEquals(TAIModelSource.SYSTEM, thriftFunction.getAi_model_source());
+            }
+        }
+
+        Assertions.assertTrue(FunctionSet.nonDeterministicFunctions.contains("ai_complete"));
+
+        Function aiQuery = functionSet.getBuiltinFunctions().stream()
+                .filter(fn -> fn.getFunctionId() == 200000L)
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertEquals("ai_query", aiQuery.functionName());
+        Assertions.assertFalse(aiQuery.isAi());
+        Assertions.assertEquals(TFunctionBinaryType.BUILTIN, aiQuery.getBinaryType());
+    }
+
+    @Test
+    public void testAICompletePolymorphicSpecializationPreservesMetadata() {
+        Type mapType = new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR);
+        Type[][] concreteArgs = {
+                {VarcharType.VARCHAR, mapType},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, mapType}
+        };
+        long[] expectedIds = {200101L, 200103L};
+
+        for (int i = 0; i < concreteArgs.length; i++) {
+            Function resolved = functionSet.getFunction(
+                    new Function(new FunctionName("ai_complete"), concreteArgs[i], InvalidType.INVALID, false),
+                    Function.CompareMode.IS_IDENTICAL);
+
+            Assertions.assertNotNull(resolved);
+            Assertions.assertEquals(expectedIds[i], resolved.getFunctionId());
+            Assertions.assertArrayEquals(concreteArgs[i], resolved.getArgs());
+            Assertions.assertFalse(resolved.isPolymorphic());
+            Assertions.assertTrue(resolved.isAi());
+            Assertions.assertEquals(TAIModelSource.SYSTEM, resolved.getAiModelSource());
+            Assertions.assertEquals(TAIModelSource.SYSTEM, resolved.toThrift().getAi_model_source());
+        }
     }
 }

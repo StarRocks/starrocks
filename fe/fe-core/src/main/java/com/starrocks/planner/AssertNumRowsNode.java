@@ -101,4 +101,11 @@ public class AssertNumRowsNode extends PlanNode {
         planNode.setNode_type(TPlanNodeType.ASSERT_NUM_ROWS_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into an assert-num-rows operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }

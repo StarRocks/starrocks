@@ -378,11 +378,31 @@ public class ListPartitionPruner implements PartitionPruner {
 
             ScalarOperator result = buildDeducedConjunct(conjunct, generatedExpr, generatedColumn);
             if (result != null) {
-                extraConjuncts.add(result);
+                extraConjuncts.add(keepNullPartitions(result, generatedColumn));
             }
         }
 
         partitionConjuncts.addAll(extraConjuncts);
+    }
+
+    /**
+     * A deduced conjunct only describes the rows whose partition value is not NULL.
+     * <p>
+     * The deduction rewrites a predicate on the source column into a predicate on the generated
+     * partition column, which is sound only where the generating function is defined. For a row it
+     * maps to NULL - for example from_unixtime(ts) of a negative ts, which lands the row in the NULL
+     * (default) partition - the source predicate can still be true while the deduced predicate is
+     * not, and every comparison against the partition value map drops the NULL partitions
+     * (evalBinaryPredicate only ever unions matches out of partitionValueMap). Pruning with the
+     * deduced conjunct alone therefore removes partitions that hold matching rows, and the rows are
+     * silently missing from the result.
+     * <p>
+     * OR-ing "generated column IS NULL" keeps exactly those partitions: what the deduced predicate
+     * says nothing about, it may not prune. Where the table has no NULL partition the added branch
+     * matches nothing and pruning is unchanged.
+     */
+    private static ScalarOperator keepNullPartitions(ScalarOperator deduced, ColumnRefOperator generatedColumn) {
+        return Utils.compoundOr(deduced, new IsNullPredicateOperator(generatedColumn));
     }
 
     public static boolean checkDeduceConjunct(List<ColumnRefOperator> partitionColumnRefs,

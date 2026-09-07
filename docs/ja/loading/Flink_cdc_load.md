@@ -1,4 +1,5 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 description: "Flink CDC を使用して MySQL の変更データをリアルタイムでキャプチャし、StarRocks Flink コネクタで StarRocks テーブルに同期する方法。"
 ---
@@ -236,7 +237,7 @@ MySQL からリアルタイムでデータを同期するには、システム�
     - `[table-rule]`: データベース & テーブルのマッチングルールと対応する flink-connector-starrocks の設定。
 
        - `Database`, `table`: MySQL のデータベース & テーブルの名前。正規表現がサポートされています。
-       - `flink.starrocks.*`: flink-connector-starrocks の設定情報。詳細な設定と情報については、[flink-connector-starrocks](../loading/Flink-connector-starrocks.md) を参照してください。
+       - `flink.starrocks.*`: flink-connector-starrocks の設定情報。詳細な設定と情報については、[flink-connector-starrocks](./Flink-connector-starrocks.md) を参照してください。
 
        > 異なるテーブルに対して異なる flink-connector-starrocks 設定を使用する必要がある場合。たとえば、一部のテーブルが頻繁に更新され、データロードを加速する必要がある場合は、[異なるテーブルに対して異なる flink-connector-starrocks 設定を使用する](#use-different-flink-connector-starrocks-configurations-for-different-tables) を参照してください。MySQL シャーディングから取得した複数のテーブルを同じ StarRocks テーブルにロードする必要がある場合は、[MySQL シャーディング後の複数のテーブルを StarRocks の 1 つのテーブルに同期する](#synchronize-multiple-tables-after-mysql-sharding-to-one-table-in-starrocks) を参照してください。
 

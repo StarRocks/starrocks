@@ -23,6 +23,13 @@ Map the FE surface for SQL parsing, optimization, metadata, coordination, and sh
 - Connectors and plugins should depend on FE SPI boundaries, not FE internals.
 - Shared test utilities belong in `fe/fe-testing/` instead of ad hoc local fixtures.
 
+## Observability Touchpoints
+
+Apply the [Observability Awareness policy](../policies/observability-awareness.md) to the existing FE mechanisms used by the affected path:
+
+- **Query and Load Profiles**: Follow BE profile reports through FE aggregation, finalization, storage, and exposure. Ensure a new path preserves the existing profile lifecycle and does not drop reports, aggregate them incorrectly, or finish the profile prematurely.
+- **Metrics**: Inspect the owning component's existing metric registration, update, and cleanup path. Keep those metrics accurate when adding branches, retries, fallbacks, or terminal outcomes; extend the nearby metric set when an important new state or outcome would otherwise be missing, following [Adding/Modifying FE Metrics](../../fe/AGENTS.md#addingmodifying-fe-metrics).
+
 ## Test and Validation
 
 - Use focused `run-fe-ut.sh --test ...` loops for planner, analyzer, optimizer, and catalog changes.

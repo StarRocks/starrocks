@@ -210,6 +210,8 @@ option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
 option(WITH_TENANN "Build with TENANN" OFF)
 
+option(WITH_PAIMON_CPP "Build with paimon-cpp" ON)
+
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
 if (${WITH_TENANN} STREQUAL "ON")
@@ -225,6 +227,12 @@ message(STATUS "WITH TENANN is: ${WITH_TENANN}")
 if (APPLE AND WITH_STARCACHE)
     message(STATUS "Disable starcache on macOS")
     set(WITH_STARCACHE OFF CACHE BOOL "Build binary with starcache library" FORCE)
+endif()
+
+# thirdparty does not build paimon-cpp on macOS.
+if (APPLE AND WITH_PAIMON_CPP)
+    message(STATUS "Disable paimon-cpp on macOS")
+    set(WITH_PAIMON_CPP OFF CACHE BOOL "Build with paimon-cpp" FORCE)
 endif()
 
 # Check gcc
@@ -931,10 +939,12 @@ set (TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
+# Several benches assert with gtest macros, so benchmarks need gtest just like tests do.
 set (BENCH_LINK_LIBS
     ${STARROCKS_LINK_LIBS}
     ${WL_START_GROUP}
     ${DIRECT_CONNECTOR_LINK_LIBS}
+    gtest
     ${WL_END_GROUP}
 )
 

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ADD_BE_BENCH(${SRC_DIR}/bench/analytor_lag_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/agg_hash_map_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
@@ -50,3 +51,6 @@ ADD_BE_BENCH(${SRC_DIR}/bench/column_ops_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/arrow_scanner_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/cast_overflow_check_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/agg_simd_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/flat_json_vertical_compaction_mem_bench)
+# Measure task memory with the same malloc hooks as starrocks_be.
+target_sources(flat_json_vertical_compaction_mem_bench PRIVATE ${SRC_DIR}/service/mem_hook.cpp)

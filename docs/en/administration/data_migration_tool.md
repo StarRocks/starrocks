@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community."
 ---
@@ -159,6 +160,60 @@ These storage volumes are used **only during migration** to give target CNs read
    - It is recommended to use temporary credentials (access key / secret key) for the source storage volume. These can be revoked after migration is complete.
    :::
 
+#### Migrate range-distributed tables
+
+Range-distributed table migration is supported only between shared-data clusters. The migration tool creates a missing target table automatically from the source table definition. Do not create the target table manually.
+
+Record the original values of the following FE configurations. For each dynamic setting, also add the matching persistent setting to **fe.conf** on every applicable FE so that an FE restart does not change the migration contract.
+
+1. On both the source and target clusters, disable tablet merge and keep range distribution enabled:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+   ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "true");
+   ```
+
+2. `enable_execute_script_on_frontend` is a static configuration. Set it to `true` in **fe.conf** on every source and target FE, and restart the FEs before the migration window.
+
+   ```Properties
+   enable_execute_script_on_frontend = true
+   ```
+
+3. On the target cluster, suppress size-triggered automatic tablet split by setting the target size to a very large value:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807");
+   ```
+
+4. Before starting the tool, run the following query separately on the source and target clusters:
+
+   ```SQL
+   SELECT JOB_ID, DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_TYPE = 'MERGE_TABLET'
+     AND JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   Start migration only when this query returns no relevant rows on either cluster. This waits for every non-final merge state, including `PENDING`, `PREPARING`, `RUNNING`, `CLEANING`, and `ABORTING`. Keep source automatic split enabled so that the source topology can evolve. Do not run independent writes or pre-split operations on the target while migration is active.
+
+The tool reads the actual source and target topology through leader-only `ADMIN EXECUTE ON FRONTEND` calls. The complete range value for each tablet contains `lowerBound`, `lowerIncluded`, `upperBound`, and `upperIncluded`. A null endpoint means negative or positive infinity. In a finite multi-column endpoint list, a null cell means SQL NULL; every other cell is a canonical string value. This representation preserves both inclusion flags and distinguishes a literal string `NULL` from SQL NULL. Although the bridge retains this complete representation for future extension, the current FE-to-BE split path accepts only half-open `[lower, upper)` child ranges.
+
+`ADMIN EXECUTE ON FRONTEND` is not forwarded to another FE. The tool must discover and connect to each cluster's Leader FE, and the migration users need the SYSTEM-level `OPERATE` privilege. FE scripts are privileged code: use a dedicated trusted account, protect its credentials, and pass generated script parameters as properly escaped JSON inside one SQL string. The DDL executor must send the complete ADMIN statement without splitting it at semicolons. After migration, restore the recorded static script-execution setting as described below.
+
+For each range-distributed table, the tool compares freshly read source and target topologies. If they differ, the tool stops generating new replication jobs for that table but lets queued, sending, and target-running jobs finish. After all such jobs and replication transactions have drained, it submits an exact-boundary tablet split through the existing DDL queue. Replication resumes only after another topology read proves that source and target ranges are structurally equal.
+
+Range distribution does not change shared-data version synchronization. Each replication uses the source physical partition's `visibleVersion`, compares the complete metadata and file sets, and skips files that already exist on the target.
+
+When transparent data encryption (TDE) is used in shared-data-to-shared-data migration, a newly copied private standalone physical file is read with its source encryption metadata and then re-encrypted under the target policy. If the source key hierarchy cannot be unwrapped, migration fails before the target publication. Newly copied shared or bundled physical files are unsupported when the source file is encrypted or target TDE is enabled. Objects that already exist on the target can be reused directly and retain their target encryption metadata. Migration from a shared-nothing source to a shared-data target fails closed when a source rowset or DCG file is encrypted; decrypting and re-encrypting those files on this path is not supported.
+
+:::warning
+
+This workflow supports split convergence only. It fails closed if convergence would require a target merge, including a source merge, a target-only boundary, crossing ranges, or a target topology finer than the source topology. Range-colocate layouts are also unsupported.
+
+:::
+
+After migration, first wait for the tool, replication jobs and transactions, and tablet reshard jobs to drain. Restore dynamic configurations, including the source and target merge setting and the target tablet size, with `ADMIN SET FRONTEND CONFIG`, and restore their recorded values in **fe.conf**. Restore automatic reshard behavior only if it was enabled before migration; otherwise keep it disabled. Separately restore the recorded static `enable_execute_script_on_frontend` value in **fe.conf** on every FE and restart the FEs. Disable script execution only if its recorded value was `false` or you intentionally choose a stricter post-migration security policy.
+
 </TabItem>
 </Tabs>
 
@@ -208,7 +263,7 @@ Please note that increasing the values of the following configuration items can 
 
 #### FE Parameters
 
-The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) on how to modify them.
+The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](./configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) on how to modify them.
 
 | **Parameter**                         | **Default** | **Unit** | **Description**                                              |
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -219,7 +274,7 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 
 #### BE Parameters
 
-The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md) on how to modify it.
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](./configuration/BE_parameters/BE_parameters.md) on how to modify it.
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -322,6 +377,15 @@ replication_job_batch_size=10
 report_interval_seconds=300
 
 enable_table_property_sync=false
+
+# privilege config
+enable_privilege_sync=false
+ddl_job_allow_drop_user_target_only=false
+ddl_job_allow_drop_role_target_only=false
+ddl_job_allow_drop_inconsistent_user=true
+ddl_job_allow_revoke_grant_target_only=false
+privilege_sync_exclude_users=
+privilege_sync_exclude_roles=
 ```
 
 The description of the parameters is as follows:
@@ -372,6 +436,13 @@ The description of the parameters is as follows:
 | ddl_job_allow_drop_inconsistent_view      | Whether to allow the migration tool to delete inconsistent views between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted views during the migration. |
 | ddl_job_allow_drop_view_target_only       | Whether to allow the migration tool to delete views that are deleted in the source cluster to keep the views consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
 | enable_table_property_sync                | Whether to enable synchronization for table properties.       |
+| enable_privilege_sync                     | Whether to enable synchronization for users, roles, and their privileges. The default is `false`, which means account metadata is not synchronized. |
+| ddl_job_allow_drop_user_target_only       | Whether to allow the migration tool to delete users that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. |
+| ddl_job_allow_drop_role_target_only       | Whether to allow the migration tool to delete roles that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. |
+| ddl_job_allow_drop_inconsistent_user      | Whether to allow the migration tool to rebuild (that is, drop and re-create) a user whose definition is inconsistent between the source and target clusters. The default is `true`. A user is only rebuilt when their privileges have been read in the same cycle, so that the privileges can be granted again immediately. |
+| ddl_job_allow_revoke_grant_target_only    | Whether to allow the migration tool to revoke privileges that are granted only in the target cluster but not in the source cluster. The default is `false`, which means they will not be revoked. |
+| privilege_sync_exclude_users              | The users that the migration tool must leave untouched, with multiple users separated by commas (`,`). A user can be specified either as a user name (`jack`) or as a full user identity (`'jack'@'%'`). `root` and the user specified in `target_cluster_user` are always excluded. |
+| privilege_sync_exclude_roles              | The roles that the migration tool must leave untouched, with multiple roles separated by commas (`,`). |
 
 <Tabs groupId="migrationPath">
 <TabItem value="sourceNothing" label="Migrate from Shared-nothing" default>
@@ -508,6 +579,26 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 </TabItem>
 </Tabs>
 
+### Synchronize users, roles, and privileges (Optional)
+
+By default, the migration tool does not synchronize account metadata. If you set `enable_privilege_sync` to `true`, the tool also synchronizes users, roles, and their privileges from the source cluster to the target cluster.
+
+Each time the tool retrieves metadata, it reads the users, roles, and privileges of both clusters, compares them, and executes the DDL statements needed to make the target cluster consistent with the source cluster. User definitions are obtained using `SHOW CREATE USER`, which returns the password as ciphertext, so no plaintext password is handled during migration.
+
+The following objects are never modified by the migration tool:
+
+- `root` and the user specified in `target_cluster_user`. Overwriting the password of the target cluster's `root` would lock out its operators, and dropping the account that the tool uses to connect would break the tool's own connection.
+- The immutable built-in roles `root`, `db_admin`, `cluster_admin`, `user_admin`, and `security_admin`. The `public` role is built-in but mutable, so its privileges are synchronized while the role itself is left alone.
+- The users specified in `privilege_sync_exclude_users` and the roles specified in `privilege_sync_exclude_roles`.
+
+:::note
+
+- The FE of both clusters must support `SHOW CREATE USER`. If the FE of either cluster does not support this statement, users and their privileges are skipped, and only roles and role privileges are synchronized.
+- The progress of privilege synchronization is printed to the log file **log/sync.INFO.log** with the prefix `Sync privilege progress`. It lists the status of each of the four units: roles, role privileges, users, and user privileges.
+- In one-time synchronization mode (`one_time_run_mode=true`), the tool exits successfully only after privileges have also converged. It exits with a failure if either cluster does not support `SHOW CREATE USER`, or if privileges remain inconsistent across three consecutive comparisons.
+
+:::
+
 ## Step 3: Start the Migration Tool
 
 After configuring the tool, start the migration tool to initiate the data migration process.
@@ -635,6 +726,7 @@ The list of objects that support synchronization currently is as follows (those 
 - Internal tables and their data
 - Materialized view schemas and their building statements (The data in the materialized view will not be synchronized. And if the base tables of the materialized view is not synchronized to the target cluster, the background refresh task of the materialized view reports an error.)
 - Logical views
+- Users, roles, and their privileges (not synchronized by default, enabled by `enable_privilege_sync`)
 
 For migration between shared-data clusters:
 

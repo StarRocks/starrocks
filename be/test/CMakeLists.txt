@@ -40,6 +40,8 @@ set(EXEC_FILES
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
+        ./exec/pipeline/scan/logical_split_morsel_queue_full_key_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -48,7 +50,6 @@ set(EXEC_FILES
         ./exec/agg_hash_map_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
-        ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
@@ -59,6 +60,7 @@ set(EXEC_FILES
         ./exec/hdfs_scan_node_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/repeat_node_test.cpp
+        ./exec/set_hash_set_test.cpp
         ./exec/sorting_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
@@ -120,6 +122,7 @@ set(EXEC_FILES
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
+        ./http/dump_tablet_metadata_action_test.cpp
         ./http/handler_required_privilege_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stop_be_action_test.cpp
@@ -137,6 +140,8 @@ set(EXEC_FILES
         ./runtime/merge_cascade_test.cpp
         ./runtime/exec_env_test.cpp
         ./storage/flat_json_metrics_test.cpp
+        ./storage/seek_tuple_test.cpp
+        ./storage/full_sort_key_codec_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
@@ -148,6 +153,7 @@ set(EXEC_FILES
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
+        ./service/service_be/backend_service_test.cpp
         ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         )
@@ -155,6 +161,7 @@ set(EXEC_FILES
 if (NOT APPLE)
     list(APPEND EXEC_FILES
         ./gutil/sysinfo-test.cc
+        ./service/lake_service_parent_view_test.cpp
         ./service/lake_service_test.cpp
     )
 endif ()
@@ -206,6 +213,7 @@ endif ()
 # Tests that link against ServiceBE / Cache. Append before add_library so the
 # object library actually picks them up (CMake evaluates EXEC_FILES by value
 # at add_library call time).
+list(APPEND EXEC_FILES ./service/ai_config_update_hooks_test.cpp)
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
     list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
@@ -213,11 +221,7 @@ endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
-if (NOT STARROCKS_JIT_ENABLE)
-    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
-else()
-    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-endif ()
+SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
 set(STARROCKS_TEST_LINK_LIBS ${TEST_LINK_LIBS})
@@ -256,6 +260,7 @@ SET(DW_TEST_FILES
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
     ./storage/index/vector/vector_index_cache_test.cpp
+    ./storage/index/vector/vector_index_file_reader_test.cpp
     ./storage/index/vector/vector_index_cache_metrics_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp
     ./storage/kv_store_test.cpp
@@ -276,6 +281,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
+    ./storage/lake/lake_primary_index_selection_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
@@ -287,12 +293,14 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/lake_merged_del_op_offset_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
+    ./storage/lake/parallel_task_runner_test.cpp
     ./storage/lake/segment_task_runner_test.cpp
     ./storage/lake/add_index_schema_change_test.cpp
     ./storage/lake/schema_change_test.cpp
@@ -301,6 +309,7 @@ SET(DW_TEST_FILES
     ./storage/lake/spill_mem_table_sink_test.cpp
     ./storage/lake/starlet_location_provider_test.cpp
     ./storage/lake/tablet_manager_test.cpp
+    ./storage/lake/cross_publish_context_test.cpp
     ./storage/lake/tablet_range_helper_test.cpp
     ./storage/lake/sst_seek_range_test.cpp
     ./storage/lake/tablet_parallel_compaction_manager_test.cpp
@@ -365,9 +374,11 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
+    ./storage/rowset/segment_full_sort_key_index_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
+    ./storage/rowset/segment_writer_short_key_encode_test.cpp
     ./storage/rowset/segment_writer_sort_key_sampling_test.cpp
     ./storage/rowset/series_column_iterator_test.cpp
     ./storage/rowset/struct_column_rw_test.cpp
@@ -381,6 +392,7 @@ SET(DW_TEST_FILES
     ./storage/segment_stream_converter_test.cpp
     ./storage/del_file_stream_converter_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
+    ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
@@ -418,6 +430,7 @@ SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-co
 target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs> ${TEST_EXTRA_SOURCES})
 TARGET_LINK_LIBRARIES(starrocks_dw_test SchemaScannerBuiltin ${TEST_LINK_LIBS})
+target_link_be_test_cxa_throw_wrap(starrocks_dw_test)
 STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test ${EXPR_FORCE_LOAD_LIBS})
 
 
@@ -431,6 +444,25 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 if (APPLE)
     target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
+
+# paimon-cpp tests live in a standalone binary that is skipped with
+# --without-paimon-cpp, so no other test binary depends on libpaimon.so.
+# The paimon include path comes from the imported `paimon` target, so other
+# test sources cannot include paimon headers.
+# The production sources are compiled directly into this binary: they ship in
+# the dlopen()ed libstarrocks_paimon.so shim and are no longer part of
+# ConnectorHive, while tests link paimon the ordinary build-time way.
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
+    ADD_BE_TEST(connector/paimon/paimon_cpp_test)
+    target_sources(paimon_cpp_test PRIVATE
+        connector/paimon/paimon_predicate_converter_test.cpp
+        connector/paimon/paimon_file_system_test.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
+    )
+    target_link_libraries(paimon_cpp_test paimon)
+endif ()
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)

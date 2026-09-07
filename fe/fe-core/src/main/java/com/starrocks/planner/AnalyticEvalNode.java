@@ -336,7 +336,7 @@ public class AnalyticEvalNode extends PlanNode {
         try {
             return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                     candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
-                    partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+                    partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr(descTbl)), 0, true);
         } finally {
             context.exitNonAggPipelineBreaker();
         }

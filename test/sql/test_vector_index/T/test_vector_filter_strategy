@@ -4,12 +4,14 @@
 --   FE unconditionally rewrites ORDER BY approx_*_distance(indexed_col, const)
 --   LIMIT k into an ANN plan (keeping the scalar/fulltext residual); the BE
 --   resolver then decides PRE vs exact brute-force per segment automatically
---   (no user knob). Both paths are exact, so the ANN result (approx_l2_distance,
+--   while enable_vector_index_topk_underfill_fallback=true protects filters that
+--   execute above the iterator. Both protected paths are exact, so the ANN result (approx_l2_distance,
 --   which the FE rewrites) must equal the full-scan ground truth (l2_distance,
 --   which is not rewritten) -- checked via assert_equal_result. PRE-vs-BRUTE is
 --   a BE-runtime choice not visible in EXPLAIN (always VECTORINDEX: ON).
 -- ===========================================================================
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+function: update_be_config("enable_vector_index_topk_underfill_fallback", "true")
 
 CREATE TABLE vt (
     id   bigint        NOT NULL,
@@ -119,4 +121,5 @@ function: assert_equal_result("select id from vt_pk where cat < 5 order by appro
 
 DROP TABLE vt_pk;
 
+function: update_be_config("enable_vector_index_topk_underfill_fallback", "false")
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");

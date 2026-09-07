@@ -8,7 +8,7 @@ keywords: ['ziyuan']
 
 ## 功能
 
-创建资源。StarRocks 支持创建以下资源：Apache Spark™、Apache Hive™、Apache Iceberg、 Apache Hudi 和 JDBC。其中 Spark 资源用于 [Spark Load](../../../loading/SparkLoad.md)，负责管理数据导入的相关信息，比如 YARN 配置，中间数据存储的路径以及 Broker 配置等；Hive、Iceberg、Hudi 和 JDBC 资源用于在查询[外部表](../../../data_source/External_table.md)是管理数据源的访问信息。
+创建资源。StarRocks 支持创建以下资源：Apache Spark™、Apache Hive™、Apache Iceberg、 Apache Hudi 和 JDBC。其中 Spark 资源用于 [Spark Load](../../../loading/spark/SparkLoad.md)，负责管理数据导入的相关信息，比如 YARN 配置，中间数据存储的路径以及 Broker 配置等；Hive、Iceberg、Hudi 和 JDBC 资源用于在查询[外部表](../../../data_source/External_table.md)是管理数据源的访问信息。
 
 > 说明：
 >
@@ -255,5 +255,5 @@ PROPERTIES (
 
 - 如要修改资源属性，参见 [ALTER RESOURCE](ALTER_RESOURCE.md)。
 - 如要删除资源，参见 [DROP RESOURCE](DROP_RESOURCE.md)。
-- 如要使用 Spark 资源进行 Spark Load，参见 [Spark Load](../../../loading/SparkLoad.md)。
+- 如要使用 Spark 资源进行 Spark Load，参见 [Spark Load](../../../loading/spark/SparkLoad.md)。
 - 如要引用 Hive、Iceberg、Hudi 和 JDBC 资源创建外部表，参见[外部表](../../../data_source/External_table.md)。

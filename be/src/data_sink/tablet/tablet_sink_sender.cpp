@@ -396,14 +396,51 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
     return has_immutable_partition;
 }
 
+ExpectedTabletsByPartition TabletSinkSender::_expected_tablets_by_partition() const {
+    ExpectedTabletsByPartition expected;
+    if (_partition_params == nullptr) {
+        return expected;
+    }
+    std::unordered_set<int64_t> participating_indexes;
+    participating_indexes.reserve(_channels.size());
+    for (const auto* index_channel : _channels) {
+        participating_indexes.insert(index_channel->index_id());
+    }
+    const auto& partitions = _partition_params->get_partitions();
+    for (const auto& [partition_id, logs] : _txn_log_map) {
+        (void)logs;
+        auto it = partitions.find(partition_id);
+        if (it == partitions.end() || it->second == nullptr) {
+            continue;
+        }
+        std::set<int64_t> tablets;
+        for (const auto& index : it->second->indexes) {
+            if (participating_indexes.count(index.index_id) == 0) {
+                continue;
+            }
+            tablets.insert(index.tablet_ids.begin(), index.tablet_ids.end());
+        }
+        if (!tablets.empty()) {
+            expected.emplace(partition_id, std::move(tablets));
+        }
+    }
+    return expected;
+}
+
 Status TabletSinkSender::_write_combined_txn_log() {
+    // A combined txn log is the only record of a partition's rowset metadata -- publish resolves
+    // each tablet inside it and has no per-tablet fallback -- so an object written short of an
+    // entry leaves the transaction permanently unpublishable once it commits. Check coverage
+    // against what the FE dispatched before anything reaches object storage.
+    const ExpectedTabletsByPartition expected = _expected_tablets_by_partition();
     if (config::enable_put_combinded_txn_log_parallel) {
-        return write_combined_txn_log_parallel(_txn_log_map);
+        return write_combined_txn_log_parallel(_txn_log_map, expected);
     }
 
+    static const std::set<int64_t> kNoExpectation;
     for (const auto& [partition_id, logs] : _txn_log_map) {
-        (void)partition_id;
-        RETURN_IF_ERROR(write_combined_txn_log(logs));
+        auto it = expected.find(partition_id);
+        RETURN_IF_ERROR(write_combined_txn_log(logs, it != expected.end() ? it->second : kNoExpectation));
     }
     return Status::OK();
 }

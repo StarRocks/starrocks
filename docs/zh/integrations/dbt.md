@@ -1,4 +1,5 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 description: "使用 dbt-starrocks 在 StarRocks 中通过 dbt 建模模式和最佳实践进行数据转换。"
 ---

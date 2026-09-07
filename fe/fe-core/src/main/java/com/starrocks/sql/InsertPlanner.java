@@ -283,7 +283,14 @@ public class InsertPlanner {
             inferOutputSchemaForPartialUpdate(insertStmt);
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
-            outputFullSchema = targetTable.getFullSchema();
+            // Online OPTIMIZE rewrites a temporary partition and does not perform a schema change.
+            // Exclude stale schema-change shadow columns from the sink while retaining derived columns
+            // of normal synchronous materialized views, which are also kept in fullSchema. A completed
+            // OPTIMIZE may also leave same-named generated-column entries in fullSchema, so only emit one
+            // occurrence of each logical column and prefer the committed base-schema definition.
+            outputFullSchema = session.isOptimizeRewrite()
+                    ? getOptimizeOutputFullSchema(targetTable)
+                    : targetTable.getFullSchema();
         }
 
         if (targetTable.isIcebergTable()) {
@@ -588,6 +595,18 @@ public class InsertPlanner {
         }
         throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
                 watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+    }
+
+    private List<Column> getOptimizeOutputFullSchema(Table targetTable) {
+        List<Column> outputSchema = new ArrayList<>(targetTable.getBaseSchema());
+        Set<String> outputColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        targetTable.getBaseSchema().stream().map(Column::getName).forEach(outputColumnNames::add);
+        for (Column column : targetTable.getFullSchema()) {
+            if (!column.isShadowColumn() && outputColumnNames.add(column.getName())) {
+                outputSchema.add(column);
+            }
+        }
+        return outputSchema;
     }
 
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,

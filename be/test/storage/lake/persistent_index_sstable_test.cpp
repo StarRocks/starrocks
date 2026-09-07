@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <ctime>
 #include <map>
 #include <set>
@@ -121,6 +122,36 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
         ASSERT_TRUE(exp_val == cur_val);
     }
     delete iter;
+}
+
+TEST_F(PersistentIndexSstableTest, test_sample_data_keys_returns_complete_keys) {
+    constexpr int kNumKeys = 10000;
+    const std::string filename = "test_sample_data_keys.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> entries;
+    for (int i = 0; i < kNumKeys; ++i) {
+        entries.emplace(fmt::format("sample_key_{:016X}", i), std::make_pair(100, IndexValue(i)));
+    }
+
+    uint64_t file_size = 0;
+    PersistentIndexSstableRangePB range;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(entries, file.get(), &file_size, &range));
+
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(file_size);
+    sstable_pb.mutable_range()->CopyFrom(range);
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    ASSERT_OK(sstable->init(std::move(read_file), sstable_pb, nullptr, false));
+
+    std::vector<std::string> samples;
+    // Empty bounds are unbounded on that side, i.e. sample the whole table.
+    ASSERT_OK(sstable->sample_data_keys(&samples, Slice(), Slice(), 1));
+    ASSERT_FALSE(samples.empty());
+    for (const auto& sample : samples) {
+        EXPECT_NE(entries.end(), entries.find(sample)) << "sampled an index separator rather than a data key";
+    }
 }
 
 TEST_F(PersistentIndexSstableTest, test_merge) {
@@ -1313,6 +1344,68 @@ TEST_F(PersistentIndexSstableTest, test_io_stats_snapshot_wrapper_forwarding) {
         BundleSeekableInputStream w(sentinel, 0 /*offset*/, 1 /*size*/);
         EXPECT_EQ(SentinelSeekableStream::kSentinel, w.get_io_stats_snapshot().bytes_read_local_disk);
     }
+}
+
+// Tablet split samples the PK index for its boundaries, and a tablet born of an earlier split reads
+// the SSTs its parent wrote -- they stay shared until MERGE rewrites them privately. So the budget
+// has to be filled from inside the caller's own window: a table-wide density puts almost nothing
+// there, which is exactly what leaves a narrow child without enough boundaries to split again.
+TEST_F(PersistentIndexSstableTest, test_sample_data_keys_scoped_to_range) {
+    // Enough keys that the index spans many blocks: the whole point is the contrast between a
+    // window-scoped density and a table-wide one, and both need room to differ.
+    const int N = 40000;
+    const std::string filename = "test_sample_data_keys_in_range.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < N; i++) {
+        map.emplace(fmt::format("test_key_{:016X}", i), std::make_pair(100, IndexValue(i)));
+    }
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize, &range_pb));
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    std::unique_ptr<Cache> cache_ptr(new_lru_cache(1024 * 1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+
+    // A window over a tenth of the keys, the shape a child tablet has after one split.
+    const std::string seek_key = fmt::format("test_key_{:016X}", N / 2);
+    const std::string stop_key = fmt::format("test_key_{:016X}", N / 2 + N / 10);
+    constexpr size_t kMaxSamples = 16;
+    auto count_in_window = [&](const std::vector<std::string>& keys) {
+        return static_cast<size_t>(std::count_if(
+                keys.begin(), keys.end(), [&](const std::string& key) { return key >= seek_key && key < stop_key; }));
+    };
+
+    std::vector<std::string> window_samples;
+    ASSERT_OK(sst->sample_data_keys(&window_samples, Slice(seek_key), Slice(stop_key), kMaxSamples));
+    ASSERT_LE(window_samples.size(), kMaxSamples);
+    for (const auto& key : window_samples) {
+        EXPECT_GE(key, seek_key);
+    }
+    // A separator below stop_key can resolve to the first key of the following block, which may sit
+    // past it; that is the one sample allowed to overshoot, and the split path filters it anyway.
+    EXPECT_LE(window_samples.size() - count_in_window(window_samples), 1u);
+    EXPECT_GE(count_in_window(window_samples), 4u);
+
+    // The same budget spent over the whole table barely reaches the window.
+    std::vector<std::string> table_samples;
+    ASSERT_OK(sst->sample_data_keys(&table_samples, Slice(), Slice(), kMaxSamples));
+    ASSERT_LE(table_samples.size(), kMaxSamples);
+    EXPECT_GT(count_in_window(window_samples), count_in_window(table_samples));
+
+    // A window past the last key holds no data keys at all: the only index entry at or after it is
+    // the trailing short successor, which seeks past the end of the table.
+    std::vector<std::string> beyond_samples;
+    const std::string beyond_key = fmt::format("test_key_{:016X}", N + 1000);
+    ASSERT_OK(sst->sample_data_keys(&beyond_samples, Slice(beyond_key), Slice(), kMaxSamples));
+    EXPECT_TRUE(beyond_samples.empty());
 }
 
 } // namespace starrocks::lake

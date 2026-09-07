@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "DBeaver 是一款 SQL 客户端和数据库管理工具，支持连接到 StarRocks 进行数据查询和管理。"
 ---

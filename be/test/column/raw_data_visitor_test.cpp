@@ -54,8 +54,8 @@ TEST(MutableRawDataVisitorTest, VisitDecimal32Column) {
 
 TEST(MutableRawDataVisitorTest, VisitArrayColumn) {
     MutableRawDataVisitor visitor;
-    // Array of int32: [[42, 7]]
-    auto elements = ColumnTestHelper::build_column<int32_t>({42, 7});
+    // Array of int32: [[42, 7]]. ArrayColumn requires nullable elements.
+    auto elements = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});
     auto offsets = ColumnTestHelper::build_column<uint32_t>({0, 2});
     auto col = ArrayColumn::create(std::move(elements), std::move(offsets));
 
@@ -200,8 +200,8 @@ TEST(RawBytesVisitorTest, VisitConstColumn) {
 
 TEST(RawBytesVisitorTest, VisitArrayColumn) {
     RawBytesVisitor visitor;
-    // Array of int32: [[42, 7]]
-    auto elements = ColumnTestHelper::build_column<int32_t>({42, 7});
+    // Array of int32: [[42, 7]]. ArrayColumn requires nullable elements.
+    auto elements = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});
     auto offsets = ColumnTestHelper::build_column<uint32_t>({0, 2});
     auto col = ArrayColumn::create(std::move(elements), std::move(offsets));
 

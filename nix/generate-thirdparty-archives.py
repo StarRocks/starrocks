@@ -55,6 +55,9 @@ ARCHIVE_EXCLUDES = {
     "GCS_CONNECTOR",
     "JDK",
     "JINDOSDK",
+    # paimon-cpp's bundled deps are downloaded by its own cmake at build
+    # time, which cannot work inside the sandboxed (no-network) Nix build.
+    "PAIMON_CPP",
     "PPROF",
     "STARCACHE",
     "TENANN",
@@ -63,6 +66,7 @@ PACKAGE_EXCLUDES = {
     "aliyun_jindosdk",
     "gcs_connector",
     "jdk",
+    "paimon_cpp",
     "pprof",
     "starcache",
     "tenann",

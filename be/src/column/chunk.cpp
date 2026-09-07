@@ -175,13 +175,23 @@ void Chunk::append_column(const ColumnPtr& column, const FieldPtr& field) {
     check_or_die();
 }
 
-void Chunk::append_vector_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id) {
-    DCHECK(!_cid_to_index.contains(field->id()));
-    _cid_to_index[field->id()] = _columns.size();
-    _slot_id_to_index[slot_id] = _columns.size();
-    _append_column_checked(_columns.size(), std::move(column));
-    _schema->append(field);
-    check_or_die();
+void Chunk::append_or_update_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id) {
+    if (auto it = _cid_to_index.find(field->id()); it != _cid_to_index.end()) {
+        // The column id is already present -- e.g. the synthetic ANN distance column re-emitted across a
+        // `do { _do_get_next(chunk); } while (chunk->num_rows() == 0)` scan-loop iteration whose chunk
+        // survived reset() (reset clears rows, not _cid_to_index/_columns/_schema). Update it in place;
+        // the cid/slot/schema entries already point at this column. (_update_column_checked only does
+        // the shared-pointer bookkeeping, so verify row-count consistency explicitly.)
+        _update_column_checked(it->second, std::move(column));
+        check_or_die();
+    } else {
+        _cid_to_index[field->id()] = _columns.size();
+        _slot_id_to_index[slot_id] = _columns.size();
+        _append_column_checked(_columns.size(), std::move(column));
+        _schema->append(field);
+        // only check it when append a new column
+        check_or_die();
+    }
 }
 
 void Chunk::append_column(ColumnPtr&& column, SlotId slot_id) {
@@ -714,13 +724,20 @@ void MutableChunk::append_column(MutableColumnPtr&& column, const FieldPtr& fiel
     check_or_die();
 }
 
-void MutableChunk::append_vector_column(MutableColumnPtr&& column, const FieldPtr& field, SlotId slot_id) {
-    DCHECK(!_cid_to_index.contains(field->id()));
-    _cid_to_index[field->id()] = _columns.size();
-    _slot_id_to_index[slot_id] = _columns.size();
-    _columns.emplace_back(std::move(column));
-    _schema->append(field);
-    check_or_die();
+void MutableChunk::append_or_update_column(MutableColumnPtr&& column, const FieldPtr& field, SlotId slot_id) {
+    if (auto it = _cid_to_index.find(field->id()); it != _cid_to_index.end()) {
+        // See Chunk::append_or_update_column: update an already-present column in place rather than
+        // appending a duplicate (the reused-chunk scan loop can re-emit the same synthetic cid).
+        _columns[it->second] = std::move(column);
+        check_or_die();
+    } else {
+        _cid_to_index[field->id()] = _columns.size();
+        _slot_id_to_index[slot_id] = _columns.size();
+        _columns.emplace_back(std::move(column));
+        _schema->append(field);
+        // only check it when append a new column
+        check_or_die();
+    }
 }
 
 void MutableChunk::append_column(MutableColumnPtr&& column, SlotId slot_id) {

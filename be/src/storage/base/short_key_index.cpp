@@ -67,36 +67,82 @@ Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Sli
     return Status::OK();
 }
 
-Status ShortKeyIndexDecoder::parse(const Slice& body, const ShortKeyFooterPB& footer) {
-    _footer = footer;
+Status ShortKeyIndexBuilder::finalize_full_sort_key(uint32_t num_segment_rows, std::vector<Slice>* body,
+                                                    PageFooterPB* page_footer, uint32_t num_sort_key_columns) {
+    page_footer->set_type(SORT_KEY_PAGE);
+    page_footer->set_uncompressed_size(_key_buf.size() + _offset_buf.size());
 
+    SortKeyFooterPB* footer = page_footer->mutable_sort_key_page_footer();
+    footer->set_num_items(_num_items);
+    footer->set_key_bytes(_key_buf.size());
+    footer->set_offset_bytes(_offset_buf.size());
+    footer->set_segment_id(_segment_id);
+    footer->set_num_rows_per_block(_num_rows_per_block);
+    footer->set_num_segment_rows(num_segment_rows);
+    footer->set_num_sort_key_columns(num_sort_key_columns);
+
+    body->emplace_back(_key_buf);
+    body->emplace_back(_offset_buf);
+    return Status::OK();
+}
+
+Status ShortKeyIndexDecoder::parse_body(const Slice& body, uint32_t num_items, uint32_t key_bytes,
+                                        uint32_t offset_bytes) {
     // check if body size match footer's information
-    if (body.size != (_footer.key_bytes() + _footer.offset_bytes())) {
-        return Status::Corruption(strings::Substitute("Index size not match, need=$0, real=$1",
-                                                      _footer.key_bytes() + _footer.offset_bytes(), body.size));
+    if (body.size != (key_bytes + offset_bytes)) {
+        return Status::Corruption(
+                strings::Substitute("Index size not match, need=$0, real=$1", key_bytes + offset_bytes, body.size));
     }
 
     // set index buffer
-    _key_data = Slice(body.data, _footer.key_bytes());
+    _key_data = Slice(body.data, key_bytes);
 
     // parse offset information
-    Slice offset_slice(body.data + _footer.key_bytes(), _footer.offset_bytes());
+    Slice offset_slice(body.data + key_bytes, offset_bytes);
     // +1 for record total length
-    _offsets.resize(_footer.num_items() + 1);
-    for (uint32_t i = 0; i < _footer.num_items(); ++i) {
+    _offsets.resize(num_items + 1);
+    // Runtime-validate the offset table (not just DCHECK): offsets must be non-decreasing and no
+    // larger than key_bytes so key(i) always yields an in-bounds, non-negative-length Slice. A page
+    // that passes the CRC but carries a corrupt/decreasing/out-of-range offset would otherwise make
+    // key(i) read out of bounds; reject it here so callers get a clean Corruption and can fall back.
+    uint32_t prev_offset = 0;
+    for (uint32_t i = 0; i < num_items; ++i) {
         uint32_t offset = 0;
         if (!get_varint32(&offset_slice, &offset)) {
             return Status::Corruption("Fail to get varint from index offset buffer");
         }
-        DCHECK(offset <= _footer.key_bytes())
-                << "Offset is larger than total bytes, offset=" << offset << ", key_bytes=" << _footer.key_bytes();
+        if (offset < prev_offset || offset > key_bytes) {
+            return Status::Corruption(strings::Substitute(
+                    "Short key index offset out of order or out of range, offset=$0, prev=$1, key_bytes=$2", offset,
+                    prev_offset, key_bytes));
+        }
         _offsets[i] = offset;
+        prev_offset = offset;
     }
-    _offsets[_footer.num_items()] = _footer.key_bytes();
+    _offsets[num_items] = key_bytes;
 
     if (offset_slice.size != 0) {
         return Status::Corruption("Still has data after parse all key offset");
     }
+    return Status::OK();
+}
+
+Status ShortKeyIndexDecoder::parse(const Slice& body, const ShortKeyFooterPB& footer) {
+    RETURN_IF_ERROR(parse_body(body, footer.num_items(), footer.key_bytes(), footer.offset_bytes()));
+    _num_items = footer.num_items();
+    _num_rows_per_block = footer.num_rows_per_block();
+    _num_segment_rows = footer.num_segment_rows();
+    _num_sort_key_columns = 0;
+    _parsed = true;
+    return Status::OK();
+}
+
+Status ShortKeyIndexDecoder::parse(const Slice& body, const SortKeyFooterPB& footer) {
+    RETURN_IF_ERROR(parse_body(body, footer.num_items(), footer.key_bytes(), footer.offset_bytes()));
+    _num_items = footer.num_items();
+    _num_rows_per_block = footer.num_rows_per_block();
+    _num_segment_rows = footer.num_segment_rows();
+    _num_sort_key_columns = footer.num_sort_key_columns();
     _parsed = true;
     return Status::OK();
 }

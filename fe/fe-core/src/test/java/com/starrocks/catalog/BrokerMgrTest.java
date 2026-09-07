@@ -17,7 +17,6 @@ package com.starrocks.catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.proc.BrokerProcNode;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -25,25 +24,34 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowBrokerStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
 
 public class BrokerMgrTest {
+
+    @BeforeAll
+    public static void setUpPersistJournal() throws Exception {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory.
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterAll
+    public static void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     @BeforeEach
     public void setUp() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         BrokerMgr brokerMgr = new BrokerMgr();
         Collection<Pair<String, Integer>> addresses = new ArrayList<>();

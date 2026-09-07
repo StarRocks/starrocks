@@ -103,7 +103,7 @@ import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 | `jvm_old_gc{type="count"}` | Full GC 次数。                          |
 | `jvm_old_gc{type="time"}`  | Full GC 时间。                           |
 
-这些指标及其他指标的监控信息请参阅[监控与告警](../administration/management/monitoring/Monitor_and_Alert.md)
+这些指标及其他指标的监控信息请参阅[监控与告警](../administration/management/monitoring/monitoring.md)
 
 内存 profile 可以分析堆内存的突然增长。需要在服务安装完成后确认其是否正常工作。
 
@@ -222,7 +222,7 @@ transfer FE type from LEADER to FOLLOWER. exit
 
 ### 现场排查流程
 
-打开您的监控工具：[监控与告警](../administration/management/monitoring/Monitor_and_Alert.md)
+打开您的监控工具：[监控与告警](../administration/management/monitoring/monitoring.md)
 
 **第一步：检查以下监控**
 

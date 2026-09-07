@@ -34,6 +34,8 @@
 
 #include "http/action/metrics_action.h"
 
+#include <bvar/bvar.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "base/metrics.h"
@@ -52,11 +54,24 @@ namespace starrocks {
 extern bool sDisableStarOSMetrics;
 #endif
 
+namespace {
+// Test-only exposed bvars with unique names for dump_metrics_with_bvar coverage.
+bvar::Adder<int64_t> g_metrics_action_test_gauge_bvar("metrics_action_test_gauge_bvar");
+bvar::Adder<int64_t> g_metrics_action_test_rpc_error("rpc_server_metrics_action_test_method_error");
+} // namespace
+
 // Mock part
 const char* s_expect_response = nullptr;
+std::string* s_captured_response = nullptr;
 
 void mock_send_reply(const std::string& content) {
     ASSERT_STREQ(s_expect_response, content.c_str());
+}
+
+void mock_capture_reply(const std::string& content) {
+    if (s_captured_response != nullptr) {
+        *s_captured_response = content;
+    }
 }
 
 class MetricsActionTest : public testing::Test {
@@ -185,6 +200,27 @@ TEST_F(MetricsActionTest, json_output_with_table_metrics) {
     request.add_param("type", "json");
     MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
+}
+
+TEST_F(MetricsActionTest, prometheus_output_with_bvar_metrics) {
+    config::dump_metrics_with_bvar = true;
+    g_metrics_action_test_gauge_bvar << 1;
+    g_metrics_action_test_rpc_error << 1;
+
+    ProcessMetricsRegistry registry("test");
+    std::string response;
+    s_captured_response = &response;
+    HttpRequest request(_evhttp_req);
+    MetricsAction action(&registry, mock_capture_reply);
+    action.handle(&request);
+    s_captured_response = nullptr;
+
+    EXPECT_THAT(response, testing::HasSubstr("# HELP metrics_action_test_gauge_bvar\n"));
+    EXPECT_THAT(response, testing::HasSubstr("# TYPE metrics_action_test_gauge_bvar gauge\n"));
+    EXPECT_THAT(response, testing::HasSubstr("metrics_action_test_gauge_bvar "));
+    EXPECT_THAT(response, testing::HasSubstr("# HELP rpc_server_metrics_action_test_method_error\n"));
+    EXPECT_THAT(response, testing::HasSubstr("# TYPE rpc_server_metrics_action_test_method_error counter\n"));
+    EXPECT_THAT(response, testing::HasSubstr("rpc_server_metrics_action_test_method_error "));
 }
 
 TEST_F(MetricsActionTest, core_output_does_not_collect_table_metrics) {

@@ -86,7 +86,8 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
             Set<Long> tableTabletIds = new HashSet<>();
             for (Partition partition : table.getPartitions()) {
                 for (com.starrocks.catalog.PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    com.starrocks.catalog.MaterializedIndex index = physicalPartition.getLatestIndex(table.getBaseIndexMetaId());
+                    com.starrocks.catalog.MaterializedIndex index =
+                            physicalPartition.getLatestIndex(table.getBaseIndexMetaId());
                     if (index != null) {
                         for (com.starrocks.catalog.Tablet tablet : index.getTablets()) {
                             tableTabletIds.add(tablet.getId());

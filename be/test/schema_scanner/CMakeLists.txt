@@ -21,6 +21,7 @@ set(SCHEMA_SCANNER_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     ${BE_TEST_JNI_ENV_STUB}
     schema_scanner_test_main.cpp
+    schema_be_cloud_native_compactions_scanner_test.cpp
     schema_be_tablet_write_log_scanner_test.cpp
     schema_columns_scanner_test.cpp
     schema_fe_metrics_scanner_test.cpp

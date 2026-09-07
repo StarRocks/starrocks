@@ -79,6 +79,11 @@ jobs:
       - name: update body
         if: always() && github.base_ref != 'main' && (github.event.action == 'opened' || github.event.action == 'reopened')
         env:
+          # MUST stay a PAT: this step edits the PR body to check "[x] This is a
+          # backport pr", and the edit must emit an `edited` event that re-triggers
+          # this workflow so `check backport pr's title` runs on the updated body.
+          # GITHUB_TOKEN edits do not trigger workflows, which would silently skip
+          # the backport-title check.
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt

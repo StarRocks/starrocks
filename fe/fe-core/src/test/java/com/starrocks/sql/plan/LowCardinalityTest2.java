@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.gson.GsonBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1285,6 +1286,43 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testNestedDictExprKeepsIntermediateDict() throws Exception {
+        // The outer expression is not NULL-sensitive, but the inner CASE result has dictionary codes
+        // of its own (BE builds them from the CASE define). Folding the outer IF onto S_ADDRESS would
+        // make the fragment that receives the CASE codes after the exchange look them up in a mapping
+        // built for S_ADDRESS codes ("Dict Decode failed"), so the IF must stay over the CASE dict.
+        String sql = "select distinct if(subq.x = subq.x, subq.x, '-') as y "
+                + "from (select distinct case when S_ADDRESS = 'a' then 'A' else 'B' end as x "
+                + "from supplier_nullable) subq";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "if(<place-holder> = 'a', 'A', 'B')");
+        assertContains(plan, "if(<place-holder> = <place-holder>, <place-holder>, '-')");
+        assertNotContains(plan, "if(if(");
+    }
+
+    @Test
+    public void testAggregateOverDerivedDictKeepsIntermediateDict() throws Exception {
+        // max over a derived dict: the aggregate wrapper is still stripped from the define, but the
+        // mapping is defined over the derived (upper) dict instead of being folded onto S_ADDRESS.
+        String sql = "select max(x) from (select distinct upper(S_ADDRESS) as x from supplier_nullable) t";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    12: DictDefine(11: S_ADDRESS, [upper(<place-holder>)])\n" +
+                "    13: DictDefine(upper, [<place-holder>])");
+        assertNotContains(plan, "max(<place-holder>)");
+    }
+
+    @Test
+    public void testAliasChainOverDerivedDictStaysFolded() throws Exception {
+        // An alias (identity define) shares the codes of its source, so folding through it is safe
+        // and the plan keeps the flat DictDefine over the base column.
+        String sql = "select distinct upper(y) from (select x as y from (select S_ADDRESS as x " +
+                "from supplier_nullable) a) b";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "DictDefine(10: S_ADDRESS, [upper(<place-holder>)])");
+    }
+
+    @Test
     public void testDictMappingGroupByReservesExtraCode() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         try {
@@ -2007,15 +2045,17 @@ public class LowCardinalityTest2 extends PlanTestBase {
         assertContains(plan, "  Global Dict Exprs:\n" +
                 "    27: DictDefine(26: S_ADDRESS, [lower(<place-holder>)])");
 
+        // min/max over a derived dict are defined over that dict (they carry its codes), not folded
+        // onto S_ADDRESS
         assertContains(plan, "  Global Dict Exprs:\n" +
-                "    32: DictDefine(25: S_ADDRESS, [concat(<place-holder>, '1')])\n" +
-                "    33: DictDefine(26: S_ADDRESS, [concat(<place-holder>, '2')])\n" +
+                "    32: DictDefine(concat, [<place-holder>])\n" +
+                "    33: DictDefine(concat, [<place-holder>])\n" +
                 "    34: DictDefine(25: S_ADDRESS, [upper(<place-holder>)])\n" +
                 "    27: DictDefine(26: S_ADDRESS, [lower(<place-holder>)])\n" +
                 "    28: DictDefine(25: S_ADDRESS, [concat(<place-holder>, '1')])\n" +
                 "    29: DictDefine(26: S_ADDRESS, [concat(<place-holder>, '2')])\n" +
-                "    30: DictDefine(25: S_ADDRESS, [upper(<place-holder>)])\n" +
-                "    31: DictDefine(26: S_ADDRESS, [lower(<place-holder>)])\n");
+                "    30: DictDefine(34: upper, [<place-holder>])\n" +
+                "    31: DictDefine(27: lower, [<place-holder>])\n");
     }
 
     @Test
@@ -2034,15 +2074,17 @@ public class LowCardinalityTest2 extends PlanTestBase {
         assertContains(plan, "  Global Dict Exprs:\n" +
                 "    27: DictDefine(26: S_ADDRESS, [lower(<place-holder>)])");
 
+        // min/max over a derived dict are defined over that dict (they carry its codes), not folded
+        // onto S_ADDRESS
         assertContains(plan, "  Global Dict Exprs:\n" +
-                "    32: DictDefine(25: S_ADDRESS, [concat(<place-holder>, '1')])\n" +
-                "    33: DictDefine(26: S_ADDRESS, [concat(<place-holder>, '2')])\n" +
+                "    32: DictDefine(concat, [<place-holder>])\n" +
+                "    33: DictDefine(concat, [<place-holder>])\n" +
                 "    34: DictDefine(25: S_ADDRESS, [upper(<place-holder>)])\n" +
                 "    27: DictDefine(26: S_ADDRESS, [lower(<place-holder>)])\n" +
                 "    28: DictDefine(25: S_ADDRESS, [concat(<place-holder>, '1')])\n" +
                 "    29: DictDefine(26: S_ADDRESS, [concat(<place-holder>, '2')])\n" +
-                "    30: DictDefine(25: S_ADDRESS, [upper(<place-holder>)])\n" +
-                "    31: DictDefine(26: S_ADDRESS, [lower(<place-holder>)])\n");
+                "    30: DictDefine(34: upper, [<place-holder>])\n" +
+                "    31: DictDefine(27: lower, [<place-holder>])\n");
     }
 
     @Test
@@ -2101,9 +2143,12 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "   FROM (select distinct upper(S_ADDRESS) c from supplier) t_a_0) t_a_1;";
 
         String plan = getVerboseExplain(sql);
+        // lower() over the derived upper() dict stays over that dict instead of being folded onto
+        // S_ADDRESS as lower(upper(...)): the fragment above the exchange evaluates it on upper's codes
         assertContains(plan, "Global Dict Exprs:\n" +
                 "    12: DictDefine(11: S_ADDRESS, [upper(<place-holder>)])\n" +
-                "    13: DictDefine(11: S_ADDRESS, [lower(upper(<place-holder>))])");
+                "    13: DictDefine(12: upper, [lower(<place-holder>)])");
+        assertNotContains(plan, "lower(upper(");
     }
 
     @Test
@@ -2200,19 +2245,51 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "RESULT SINK\n" +
                 "\n" +
-                "  12:Decode\n" +
-                "  |  <dict id 59> : <string id 40>\n" +
-                "  |  <dict id 60> : <string id 42>\n" +
-                "  |  <dict id 61> : <string id 43>\n" +
+                "  14:Decode\n" +
+                "  |  <dict id 65> : <string id 40>\n" +
+                "  |  <dict id 66> : <string id 42>\n" +
+                "  |  <dict id 67> : <string id 43>\n" +
+                "  |  <dict id 56> : <string id 48>\n" +
+                "  |  <dict id 57> : <string id 39>\n" +
+                "  |  <dict id 58> : <string id 44>\n" +
+                "  |  <dict id 59> : <string id 45>\n" +
+                "  |  <dict id 60> : <string id 46>\n" +
+                "  |  <dict id 61> : <string id 47>\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "  |  \n" +
-                "  |----11:Decode\n" +
-                "  |    |  <dict id 62> : <string id 29>\n" +
+                "  |----13:Project\n" +
+                "  |    |  <slot 29> : 29: case\n" +
+                "  |    |  <slot 35> : 35: ifnull\n" +
+                "  |    |  <slot 62> : 62: cast\n" +
+                "  |    |  <slot 63> : 63: cast\n" +
+                "  |    |  <slot 64> : 64: cast\n" +
+                "  |    |  <slot 75> : 1\n" +
+                "  |    |  <slot 76> : 2\n" +
+                "  |    |  <slot 77> : 2\n" +
+                "  |    |  <slot 78> : 1\n" +
+                "  |    |  <slot 79> : 2\n" +
+                "  |    |  <slot 80> : 2\n" +
                 "  |    |  \n" +
-                "  |    10:EXCHANGE\n" +
+                "  |    12:Decode\n" +
+                "  |    |  <dict id 68> : <string id 29>\n" +
+                "  |    |  \n" +
+                "  |    11:EXCHANGE\n" +
                 "  |    \n" +
-                "  5:EXCHANGE\n");
+                "  6:Project\n" +
+                "  |  <slot 15> : 15: concat\n" +
+                "  |  <slot 21> : 21: round\n" +
+                "  |  <slot 50> : 50: c_user\n" +
+                "  |  <slot 51> : 51: c_dept\n" +
+                "  |  <slot 52> : 52: c_par\n" +
+                "  |  <slot 69> : 1\n" +
+                "  |  <slot 70> : 1\n" +
+                "  |  <slot 71> : 1\n" +
+                "  |  <slot 72> : 2\n" +
+                "  |  <slot 73> : 1\n" +
+                "  |  <slot 74> : 1\n" +
+                "  |  \n" +
+                "  5:EXCHANGE");
     }
 
     @Test
@@ -2307,7 +2384,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "   SELECT REVERSE(S_ADDRESS) x1, CONCAT(S_COMMENT, '1') y1, S_SUPPKEY FROM supplier_nullable) x " +
                 "GROUP BY S_SUPPKEY ";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "17: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])");
+        assertContains(plan, "17: DictDefine(REVERSE, [<place-holder>])");
         assertContains(plan, "15: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])");
     }
 
@@ -2824,8 +2901,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [14: c_user, VARCHAR, true]\n" +
                     "  |  equal join conjunct: [3: c_dept, VARCHAR, true] = [15: c_dept, VARCHAR, true]\n" +
                     "  |  build runtime filters:\n" +
-                    "  |  - filter_id = 0, build_expr = (14: c_user), remote = false\n" +
-                    "  |  - filter_id = 1, build_expr = (15: c_dept), remote = false\n" +
+                    "  |  - filter_id = 0, build_expr = (14: c_user), remote = true\n" +
+                    "  |  - filter_id = 1, build_expr = (15: c_dept), remote = true\n" +
                     "  |  output columns: 2, 15\n" +
                     "  |  cardinality: 1\n" +
                     "  |  \n" +
@@ -2881,14 +2958,17 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "  |  analytic partition by: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
                     "  |  offset: 0\n" +
                     "  |  cardinality: 1\n" +
-                    "  |  probe runtime filters:\n" +
-                    "  |  - filter_id = 0, probe_expr = (2: c_user)\n" +
-                    "  |  - filter_id = 1, probe_expr = (3: c_dept)\n" +
                     "  |  \n" +
                     "  1:EXCHANGE\n" +
                     "     distribution type: SHUFFLE\n" +
                     "     partition exprs: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
                     "     cardinality: 1");
+            // Both filters now cross the exchange and land on the scan, which is what actually
+            // evaluates them; the probe columns are exactly the analytic partition-by columns,
+            // so pruning here removes whole window partitions and cannot change a surviving row.
+            assertContains(plan, "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (2: c_user), partition_exprs = (2: c_user,3: c_dept)\n" +
+                    "     - filter_id = 1, probe_expr = (3: c_dept), partition_exprs = (2: c_user,3: c_dept)");
 
         } finally {
             FeConstants.runningUnitTest = false;
@@ -3103,7 +3183,54 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |      [30, INT, true] | [31, INT, true] | [33, INT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
-                "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
+                "  |      [34: expr, INT, true] | [35: expr, INT, false] | [36: expr, INT, true]", plan);
+    }
+
+    @Test
+    public void testUnionSameChildColumnPartiallyMergeable() throws Exception {
+        // C_USER feeds BOTH union output positions:
+        //   position 0: C_USER / C_DEPT     -> both have a dictionary, the merge succeeds
+        //   position 1: C_USER / CAST(int)  -> the cast has no dictionary, the merge fails
+        // The failed position forces C_USER to be decoded before the union, so position 0 must not
+        // stay dictionary encoded either - otherwise the left branch feeds a VARCHAR into an INT
+        // dict-code slot and the BE aborts in FixedLengthColumnBase<int>::append.
+        // Both sides of every position use the same type on purpose: any type mismatch makes the
+        // planner wrap the children in casts, which gives each position its own column ref.
+        String sql = """
+                  SELECT * FROM (
+                    SELECT C_USER a, C_USER b FROM low_card_t1
+                    UNION ALL
+                    SELECT C_DEPT, CAST(cpc AS VARCHAR(50)) FROM low_card_t1
+                  ) t
+                  """;
+        String plan = getVerboseExplain(sql);
+        // Neither position is dictionary encoded, and both branches feed the union strings.
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [24, VARCHAR(50), true] | [25, VARCHAR(50), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [2: c_user, VARCHAR(50), true] | [2: c_user, VARCHAR(50), true]\n" +
+                "  |      [14: c_dept, VARCHAR(50), true] | [23: cast, VARCHAR(50), true]", plan);
+    }
+
+    @Test
+    public void testUnionSameChildColumnFullyMergeable() throws Exception {
+        // Same shape as testUnionSameChildColumnPartiallyMergeable, except that every position can
+        // merge its dictionaries. Giving up on a position must not spread when nothing failed.
+        String sql = """
+                  SELECT * FROM (
+                    SELECT C_USER a, C_USER b FROM low_card_t1
+                    UNION ALL
+                    SELECT C_DEPT, C_PAR FROM low_card_t1
+                  ) t
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [28, INT, true] | [29, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [25: c_user, INT, true] | [25: c_user, INT, true]\n" +
+                "  |      [26: c_dept, INT, true] | [27: c_par, INT, true]", plan);
     }
 
     @Test
@@ -3292,5 +3419,114 @@ public class LowCardinalityTest2 extends PlanTestBase {
             connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(false);
             connectContext.getGlobalStateMgr().setStatisticStorage(prevStorage);
         }
+    }
+
+    @Test
+    void testUnionAllConstantInputsOnly() throws Exception {
+        String sql = """
+                select c_user, "abc", null const FROM low_card_t1 as s
+                UNION ALL
+                select c_mr, null, null FROM low_card_t2;
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "9:Decode\n" +
+                "  |  <dict id 28> : <string id 24>\n" +
+                "  |  <dict id 30> : <string id 23>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [30, INT, true] | [28, INT, true] | [25, BOOLEAN, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [26: c_user, INT, true] | [31: expr, INT, false] | [13: expr, BOOLEAN, true]\n" +
+                "  |      [29: cast, INT, true] | [32: expr, INT, true] | [20: expr, BOOLEAN, true]", plan);
+        String thrift = getThriftPlan(sql);
+        Assertions.assertTrue(thrift.contains("TGlobalDict(columnId:28"), thrift);
+    }
+
+    @Test
+    void unionAllDictificationWithAggregateUnionRewriteWithDictMapping() throws Exception {
+        boolean prevConfig = Config.push_down_non_grouped_aggregate_below_union;
+        try {
+            Config.push_down_non_grouped_aggregate_below_union = true;
+            String sql = """
+                     SELECT
+                       max(source), min(source), count(source), sum(length(source)),
+                       max(value), min(value), count(value), sum(length(value))
+                     FROM (
+                         SELECT 'test_table_1' as source, c_user as value FROM low_card_t1
+                         UNION ALL
+                         SELECT 'test_table_2' as source, c_mr as value FROM low_card_t2
+                     ) T;
+                    """;
+
+            String plan = getFragmentPlan(sql);
+            // Aggregate is not pushed
+            assertContains(plan, "  10:AGGREGATE (update serialize)\n" +
+                    "  |  output: max(34: expr), min(34: expr), count(34: expr), sum(22: length), max(36: c_user)," +
+                    " min(36: c_user), count(36: c_user), sum(23: length)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  9:Project\n" +
+                    "  |  <slot 22> : DictDecode(34: expr, [length(<place-holder>)])\n" +
+                    "  |  <slot 23> : DictDecode(36: c_user, [length(<place-holder>)])\n" +
+                    "  |  <slot 34> : 34: expr\n" +
+                    "  |  <slot 36> : 36: c_user\n" +
+                    "  |  \n" +
+                    "  0:UNION", plan);
+        } finally {
+            Config.push_down_non_grouped_aggregate_below_union = prevConfig;
+        }
+    }
+
+    @Test
+    void unionAllDictificationWithAggregateUnionRewriteWithoutDictMapping() throws Exception {
+        boolean prevConfig = Config.push_down_non_grouped_aggregate_below_union;
+        try {
+            Config.push_down_non_grouped_aggregate_below_union = true;
+            String sql = """
+                     SELECT max(source), min(source), count(source), max(value), min(value), count(value)
+                     FROM (
+                         SELECT 'test_table_1' as source, c_user as value FROM low_card_t1
+                         UNION ALL
+                         SELECT 'test_table_2' as source, c_mr as value FROM low_card_t2
+                     ) T;
+                    """;
+
+            String plan = getFragmentPlan(sql);
+            // update stage is pushed below the union, merge stage is above it.
+            assertContains(plan, "  11:AGGREGATE (merge serialize)\n" +
+                    "  |  output: max(33: max), min(34: min), count(24: count), max(35: max), min(36: min), count(27: count)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  0:UNION", plan);
+        } finally {
+            Config.push_down_non_grouped_aggregate_below_union = prevConfig;
+        }
+    }
+
+    @Test
+    void testPredicateOnlyDictDecodeWithProjection() throws Exception {
+        String sql = """
+              WITH T1 AS ( SELECT C_USER, C_DEPT FROM low_card_t1) [MATERIALIZED]
+              SELECT C_DEPT FROM T1 WHERE C_USER = "str"
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    16: DictDefine(14: c_user, [<place-holder>])\n" +
+                "    17: DictDefine(15: c_dept, [<place-holder>])\n" +
+                "\n" +
+                "  5:Decode\n" +
+                "  |  <dict id 17> : <string id 13>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  17 <-> [17: c_dept, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:SELECT\n" +
+                "  |  predicates: DictDecode(16: c_user, [<place-holder> = 'str'])\n" +
+                "  |  cardinality: 1", plan);
     }
 }

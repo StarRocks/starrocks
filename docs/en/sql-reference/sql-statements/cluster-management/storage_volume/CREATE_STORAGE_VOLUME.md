@@ -49,6 +49,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.endpoint                     | The endpoint URL used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. [Preview] From v3.3.0 onwards, the Amazon S3 Express One Zone storage class is supported, for example, `https://s3express.us-west-2.amazonaws.com`.  <Beta /> |
 | aws.s3.use_aws_sdk_default_behavior | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
 | aws.s3.use_instance_profile         | Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: `true` and `false` (Default).<ul><li>If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws.s3.access_key` and `aws.s3.secret_key`.</li><li>If you use Instance Profile to access S3, you must specify this item as `true`.</li><li>If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws.s3.iam_role_arn`.</li><li>And if you use an external AWS account, you must specify this item as `true`, and specify `aws.s3.iam_role_arn` and `aws.s3.external_id`.</li></ul> |
+| aws.s3.use_web_identity_token_file  | Whether to use a web identity token file to access S3. Valid values: `true` and `false` (Default). When enabled, the AWS SDK on each worker reads the token file and IAM role from the `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` environment variables. |
 | aws.s3.access_key                   | The Access Key ID used to access your S3 bucket.             |
 | aws.s3.secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws.s3.iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
@@ -82,6 +83,9 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 
 #### Credential information
 
+For a comparison of credential combinations supported by FE and storage volumes, see
+[AWS credential support for storage volumes](AWS_CREDENTIAL_SUPPORT.md).
+
 ##### AWS S3
 
 - If you use the default authentication credential of AWS SDK to access S3, set the following properties:
@@ -114,6 +118,27 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
   "aws.s3.use_aws_sdk_default_behavior" = "false",
   "aws.s3.use_instance_profile" = "true"
   ```
+
+- If you use a web identity token file, such as an EKS IAM role for a service account (IRSA), set the following
+  properties. Set `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` in the environment of every worker that accesses the
+  storage volume.
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "aws.s3.region" = "<region>",
+  "aws.s3.endpoint" = "<endpoint_url>",
+  "aws.s3.use_aws_sdk_default_behavior" = "false",
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.use_web_identity_token_file" = "true"
+  ```
+
+  To assume another IAM role after obtaining credentials through web identity, additionally set
+  `aws.s3.iam_role_arn`. For cross-account access, you can also set `aws.s3.external_id`.
+
+  :::caution
+  Before using web identity for a storage volume, make sure every FE, StarManager, BE, and CN in the cluster supports
+  this authentication method. During a rolling upgrade, do not use the storage volume until all nodes are upgraded.
+  :::
 
 - If you use Assumed Role to access S3, set the following properties:
 

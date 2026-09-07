@@ -21,6 +21,7 @@
 
 #include "base/string/slice.h"
 #include "butil/time.h"
+#include "column/array_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
@@ -2898,6 +2899,80 @@ TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
     ASSERT_TRUE(json1.ok());
     EXPECT_EQ("123", json0.value());
     EXPECT_EQ("-7", json1.value());
+}
+
+// Verifies CAST(ARRAY<VARIANT> AS VARIANT) uses column-aware recursive encoding instead of
+// materializing VariantColumn through the legacy Datum/ObjectColumn storage.
+TEST_F(VectorizedCastExprTest, array_with_variant_children_cast_to_variant) {
+    auto variant_data = VariantColumn::create();
+    auto variant_nulls = NullColumn::create();
+    for (const auto& json_text : {R"({"a":1})", R"({"b":2})"}) {
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json_text);
+        ASSERT_TRUE(encoded.ok());
+        variant_data->append(encoded.value());
+        variant_nulls->append(DATUM_NOT_NULL);
+    }
+    variant_data->append_default();
+    variant_nulls->append(DATUM_NULL);
+    auto elements = NullableColumn::create(std::move(variant_data), std::move(variant_nulls));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(3);
+    auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+
+    auto result = cast_to_variant(array_type, array);
+    auto json = variant_json_at(result, 0);
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"([{"a":1},{"b":2},null])", json.value());
+}
+
+TEST_F(VectorizedCastExprTest, nullable_array_with_variant_children_cast_to_variant) {
+    auto variant_data = VariantColumn::create();
+    auto encoded = VariantEncoder::encode_json_text_to_variant(R"({"a":1})");
+    ASSERT_TRUE(encoded.ok());
+    variant_data->append(encoded.value());
+    auto variant_nulls = NullColumn::create(1, DATUM_NOT_NULL);
+    auto elements = NullableColumn::create(std::move(variant_data), std::move(variant_nulls));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(1);
+    offsets->append(1);
+    auto arrays = ArrayColumn::create(std::move(elements), std::move(offsets));
+    auto array_nulls = NullColumn::create();
+    array_nulls->append(DATUM_NOT_NULL);
+    array_nulls->append(DATUM_NULL);
+    ColumnPtr input = NullableColumn::create(std::move(arrays), std::move(array_nulls));
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+
+    auto result = cast_to_variant(array_type, input);
+    ASSERT_FALSE(result->is_null(0));
+    ASSERT_TRUE(result->is_null(1));
+    auto json = variant_json_at(result, 0);
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"([{"a":1}])", json.value());
+}
+
+TEST_F(VectorizedCastExprTest, const_array_with_variant_children_cast_to_variant) {
+    auto variant_data = VariantColumn::create();
+    auto encoded = VariantEncoder::encode_json_text_to_variant(R"({"a":1})");
+    ASSERT_TRUE(encoded.ok());
+    variant_data->append(encoded.value());
+    auto variant_nulls = NullColumn::create(1, DATUM_NOT_NULL);
+    auto elements = NullableColumn::create(std::move(variant_data), std::move(variant_nulls));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(1);
+    auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
+    ColumnPtr input = ConstColumn::create(std::move(array), 3);
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+
+    auto result = cast_to_variant(array_type, input);
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_EQ(3, result->size());
+    auto json = variant_json_at(result, 0);
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"([{"a":1}])", json.value());
 }
 
 // Verifies const variant input can cast to complex types with stable semantics.

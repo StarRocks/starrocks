@@ -16,6 +16,71 @@ description: "Alphabetical t - z"
 - Unit: -
 - Description: Highest cumulative compaction score of tablets in this BE.
 
+## `tablet_merge_sstable_fallback_cohort_mismatch_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because source SST cohorts differed in count, order, or semantic metadata.
+
+## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because a candidate cohort contained a duplicate physical SST filename.
+
+## `tablet_merge_sstable_fallback_embedded_delvec_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because a required embedded delete vector could not be resolved after SST projection.
+
+## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because source-to-target RSSID mapping or ownership was not uniform enough for metadata reuse.
+
+## `tablet_merge_sstable_fallback_projected_domain_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because a projected SST owner, RSSID offset, or watermark fell outside the reusable live or supported domain.
+
+## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because source rowset physical layouts differed.
+
+## `tablet_merge_sstable_fallback_shared_or_mixed_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because shared or mixed source SST ownership prevented safe metadata reuse.
+
+## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because source ranges or SST metadata did not meet the supported reuse form.
+
+## `tablet_merge_sstable_meta_identical_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that reused one complete, identical inherited SST cohort in the merged tablet metadata.
+
+## `tablet_merge_sstable_meta_lazy_rebuild_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that omitted source SST metadata so the next operation or user that loads the Primary Key index rebuilds it.
+
+## `tablet_merge_sstable_meta_private_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that projected and reused a complete cohort of private source SST metadata.
+
+## `tablet_merge_sstable_omitted_bytes_total`
+
+- Unit: Bytes
+- Description: Cumulative size of unique source SST files omitted from merged index metadata and recorded as orphan files during lazy rebuild fallback.
+
+## `tablet_merge_sstable_omitted_file_total`
+
+- Unit: Count
+- Description: Cumulative number of unique source SST files omitted from merged index metadata and recorded as orphan files during lazy rebuild fallback.
+
 ## `tablet_metadata_mem_bytes`
 
 - Unit: Bytes
@@ -34,7 +99,7 @@ description: "Alphabetical t - z"
 ## `threadpool_task_exception_total`
 
 - Unit: Count
-- Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
+- Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
 
 ## `thrift_connections_total`
 
@@ -173,6 +238,48 @@ description: "Alphabetical t - z"
 
 - Unit: Count
 - Description: Total number of rowset COMMIT requests in Primary Key tables.
+
+## `vector_index_cache_async_load_failure`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load tasks that started but failed during loading or cache publication. Tasks canceled before execution are not included.
+
+## `vector_index_cache_async_load_inflight`
+
+- Type: Gauge
+- Unit: Count
+- Description: Current number of vector index cache-load tasks running in background workers.
+
+## `vector_index_cache_async_load_ns`
+
+- Type: Counter
+- Unit: Nanoseconds
+- Description: Cumulative execution time of background vector index cache-load tasks that started, including successful and failed tasks. Queue wait time and rejected tasks are not included.
+
+## `vector_index_cache_async_load_queued`
+
+- Type: Gauge
+- Unit: Count
+- Description: Current number of vector index cache-load tasks accepted by the background pool but not yet running.
+
+## `vector_index_cache_async_load_rejected`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load requests rejected before execution, for example because the cache has zero capacity, the pool is stopped, or its queue cannot accept the task.
+
+## `vector_index_cache_async_load_success`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load tasks that successfully loaded and published an index. Capacity eviction can remove a successfully published entry immediately when the cache cannot retain it.
+
+## `vector_index_cache_loading_wait_timeout`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of synchronous cache callers whose wait for an in-progress vector index load reached `vector_index_cache_loading_wait_timeout_ms`. This metric counts callers rather than unique indexes; the existing loader continues after a timeout.
 
 ## `wait_base_compaction_task_num`
 

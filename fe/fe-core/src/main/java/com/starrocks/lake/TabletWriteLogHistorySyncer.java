@@ -18,7 +18,7 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
@@ -28,7 +28,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class TabletWriteLogHistorySyncer extends FrontendDaemon {
+public class TabletWriteLogHistorySyncer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletWriteLogHistorySyncer.class);
 
     public static final String DB_NAME = "_statistics_";
@@ -104,7 +104,7 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         if (FeConstants.runningUnitTest) {
             return;
         }

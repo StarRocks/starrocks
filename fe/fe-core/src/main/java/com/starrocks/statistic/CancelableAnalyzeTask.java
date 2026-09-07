@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CancelableAnalyzeTask implements RunnableFuture<Void> {
     private static final Logger LOG = LogManager.getLogger(CancelableAnalyzeTask.class);
@@ -33,6 +34,7 @@ public class CancelableAnalyzeTask implements RunnableFuture<Void> {
     private final AnalyzeStatus analyzeStatus;
     private volatile boolean cancelled = false;
     private volatile boolean done = false;
+    private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
     private volatile Throwable exception = null;
     private final CountDownLatch latch = new CountDownLatch(1);
     private volatile Thread runningThread = null;
@@ -72,17 +74,23 @@ public class CancelableAnalyzeTask implements RunnableFuture<Void> {
             return false;
         }
 
+        // Only the caller that claims the request owns the cancellation; the rest get false, as
+        // Future#cancel requires. The claim is a separate flag so that the terminal state is still
+        // published in the order an observer expects: cancelled, then done, then the latch.
+        if (!cancelRequested.compareAndSet(false, true)) {
+            return false;
+        }
+
         cancelled = true;
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
 
-        if (mayInterruptIfRunning && runningThread != null) {
-            runningThread.interrupt();
+        Thread thread = runningThread;
+        if (mayInterruptIfRunning && thread != null) {
+            thread.interrupt();
         }
 
-        if (!done) {
-            done = true;
-            latch.countDown();
-        }
+        done = true;
+        latch.countDown();
 
         return true;
     }

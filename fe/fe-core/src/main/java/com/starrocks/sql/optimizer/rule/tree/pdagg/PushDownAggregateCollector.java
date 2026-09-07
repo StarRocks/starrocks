@@ -84,11 +84,17 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
     private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
             FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION);
+    private static final List<String> WHITE_FNS_WITH_COUNT = ImmutableList.<String>builder()
+            .addAll(WHITE_FNS).add(FunctionSet.COUNT).build();
 
     private final TaskContext taskContext;
     private final OptimizerContext optimizerContext;
     private final ColumnRefFactory factory;
     private final SessionVariable sessionVariable;
+    // Selected once per collector instance so a single collect() pass can't observe the
+    // switch flip mid-walk; the rewriter never needs this list since it only materializes
+    // what the collector already decided.
+    private final List<String> whiteFns;
 
     // Used to assign a unique index to each path from root to leaf node.
     // For example, in the following tree structure, the index of A#1, Join#3, Join#5 is 0,
@@ -112,6 +118,18 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
         this.sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
         this.nextRootToLeafPathIndex = nextRootToLeafPathIndex;
+        this.whiteFns = sessionVariable.isCboPushDownCountAggregate() ? WHITE_FNS_WITH_COUNT : WHITE_FNS;
+    }
+
+    private boolean countPushDownEnabled() {
+        return sessionVariable.isCboPushDownCountAggregate();
+    }
+
+    // count(*) has no args, so plain isConstant() is vacuously true for it (the loop over
+    // children never runs); that would wrongly make a lone count(*) look like "all aggregations
+    // are constant" and get skipped. Treat it as never-constant here.
+    private static boolean isConstantAggregate(CallOperator call) {
+        return !call.getArguments().isEmpty() && call.isConstant();
     }
 
     Map<LogicalAggregationOperator, List<AggregatePushDownContext>> getAllRewriteContext() {
@@ -179,6 +197,12 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         ColumnRefSet aggUsedColumns = new ColumnRefSet();
         context.aggregations.values().forEach(v -> aggUsedColumns.union(v.getUsedColumns()));
 
+        // Columns consumed by a non-distinct count(). count() can't be split per case-when/if branch:
+        // a NULL branch would make the partial value NULL, while sum(NULL) = NULL but count(...) = 0.
+        ColumnRefSet countUsedColumns = new ColumnRefSet();
+        context.aggregations.values().stream().filter(PushDownAggregateUtils::isCountAgg)
+                .map(CallOperator::getUsedColumns).forEach(countUsedColumns::union);
+
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = project.getColumnRefMap();
         Map<ColumnRefOperator, ScalarOperator> aggRewriteMap = columnRefMap;
 
@@ -193,7 +217,16 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
                 continue;
             }
 
-            if (call instanceof CaseWhenOperator) {
+            boolean isCaseWhen = call instanceof CaseWhenOperator;
+            boolean isIfFn = !isCaseWhen && call.getFunction() != null
+                    && FunctionSet.IF.equals(call.getFunction().getFunctionName().getFunction());
+
+            if ((isCaseWhen || isIfFn) && countUsedColumns.contains(key)) {
+                // forbidden push down: count(col) where col comes from a case-when/if() output
+                return visit(optExpression, context);
+            }
+
+            if (isCaseWhen) {
                 CaseWhenOperator caseWhen = (CaseWhenOperator) value;
                 for (ScalarOperator condition : caseWhen.getAllConditionClause()) {
                     condition.getUsedColumns().getStream().map(factory::getColumnRef)
@@ -227,8 +260,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
                     aggRewriteMap = Maps.newHashMap(columnRefMap);
                 }
                 aggRewriteMap.put(key, newCaseWhen);
-            } else if (call.getFunction() != null &&
-                        FunctionSet.IF.equals(call.getFunction().getFunctionName().getFunction())) {
+            } else if (isIfFn) {
                 if (call.getChildren().stream().skip(1).anyMatch(c -> c.isConstant() && !c.isConstantNull())) {
                     // forbidden push down
                     return visit(optExpression, context);
@@ -259,7 +291,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         // check has constant aggregate, forbidden
         if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
+                context.aggregations.values().stream().allMatch(PushDownAggregateCollector::isConstantAggregate)) {
             return visit(optExpression, context);
         }
 
@@ -269,14 +301,15 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
     @Override
     public Void visitLogicalAggregate(OptExpression optExpression, AggregatePushDownContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
-        // distinct/count* aggregate can't push down
-        if (aggregate.getAggregations().values().stream().anyMatch(c -> c.isDistinct() || c.isCountStar())) {
+        // distinct aggregate can't push down; count(*) can, when the switch is on
+        if (aggregate.getAggregations().values().stream()
+                .anyMatch(c -> c.isDistinct() || (c.isCountStar() && !countPushDownEnabled()))) {
             return visit(optExpression, context);
         }
 
         // all constant can't push down
         if (!aggregate.getAggregations().isEmpty() &&
-                aggregate.getAggregations().values().stream().allMatch(ScalarOperator::isConstant)) {
+                aggregate.getAggregations().values().stream().allMatch(PushDownAggregateCollector::isConstantAggregate)) {
             return visit(optExpression, context);
         }
 
@@ -297,7 +330,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         }
         // constant aggregate can't push down
         if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
+                context.aggregations.values().stream().allMatch(PushDownAggregateCollector::isConstantAggregate)) {
             return visit(optExpression, context);
         }
 
@@ -346,9 +379,23 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             return AggregatePushDownContext.EMPTY;
         }
 
+        // count over a join is N0*N1, unrecoverable from sum(cnt_left) and sum(cnt_right), so it must be
+        // pushed to exactly one side. count(*)/count(col) has no aggregationsRefs to source-check above,
+        // so without this strip both sides would otherwise accept it.
+        Map<ColumnRefOperator, CallOperator> childAggregations = Maps.newHashMap(context.aggregations);
+        childAggregations.entrySet().removeIf(
+                e -> PushDownAggregateUtils.isCountAgg(e.getValue())
+                        && !PushDownAggregateUtils.canPushCountToJoinChild(join.getJoinType(), child));
+        if (childAggregations.size() != context.aggregations.size()) {
+            // A count was stripped from this side. Pushing only the remaining aggregations is not an option:
+            // pushing anything at all collapses this child to one row per group key, and the count left above
+            // the join would then count the collapsed rows instead of the real join rows. Refuse entirely.
+            return AggregatePushDownContext.EMPTY;
+        }
+
         int rootToLeafPathIndex = child == 0 ? context.rootToLeafPathIndex : nextRootToLeafPathIndex.getAndIncrement();
         AggregatePushDownContext childContext = new AggregatePushDownContext(rootToLeafPathIndex);
-        childContext.aggregations.putAll(context.aggregations);
+        childContext.aggregations.putAll(childAggregations);
 
         // check group by
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
@@ -375,6 +422,13 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             join.getPredicate().getUsedColumns().getStream().map(factory::getColumnRef)
                     .filter(childOutput::contains)
                     .forEach(v -> childContext.groupBys.put(v, v));
+        }
+
+        // Refuse a count that would land on this child without any real group-by key (no column-bearing
+        // group-by expression): it degenerates into a scalar aggregate that emits a phantom row for an
+        // empty child. See isUngroupedCountPush.
+        if (PushDownAggregateUtils.isUngroupedCountPush(childContext)) {
+            return AggregatePushDownContext.EMPTY;
         }
 
         childContext.immediateChildOfSmallBroadcastJoin = immediateChildOfSmallBroadcastJoin;
@@ -477,7 +531,12 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
     @Override
     public Void visitLogicalTableScan(OptExpression optExpression, AggregatePushDownContext context) {
-        if (!isInvalid(optExpression, context)) {
+        // Last line of defence for an ungrouped count: this is where every push down candidate is finally
+        // recorded, whatever path it took to get here. splitJoinAggregate rejects the join shapes early, but
+        // a group-by key can also be erased on the way down without ever crossing a join -- a UNION branch
+        // projecting a constant (`select 1 as k from t ... group by k`) leaves this context with a
+        // column-less group-by, and the resulting scalar aggregate emits a phantom row for an empty branch.
+        if (!isInvalid(optExpression, context) && !PushDownAggregateUtils.isUngroupedCountPush(context)) {
             context.targetPosition = optExpression;
             addCandidateContext(context.origAggregator, context);
         }
@@ -716,7 +775,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         // distinct function, not support function can't push down
         if (context.aggregations.values().stream()
-                .anyMatch(v -> v.isDistinct() || !WHITE_FNS.contains(v.getFnName()))) {
+                .anyMatch(v -> v.isDistinct() || !whiteFns.contains(v.getFnName()))) {
             return false;
         }
 

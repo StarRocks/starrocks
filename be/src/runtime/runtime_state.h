@@ -80,7 +80,6 @@ class FragmentDictState;
 class LoadPathStateHelper;
 class RuntimeStateHelper;
 class RejectedRecordWriter;
-using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
 class QueryRuntimeState;
@@ -616,20 +615,6 @@ public:
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 
-    void set_non_broadcast_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
-        this->_non_broadcast_rf_ids = std::move(filter_ids);
-    }
-
-    const std::unordered_set<int32_t>& non_broadcast_rf_ids() const { return this->_non_broadcast_rf_ids; }
-
-    void set_broadcast_join_right_offsprings(BroadcastJoinRightOffsprings&& broadcast_join_right_offsprings) {
-        this->_broadcast_join_right_offsprings = std::move(broadcast_join_right_offsprings);
-    }
-
-    const BroadcastJoinRightOffsprings& broadcast_join_right_offsprings() const {
-        return this->_broadcast_join_right_offsprings;
-    }
-
     bool enable_event_scheduler() const { return _enable_event_scheduler; }
     void set_enable_event_scheduler(bool enable) { _enable_event_scheduler = enable; }
 
@@ -810,9 +795,6 @@ private:
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
-
-    std::unordered_set<int32_t> _non_broadcast_rf_ids;
-    BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 
     std::optional<TSpillOptions> _spill_options;
 

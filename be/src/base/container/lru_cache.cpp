@@ -315,14 +315,13 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
     _usage -= e->charge;
 }
 
-Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
-                                void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+LRUHandle* LRUCache::_alloc_handle(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                   void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
     size_t key_mem_size = sizeof(LRUHandle) - 1 + key.size();
-    size_t kv_mem_size = value_size + key_mem_size;
     auto* e = reinterpret_cast<LRUHandle*>(malloc(key_mem_size));
     e->value = value;
     e->deleter = deleter;
-    e->charge = kv_mem_size;
+    e->charge = value_size + key_mem_size;
     e->key_length = key.size();
     e->hash = hash;
     e->refs = 2; // one for the returned handle, one for LRUCache.
@@ -331,39 +330,48 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     e->priority = priority;
     e->value_size = value_size;
     memcpy(e->key_data, key.data(), key.size());
+    return e;
+}
+
+void LRUCache::_insert_no_lock(LRUHandle* e, std::vector<LRUHandle*>* last_ref_list) {
+    // Track insert count
+    ++_insert_count;
+
+    // Free the space following strict LRU policy until enough space
+    // is freed or the lru list is empty
+    size_t evicted_count_before = last_ref_list->size();
+    _evict_from_lru(e->charge, last_ref_list);
+    size_t evicted_count_after = last_ref_list->size();
+
+    // Track evictions caused by insert
+    if (evicted_count_after > evicted_count_before) {
+        _insert_evict_count += (evicted_count_after - evicted_count_before);
+    }
+
+    // insert into the cache
+    // note that the cache might get larger than its capacity if not enough
+    // space was freed
+    auto old = _table.insert(e);
+    _usage += e->charge;
+    if (old != nullptr) {
+        old->in_cache = false;
+        if (_unref(old)) {
+            _usage -= old->charge;
+            // old is on LRU because it's in cache and its reference count
+            // was just 1 (Unref returned 0)
+            _lru_remove(old);
+            last_ref_list->push_back(old);
+        }
+    }
+}
+
+Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+    LRUHandle* e = _alloc_handle(key, hash, value, value_size, deleter, priority);
     std::vector<LRUHandle*> last_ref_list;
     {
         std::lock_guard l(_mutex);
-
-        // Track insert count
-        ++_insert_count;
-
-        // Free the space following strict LRU policy until enough space
-        // is freed or the lru list is empty
-        size_t evicted_count_before = last_ref_list.size();
-        _evict_from_lru(kv_mem_size, &last_ref_list);
-        size_t evicted_count_after = last_ref_list.size();
-
-        // Track evictions caused by insert
-        if (evicted_count_after > evicted_count_before) {
-            _insert_evict_count += (evicted_count_after - evicted_count_before);
-        }
-
-        // insert into the cache
-        // note that the cache might get larger than its capacity if not enough
-        // space was freed
-        auto old = _table.insert(e);
-        _usage += kv_mem_size;
-        if (old != nullptr) {
-            old->in_cache = false;
-            if (_unref(old)) {
-                _usage -= old->charge;
-                // old is on LRU because it's in cache and its reference count
-                // was just 1 (Unref returned 0)
-                _lru_remove(old);
-                last_ref_list.push_back(old);
-            }
-        }
+        _insert_no_lock(e, &last_ref_list);
     }
 
     // we free the entries here outside of mutex for
@@ -373,6 +381,78 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     }
 
     return reinterpret_cast<Cache::Handle*>(e);
+}
+
+Cache::Handle* LRUCache::insert_if_absent(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                          void (*deleter)(const CacheKey& key, void* value), bool* inserted,
+                                          CachePriority priority) {
+    LRUHandle* e = _alloc_handle(key, hash, value, value_size, deleter, priority);
+    LRUHandle* ret = nullptr;
+    std::vector<LRUHandle*> last_ref_list;
+    {
+        std::lock_guard l(_mutex);
+        LRUHandle* existing = _table.lookup(key, hash);
+        if (existing != nullptr) {
+            // we get it from _table, so in_cache must be true
+            DCHECK(existing->in_cache);
+            if (existing->refs == 1) {
+                // only in LRU free list, remove it from list
+                _lru_remove(existing);
+            }
+            existing->refs++;
+            ret = existing;
+        } else {
+            _insert_no_lock(e, &last_ref_list);
+            ret = e;
+        }
+    }
+
+    *inserted = (ret == e);
+    if (!*inserted) {
+        // Only the handle is ours to release; `value` still belongs to the caller.
+        ::free(e);
+    }
+    for (auto entry : last_ref_list) {
+        entry->free();
+    }
+
+    return reinterpret_cast<Cache::Handle*>(ret);
+}
+
+void LRUCache::_update_charge_no_lock(LRUHandle* e, size_t new_value_size, std::vector<LRUHandle*>* last_ref_list) {
+    const size_t new_charge = new_value_size + sizeof(LRUHandle) - 1 + e->key_length;
+    _usage = _usage - e->charge + new_charge;
+    e->charge = new_charge;
+    e->value_size = new_value_size;
+    // An entry whose size just changed is being actively populated, so refresh it to
+    // the MRU end. This matches the old "re-insert to update the charge" behaviour and
+    // keeps the eviction below from picking `e` itself unless `e` alone is over capacity.
+    if (e->refs == 1) {
+        _lru_remove(e);
+        _lru_append(&_lru, e);
+    }
+    if (_usage > _capacity) {
+        _evict_from_lru(0, last_ref_list);
+    }
+}
+
+bool LRUCache::update_charge_if(const CacheKey& key, uint32_t hash, size_t new_value_size,
+                                bool (*pred)(void* value, const void* ctx), const void* ctx) {
+    std::vector<LRUHandle*> last_ref_list;
+    bool updated = false;
+    {
+        std::lock_guard l(_mutex);
+        LRUHandle* e = _table.lookup(key, hash);
+        if (e != nullptr && (pred == nullptr || pred(e->value, ctx))) {
+            _update_charge_no_lock(e, new_value_size, &last_ref_list);
+            // `e` may have been evicted by the call above, do not touch it again.
+            updated = true;
+        }
+    }
+    for (auto entry : last_ref_list) {
+        entry->free();
+    }
+    return updated;
 }
 
 void LRUCache::erase(const CacheKey& key, uint32_t hash) {
@@ -464,6 +544,19 @@ Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t 
                                        void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
     const uint32_t hash = _hash_slice(key);
     return _shards[_shard(hash)].insert(key, hash, value, value_size, deleter, priority);
+}
+
+Cache::Handle* ShardedLRUCache::insert_if_absent(const CacheKey& key, void* value, size_t value_size,
+                                                 void (*deleter)(const CacheKey& key, void* value), bool* inserted,
+                                                 CachePriority priority) {
+    const uint32_t hash = _hash_slice(key);
+    return _shards[_shard(hash)].insert_if_absent(key, hash, value, value_size, deleter, inserted, priority);
+}
+
+bool ShardedLRUCache::update_charge_if(const CacheKey& key, size_t new_value_size,
+                                       bool (*pred)(void* value, const void* ctx), const void* ctx) {
+    const uint32_t hash = _hash_slice(key);
+    return _shards[_shard(hash)].update_charge_if(key, hash, new_value_size, pred, ctx);
 }
 
 Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {

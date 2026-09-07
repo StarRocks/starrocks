@@ -70,7 +70,7 @@ TO <repository_name>
 | repository_name | 仓库名。您可以通过 [CREATE REPOSITORY](./CREATE_REPOSITORY.md) 创建仓库。 |
 | ON              | 需要备份的表名。如不指定则备份整个数据库。                         |
 | PARTITION       | 需要备份的分区名。如不指定则备份对应表的所有分区。                   |
-| PROPERTIES      | 数据快照属性。现支持以下属性：<ul><li>`type`：备份类型。当前仅支持 `FULL`，即全量备份。默认：`FULL`。</li><li>`timeout`：任务超时时间。单位：秒。默认：`86400`。</li></ul> |
+| PROPERTIES      | 数据快照属性。现支持以下属性：<ul><li>`type`：备份类型。当前仅支持 `FULL`，即全量备份。默认：`FULL`。</li><li>`timeout`：任务超时时间。单位：秒。默认：`86400`。</li><li>`ttl`：快照的保留时长，格式为 `<数字> <单位>`，单位可为 `SECOND`、`MINUTE`、`HOUR`、`DAY`、`WEEK`、`MONTH`、`YEAR`，例如 `7 DAY`。不指定该属性则永久保留。自 v4.2.0 起支持。</li></ul> |
 
 ## 语法（自 v3.4.0 起支持）
 
@@ -112,7 +112,17 @@ backup_object ::= [
 | view_name       | 待备份的逻辑视图的名称。                                        |
 | udf_name        | 待备份的 UDF 的名称。                                          |
 | PARTITION       | 待备份的分区名。如不指定则备份对应表的所有分区。                    |
-| PROPERTIES      | 数据快照属性。现支持以下属性：<ul><li>`type`：备份类型。当前仅支持 `FULL`，即全量备份。默认：`FULL`。</li><li>`timeout`：任务超时时间。单位：秒。默认：`86400`。</li></ul> |
+| PROPERTIES      | 数据快照属性。现支持以下属性：<ul><li>`type`：备份类型。当前仅支持 `FULL`，即全量备份。默认：`FULL`。</li><li>`timeout`：任务超时时间。单位：秒。默认：`86400`。</li><li>`ttl`：快照的保留时长，格式为 `<数字> <单位>`，单位可为 `SECOND`、`MINUTE`、`HOUR`、`DAY`、`WEEK`、`MONTH`、`YEAR`，例如 `7 DAY`。不指定该属性则永久保留。自 v4.2.0 起支持。</li></ul> |
+
+## 快照保留策略
+
+`ttl` 属性指定 BACKUP 作业所创建快照的保留时长。备份完成时，该时长会被换算成绝对到期时间，与创建集群的 ID 一并写入快照自身，两者均可通过 [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md) 查看。
+
+快照到期后会被自动删除。只有指定了 `ttl` 的快照才带到期时间，因此未指定 `ttl` 的备份不会被触碰。将 FE 配置项 `enable_backup_snapshot_auto_clean` 置为 `false` 可完全停止自动清理。自动清理只会删除执行清理的集群自己创建的快照，因此共用同一仓库的多个集群不会互相删除对方的快照。v4.2.0 之前创建的快照未记录集群 ID，不会被自动删除。
+
+已创建快照的保留时长无法修改。如需在到期前删除快照，请使用 [DROP SNAPSHOT](./DROP_SNAPSHOT.md)。
+
+保留策略自 v4.2.0 起支持。
 
 ## 示例
 

@@ -27,6 +27,8 @@ namespace starrocks {
 
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index);
 
+bool is_builtin_inverted_index(const TabletIndex& tablet_index);
+
 std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type);
 
 InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::string& parser_str);

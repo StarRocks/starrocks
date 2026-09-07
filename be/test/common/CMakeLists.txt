@@ -22,6 +22,7 @@ set(COMMON_TEST_FILES
     brpc/internal_service_recoverable_stub_test.cpp
     config_test.cpp
     cow_test.cpp
+    crash_watchdog_test.cpp
     greplog_test.cpp
     process_exit_test.cpp
     runtime_profile_test.cpp

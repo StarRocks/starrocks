@@ -198,12 +198,12 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 | 参数        | 是否必填 | 描述                                                  |
 | ---------------- | -------- | ------------------------------------------------------------ |
-| label            | 否       | 加载作业的标签。如果不指定此参数，系统将自动为加载作业生成标签。<br />系统不允许使用同一标签多次加载同一批数据。因此，系统可防止相同数据被重复加载。有关标签命名规范，请参阅[系统限制](../../System_limit.md)。<br />默认情况下，系统保留最近三天内成功完成的加载作业的标签。您可以使用[FE 参数](../../../administration/management/FE_configuration.md) `label_keep_max_second` 更改标签保留期。|
+| label            | 否       | 加载作业的标签。如果不指定此参数，系统将自动为加载作业生成标签。<br />系统不允许使用同一标签多次加载同一批数据。因此，系统可防止相同数据被重复加载。有关标签命名规范，请参阅[系统限制](../../System_limit.md)。<br />默认情况下，系统保留最近三天内成功完成的加载作业的标签。您可以使用[FE 参数](../../../administration/configuration/FE_parameters/FE_parameters.md) `label_keep_max_second` 更改标签保留期。|
 | where            | 否       | 系统用于过滤预处理数据的条件。系统仅加载满足 WHERE 子句中指定过滤条件的预处理数据。|
 | max_filter_ratio | 否       | 加载作业的最大错误容忍度。错误容忍度是指在加载作业请求的所有数据记录中，因数据质量不足而被过滤掉的数据记录的最大百分比。有效值：`0` 到 `1`。默认值：`0`。<br />我们建议您保留默认值 `0`。这样，如果检测到不合格的数据记录，加载作业将失败，从而确保数据正确性。<br />如果您想忽略不合格的数据记录，可以将此参数设置为大于 `0` 的值。这样，即使数据文件包含不合格的数据记录，加载作业也可以成功。<br />**注意**<br />不合格的数据记录不包括被 WHERE 子句过滤掉的数据记录。|
 | log_rejected_record_num | 否 | 指定可以记录的不合格数据行的最大数量。此参数从 v3.1 版本开始支持。有效值：`0`、`-1` 以及任意非零正整数。默认值：`0`。<ul><li>值 `0` 表示被过滤掉的数据行将不会被记录。</li><li>值 `-1` 表示所有被过滤掉的数据行都将被记录。</li><li>非零正整数（如 `n`）表示每个 BE 或 CN 上最多可记录 `n` 行被过滤掉的数据行。</li></ul> |
-| timeout | 否 | 加载作业的超时时间。有效值：`1` 到 `259200`。单位：秒。默认值：`600`。<br />**注意**除了 `timeout` 参数之外，您还可以使用[FE 参数](../../../administration/management/FE_configuration.md) `stream_load_default_timeout_second` 集中控制集群中所有 Stream Load 作业的超时时间。如果您指定了 `timeout` 参数，则以 `timeout` 参数指定的超时时间为准。如果您未指定 `timeout` 参数，则以 `stream_load_default_timeout_second` 参数指定的超时时间为准。|
-| strict_mode | 否 | 指定是否启用[严格模式](../../../loading/load_concept/strict_mode.md)。有效值：`true` 和 `false`。默认值：`false`。值 `true` 表示启用严格模式，值 `false` 表示禁用严格模式。|
+| timeout | 否 | 加载作业的超时时间。有效值：`1` 到 `259200`。单位：秒。默认值：`600`。<br />**注意**除了 `timeout` 参数之外，您还可以使用[FE 参数](../../../administration/configuration/FE_parameters/FE_parameters.md) `stream_load_default_timeout_second` 集中控制集群中所有 Stream Load 作业的超时时间。如果您指定了 `timeout` 参数，则以 `timeout` 参数指定的超时时间为准。如果您未指定 `timeout` 参数，则以 `stream_load_default_timeout_second` 参数指定的超时时间为准。|
+| strict_mode | 否 | 指定是否启用[严格模式](../../../loading/strict_mode.md)。有效值：`true` 和 `false`。默认值：`false`。值 `true` 表示启用严格模式，值 `false` 表示禁用严格模式。|
 | timezone | 否 | 加载作业使用的时区。默认值：`Asia/Shanghai`。此参数的值会影响 strftime、alignment_timestamp 和 from_unixtime 等函数返回的结果。此参数指定的时区为会话级时区。更多信息，请参见[配置时区](../../../administration/management/timezone.md)。|
 | load_mem_limit | 否 | 可分配给加载作业的最大内存量。单位：字节。默认情况下，加载作业的最大内存大小为 2 GB。此参数的值不能超过每个 BE 或 CN 可分配的最大内存量。|
 | partial_update | 否 | 是否使用部分更新。有效值：`TRUE` 和 `FALSE`。默认值：`FALSE`，表示禁用此功能。|

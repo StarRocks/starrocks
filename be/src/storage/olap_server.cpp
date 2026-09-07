@@ -48,6 +48,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
 #include "common/storage_define.h"
 #include "common/thread/thread.h"
@@ -57,6 +58,7 @@
 #include "runtime/runtime_env.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
@@ -317,12 +319,6 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
             _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
                 return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
             });
-#ifdef USE_STAROS
-            auto update_manager = StorageEnv::GetInstance()->lake_update_manager();
-            _local_pk_index_manager->schedule([&]() {
-                return _local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(update_manager);
-            });
-#endif
         }
     }
 
@@ -656,6 +652,17 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
     return nullptr;
 }
 
+void StorageEngine::_expire_caches(int64_t vector_cache_now) {
+    _update_manager->expire_cache();
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    StorageEnv::GetInstance()->lake_update_manager()->expire_cache();
+#endif
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache != nullptr) {
+        vector_index_cache->clear_expired(vector_cache_now);
+    }
+}
+
 void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
@@ -671,12 +678,12 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #if defined(USE_STAROS) && !defined(BE_TEST)
         StorageEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
 #endif
-        int32_t sleep_sec = std::max(1, expire_sec / 2);
+        int64_t sleep_sec = std::max(1, expire_sec / 2);
+        if (StorageEnv::GetInstance()->vector_index_cache() != nullptr && config::vector_index_cache_expire_sec > 0) {
+            sleep_sec = std::min<int64_t>(sleep_sec, std::max<int64_t>(1, config::vector_index_cache_expire_sec / 2));
+        }
         SLEEP_IN_BG_WORKER(sleep_sec);
-        _update_manager->expire_cache();
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        StorageEnv::GetInstance()->lake_update_manager()->expire_cache();
-#endif
+        _expire_caches(MonotonicMillis());
     }
 
     return nullptr;

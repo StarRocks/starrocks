@@ -918,4 +918,99 @@ TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
     VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
     ASSERT_EQ(0, ngram_set.size());
 }
+
+TEST_F(LikeTest, issue76417LikeMultiline) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    std::string test_str =
+            "-- --------------------------------------------------------------------------------\n"
+            "-- @Time     : 2026-05-07 17:02\n"
+            "    ,track_path                 ARRAY<STRING> COMMENT";
+
+    // Test with BinaryColumn
+    {
+        auto str = BinaryColumn::create();
+        str->append(test_str);
+        str->append("another row without matching keyword");
+
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%track_path%", 2);
+        Columns columns;
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::like(context, columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_TRUE(v->immutable_data()[0]);
+        ASSERT_FALSE(v->immutable_data()[1]);
+
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+
+    // Test with ConstColumn
+    {
+        auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>(test_str, 1);
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%track_path%", 1);
+        Columns columns;
+        columns.emplace_back(std::move(haystack));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::like(context, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
+
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+}
+
+TEST_F(LikeTest, issue76417RegexpAlternation) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    std::string test_str = "gk|abc_0.054523_psc2.8.225|cba_0.060057";
+
+    // Test with BinaryColumn
+    {
+        auto str = BinaryColumn::create();
+        str->append(test_str);
+        str->append("gk|xyz_dummy|cba_dummy");
+
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc_[0-9]+[.][0-9]+", 2);
+        Columns columns;
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::regex(context, columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_TRUE(v->immutable_data()[0]);
+        ASSERT_FALSE(v->immutable_data()[1]);
+
+        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+
+    // Test with ConstColumn
+    {
+        auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>(test_str, 1);
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc_[0-9]+[.][0-9]+", 1);
+        Columns columns;
+        columns.emplace_back(std::move(haystack));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::regex(context, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
+
+        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+}
 } // namespace starrocks

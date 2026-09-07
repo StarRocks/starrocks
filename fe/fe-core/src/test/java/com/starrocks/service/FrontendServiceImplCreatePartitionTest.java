@@ -885,6 +885,11 @@ public class FrontendServiceImplCreatePartitionTest {
             }
 
             @Override
+            protected void resetTransientState() {
+                // Stub: nothing transient to reset.
+            }
+
+            @Override
             protected void runRunningJob() {
             }
 

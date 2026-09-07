@@ -50,6 +50,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
+#include "formats/parquet/parquet_test_util/handmade_file.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
@@ -94,6 +95,15 @@ protected:
     using Int32RF = ComposedRuntimeBloomFilter<TYPE_INT>;
 
     StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id);
+    StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id, int32_t filter_id);
+
+    // Wires runtime filter predicates the way HdfsScanner::_build_scanner_context does.
+    // No ScanConjunctsManager is needed: a predicate only needs its descriptor and the
+    // probe slot id, since ConnectorPredicateParser::column_id() returns the slot id.
+    void _setup_rf_predicates(HdfsScannerContext* ctx,
+                              const std::vector<std::pair<RuntimeFilterProbeDescriptor*, SlotId>>& probes);
+    // Reads the reader to exhaustion, returning every value of the first INT column.
+    StatusOr<std::vector<int32_t>> _read_all_int_col0(const std::shared_ptr<FileReader>& file_reader);
 
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
     DataCacheOptions _mock_datacache_options();
@@ -388,8 +398,36 @@ protected:
 };
 
 StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(SlotId slot_id) {
+    return gen_runtime_filter_desc(slot_id, 1);
+}
+
+void FileReaderTest::_setup_rf_predicates(HdfsScannerContext* ctx,
+                                          const std::vector<std::pair<RuntimeFilterProbeDescriptor*, SlotId>>& probes) {
+    ctx->predicates.runtime_filter_preds = RuntimeFilterPredicates(0 /*driver_sequence*/);
+    for (const auto& [desc, slot_id] : probes) {
+        ctx->predicates.runtime_filter_preds.add_predicate(_pool.add(new RuntimeFilterPredicate(desc, slot_id)));
+    }
+    ctx->format_scan_context.runtime_filter_preds = &ctx->predicates.runtime_filter_preds;
+    ctx->format_scan_context.driver_sequence = 0;
+}
+
+StatusOr<std::vector<int32_t>> FileReaderTest::_read_all_int_col0(const std::shared_ptr<FileReader>& file_reader) {
+    std::vector<int32_t> values;
+    while (true) {
+        auto chunk = _create_int_chunk();
+        Status st = file_reader->get_next(&chunk);
+        if (st.is_end_of_file()) break;
+        RETURN_IF_ERROR(st);
+        const Column* col = ColumnHelper::get_data_column(chunk->get_column_by_index(0).get());
+        const auto& data = down_cast<const Int32Column*>(col)->get_data();
+        values.insert(values.end(), data.begin(), data.end());
+    }
+    return values;
+}
+
+StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(SlotId slot_id, int32_t filter_id) {
     TRuntimeFilterDescription tRuntimeFilterDescription;
-    tRuntimeFilterDescription.__set_filter_id(1);
+    tRuntimeFilterDescription.__set_filter_id(filter_id);
     tRuntimeFilterDescription.__set_has_remote_targets(false);
     tRuntimeFilterDescription.__set_build_plan_node_id(1);
     tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
@@ -3857,6 +3895,144 @@ TEST_F(FileReaderTest, update_rf_and_filter_row_group) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
+// ── Join runtime filter row-level pushdown (GroupReader stage 4.1) ──────────
+//
+// _filter_row_group_path_1 holds 2 row groups of 3 rows: col1 = 1..6, col2 = 11..66.
+// Every filter below spans [1,6], so row group statistics can never prune anything --
+// whatever rows disappear were dropped by the row-level probe, which is the point.
+
+// Probe column carries a conjunct entry, so it is classified active and the probe reads
+// it straight out of active_chunk.
+TEST_F(FileReaderTest, runtime_filter_pushdown_on_active_column) {
+    const SlotId slot_id = 0;
+    // Slot ids must match _create_int_chunk(), which keys columns positionally.
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
+
+    auto* rf = _pool.add(new Int32RF());
+    rf->get_membership_filter()->init(10);
+    rf->insert(1);
+    rf->insert(6);
+    ASSIGN_OR_ABORT(auto* rf_desc, gen_runtime_filter_desc(slot_id));
+    rf_desc->set_runtime_filter(rf);
+    _rf_probe_collector->add_descriptor(rf_desc);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
+    _setup_rf_predicates(ctx, {{rf_desc, slot_id}});
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_1);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    // min/max spans the whole file: neither row group is pruned by statistics.
+    ASSERT_EQ(file_reader->row_group_size(), 2);
+
+    // g_hdfs_stats is shared by every test in this file, so compare deltas.
+    const int64_t input_before = g_hdfs_stats.rf_cond_input_rows;
+    const int64_t output_before = g_hdfs_stats.rf_cond_output_rows;
+    ASSIGN_OR_ABORT(auto values, _read_all_int_col0(file_reader));
+    EXPECT_EQ(std::vector<int32_t>({1, 6}), values);
+    EXPECT_EQ(6, g_hdfs_stats.rf_cond_input_rows - input_before);
+    EXPECT_EQ(2, g_hdfs_stats.rf_cond_output_rows - output_before);
+}
+
+// Probe column has no conjunct, so classify_columns() leaves it lazy. The probe must
+// pull it on demand via materialize_slot(), and stage 5 must still emit correct values
+// for it through the _slot_cache triggered path.
+TEST_F(FileReaderTest, runtime_filter_pushdown_on_lazy_column) {
+    const SlotId probe_slot = 0; // col1: runtime filter target, no conjunct -> lazy
+    const SlotId other_slot = 1; // col2: carries the conjunct entry -> active
+    // Slot ids must match _create_int_chunk(), which keys columns positionally.
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
+
+    auto* rf = _pool.add(new Int32RF());
+    rf->get_membership_filter()->init(10);
+    rf->insert(1);
+    rf->insert(6);
+    ASSIGN_OR_ABORT(auto* rf_desc, gen_runtime_filter_desc(probe_slot));
+    rf_desc->set_runtime_filter(rf);
+    _rf_probe_collector->add_descriptor(rf_desc);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[other_slot],
+                                           _rf_probe_collector, tuple_desc, _runtime_state, ctx);
+    _setup_rf_predicates(ctx, {{rf_desc, probe_slot}});
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_1);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    ASSERT_EQ(file_reader->row_group_size(), 2);
+
+    const int64_t lazy_reads_before = g_hdfs_stats.parquet_lazy_read_count;
+    ASSIGN_OR_ABORT(auto values, _read_all_int_col0(file_reader));
+    EXPECT_EQ(std::vector<int32_t>({1, 6}), values);
+    // Proves the probe really went through materialize_slot() rather than finding the
+    // column already in active_chunk -- without this the test would also pass if col1
+    // had been classified active.
+    EXPECT_GT(g_hdfs_stats.parquet_lazy_read_count, lazy_reads_before);
+}
+
+// Nothing has arrived: any_filter_ready() must short-circuit before any column is
+// materialized, and every row must still be emitted.
+TEST_F(FileReaderTest, runtime_filter_pushdown_filter_not_arrived) {
+    const SlotId slot_id = 0;
+    // Slot ids must match _create_int_chunk(), which keys columns positionally.
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
+
+    // Descriptor registered but set_runtime_filter() never called.
+    ASSIGN_OR_ABORT(auto* rf_desc, gen_runtime_filter_desc(slot_id));
+    _rf_probe_collector->add_descriptor(rf_desc);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
+    _setup_rf_predicates(ctx, {{rf_desc, slot_id}});
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_1);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    ASSIGN_OR_ABORT(auto values, _read_all_int_col0(file_reader));
+    EXPECT_EQ(std::vector<int32_t>({1, 2, 3, 4, 5, 6}), values);
+}
+
+// Two filters probing the same column. The probe chunk keys columns by id and rejects
+// duplicates, so the column must be collected once even though both predicates run.
+TEST_F(FileReaderTest, runtime_filter_pushdown_two_filters_same_column) {
+    const SlotId slot_id = 0;
+    // Slot ids must match _create_int_chunk(), which keys columns positionally.
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
+
+    auto* rf1 = _pool.add(new Int32RF());
+    rf1->get_membership_filter()->init(10);
+    rf1->insert(1);
+    rf1->insert(6);
+    ASSIGN_OR_ABORT(auto* rf_desc1, gen_runtime_filter_desc(slot_id, 1));
+    rf_desc1->set_runtime_filter(rf1);
+    _rf_probe_collector->add_descriptor(rf_desc1);
+
+    // Overlaps rf1 on 6 only, so the two together must keep exactly {6}.
+    auto* rf2 = _pool.add(new Int32RF());
+    rf2->get_membership_filter()->init(10);
+    rf2->insert(3);
+    rf2->insert(6);
+    ASSIGN_OR_ABORT(auto* rf_desc2, gen_runtime_filter_desc(slot_id, 2));
+    rf_desc2->set_runtime_filter(rf2);
+    _rf_probe_collector->add_descriptor(rf_desc2);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
+    _setup_rf_predicates(ctx, {{rf_desc1, slot_id}, {rf_desc2, slot_id}});
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_1);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    ASSIGN_OR_ABORT(auto values, _read_all_int_col0(file_reader));
+    EXPECT_EQ(std::vector<int32_t>({6}), values);
+}
+
 TEST_F(FileReaderTest, filter_page_index_with_rf_has_null) {
     SlotId slot_id = 1;
 
@@ -4885,6 +5061,233 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_whole_column_access_path
     ASSERT_NE(-1, variant_col->find_shredded_path("age"));
     ASSERT_NE(-1, variant_col->find_shredded_path("profile.salary"));
     ASSERT_NE(-1, variant_col->find_shredded_path("events"));
+}
+
+// A Parquet `null_count` statistic is a hint, not a fact: files written by old parquet-mr
+// under-report it, and StarRocks used to take it at face value. When the statistic claims
+// "no NULLs" but the definition levels disagree, the reader asked the value decoder for one
+// physical value per row while the page only stores the non-NULL ones, and the read walked
+// off the end of the page:
+//   going to read out-of-bounds data, offset=1050424,count=187,size=1050424
+// The definition levels have already been decoded by the time the decoder is picked, so the
+// true NULL count is available for free and must win over the statistic.
+class HandmadeNullCountTest : public FileReaderTest {
+protected:
+    // Writes `values` into a scratch file whose statistics are whatever `options` says.
+    std::string _write_handmade_file(const std::vector<std::optional<std::string>>& values,
+                                     const HandmadeParquetFile::Options& options, const std::string& tag) {
+        std::string content = HandmadeParquetFile::build(values, options);
+        std::string path = (std::filesystem::temp_directory_path() / ("sr_handmade_" + tag + ".parquet")).string();
+        auto file = *FileSystem::Default()->new_writable_file(path);
+        CHECK_OK(file->append(Slice(content)));
+        CHECK_OK(file->close());
+        _scratch_files.emplace_back(path);
+        return path;
+    }
+
+    // Reads the single "c0" column out in one chunk.
+    StatusOr<ColumnPtr> _read_c0(const std::string& path, size_t expected_rows) {
+        auto file_reader = _create_file_reader(path);
+        Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {""}};
+        auto* ctx = _create_scan_context(slot_descs, path);
+        RETURN_IF_ERROR(file_reader->init(&ctx->format_scan_context));
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+        RETURN_IF_ERROR(file_reader->get_next(&chunk));
+        EXPECT_EQ(expected_rows, chunk->num_rows());
+        return chunk->get_column_by_index(0);
+    }
+
+    void TearDown() override {
+        for (const auto& path : _scratch_files) {
+            std::filesystem::remove(path);
+        }
+        _scratch_files.clear();
+        FileReaderTest::TearDown();
+    }
+
+    // "a", NULL, "bbb", NULL, "c" — three physical values behind five rows.
+    static std::vector<std::optional<std::string>> _values_with_nulls() {
+        return {std::string("a"), std::nullopt, std::string("bbb"), std::nullopt, std::string("c")};
+    }
+
+    static void _expect_values_with_nulls(const ColumnPtr& column) {
+        ASSERT_EQ("['a', NULL, 'bbb', NULL, 'c']", column->debug_string());
+    }
+
+private:
+    std::vector<std::string> _scratch_files;
+};
+
+// The shape seen in the field: the row group counts its NULLs correctly, but the page header
+// claims the page has none. Only the page statistic lies. Before the fix this failed with
+// "going to read out-of-bounds data".
+TEST_F(HandmadeNullCountTest, reads_a_page_that_under_reports_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 2;
+    options.page_null_count = 0;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "page_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// The same lie one level up: the row group claims no NULLs and the page carries no statistics.
+TEST_F(HandmadeNullCountTest, reads_a_row_group_that_under_reports_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = std::nullopt;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "row_group_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// Both statistics lie at once.
+TEST_F(HandmadeNullCountTest, reads_when_both_statistics_lie) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = 0;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "both_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// The control group: files whose statistics are honest, or that carry none. These read correctly
+// both before and after the fix -- that is what proves the hand-built files above are valid
+// parquet rather than mis-assembled bytes.
+TEST_F(HandmadeNullCountTest, honest_statistics_without_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = 0;
+    std::vector<std::optional<std::string>> values = {std::string("a"), std::string("bb"), std::string("ccc")};
+
+    auto path = _write_handmade_file(values, options, "honest_no_null");
+    auto column = _read_c0(path, 3);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    ASSERT_EQ("['a', 'bb', 'ccc']", column.value()->debug_string());
+}
+
+TEST_F(HandmadeNullCountTest, honest_statistics_with_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 2;
+    options.page_null_count = 2;
+
+    auto path = _write_handmade_file(_values_with_nulls(), options, "honest_with_null");
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+TEST_F(HandmadeNullCountTest, no_statistics_at_all) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = std::nullopt;
+    options.page_null_count = std::nullopt;
+
+    auto path = _write_handmade_file(_values_with_nulls(), options, "no_stat");
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// `null_count` also drives pruning, where -- unlike decoding -- there are no definition levels to
+// cross-check against, so an under-reported count silently drops the rows `IS NULL` asks for.
+// StarRocks already refuses min/max from writers known to compute statistics incorrectly
+// (`ApplicationVersion::HasCorrectStatistics`, PARQUET-251); the fix asks the same writer-version
+// question about `null_count`.
+//
+// The column is INT32 on purpose. For BYTE_ARRAY from a legacy writer the min/max gate already
+// drops the statistics, so no zone map is built and the bug cannot be reached; for INT32 the gate
+// lets min/max through (`col_type != BYTE_ARRAY` returns early) and the bug is reachable.
+class LegacyNullCountPruningTest : public HandmadeNullCountTest {
+protected:
+    static constexpr const char* kLegacyWriter = "parquet-mr version 1.9.0-cdh6.3.2 (build handmade)";
+    static constexpr const char* kModernWriter = "parquet-mr version 1.13.1 (build handmade)";
+
+    // Statistics claim no NULLs. `with_nulls` decides whether that claim is a lie.
+    std::string _write_int_file(const std::string& created_by, bool with_nulls, const std::string& tag) {
+        HandmadeParquetFile::Options options;
+        options.row_group_null_count = 0;
+        options.page_null_count = 0;
+        options.row_group_min = HandmadeParquetFile::plain_int32(1);
+        options.row_group_max = HandmadeParquetFile::plain_int32(3);
+        options.created_by = created_by;
+
+        std::vector<std::optional<int32_t>> values = {1, 2, 3};
+        if (with_nulls) {
+            values = {1, std::nullopt, 3};
+        }
+        std::string content = HandmadeParquetFile::build_int32(values, options);
+        std::string path = (std::filesystem::temp_directory_path() / ("sr_handmade_" + tag + ".parquet")).string();
+        auto file = *FileSystem::Default()->new_writable_file(path);
+        CHECK_OK(file->append(Slice(content)));
+        CHECK_OK(file->close());
+        _int_scratch_files.emplace_back(path);
+        return path;
+    }
+
+    // Returns how many row groups survived `WHERE c0 IS NULL`. 0 means the group was pruned.
+    StatusOr<size_t> _row_groups_surviving_is_null(const std::string& path) {
+        Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {""}};
+        std::vector<TExpr> t_conjuncts;
+        ParquetUTBase::is_null_pred(0, true, &t_conjuncts);
+        std::vector<ExprContext*> expr_ctxs;
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
+
+        auto* ctx = _create_scan_context(slot_descs, path);
+        ctx->format_scan_context.conjunct_ctxs_by_slot.insert({0, expr_ctxs});
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[0], nullptr, tuple_desc,
+                                               _runtime_state, ctx);
+
+        auto file_reader = _create_file_reader(path);
+        RETURN_IF_ERROR(file_reader->init(&ctx->format_scan_context));
+        return file_reader->row_group_size();
+    }
+
+    void TearDown() override {
+        for (const auto& path : _int_scratch_files) {
+            std::filesystem::remove(path);
+        }
+        _int_scratch_files.clear();
+        HandmadeNullCountTest::TearDown();
+    }
+
+private:
+    std::vector<std::string> _int_scratch_files;
+};
+
+// CONTROL. A modern writer's statistics are still trusted, so an honest file with no NULLs is
+// still pruned away by `IS NULL`. This is also what proves the hand-built file reaches the zone
+// map at all -- without it the cases below would pass for the wrong reason.
+TEST_F(LegacyNullCountPruningTest, still_prunes_a_modern_writer) {
+    auto path = _write_int_file(kModernWriter, /*with_nulls=*/false, "modern_honest");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(0, surviving.value()) << "zone-map pruning never ran, so the cases below are inconclusive";
+}
+
+// A legacy writer under-reporting its `null_count` no longer drops the rows `IS NULL` asks for.
+TEST_F(LegacyNullCountPruningTest, stops_trusting_a_legacy_writer) {
+    auto path = _write_int_file(kLegacyWriter, /*with_nulls=*/true, "legacy_lying");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(1, surviving.value()) << "row group pruned away although the file does contain NULLs";
+}
+
+// A legacy writer with an honest file: no longer pruned. That is a lost optimisation, not a
+// wrong answer -- the predicate still rejects the rows downstream. Stated so the trade-off is
+// visible rather than discovered later in a benchmark.
+TEST_F(LegacyNullCountPruningTest, gives_up_pruning_on_honest_legacy_files) {
+    auto path = _write_int_file(kLegacyWriter, /*with_nulls=*/false, "legacy_honest_kept");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(1, surviving.value());
 }
 
 } // namespace starrocks::parquet

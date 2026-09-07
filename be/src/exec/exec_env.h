@@ -134,6 +134,7 @@ public:
     const LakeServices& lake_services() const { return _lake_services; }
     const RuntimeServices& runtime_services() const { return _runtime_services; }
     const AgentServices& agent_services() const { return _agent_services; }
+    const AIServices& ai_services() const { return _ai_services; }
     const QueryExecutionServices& query_execution_services() const { return _query_execution_services; }
     const AdminServices& admin_services() const { return _admin_services; }
 
@@ -189,6 +190,7 @@ private:
     LakeServices _lake_services;
     RuntimeServices _runtime_services;
     AgentServices _agent_services;
+    AIServices _ai_services;
     QueryExecutionServices _query_execution_services;
     AdminServices _admin_services;
 };

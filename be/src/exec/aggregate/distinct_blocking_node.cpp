@@ -46,7 +46,6 @@ StatusOr<pipeline::OpFactories> DistinctBlockingNode::_decompose_to_pipeline(pip
                                                                              bool per_bucket_optimize) {
     using namespace pipeline;
 
-    auto workgroup = context->fragment_context()->workgroup();
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
 

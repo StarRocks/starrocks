@@ -14,6 +14,7 @@
 
 #include "storage/delta_writer.h"
 
+#include <algorithm>
 #include <mutex>
 #include <utility>
 
@@ -30,6 +31,7 @@
 #include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
+#include "storage/full_sort_key_codec.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -125,6 +127,21 @@ static bool contains_any_of(const std::vector<int32_t>& referenced_column_ids,
     return std::any_of(referenced_column_ids.begin(), referenced_column_ids.end(),
                        // Only check non-pk column id
                        [&](int32_t id) { return id >= num_key_columns && sort_key_idxes_set.count(id) > 0; });
+}
+
+std::vector<ColumnId> DeltaWriter::map_sort_key_to_partial_schema(const std::vector<ColumnId>& sort_key_idxes,
+                                                                  const std::vector<int32_t>& referenced_column_ids) {
+    std::vector<ColumnId> mapped;
+    mapped.reserve(sort_key_idxes.size());
+    for (ColumnId cid : sort_key_idxes) {
+        auto it = std::find(referenced_column_ids.begin(), referenced_column_ids.end(), static_cast<int32_t>(cid));
+        if (it == referenced_column_ids.end()) {
+            // Not total: the caller must not check an ordering it cannot address.
+            return {};
+        }
+        mapped.emplace_back(static_cast<ColumnId>(std::distance(referenced_column_ids.begin(), it)));
+    }
+    return mapped;
 }
 
 bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
@@ -313,6 +330,17 @@ Status DeltaWriter::_init() {
             partial_update_schema->set_num_short_key_columns(1);
             partial_update_schema->set_sort_key_idxes(sort_key_idxes);
         }
+        // The rewrite above points sort_key_idxes at the primary key columns in primary key order,
+        // which is what the .upt segment's own index uses. Missing-key upserts are materialised into
+        // full segments after commit under the table's ORIGINAL sort key order, and the encoded size
+        // is order-sensitive, so the artificial ordering is not an upper bound on the real one. Keep
+        // the original ordering so write() can bound that too. COLUMN_UPDATE_MODE never inserts new
+        // rows and needs no second check.
+        if (_opt.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE) {
+            // _tablet_schema is still the full schema here; it is replaced below.
+            _original_sort_key_idxes_in_partial_schema = map_sort_key_to_partial_schema(
+                    _tablet_schema->sort_key_idxes(), writer_context.referenced_column_ids);
+        }
 
         writer_context.tablet_schema = partial_update_schema;
         writer_context.full_tablet_schema = _tablet_schema;
@@ -431,6 +459,10 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
+    // A column addresses its bytes with uint32 offsets, so a chunk wider than that cannot be
+    // carried through to apply. Fail the load here, where the statement can still be retried with
+    // less data per batch, rather than let it commit and leave apply to fail on every retry.
+    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(chunk, "load chunk", _opt.tablet_id, _opt.txn_id));
     ADD_COUNTER_RELAXED(_stats.write_count, 1);
     ADD_COUNTER_RELAXED(_stats.row_count, size);
     int64_t start_time = MonotonicNanos();
@@ -706,6 +738,14 @@ Status DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
+    // Column-mode upsert also has to bound the table's ORIGINAL sort key ordering, which the memtable
+    // can address safely: its accumulated chunk is in _vectorized_schema order and holds exactly the
+    // admitted rows, whereas the caller's input chunk is resolved by slot id and may carry
+    // schema-change shadow columns. Empty when the mapping is not total, which
+    // _check_partial_update_with_sort_key proves means the chunk has no UPSERT row and materialises
+    // nothing.
+    _mem_table->set_extra_sort_key_idxes(_original_sort_key_idxes_in_partial_schema);
+
     PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;

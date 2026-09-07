@@ -216,6 +216,9 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      # Scratch dir the FE UT tarball unpacks into. Deliberately NOT the repo's own `fe/`,
+      # which is tracked and so survives `git clean`. See ci-report.yml.
+      FE_UT_UNPACK_DIR: fe-ut-report
     steps:
       - name: clean
         run: |
@@ -261,7 +264,10 @@ jobs:
         env:
           oss_path: ${{ steps.run_ut.outputs.oss_path }}
         run: |
-          mkdir fe && cd fe
+          # Unpack into a scratch dir, not the tracked `fe/`: that survives
+          # `git clean -ffdxq`, so a bare mkdir fails and the `cd` is skipped without
+          # tripping `set -e`, unpacking into the workspace root. See ci-report.yml.
+          rm -rf ${FE_UT_UNPACK_DIR} && mkdir ${FE_UT_UNPACK_DIR} && cd ${FE_UT_UNPACK_DIR}
           ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
           tar zxf fe_ut_report.tar.gz
 
@@ -276,7 +282,7 @@ jobs:
           check_name: 'FE UT Report'
           detailed_summary: true
           fail_on_failure: true
-          report_paths: ./fe/fe-core/target/surefire-reports/*.xml
+          report_paths: ./${{ env.FE_UT_UNPACK_DIR }}/fe-core/target/surefire-reports/*.xml
 
       - name: Clean ENV
         if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')

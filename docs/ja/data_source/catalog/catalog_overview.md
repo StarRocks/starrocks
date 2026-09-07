@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks catalog を使用して、内部データと外部データを統一的に管理およびクエリする方法。"
 ---
@@ -20,18 +21,19 @@ StarRocks は v2.3 以降、 catalog 機能をサポートしています。 cat
 
 ![figure1](../../_assets/3.8.1.png)
 
-- **内部 catalog** は、StarRocks の内部データを管理します。たとえば、CREATE DATABASE または CREATE TABLE ステートメントを実行してデータベースまたはテーブルを作成すると、データベースまたはテーブルは内部 catalog に保存されます。各 StarRocks クラスタには、[default_catalog](../catalog/default_catalog.md) という名前の内部 catalog が 1 つだけあります。
+- **内部 catalog** は、StarRocks の内部データを管理します。たとえば、CREATE DATABASE または CREATE TABLE ステートメントを実行してデータベースまたはテーブルを作成すると、データベースまたはテーブルは内部 catalog に保存されます。各 StarRocks クラスタには、[default_catalog](./default_catalog.md) という名前の内部 catalog が 1 つだけあります。
 
 - **外部 catalog** は、外部で管理されているメタストアへのリンクとして機能し、StarRocks に外部データソースへの直接アクセスを許可します。データのロードや移行を行わずに、外部データを直接クエリできます。現在、StarRocks は次のタイプの外部 catalog をサポートしています。
-  - [Hive catalog](../catalog/hive_catalog.md): Hive からデータをクエリするために使用されます。
-  - [Iceberg catalog](./iceberg/iceberg_catalog.md): Iceberg からデータをクエリするために使用されます。
-  - [Hudi catalog](../catalog/hudi_catalog.md): Hudi からデータをクエリするために使用されます。
-  - [Delta Lake catalog](../catalog/deltalake_catalog.md): Delta Lake からデータをクエリするために使用されます。
-  - [JDBC catalog](../catalog/jdbc_catalog.md): JDBC 互換のデータソースからデータをクエリするために使用されます。
-  - [Benchmark catalog](../catalog/benchmark_catalog.md): TPC-H、TPC-DS、および SSB スキーマ用に生成されたインフライトデータセットをクエリするために使用されます。
-  - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md): Elasticsearch からデータをクエリするために使用されます。 Elasticsearch catalog は v3.1 以降でサポートされています。
-  - [Paimon catalog](../catalog/paimon_catalog.md): Paimon からデータをクエリするために使用されます。 Paimon catalog は v3.1 以降でサポートされています。
-  - [Unified catalog](../catalog/unified_catalog.md): Hive、Iceberg、Hudi、および Delta Lake のデータソースから、統合されたデータソースとしてデータをクエリするために使用されます。 Unified catalog は v3.2 以降でサポートされています。
+  - [Hive catalog](./hive_catalog.md): Hive からデータをクエリするために使用されます。
+  - [Iceberg catalog](./iceberg/iceberg.md): Iceberg からデータをクエリするために使用されます。
+  - [Hudi catalog](./hudi_catalog.md): Hudi からデータをクエリするために使用されます。
+  - [Delta Lake catalog](./deltalake_catalog.md): Delta Lake からデータをクエリするために使用されます。
+  - [JDBC catalog](./jdbc_catalog.md): JDBC 互換のデータソースからデータをクエリするために使用されます。
+  - [Benchmark catalog](./benchmark_catalog.md): TPC-H、TPC-DS、および SSB スキーマ用に生成されたインフライトデータセットをクエリするために使用されます。
+  - [Elasticsearch catalog](./elasticsearch_catalog.md): Elasticsearch からデータをクエリするために使用されます。 Elasticsearch catalog は v3.1 以降でサポートされています。
+  - [Paimon catalog](./paimon_catalog.md): Paimon からデータをクエリするために使用されます。 Paimon catalog は v3.1 以降でサポートされています。
+  - [Fluss catalog](./fluss_catalog.md): Fluss のデータをクエリするために使用されます。
+  - [Unified catalog](./unified_catalog.md): Hive、Iceberg、Hudi、および Delta Lake のデータソースから、統合されたデータソースとしてデータをクエリするために使用されます。 Unified catalog は v3.2 以降でサポートされています。
 
   StarRocks は、外部データをクエリするときに、外部データソースの次の 2 つのコンポーネントとやり取りします。
 
@@ -46,11 +48,11 @@ StarRocks は v2.3 以降、 catalog 機能をサポートしています。 cat
 
 ### 内部データのクエリ
 
-StarRocks でデータをクエリするには、[Default catalog](../catalog/default_catalog.md) を参照してください。
+StarRocks でデータをクエリするには、[Default catalog](./default_catalog.md) を参照してください。
 
 ### 外部データのクエリ
 
-外部データソースからデータをクエリするには、[Query external data](../catalog/query_external_data.md) を参照してください。
+外部データソースからデータをクエリするには、[Query external data](./query_external_data.md) を参照してください。
 
 ### クロス catalog クエリ
 

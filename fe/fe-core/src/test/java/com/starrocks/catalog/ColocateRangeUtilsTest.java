@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.Range;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
@@ -240,6 +241,109 @@ public class ColocateRangeUtilsTest {
     public void testLookupPackShardGroupIdReturnsSentinelWhenUncovered() {
         Assertions.assertEquals(PhysicalPartition.INVALID_SHARD_GROUP_ID,
                 ColocateRangeUtils.lookupPackShardGroupId(Range.all(), List.of(), 1));
+    }
+
+    // ---- Classifier ----
+
+    // Three colocate ranges on the single-column prefix k1:
+    //   R0 = (-inf, 200) -> 1000, R1 = [200, 300) -> 1001, R2 = [300, +inf) -> 1002
+    private static final List<ColocateRange> THREE_RANGES = Arrays.asList(
+            new ColocateRange(Range.lt(makeTuple(200)), 1000L),
+            new ColocateRange(Range.gelt(makeTuple(200), makeTuple(300)), 1001L),
+            new ColocateRange(Range.ge(makeTuple(300)), 1002L));
+
+    private static Range<Tuple> expandedTabletRange(Range<Tuple> colocateShapedRange) {
+        return ColocateRangeUtils.expandToFullSortKey(colocateShapedRange, SORT_KEY_COLUMNS, 1);
+    }
+
+    private static ColocateRangeUtils.Classifier threeRangeClassifier() {
+        return ColocateRangeUtils.Classifier.of(THREE_RANGES, SORT_KEY_COLUMNS, 1);
+    }
+
+    @Test
+    public void testClassifierIsNullWhenNotRangeColocate() {
+        Assertions.assertNull(ColocateRangeUtils.Classifier.of(null, SORT_KEY_COLUMNS, 1));
+    }
+
+    @Test
+    public void testClassifierIndexOfRange() {
+        ColocateRangeUtils.Classifier classifier = threeRangeClassifier();
+
+        // Fully inside the MIDDLE range: neither first nor last, so an implementation that always
+        // answered 0 (or ranges.size()-1) cannot pass.
+        Assertions.assertEquals(1, classifier.indexOf(
+                expandedTabletRange(Range.gelt(makeTuple(200), makeTuple(250)))));
+        // Unbounded below -> first range; unbounded above -> last range.
+        Assertions.assertEquals(0, classifier.indexOf(expandedTabletRange(Range.lt(makeTuple(200)))));
+        Assertions.assertEquals(2, classifier.indexOf(expandedTabletRange(Range.ge(makeTuple(300)))));
+        // Spans R1 and R2: the prefix resolves to R1 but the range is not contained in it.
+        Assertions.assertEquals(-1, classifier.indexOf(
+                expandedTabletRange(Range.gelt(makeTuple(250), makeTuple(350)))));
+        // A null range is classified, not dereferenced.
+        Assertions.assertEquals(-1, classifier.indexOf((Range<Tuple>) null));
+    }
+
+    @Test
+    public void testClassifierIndexOfTabletWithoutRange() {
+        // A tablet carrying no TabletRange classifies as -1 rather than throwing, so a caller walking
+        // an index does not have to spell out the null check.
+        Assertions.assertEquals(-1, threeRangeClassifier().indexOf(new LakeTablet(1L)));
+    }
+
+    @Test
+    public void testClassifierUncoveredPrefix() {
+        // A partial range list that does not cover prefix 50.
+        List<ColocateRange> partial = List.of(THREE_RANGES.get(1));
+        ColocateRangeUtils.Classifier classifier =
+                ColocateRangeUtils.Classifier.of(partial, SORT_KEY_COLUMNS, 1);
+        Assertions.assertEquals(-1, classifier.indexOf(
+                expandedTabletRange(Range.gelt(makeTuple(50), makeTuple(60)))));
+    }
+
+    @Test
+    public void testClassifierRangeTooShortForPrefix() {
+        // A mixed-version or faulty BE can publish a range whose lower tuple is shorter than the
+        // colocate prefix, tripping extractColocatePrefix's precondition. indexOf must absorb that
+        // into -1: its callers run past points of no return where an escaping exception cannot be
+        // unwound, and the only sensible answer there is "uncontained" anyway.
+        Assertions.assertEquals(-1, threeRangeClassifier().indexOf(Range.ge(new Tuple(List.of()))));
+    }
+
+    @Test
+    public void testClassifierZeroColocateColumns() {
+        // colocateColumnCount == 0 is the degenerate single-[MIN,MAX) shape. The prefix must stay null
+        // (indexOf maps null to the first range); calling extractColocatePrefix unconditionally would
+        // trip its colocateColumnCount > 0 precondition instead.
+        List<ColocateRange> allRange = List.of(new ColocateRange(Range.all(), 1000L));
+        ColocateRangeUtils.Classifier classifier =
+                ColocateRangeUtils.Classifier.of(allRange, SORT_KEY_COLUMNS, 0);
+        Assertions.assertEquals(0, classifier.indexOf(
+                expandedTabletRange(Range.gelt(makeTuple(200), makeTuple(250)))));
+    }
+
+    /**
+     * Classifier.indexOf(...) >= 0 must agree with the pre-existing isContainedInOwningColocateRange
+     * for every valid non-null tablet range, so the two lookups cannot drift apart. A null range is
+     * deliberately NOT in this table: the classifier returns -1 where isContainedInOwningColocateRange
+     * dereferences, an intentional difference asserted in {@link #testClassifierIndexOfRange}.
+     */
+    @Test
+    public void testClassifierAgreesWithIsContained() {
+        ColocateRangeUtils.Classifier classifier = threeRangeClassifier();
+        List<Range<Tuple>> cases = Arrays.asList(
+                expandedTabletRange(Range.gelt(makeTuple(200), makeTuple(250))),  // inside R1
+                expandedTabletRange(Range.lt(makeTuple(200))),                    // inside R0
+                expandedTabletRange(Range.ge(makeTuple(300))),                    // inside R2
+                expandedTabletRange(Range.gelt(makeTuple(250), makeTuple(350))),  // spans R1..R2
+                expandedTabletRange(Range.gelt(makeTuple(100), makeTuple(400))),  // spans all three
+                Range.all());
+        for (Range<Tuple> tabletRange : cases) {
+            Assertions.assertEquals(
+                    ColocateRangeUtils.isContainedInOwningColocateRange(
+                            tabletRange, THREE_RANGES, SORT_KEY_COLUMNS, 1),
+                    classifier.indexOf(tabletRange) >= 0,
+                    "lookups disagree for " + tabletRange);
+        }
     }
 
 }

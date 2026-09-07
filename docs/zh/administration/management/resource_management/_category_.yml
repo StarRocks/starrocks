@@ -1,0 +1,7 @@
+position: 150
+label: 'Resource management'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: resource_management

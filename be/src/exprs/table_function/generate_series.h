@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <type_traits>
+
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/runtime_type_traits.h"
@@ -100,9 +103,42 @@ public:
                     continue;
                 }
 
-                auto count = (stop - current) / step + 1;
-                if (count > max_chunk_size - res->size()) {
-                    count = max_chunk_size - res->size();
+                // The number of values still to emit for this row is `(stop - current) / step + 1`,
+                // but neither the subtraction nor the division is safe in NumericType:
+                //   * `stop - current` overflows whenever the two ends are further apart than the
+                //     type range (e.g. `current = -1, stop = INT32_MAX`), which is undefined
+                //     behaviour and yields a garbage count;
+                //   * `<type>::min() / -1` is not representable. For INT and BIGINT the division
+                //     traps with SIGFPE on x86 and takes the BE down, e.g. INT columns feeding
+                //     `generate_series(0, -2147483648, -1)`; for LARGEINT the __int128 division
+                //     helper returns min() instead, and the resulting negative count skips the fill
+                //     loop and hands back uninitialized memory. (TINYINT and SMALLINT escape only
+                //     because their operands are promoted to `int` before the division.)
+                // Both operands come from input columns, so the offending values can only be known
+                // at runtime and cannot be rejected by constant-time analysis in the FE.
+                //
+                // Compute the distance and the step magnitude as unsigned values instead: unsigned
+                // arithmetic is defined to wrap, so it represents the whole two's-complement span
+                // exactly, and then clamp to the room left in the output chunk.
+                using UnsignedType = std::make_unsigned_t<NumericType>;
+                const auto u_current = static_cast<UnsignedType>(current);
+                const auto u_stop = static_cast<UnsignedType>(stop);
+                const UnsignedType span = (step > 0) ? static_cast<UnsignedType>(u_stop - u_current)
+                                                     : static_cast<UnsignedType>(u_current - u_stop);
+                const UnsignedType abs_step =
+                        (step > 0) ? static_cast<UnsignedType>(step)
+                                   : static_cast<UnsignedType>(UnsignedType{0} - static_cast<UnsignedType>(step));
+                // Values left after `current` itself; `+ 1` is applied below, after clamping, so it
+                // can never overflow UnsignedType.
+                const UnsignedType steps_left = span / abs_step;
+                const size_t room = static_cast<size_t>(max_chunk_size) - res->size();
+
+                size_t count;
+                if constexpr (sizeof(UnsignedType) >= sizeof(size_t)) {
+                    count = (steps_left >= static_cast<UnsignedType>(room)) ? room
+                                                                            : static_cast<size_t>(steps_left) + 1;
+                } else {
+                    count = std::min<size_t>(static_cast<size_t>(steps_left) + 1, room);
                 }
 
                 bool overflow = false;

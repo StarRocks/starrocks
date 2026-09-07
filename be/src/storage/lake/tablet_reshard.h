@@ -20,6 +20,7 @@
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 
@@ -103,10 +104,17 @@ void convert_op_write_to_op_schema_change(TxnLogPB* log, int64_t alter_version);
 StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
                                     const PublishTabletInfo& publish_tablet_info);
 
+// |base_version_order| carries FE's prefer_shared_initial_metadata hint into the reads of the OLD
+// tablets' |base_version| metadata, as publish_version() does for a normal publish. It matters here
+// because a partition can be resharded while still at version 1 -- an empty `file_bundling` partition
+// pre-split ahead of its first load -- and then the old tablets' version-1 metadata exists only in the
+// partition-shared object. A preference only: either order resolves the metadata. See
+// InitialMetadataOrder.
 Status publish_resharding_tablet(TabletManager* tablet_manager, const ReshardingTabletInfoPB& resharding_tablet,
                                  int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                  bool skip_write_tablet_metadata,
                                  std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
-                                 std::unordered_map<int64_t, TabletRangePB>& tablet_ranges);
+                                 std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
+                                 InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst);
 
 } // namespace starrocks::lake

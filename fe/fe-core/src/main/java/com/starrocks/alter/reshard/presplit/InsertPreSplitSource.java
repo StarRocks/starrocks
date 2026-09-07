@@ -23,7 +23,7 @@ import com.starrocks.sql.ast.SelectRelation;
 
 /**
  * Strategy for one INSERT pre-split source kind — INSERT-from-FILES vs
- * INSERT-from-OLAP-table. The two kinds share the same skeleton flow: the
+ * INSERT-from-table (internal OLAP or external Iceberg). The two kinds share the same skeleton flow: the
  * skeleton owns the statement-shape pre-filters, target resolve + authorization,
  * and the conservative-skip eligibility gates, while {@link PreSplitFlow} owns
  * the submit flow that turns a resolved bundle into a reshard.

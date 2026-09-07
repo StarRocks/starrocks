@@ -463,8 +463,9 @@ public class CreateLakeTableTest {
             LakeTable lakeTable = getLakeTable("lake_test", "table_with_rollup");
             Assertions.assertEquals(2, lakeTable.getShardGroupIds().size());
 
-            Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().
-                    get().getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+            Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().get()
+                    .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
+                    .size());
 
         }
     }

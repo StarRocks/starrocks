@@ -15,6 +15,7 @@
 #include "connector/lake/lake_connector.h"
 
 #include <atomic>
+#include <set>
 #include <vector>
 
 #include "base/string/string_parser.hpp"
@@ -53,6 +54,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/predicate_parser.h"
 #include "storage/query/olap_dynamic_morsel_queue_builder.h"
 #include "storage/query/split_morsel_queue_builder.h"
@@ -508,6 +510,9 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
         }
         _params.vector_search_option->vector_range = vector_options.vector_range;
+        _params.vector_search_option->has_vector_range = vector_options.__isset.has_vector_range
+                                                                 ? vector_options.has_vector_range
+                                                                 : vector_options.vector_range >= 0;
         _params.vector_search_option->result_order = vector_options.result_order;
         _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
@@ -534,6 +539,16 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _unused_output_column_ids.erase(cid);
     }
 
+    // The delete filter evaluates these on the outgoing chunk, so they must survive into the output schema.
+    // An empty unused set makes every erase a no-op, so skip walking the rowset metadata entirely.
+    if (!_unused_output_column_ids.empty()) {
+        std::set<ColumnId> delete_pred_cids;
+        RETURN_IF_ERROR(lake::delete_predicate_column_ids(*_tablet.metadata(), *_tablet_schema, &delete_pred_cids));
+        for (ColumnId cid : delete_pred_cids) {
+            _unused_output_column_ids.erase(cid);
+        }
+    }
+
     std::vector<ExprContext*> not_pushdown_conjuncts;
     _conjuncts_manager->get_not_push_down_conjuncts(&not_pushdown_conjuncts);
     std::unordered_set<SlotId> conjuncts_slot_ids;
@@ -553,8 +568,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     }
 
     // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
-    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
-    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // candidate. Preserve that fact so the vector filter resolver can apply the configured underfill
+    // fallback policy. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
     // operator placed ABOVE this scan in the execution tree. ConnectorScanNode forwards the latter signal
     // to the provider during setup; providers constructed directly keep the default false value.
     _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
@@ -589,6 +604,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
 
     bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
                       thrift_lake_scan_node.enable_global_late_materialization;
+    LakeScanLazyMaterializationContext* glm_ctx = nullptr;
     if (enable_glm) {
         auto* glm_mgr = runtime_state->query_runtime_state()->global_late_materialization_ctx_mgr();
         auto* obj_pool = runtime_state->query_runtime_state()->object_pool();
@@ -596,11 +612,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
             auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
             return ctx;
         };
-        auto* glm_ctx =
-                (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(_provider->_plan_node_id, creator);
+        glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(_provider->_plan_node_id, creator);
         glm_ctx->set_scan_node(thrift_lake_scan_node);
-        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
-        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
     }
 
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
@@ -615,6 +628,14 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
     }
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+    if (glm_ctx != nullptr) {
+        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
+        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets(),
+                                 LakeScanCacheOptions{.use_page_cache = _params.use_page_cache,
+                                                      .fill_data_cache = _params.lake_io_opts.fill_data_cache,
+                                                      .fill_metadata_cache = _params.lake_io_opts.fill_metadata_cache,
+                                                      .skip_disk_cache = _params.lake_io_opts.skip_disk_cache});
+    }
 
     // Setup SST warmup callback for CACHE SELECT on PK tables
     if (_params.lake_io_opts.cache_file_only && _slots != nullptr &&
@@ -1306,6 +1327,33 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
 
+    const std::string vector_index_name = "VectorIndex";
+    const std::string vector_index_load_name = "VectorIndexLoad";
+    const std::string vector_index_cache_lookup_name = "VectorIndexCacheLookup";
+    const std::string vector_index_search_name = "VectorIndexSearch";
+    _vector_index_timer = ADD_CHILD_TIMER(_runtime_profile, vector_index_name, segment_init_name);
+    _vector_index_load_timer = ADD_CHILD_TIMER(_runtime_profile, vector_index_load_name, vector_index_name);
+    _get_row_ranges_by_vector_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, vector_index_search_name, vector_index_name);
+    _vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_runtime_profile, vector_index_cache_lookup_name, vector_index_load_name);
+    _vector_index_file_open_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileOpenAndGetSize", vector_index_load_name);
+    _vector_index_read_file_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileRead", vector_index_load_name);
+    _vector_index_init_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexDeserialize", vector_index_load_name);
+    _vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexSearcherCreate", vector_index_load_name);
+    _vector_index_cache_hit_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexCacheHit", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_index_cache_miss_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexCacheMiss", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_search_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorANNSearch", vector_index_search_name);
+    _process_vector_distance_and_id_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorResultProcess", vector_index_search_name);
+    _vector_index_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexFilterRows", TUnit::UNIT, vector_index_search_name);
+
     const std::string gin_filter_name = "GinFilter";
     _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, gin_filter_name, segment_init_name);
     _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, gin_filter_name);
@@ -1365,6 +1413,36 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _lake_seed_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedIOTime", "SeedPrepareTime");
     _lake_seed_io_count_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedIOCount", TUnit::UNIT, "SeedPrepareTime");
     _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
+
+    const std::string seed_vector_index_name = "SeedVectorIndex";
+    const std::string seed_vector_index_load_name = "SeedVectorIndexLoad";
+    const std::string seed_vector_index_cache_lookup_name = "SeedVectorIndexCacheLookup";
+    const std::string seed_vector_index_search_name = "SeedVectorIndexSearch";
+    _lake_seed_vector_index_timer = ADD_CHILD_TIMER(_runtime_profile, seed_vector_index_name, "SeedSegmentInitTime");
+    _lake_seed_vector_index_load_timer =
+            ADD_CHILD_TIMER(_runtime_profile, seed_vector_index_load_name, seed_vector_index_name);
+    _lake_seed_get_row_ranges_by_vector_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, seed_vector_index_search_name, seed_vector_index_name);
+    _lake_seed_vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_runtime_profile, seed_vector_index_cache_lookup_name, seed_vector_index_load_name);
+    _lake_seed_vector_index_file_open_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexFileOpenAndGetSize", seed_vector_index_load_name);
+    _lake_seed_vector_index_read_file_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexFileRead", seed_vector_index_load_name);
+    _lake_seed_vector_index_init_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexDeserialize", seed_vector_index_load_name);
+    _lake_seed_vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexSearcherCreate", seed_vector_index_load_name);
+    _lake_seed_vector_index_cache_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedVectorIndexCacheHit",
+                                                                  TUnit::UNIT, seed_vector_index_cache_lookup_name);
+    _lake_seed_vector_index_cache_miss_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedVectorIndexCacheMiss",
+                                                                   TUnit::UNIT, seed_vector_index_cache_lookup_name);
+    _lake_seed_vector_search_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorANNSearch", seed_vector_index_search_name);
+    _lake_seed_process_vector_distance_and_id_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorResultProcess", seed_vector_index_search_name);
+    _lake_seed_vector_index_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedVectorIndexFilterRows",
+                                                                 TUnit::UNIT, seed_vector_index_search_name);
     _lake_seed_zonemap_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedZoneMapFilterTime", "SeedPrepareTime");
     _lake_seed_zonemap_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SeedZoneMapFilteredRows", TUnit::UNIT, "SeedPrepareTime");
@@ -1474,6 +1552,20 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_vector_index_timer,
+                   _reader->stats().vector_index_load_ns + _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_load_timer, _reader->stats().vector_index_load_ns);
+    COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_cache_lookup_timer, _reader->stats().vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_vector_index_file_open_timer, _reader->stats().vector_index_file_open_ns);
+    COUNTER_UPDATE(_vector_index_read_file_timer, _reader->stats().vector_index_read_file_ns);
+    COUNTER_UPDATE(_vector_index_init_index_timer, _reader->stats().vector_index_init_index_ns);
+    COUNTER_UPDATE(_vector_index_searcher_init_timer, _reader->stats().vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_vector_index_cache_hit_counter, _reader->stats().vector_index_cache_hit_count);
+    COUNTER_UPDATE(_vector_index_cache_miss_counter, _reader->stats().vector_index_cache_miss_count);
+    COUNTER_UPDATE(_vector_search_timer, _reader->stats().vector_search_timer);
+    COUNTER_UPDATE(_process_vector_distance_and_id_timer, _reader->stats().process_vector_distance_and_id_timer);
+    COUNTER_UPDATE(_vector_index_filtered_counter, _reader->stats().rows_vector_index_filtered);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
     COUNTER_UPDATE(_lake_prepared_rowsets_counter, _reader->stats().lake_prepared_rowsets);
     COUNTER_UPDATE(_lake_prepared_segments_counter, _reader->stats().lake_prepared_segments);
@@ -1488,6 +1580,31 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_seed_io_timer, _reader->stats().lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, _reader->stats().lake_prepared_seed_io_count);
     COUNTER_UPDATE(_lake_seed_segment_init_timer, _reader->stats().lake_prepared_seed_segment_init_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_load_ns +
+                           _reader->stats().lake_prepared_seed_get_row_ranges_by_vector_index_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_load_timer, _reader->stats().lake_prepared_seed_vector_index_load_ns);
+    COUNTER_UPDATE(_lake_seed_get_row_ranges_by_vector_index_timer,
+                   _reader->stats().lake_prepared_seed_get_row_ranges_by_vector_index_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_cache_lookup_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_file_open_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_file_open_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_read_file_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_read_file_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_init_index_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_init_index_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_searcher_init_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_cache_hit_counter,
+                   _reader->stats().lake_prepared_seed_vector_index_cache_hit_count);
+    COUNTER_UPDATE(_lake_seed_vector_index_cache_miss_counter,
+                   _reader->stats().lake_prepared_seed_vector_index_cache_miss_count);
+    COUNTER_UPDATE(_lake_seed_vector_search_timer, _reader->stats().lake_prepared_seed_vector_search_ns);
+    COUNTER_UPDATE(_lake_seed_process_vector_distance_and_id_timer,
+                   _reader->stats().lake_prepared_seed_process_vector_distance_and_id_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_filtered_counter,
+                   _reader->stats().lake_prepared_seed_rows_vector_index_filtered);
     COUNTER_UPDATE(_lake_seed_zonemap_timer, _reader->stats().lake_prepared_seed_zonemap_ns);
     COUNTER_UPDATE(_lake_seed_zonemap_filtered_counter, _reader->stats().lake_prepared_seed_zonemap_filtered_rows);
     COUNTER_UPDATE(_lake_seed_bf_timer, _reader->stats().lake_prepared_seed_bf_ns);

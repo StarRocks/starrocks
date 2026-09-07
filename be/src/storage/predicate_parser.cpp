@@ -70,7 +70,14 @@ StatusOr<ColumnPredicate*> OlapPredicateParser::t_parse_thrift_cond(const Condit
     ColumnPredicate* pred = predicate_parser_detail::create_column_predicate(condition, type_info, index);
     RETURN_IF(pred == nullptr, Status::Unknown("unknown condition"));
 
-    if (type == TYPE_CHAR) {
+    // A length-less CHAR (col.length() == -1) reaches here from flat-JSON / variant subfield
+    // pushdown, e.g. CAST(json_col->'$.x' AS char), which materializes a synthetic CHAR scan
+    // column with no declared width. col.length() is int32; -1 converts to ~SIZE_MAX when passed
+    // to padding_zeros(size_t), so std::string::append() throws std::length_error. A real
+    // materialized CHAR column always has length in [1, 255], and a length-less CHAR is an
+    // unbounded string that must not be zero-padded, so only pad when the declared width is
+    // positive.
+    if (type == TYPE_CHAR && col.length() > 0) {
         pred->padding_zeros(col.length());
     }
     return pred;

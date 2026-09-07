@@ -16,6 +16,71 @@ description: "Alphabetical t - z"
 - 単位: -
 - 説明: このBE内のタブレットの最高累積コンパクションスコア。
 
+## `tablet_merge_sstable_fallback_cohort_mismatch_total`
+
+- 単位: カウント
+- 説明: ソース SST コホートの数、順序、またはセマンティックメタデータが一致せず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
+
+- 単位: カウント
+- 説明: 候補 SST コホートに物理 SST ファイル名の重複があり、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_embedded_delvec_total`
+
+- 単位: カウント
+- 説明: SST の投影後に必要な埋め込み削除ベクターを解決できず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
+
+- 単位: カウント
+- 説明: ソースからターゲットへの RSSID マッピングまたは所有権がメタデータの安全な再利用に必要な一様性を満たさず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_projected_domain_total`
+
+- 単位: カウント
+- 説明: 投影後の SST 所有者、RSSID オフセット、またはウォーターマークが再利用可能なライブドメインまたはサポート対象ドメインを外れ、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
+
+- 単位: カウント
+- 説明: ソース rowset の物理レイアウトが一致せず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_shared_or_mixed_total`
+
+- 単位: カウント
+- 説明: ソース SST の所有権が共有または混在していてメタデータを安全に再利用できず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
+
+- 単位: カウント
+- 説明: ソース範囲または SST メタデータがサポート対象の再利用形式を満たさず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_meta_identical_total`
+
+- 単位: カウント
+- 説明: 完全かつ同一の継承 SST コホートをマージ後のタブレットメタデータで再利用したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_meta_lazy_rebuild_total`
+
+- 単位: カウント
+- 説明: ソース SST メタデータを省略し、次にプライマリキーインデックスをロードする処理または利用側がそのインデックスを再構築するタブレットマージの累計回数。
+
+## `tablet_merge_sstable_meta_private_total`
+
+- 単位: カウント
+- 説明: 完全なプライベートソース SST メタデータのコホートを投影して再利用したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_omitted_bytes_total`
+
+- 単位: Bytes
+- 説明: 遅延再構築へのフォールバック時にマージ後のインデックスメタデータから省略され、孤立ファイルとして記録された一意なソース SST ファイルの累計サイズ。
+
+## `tablet_merge_sstable_omitted_file_total`
+
+- 単位: カウント
+- 説明: 遅延再構築へのフォールバック時にマージ後のインデックスメタデータから省略され、孤立ファイルとして記録された一意なソース SST ファイルの累計数。
+
 ## `tablet_metadata_mem_bytes`
 
 - 単位: バイト
@@ -34,7 +99,7 @@ description: "Alphabetical t - z"
 ## `threadpool_task_exception_total`
 
 - 単位: カウント
-- 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
+- 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
 
 ## `thrift_connections_total`
 
@@ -173,6 +238,48 @@ description: "Alphabetical t - z"
 
 - Unit: カウント
 - Description: Primary Keyテーブルでの行セットCOMMITリクエストの合計数。
+
+## `vector_index_cache_async_load_failure`
+
+- タイプ: 累積
+- 単位: カウント
+- 説明: 実行を開始したものの、ロードまたはキャッシュへの公開中に失敗したベクターインデックスキャッシュのバックグラウンドロードタスクの累計数です。実行前にキャンセルされたタスクは含まれません。
+
+## `vector_index_cache_async_load_inflight`
+
+- タイプ: ゲージ
+- 単位: カウント
+- 説明: バックグラウンド worker で現在実行中のベクターインデックスキャッシュロードタスク数です。
+
+## `vector_index_cache_async_load_ns`
+
+- タイプ: 累積
+- 単位: ナノ秒
+- 説明: 実行を開始したベクターインデックスキャッシュのバックグラウンドロードタスクの累積実行時間です。成功したタスクと失敗したタスクを含み、キューでの待機時間および拒否されたタスクは含みません。
+
+## `vector_index_cache_async_load_queued`
+
+- タイプ: ゲージ
+- 単位: カウント
+- 説明: バックグラウンドプールに受け付けられたものの、まだ実行を開始していないベクターインデックスキャッシュロードタスク数です。
+
+## `vector_index_cache_async_load_rejected`
+
+- タイプ: 累積
+- 単位: カウント
+- 説明: 実行前に拒否されたベクターインデックスキャッシュのバックグラウンドロード要求の累計数です。たとえば、キャッシュ容量がゼロ、プールが停止済み、またはキューがタスクを受け付けられない場合に増加します。
+
+## `vector_index_cache_async_load_success`
+
+- タイプ: 累積
+- 単位: カウント
+- 説明: インデックスのロードとキャッシュへの公開に成功したバックグラウンドタスクの累計数です。キャッシュがエントリを保持できない場合、容量制御によって公開直後のエントリが削除されることがあります。
+
+## `vector_index_cache_loading_wait_timeout`
+
+- タイプ: 累積
+- 単位: カウント
+- 説明: 同期キャッシュ呼び出し元が、進行中のベクターインデックスロードを `vector_index_cache_loading_wait_timeout_ms` まで待機した累計回数です。このメトリクスは一意のインデックス数ではなく呼び出し元ごとにカウントされ、タイムアウト後も既存の loader は実行を継続します。
 
 ## `wait_base_compaction_task_num`
 

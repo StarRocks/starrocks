@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "base/string/string_util.h"
 #include "column/chunk.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -61,7 +62,7 @@ Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationP
     _deleted_rowids.clear();
     _delete_keys.reset();
     _intermediate_ssts.clear();
-    _map_mem_usage = 0;
+    _keys_heap_size = 0;
     _next_rowid = 0;
     return Status::OK();
 }
@@ -93,10 +94,9 @@ void PkTabletUnsortSSTWriter::reconcile_entry(std::string_view key, uint64_t ord
     // not allocate; only a first-seen key materializes the owning std::string on the emplace branch.
     auto it = _map.find(key);
     if (it == _map.end()) {
-        // Rough per-entry footprint: encoded key bytes + value + btree node overhead.
-        static constexpr size_t kBtreeEntryOverhead = 24;
-        _map_mem_usage += key.size() + sizeof(Entry) + kBtreeEntryOverhead;
-        _map.emplace(std::string(key), Entry{order, rowid});
+        auto [inserted_it, inserted] = _map.emplace(std::string(key), Entry{order, rowid});
+        DCHECK(inserted);
+        _keys_heap_size += is_string_heap_allocated(inserted_it->first) ? inserted_it->first.capacity() : 0;
     } else if (order > it->second.order) {
         if (it->second.rowid != kDeleteRowid) {
             _deleted_rowids.push_back(it->second.rowid);
@@ -179,7 +179,7 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
     // map keeps the writer's combined footprint near the bound instead of letting _map independently
     // pile another l0_max_mem_usage on top of the loser vector. (_delete_keys is filled only at flush,
     // never during append, so it is not part of the footprint at this spill check.)
-    const size_t mem_usage = _map_mem_usage + _deleted_rowids.size() * sizeof(uint32_t);
+    const size_t mem_usage = memory_usage();
     if (mem_usage >= static_cast<size_t>(config::l0_max_mem_usage)) {
         return true;
     }
@@ -191,6 +191,18 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
         return true;
     }
     return false;
+}
+
+size_t PkTabletUnsortSSTWriter::map_memory_usage() const {
+    // Same accounting as PersistentIndexMemtable::memory_usage(): _keys_heap_size is the memory of the
+    // heap-allocated std::string keys, and _map.bytes_used() is the memory of the btree itself.
+    // Asking the container is exact by construction -- an incrementally maintained byte counter has to
+    // be kept in step with every single allocation and deallocation, and any drift is silent.
+    return _keys_heap_size + _map.bytes_used();
+}
+
+size_t PkTabletUnsortSSTWriter::memory_usage() const {
+    return map_memory_usage() + _deleted_rowids.capacity() * sizeof(uint32_t);
 }
 
 Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
@@ -232,7 +244,7 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
     RETURN_IF_ERROR(wf->close());
     _intermediate_ssts.push_back({location, size, std::move(encryption_meta)});
     _map.clear();
-    _map_mem_usage = 0;
+    _keys_heap_size = 0;
     return Status::OK();
 }
 
@@ -378,7 +390,7 @@ StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> PkTabletUnsortSSTWr
     _wf.reset();
     _map.clear();
     _intermediate_ssts.clear();
-    _map_mem_usage = 0;
+    _keys_heap_size = 0;
     _next_rowid = 0;
     return std::make_pair(file_info, range_pb);
 }

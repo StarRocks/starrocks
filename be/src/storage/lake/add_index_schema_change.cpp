@@ -463,11 +463,16 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
         col->reset_column();
         size_t n = kBatch;
         Status st = col_iter->next_batch(&n, col.get());
-        if (st.is_end_of_file() || n == 0) {
+        if (!st.ok() && !st.is_end_of_file()) return st;
+        if (n > 0) {
+            RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size, char_pad_len));
+        }
+        // A short read is the iterator's end-of-column signal: it means the
+        // last data page was consumed by this call. Keep looping only on a
+        // full batch, so we never ask an exhausted iterator for more rows.
+        if (st.is_end_of_file() || n < kBatch) {
             break;
         }
-        if (!st.ok()) return st;
-        RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size, char_pad_len));
     }
 
     // Final memory check: the loop-top check does not cover the last batch's

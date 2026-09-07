@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "DBeaver は SQL クライアントソフトウェアとしてデータベースへの接続プロセスを簡単にするアシスタント機能を提供します。"
 ---

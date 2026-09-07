@@ -167,6 +167,12 @@ public class MVVersionManager {
     // The batch's first-run start time, propagated across batch runs via MV_FRESHNESS_BASELINE_TIME. A single-run
     // refresh has no such property and falls back to this run's own start, which is also the batch start.
     private long freshnessBaselineTime() {
+        // A complete refresh that excluded older partitions via auto_refresh_partitions_limit does not
+        // cover the whole MV, so it must not confirm whole-MV freshness (handles a single-run batch that
+        // is both complete and final).
+        if (mvTaskRunContext.isPartitionLimitExcludedPartitions()) {
+            return 0;
+        }
         Map<String, String> properties = mvTaskRunContext.getProperties();
         if (properties != null) {
             String baseline = properties.get(TaskRun.MV_FRESHNESS_BASELINE_TIME);

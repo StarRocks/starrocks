@@ -48,6 +48,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,8 +72,10 @@ import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.TransferLeaderClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -156,6 +159,61 @@ public class SystemHandler extends AlterHandler {
         public Void visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 GlobalStateMgr.getCurrentState().getNodeMgr().modifyFrontendHost(clause);
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitTransferLeaderClause(TransferLeaderClause clause, Void context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                if (RunMode.isSharedDataMode()) {
+                    // Graceful in-place demotion is not supported in shared-data mode (StarMgr writes its
+                    // own journal outside the WAL fence); the transfer would succeed but the old leader
+                    // would exit and restart instead of demoting in place. Reject up front with the
+                    // manual alternative rather than surprise the operator with a process restart.
+                    throw new DdlException("ALTER SYSTEM TRANSFER LEADER is not supported in shared-data mode; "
+                            + "to transfer leadership, restart the current leader FE to trigger an election");
+                }
+                // Re-check leadership NOW, after this statement got through process()'s monitor: a
+                // concurrent TRANSFER LEADER may have completed while this one queued on the lock, and
+                // this FE may already be a follower. Unlike other DDL (whose journal write the WAL gate
+                // rejects after demotion), this clause never writes the journal - without this check it
+                // would drive ANOTHER transfer through the JE admin from a non-leader node.
+                if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                    throw new DdlException("this FE is no longer the leader (a leader transfer may have just"
+                            + " completed); connect to the current leader and retry");
+                }
+                String host = clause.getHost();
+                int port = clause.getPort();
+                Frontend target = null;
+                for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null)) {
+                    // NetUtils.isSameIP instead of bare equals so non-canonical IP text still matches
+                    // (e.g. IPv6 "::1" vs "0:0:0:0:0:0:0:1"), consistent with DROP FOLLOWER's lookup.
+                    if (NetUtils.isSameIP(fe.getHost(), host) && fe.getEditLogPort() == port) {
+                        target = fe;
+                        break;
+                    }
+                }
+                if (target == null) {
+                    throw new DdlException("frontend [" + host + ":" + port + "] not found");
+                }
+                if (target.getRole() != FrontendNodeType.FOLLOWER) {
+                    throw new DdlException("can only transfer leader to a FOLLOWER frontend, but ["
+                            + host + ":" + port + "] is " + target.getRole());
+                }
+                if (!target.isAlive()) {
+                    throw new DdlException("target frontend [" + host + ":" + port + "] is not alive");
+                }
+                String leaderNodeName = GlobalStateMgr.getCurrentState().getHaProtocol().getLeaderNodeName();
+                if (target.getNodeName().equals(leaderNodeName)) {
+                    throw new DdlException("frontend [" + host + ":" + port + "] is already the leader");
+                }
+                // Catch-up window for the target replica before the transfer aborts. This statement is
+                // forwarded to and runs on the current leader, so the transfer triggers the leader's
+                // in-place safe demotion.
+                final int catchUpTimeoutMs = 30000;
+                GlobalStateMgr.getCurrentState().getHaProtocol()
+                        .transferToLeader(target.getNodeName(), catchUpTimeoutMs, clause.isForce());
             });
             return null;
         }

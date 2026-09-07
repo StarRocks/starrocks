@@ -212,7 +212,7 @@ public class ExpressionStatisticCalculator {
 
             if (!childStat.isUnknown() && childStat.getHistogram() != null && child.getType().isBoolean()) {
                 Map<String, Long> mcv = childStat.getHistogram().getMCV();
-                if (mcv != null && (!mcv.isEmpty())) {
+                if (!mcv.isEmpty()) {
                     String trueKey = booleanToMcvValue(true);
                     String falseKey = booleanToMcvValue(false);
 
@@ -1053,6 +1053,64 @@ public class ExpressionStatisticCalculator {
 
         }
 
+        private ColumnStatistic calcConvertTzStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
+            ColumnStatistic childStat = inputs.get(0);
+            ColumnStatistic fromTzStat = inputs.get(1);
+            ColumnStatistic toTzStat = inputs.get(2);
+
+            Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
+            Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
+            // Invalid constant zones are not folded when the datetime is a column, but the BE
+            // returns NULL for every row (convert_tz_prepare sets is_valid=false).
+            if ((fromTz.isPresent() && !ConvertTzStatisticUtils.isValidTimeZone(fromTz.get()))
+                    || (toTz.isPresent() && !ConvertTzStatisticUtils.isValidTimeZone(toTz.get()))) {
+                return ColumnStatistic.builder()
+                        .setNullsFraction(1.0)
+                        .setAverageRowSize(callOperator.getType().getTypeSize())
+                        .setDistinctValuesCount(0)
+                        .build();
+            }
+
+            final double nullsFraction = 1.0
+                    - (1.0 - childStat.getNullsFraction())
+                    * (1.0 - fromTzStat.getNullsFraction())
+                    * (1.0 - toTzStat.getNullsFraction());
+            final double nonNullRowCount = rowCount * (1.0 - nullsFraction);
+
+            final double distinctValues = Math.min(nonNullRowCount,
+                    childStat.getDistinctValuesCount()
+                            * fromTzStat.getDistinctValuesCount()
+                            * toTzStat.getDistinctValuesCount());
+
+            double minValue = childStat.getMinValue() - ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
+            double maxValue = childStat.getMaxValue() + ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
+
+            if (fromTz.isPresent() && toTz.isPresent()
+                    && !childStat.hasNaNValue() && !childStat.isInfiniteRange()
+                    && !ConvertTzStatisticUtils.hasTimezoneOffsetDrift(childStat.getMinValue(), childStat.getMaxValue(),
+                            fromTz.get(), toTz.get())) {
+                OptionalDouble convertedMin =
+                        ConvertTzStatisticUtils.convertTzDateTime(childStat.getMinValue(), fromTz.get(), toTz.get());
+                OptionalDouble convertedMax =
+                        ConvertTzStatisticUtils.convertTzDateTime(childStat.getMaxValue(), fromTz.get(), toTz.get());
+                if (convertedMin.isPresent() && convertedMax.isPresent()) {
+                    minValue = Math.min(convertedMin.getAsDouble(), convertedMax.getAsDouble());
+                    maxValue = Math.max(convertedMin.getAsDouble(), convertedMax.getAsDouble());
+                }
+            }
+
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues)
+                    .setHistogram(ConvertTzStatisticUtils.transformHistogram(
+                            callOperator, childStat, minValue, maxValue, nonNullRowCount, fromTz, toTz)
+                            .orElse(null))
+                    .build();
+        }
+
         private ColumnStatistic calcCoalesceStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
             double nullsFraction = inputs.stream()
                     .mapToDouble(ColumnStatistic::getNullsFraction)
@@ -1129,7 +1187,7 @@ public class ExpressionStatisticCalculator {
             for (ColumnStatistic input : inputs) {
                 final double nullsFraction = input.getNullsFraction();
                 final var histogram = input.getHistogram();
-                if (nullsFraction < 1 && histogram != null && histogram.getMCV() != null) {
+                if (nullsFraction < 1 && histogram != null) {
                     for (final var entry : histogram.getMCV().entrySet().stream()
                             .sorted((a, b) -> {
                                 int cmp = Long.compare(b.getValue(), a.getValue());
@@ -1215,7 +1273,7 @@ public class ExpressionStatisticCalculator {
         private Histogram transformHistogramForDateTrunc(String fmtString, ColumnStatistic dateStatistic,
                                                          Type resultType) {
             final var histogram = dateStatistic.getHistogram();
-            if (histogram == null || histogram.getMCV() == null || histogram.getMCV().isEmpty()) {
+            if (histogram == null || histogram.getMCV().isEmpty()) {
                 return null;
             }
 
@@ -1299,6 +1357,8 @@ public class ExpressionStatisticCalculator {
             double averageRowSize;
             double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.CONVERT_TZ:
+                    return calcConvertTzStats(childColumnStatisticList, callOperator);
                 case FunctionSet.COALESCE:
                     return calcCoalesceStats(childColumnStatisticList, callOperator);
                 case FunctionSet.IF:
@@ -1315,7 +1375,7 @@ public class ExpressionStatisticCalculator {
                     // If condition MCVs are available, use branch row weights and collapse
                     // stats to the surviving branch when one side is unreachable.
                     final var conditionHistogram = condStat.getHistogram();
-                    if (conditionHistogram != null && conditionHistogram.getMCV() != null) {
+                    if (conditionHistogram != null) {
                         final var conditionMcv = conditionHistogram.getMCV();
                         final long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
                         final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
@@ -1383,7 +1443,7 @@ public class ExpressionStatisticCalculator {
         private Histogram buildIfMcv(ColumnStatistic condStat,
                                      ColumnStatistic thenStat,
                                      ColumnStatistic elseStat) {
-            if (condStat.getHistogram() == null || condStat.getHistogram().getMCV() == null) {
+            if (condStat.getHistogram() == null) {
                 return null;
             }
 
@@ -1392,8 +1452,8 @@ public class ExpressionStatisticCalculator {
             long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
             long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
 
-            final boolean thenHasHist = thenStat.getHistogram() != null && thenStat.getHistogram().getMCV() != null;
-            final boolean elseHasHist = elseStat.getHistogram() != null && elseStat.getHistogram().getMCV() != null;
+            final boolean thenHasHist = thenStat.getHistogram() != null;
+            final boolean elseHasHist = elseStat.getHistogram() != null;
 
             // If neither branch has a histogram, nothing to propagate.
             if (!thenHasHist && !elseHasHist) {
@@ -1483,7 +1543,7 @@ public class ExpressionStatisticCalculator {
          */
         private Optional<Histogram> transformHistogramForUnary(CallOperator callOperator, ColumnStatistic childStats) {
             Histogram childHist = childStats == null ? null : childStats.getHistogram();
-            if (childHist == null || childHist.getMCV() == null || childHist.getMCV().isEmpty()) {
+            if (childHist == null || childHist.getMCV().isEmpty()) {
                 return Optional.empty();
             }
 
@@ -1509,7 +1569,7 @@ public class ExpressionStatisticCalculator {
             //     - if buckets are all <= 0: y = -x (monotonic decreasing) => [l,u] -> [-u,-l], reverse order
             //     - if buckets cross 0: non-monotonic => fail closed (Optional.empty()) to avoid inconsistent histogram
             List<Bucket> newBuckets = childHist.getBuckets();
-            if (newBuckets != null && !newBuckets.isEmpty()) {
+            if (!newBuckets.isEmpty()) {
                 boolean needNegateBuckets = FunctionSet.NEGATIVE.equalsIgnoreCase(fn);
                 if (FunctionSet.ABS.equalsIgnoreCase(fn)) {
                     boolean allNonNegative = newBuckets.stream().allMatch(b -> b.getLower() >= 0);
@@ -1612,7 +1672,7 @@ public class ExpressionStatisticCalculator {
             ConstantOperator constOp = constOpOpt.get();
             ColumnStatistic baseStats = leftIsConst ? rightStats : leftStats;
             Histogram baseHist = baseStats == null ? null : baseStats.getHistogram();
-            if (baseHist == null || baseHist.getMCV() == null || baseHist.getMCV().isEmpty()) {
+            if (baseHist == null || baseHist.getMCV().isEmpty()) {
                 return Optional.empty();
             }
 
@@ -1657,16 +1717,14 @@ public class ExpressionStatisticCalculator {
                     final double bucketShift = FunctionSet.SUBTRACT.equalsIgnoreCase(callOperator.getFnName())
                             ? -deltaOpt.getAsDouble()
                             : deltaOpt.getAsDouble();
-                    if (baseHist.getBuckets() != null) {
-                        newBuckets = baseHist.getBuckets().stream()
-                                .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
-                                        b.getCount(), b.getUpperRepeats()))
-                                .collect(Collectors.toList());
-                    }
+                    newBuckets = baseHist.getBuckets().stream()
+                            .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
+                                    b.getCount(), b.getUpperRepeats()))
+                            .collect(Collectors.toList());
                 }
             } else {
                 OptionalDouble cOpt = ConstantOperatorUtils.doubleValueFromConstant(constOp);
-                if (cOpt.isPresent() && baseHist.getBuckets() != null && !baseHist.getBuckets().isEmpty()) {
+                if (cOpt.isPresent() && !baseHist.getBuckets().isEmpty()) {
                     final double cDouble = cOpt.getAsDouble();
                     final List<Bucket> baseBuckets = baseHist.getBuckets();
                     long prevCum = 0L;

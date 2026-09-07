@@ -123,6 +123,21 @@ public class MaterializedViewHandler extends AlterHandler {
     private final Map<Long, Set<Long>> tableRunningJobMap = new ConcurrentHashMap<>();
 
     @Override
+    protected void onStopped() {
+        super.onStopped();
+        // Leader-only concurrency gate, fully repopulated by runAlterJobV2 on the next
+        // leadership. Clearing it also fixes a slot leak: a job that finished and was
+        // expiry-removed by another leader while this node was a follower is removed from
+        // alterJobsV2 by replay but never from this map, permanently consuming a per-table
+        // slot and suspending new rollups on that table.
+        // tableNotFinalStateJobMap is deliberately NOT cleared: replay maintains it, and it
+        // drives the ROLLUP -> NORMAL table-state restore for jobs finished via replay.
+        synchronized (tableRunningJobMap) {
+            tableRunningJobMap.clear();
+        }
+    }
+
+    @Override
     public void addAlterJobV2(AlterJobV2 alterJob) {
         super.addAlterJobV2(alterJob);
         addAlterJobV2ToTableNotFinalStateJobMap(alterJob);
@@ -1144,7 +1159,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
         if (rollupJobV2.isTimeout()) {
             // in run(), the timeout job will be cancelled.
-            rollupJobV2.run();
+            runAlterJobV2Safely(rollupJobV2);
             return;
         }
 
@@ -1170,7 +1185,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         if (shouldJobRun) {
-            rollupJobV2.run();
+            runAlterJobV2Safely(rollupJobV2);
         }
     }
 

@@ -212,4 +212,50 @@ public class MetaUtilTest {
         Assertions.assertTrue(thrown.getMessage().contains("9999"));
         Assertions.assertTrue(thrown.getMessage().contains("t1"));
     }
+
+    @Test
+    public void testPrimaryKeyRangeColumnsAreIndependentFromSortKey() {
+        Column pk = new Column("pk", IntegerType.INT, true);
+        pk.setIsKey(true);
+        Column orderBy = new Column("ts", IntegerType.INT, false);
+        MaterializedIndexMeta meta = mock(MaterializedIndexMeta.class);
+        when(meta.getSchema()).thenReturn(Lists.newArrayList(pk, orderBy));
+        when(meta.getKeysType()).thenReturn(KeysType.PRIMARY_KEYS);
+        when(meta.getSortKeyIdxes()).thenReturn(Lists.newArrayList(1));
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexMetaByMetaId(1000L)).thenReturn(meta);
+        when(table.isRangeDistribution()).thenReturn(true);
+
+        Assertions.assertTrue(MetaUtils.hasSeparateSortKey(table, 1000L));
+        Assertions.assertEquals(List.of(pk), MetaUtils.getRangeDistributionColumns(table, 1000L));
+        Assertions.assertEquals(List.of(orderBy), MetaUtils.getPhysicalSortKeyColumns(table, 1000L));
+    }
+
+    /**
+     * The same index meta on a HASH-distributed table. That shape -- a primary-key table with an ORDER BY
+     * of its own -- has been supported all along and routes by its distribution columns, so the sort key
+     * is still the answer for it. The range test lives inside the predicate precisely so that a caller
+     * cannot reach the primary-key answer here by forgetting to ask.
+     */
+    @Test
+    public void testHashDistributedPrimaryKeyKeepsItsSortKey() {
+        Column pk = new Column("pk", IntegerType.INT, true);
+        pk.setIsKey(true);
+        Column orderBy = new Column("ts", IntegerType.INT, false);
+        MaterializedIndexMeta meta = mock(MaterializedIndexMeta.class);
+        when(meta.getSchema()).thenReturn(Lists.newArrayList(pk, orderBy));
+        when(meta.getKeysType()).thenReturn(KeysType.PRIMARY_KEYS);
+        when(meta.getSortKeyIdxes()).thenReturn(Lists.newArrayList(1));
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexMetaByMetaId(1000L)).thenReturn(meta);
+        when(table.isRangeDistribution()).thenReturn(false);
+
+        Assertions.assertFalse(MetaUtils.hasSeparateSortKey(table, 1000L),
+                "a hash-distributed primary-key table must not be treated as the range ORDER BY != PK shape");
+        Assertions.assertEquals(List.of(orderBy), MetaUtils.getRangeDistributionColumns(table, 1000L),
+                "its routing columns must stay the sort key, not the primary key");
+        Assertions.assertEquals(List.of(orderBy), MetaUtils.getPhysicalSortKeyColumns(table, 1000L));
+    }
 }

@@ -51,6 +51,8 @@ import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyMapType;
@@ -191,11 +193,11 @@ public class FunctionSet {
     public static final String TO_BINARY = "to_binary";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
-    public static final String ENCODE_ROW_ID = "encode_row_id";
     public static final String ENCODE_FINGERPRINT_SHA256 = "encode_fingerprint_sha256";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
+    public static final String APPROX_INNER_PRODUCT = "approx_inner_product";
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
     // Geo functions:
@@ -266,6 +268,7 @@ public class FunctionSet {
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
     public static final String HTTP_REQUEST = "http_request";
+    public static final String AI_COMPLETE = "ai_complete";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -591,6 +594,11 @@ public class FunctionSet {
     public static final String NGRAM_SEARCH = "ngram_search";
     public static final String NGRAM_SEARCH_CASE_INSENSITIVE = "ngram_search_case_insensitive";
 
+    public static final String TOKENIZE = "tokenize";
+    // Tokenizers GinFunctions::tokenize() implements on the BE. Matching is case-sensitive there.
+    public static final Set<String> SUPPORTED_TOKENIZERS =
+            ImmutableSet.of("english", "standard", "chinese");
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {JsonType.JSON, VarcharType.VARCHAR}, JsonType.JSON, false);
@@ -740,10 +748,11 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
+    // ai_complete treats a top-level NULL options map as an empty option set.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
                     PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
-                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY);
+                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE);
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -802,11 +811,13 @@ public class FunctionSet {
                     .add(QUERY_ID)
                     .add(SLEEP)
                     .add(HTTP_REQUEST)
+                    .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
                     .build();
 
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
             ImmutableSet.<String>builder()
                     .add(APPROX_COSINE_SIMILARITY)
+                    .add(APPROX_INNER_PRODUCT)
                     .add(APPROX_L2_DISTANCE)
                     .build();
 
@@ -1224,6 +1235,17 @@ public class FunctionSet {
 
         List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
         addVectorizedBuiltin(ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType));
+    }
+
+    public void addVectorizedAIScalarBuiltin(long fid, String fnName, boolean varArgs,
+                                             TAIModelSource modelSource, Type retType, Type... args) {
+        Preconditions.checkState(nonDeterministicFunctions.contains(fnName),
+                "AI function %s must be non-deterministic", fnName);
+        List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
+        ScalarFunction fn = ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType);
+        fn.setBinaryType(TFunctionBinaryType.AI);
+        fn.setAiModelSource(modelSource);
+        addVectorizedBuiltin(fn);
     }
 
     private void addVectorizedBuiltin(Function fn) {

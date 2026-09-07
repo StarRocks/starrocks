@@ -37,6 +37,7 @@
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/datum_variant.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
@@ -53,8 +54,65 @@
 #include "storage/rows_mapper.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks::lake {
+
+// Restores every config the tests in this suite override. They set the overrides inline and put the
+// old value back at the end, so any early exit (a fatal assertion, an ASSIGN_OR_ABORT, a crash) used
+// to leak the override into every later test in the process -- e.g. test_compaction_policy2 crashing
+// before its `lake_pk_compaction_max_input_rowsets = 1000` left the cap at 4 for the whole binary. As
+// a fixture member this destructor runs after TearDown on every exit path.
+class PkCompactionConfigGuard {
+public:
+    ~PkCompactionConfigGuard() {
+        config::vertical_compaction_max_columns_per_group = _vertical_max_columns;
+        config::lake_pk_compaction_min_input_segments = _min_input_segments;
+        config::lake_pk_compaction_max_input_rowsets = _max_input_rowsets;
+        config::write_buffer_size = _write_buffer_size;
+        config::size_tiered_min_level_size = _size_tiered_min_level_size;
+        config::update_compaction_ratio_threshold = _update_ratio_threshold;
+        config::update_compaction_delvec_file_io_amp_ratio = _delvec_io_amp_ratio;
+        config::update_compaction_result_bytes = _update_result_bytes;
+        config::max_segment_file_size = _max_segment_file_size;
+        config::vector_chunk_size = _vector_chunk_size;
+        config::enable_pk_size_tiered_compaction_strategy = _pk_size_tiered;
+        config::enable_lake_pk_compaction_score_gate = _score_gate;
+        config::lake_pk_compaction_min_level_score = _min_level_score;
+        config::lake_pk_compaction_min_benefit_cost_ratio = _min_benefit_cost_ratio;
+        config::lake_pk_compaction_emergency_score = _emergency_score;
+        config::lake_pk_compaction_size_overflow_ratio = _size_overflow_ratio;
+        config::lake_pk_compaction_delvec_benefit_weight = _delvec_benefit_weight;
+        config::l0_max_mem_usage = _l0_max_mem_usage;
+        config::lake_publish_version_slow_log_ms = _publish_slow_log_ms;
+        config::enable_light_pk_compaction_publish = _light_pk_publish;
+        config::primary_key_compaction_replace_batch_rows = _replace_batch_rows;
+    }
+
+private:
+    int64_t _vertical_max_columns = config::vertical_compaction_max_columns_per_group;
+    int64_t _min_input_segments = config::lake_pk_compaction_min_input_segments;
+    int64_t _max_input_rowsets = config::lake_pk_compaction_max_input_rowsets;
+    int64_t _write_buffer_size = config::write_buffer_size;
+    int64_t _size_tiered_min_level_size = config::size_tiered_min_level_size;
+    double _update_ratio_threshold = config::update_compaction_ratio_threshold;
+    int32_t _delvec_io_amp_ratio = config::update_compaction_delvec_file_io_amp_ratio;
+    int64_t _update_result_bytes = config::update_compaction_result_bytes;
+    int64_t _max_segment_file_size = config::max_segment_file_size;
+    int32_t _vector_chunk_size = config::vector_chunk_size;
+    bool _pk_size_tiered = config::enable_pk_size_tiered_compaction_strategy;
+    bool _score_gate = config::enable_lake_pk_compaction_score_gate;
+    double _min_level_score = config::lake_pk_compaction_min_level_score;
+    double _min_benefit_cost_ratio = config::lake_pk_compaction_min_benefit_cost_ratio;
+    double _emergency_score = config::lake_pk_compaction_emergency_score;
+    double _size_overflow_ratio = config::lake_pk_compaction_size_overflow_ratio;
+    double _delvec_benefit_weight = config::lake_pk_compaction_delvec_benefit_weight;
+    int64_t _l0_max_mem_usage = config::l0_max_mem_usage;
+    int64_t _publish_slow_log_ms = config::lake_publish_version_slow_log_ms;
+    bool _light_pk_publish = config::enable_light_pk_compaction_publish;
+    int32_t _replace_batch_rows = config::primary_key_compaction_replace_batch_rows;
+};
 
 class LakePrimaryKeyCompactionTest : public TestBase, public testing::WithParamInterface<CompactionParam> {
 public:
@@ -181,6 +239,10 @@ protected:
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id;
     RuntimeProfile _dummy_runtime_profile{"dummy"};
+
+    // Constructed before SetUp() and destroyed after TearDown(), so no test in this suite can leave
+    // a config override behind for the rest of the binary.
+    PkCompactionConfigGuard _config_guard;
 };
 
 // each time overwrite last rows
@@ -242,9 +304,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata2, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 1);
@@ -301,9 +360,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
@@ -368,9 +424,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
     ASSERT_EQ(kChunkSize * 2, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -378,6 +431,93 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     EXPECT_EQ(2, new_tablet_metadata->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata->has_prev_garbage_version());
+}
+
+// The UNSHARE rewrite is the only place a tablet range is used as a row-level predicate, and it is
+// the cutover that makes a split child's data private. If the filter is not applied, the child keeps
+// its siblings' rows and serves them after cutover; if it is applied to the wrong rows, it drops its
+// own. Nothing else in this file drives it: the filter is gated on is_unshare AND a sort key that is
+// not the primary key, which is the shape whose rows are scattered through every segment.
+TEST_P(LakePrimaryKeyCompactionTest, test_unshare_compaction_keeps_only_the_rows_in_range) {
+    // c0 is the key, c1 the value; ORDER BY c1 makes the sort key separate from the primary key.
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
+    metadata->set_persistent_index_type(GetParam().persistent_index_type);
+    metadata->mutable_schema()->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
+    metadata->mutable_schema()->add_sort_key_idxes(1);
+
+    // Keep [kRangeLow, kRangeHigh) of the key space. generate_data writes c0 = i + shift*kChunkSize,
+    // so two chunks cover [0, 2*kChunkSize).
+    constexpr int kRangeLow = 5;
+    constexpr int kRangeHigh = 17;
+    auto to_tuple = [](int value) {
+        VariantTuple tuple;
+        tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(value)));
+        TuplePB tuple_pb;
+        tuple.to_proto(&tuple_pb);
+        return tuple_pb;
+    };
+    auto* range = metadata->mutable_range();
+    range->mutable_lower_bound()->CopyFrom(to_tuple(kRangeLow));
+    range->set_lower_bound_included(true);
+    range->mutable_upper_bound()->CopyFrom(to_tuple(kRangeHigh));
+    range->set_upper_bound_included(false);
+
+    const int64_t tablet_id = metadata->id();
+    auto tablet_schema = TabletSchema::create(metadata->schema());
+    ASSERT_TRUE(tablet_schema->has_separate_sort_key());
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (uint32_t i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+    int64_t version = 1;
+    for (int shift = 0; shift < 2; ++shift) {
+        auto chunk = generate_data(kChunkSize, shift);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // What a split leaves behind: the children inherit the parent's files, so every segment is
+    // shared until the UNSHARE rewrite makes each child's copy private.
+    ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto shared = std::make_shared<TabletMetadataPB>(*before);
+    int64_t rows_before = 0;
+    for (auto& rowset : *shared->mutable_rowsets()) {
+        rows_before += rowset.num_rows();
+        for (auto& segment : *rowset.mutable_segment_metas()) {
+            segment.set_shared(true);
+        }
+    }
+    ASSERT_EQ(2 * kChunkSize, rows_before);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*shared));
+
+    auto txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr, 0 /* table_id */,
+                                                    0 /* partition_id */, true /* is_unshare */);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+
+    ASSIGN_OR_ABORT(auto compaction_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(compaction_log->has_op_compaction());
+    EXPECT_EQ(kRangeHigh - kRangeLow, compaction_log->op_compaction().output_rowset().num_rows())
+            << "the rewrite must keep exactly the keys in [" << kRangeLow << ", " << kRangeHigh << ")";
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
@@ -490,7 +630,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
-    EXPECT_EQ(4, input_rowsets.size());
+    ASSERT_EQ(4, input_rowsets.size());
 
     // check the rowset order, pick rowset#1 first, because it is empty.
     // Next order is rowset#4#2#3, by their byte size.
@@ -569,7 +709,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
-    EXPECT_EQ(4, input_rowsets.size());
+    ASSERT_EQ(4, input_rowsets.size());
     EXPECT_EQ(1, input_rowsets[0]->num_segments());
     EXPECT_EQ(1, input_rowsets[1]->num_segments());
     EXPECT_EQ(1, input_rowsets[2]->num_segments());
@@ -646,9 +786,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
         EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
         version++;
         ASSERT_EQ(kChunkSize * 4, read(version));
-        if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-            check_local_persistent_index_meta(tablet_id, version);
-        }
 
         ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 4);
@@ -1100,9 +1237,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
     config::vector_chunk_size = 4096;
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
@@ -1166,9 +1300,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(3 * kChunkSize, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata2, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 2);
@@ -1912,9 +2043,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
@@ -2002,9 +2130,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
-    if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        return;
-    }
     // Prepare data for writing
     std::vector<Chunk> chunks;
     int N = 10;
@@ -2063,9 +2188,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
-    if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        return;
-    }
     // Prepare data for writing
     std::vector<Chunk> chunks;
     int N = 10;
@@ -2179,17 +2301,10 @@ TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_index_eager_build) {
     auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     // check should_enable_pk_index_eager_build
-    if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
-    } else {
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
-        EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
-        EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
-    }
+    EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
+    EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
+    EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
+    EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_concurrent_compaction_and_publish) {

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 description: "统一 catalog 从 v3.2 起支持 Hive、Iceberg、Hudi、Delta Lake、Kudu 数据源的统一查询。"
 toc_max_heading_level: 5
@@ -32,7 +33,7 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 ## 使用注意事项
 
-- 请参阅 [Hive catalog](../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./iceberg/iceberg_catalog.md)、[Hudi catalog](../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md)、[Paimon catalog](../catalog/paimon_catalog.md) 和 [Kudu catalog](../../data_source/catalog/kudu_catalog.md) 中的“使用注意事项”部分，以了解支持的文件格式和数据类型。
+- 请参阅 [Hive catalog](./hive_catalog.md)、[Iceberg catalog](./iceberg/iceberg.md)、[Hudi catalog](./hudi_catalog.md)、[Delta Lake catalog](./deltalake_catalog.md)、[Paimon catalog](./paimon_catalog.md) 和 [Kudu catalog](./kudu_catalog.md) 中的“使用注意事项”部分，以了解支持的文件格式和数据类型。
 
 - 格式特定的操作仅支持特定的表格式。例如，[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 和 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 仅支持 Hive 和 Iceberg，[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) 仅支持 Hive 和 Hudi。
 
@@ -44,7 +45,7 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 ### AWS IAM
 
-如果您使用 AWS S3 作为存储或 AWS Glue 作为元数据存储，请选择合适的身份验证方法并进行必要的准备，以确保您的 StarRocks 集群可以访问相关的 AWS 云资源。有关更多信息，请参阅 [Authenticate to AWS resources - Preparations](../../integrations/authenticate_to_aws_resources.md#preparations)。
+如果您使用 AWS S3 作为存储或 AWS Glue 作为元数据存储，请选择合适的身份验证方法并进行必要的准备，以确保您的 StarRocks 集群可以访问相关的 AWS 云资源。有关更多信息，请参阅 [Authenticate to AWS resources - Preparations](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparations)。
 
 ### HDFS
 
@@ -167,7 +168,7 @@ PROPERTIES
 | aws.glue.access_key              | 否   | 您的 AWS IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，您必须指定此参数。 |
 | aws.glue.secret_key              | 否   | 您的 AWS IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，您必须指定此参数。 |
 
-有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参阅 [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
+有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参阅 [Authentication parameters for accessing AWS Glue](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
 
 #### StorageCredentialParams
 
@@ -215,7 +216,7 @@ PROPERTIES
 | aws.s3.access_key              | 否   | 您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 | aws.s3.secret_key              | 否   | 您的 IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参阅 [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参阅 [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ##### 兼容 S3 的存储系统
 
@@ -441,7 +442,7 @@ PROPERTIES
 
 #### MetadataUpdateParams
 
-关于 StarRocks 如何更新 Hive、Hudi 和 Delta Lake 的缓存元数据的一组参数。此参数集是可选的。有关从 Hive、Hudi 和 Delta Lake 更新缓存元数据的策略的更多信息，请参阅 [Hive catalog](../../data_source/catalog/hive_catalog.md)、[Hudi catalog](../../data_source/catalog/hudi_catalog.md) 和 [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md)。
+关于 StarRocks 如何更新 Hive、Hudi 和 Delta Lake 的缓存元数据的一组参数。此参数集是可选的。有关从 Hive、Hudi 和 Delta Lake 更新缓存元数据的策略的更多信息，请参阅 [Hive catalog](./hive_catalog.md)、[Hudi catalog](./hudi_catalog.md) 和 [Delta Lake catalog](./deltalake_catalog.md)。
 
 在大多数情况下，您可以忽略 `MetadataUpdateParams`，无需调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。
 
@@ -958,7 +959,7 @@ ENGINE = {|hive|iceberg}
 [partition_desc]
 ```
 
-有关更多信息，请参阅 [Create a Hive table](../catalog/hive_catalog.md#create-a-hive-table) 和 [Create an Iceberg table](./iceberg/iceberg_catalog.md#create-an-iceberg-table)。
+有关更多信息，请参阅 [Create a Hive table](./hive_catalog.md#create-a-hive-table) 和 [Create an Iceberg table](./iceberg/iceberg.md#create-an-iceberg-table)。
 
 以下示例创建一个名为 `hive_table` 的 Hive 表。该表由三列 `action`、`id` 和 `dt` 组成，其中 `id` 和 `dt` 是分区列。
 
@@ -996,7 +997,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-有关更多信息，请参阅 [Sink data to a Hive table ](../catalog/hive_catalog.md#sink-data-to-a-hive-table) 和 [Sink data to an Iceberg table](./iceberg/iceberg_catalog.md#sink-data-to-an-iceberg-table)。
+有关更多信息，请参阅 [Sink data to a Hive table ](./hive_catalog.md#sink-data-to-a-hive-table) 和 [Sink data to an Iceberg table](./iceberg/iceberg.md#sink-data-to-an-iceberg-table)。
 
 以下示例将三行数据插入到名为 `hive_table` 的 Hive 表中：
 
@@ -1024,7 +1025,7 @@ StarRocks 仅支持从统一 catalog 中删除 Hive 和 Iceberg 表。
 DROP TABLE <table_name>
 ```
 
-有关更多信息，请参阅 [Drop a Hive table](../catalog/hive_catalog.md#drop-a-hive-table) 和 [Drop an Iceberg table](./iceberg/iceberg_catalog.md#drop-an-iceberg-table)。
+有关更多信息，请参阅 [Drop a Hive table](./hive_catalog.md#drop-a-hive-table) 和 [Drop an Iceberg table](./iceberg/iceberg.md#drop-an-iceberg-table)。
 
 以下示例删除名为 `hive_table` 的 Hive 表：
 

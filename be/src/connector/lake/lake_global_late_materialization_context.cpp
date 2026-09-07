@@ -74,7 +74,8 @@ lake::RowsetPtr LakeScanLazyMaterializationContext::get_rowset(const std::vector
 }
 
 void LakeScanLazyMaterializationContext::capture_rowsets(int32_t tablet_id, int64_t version,
-                                                         const std::vector<BaseRowsetSharedPtr>& rowsets) {
+                                                         const std::vector<BaseRowsetSharedPtr>& rowsets,
+                                                         LakeScanCacheOptions cache_options) {
     std::unique_lock lock(_mutex);
     std::vector<lake::RowsetPtr> lake_rowsets;
     lake_rowsets.reserve(rowsets.size());
@@ -86,6 +87,7 @@ void LakeScanLazyMaterializationContext::capture_rowsets(int32_t tablet_id, int6
     }
     _rowsets[tablet_id] = std::move(lake_rowsets);
     _versions[tablet_id] = version;
+    _cache_options[tablet_id] = cache_options;
 }
 
 void LakeScanLazyMaterializationContext::set_scan_node(const TLakeScanNode& node) {

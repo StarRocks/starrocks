@@ -1,0 +1,85 @@
+{
+  "version" : 3,
+  "id" : 0,
+  "fields" : [ {
+    "id" : 0,
+    "name" : "id",
+    "type" : "INT"
+  }, {
+    "id" : 1,
+    "name" : "c_bool",
+    "type" : "BOOLEAN"
+  }, {
+    "id" : 2,
+    "name" : "c_tinyint",
+    "type" : "TINYINT"
+  }, {
+    "id" : 3,
+    "name" : "c_smallint",
+    "type" : "SMALLINT"
+  }, {
+    "id" : 4,
+    "name" : "c_int",
+    "type" : "INT"
+  }, {
+    "id" : 5,
+    "name" : "c_bigint",
+    "type" : "BIGINT"
+  }, {
+    "id" : 6,
+    "name" : "c_float",
+    "type" : "FLOAT"
+  }, {
+    "id" : 7,
+    "name" : "c_double",
+    "type" : "DOUBLE"
+  }, {
+    "id" : 8,
+    "name" : "c_dec_9_2",
+    "type" : "DECIMAL(9, 2)"
+  }, {
+    "id" : 9,
+    "name" : "c_dec_20_4",
+    "type" : "DECIMAL(20, 4)"
+  }, {
+    "id" : 10,
+    "name" : "c_dec_38_10",
+    "type" : "DECIMAL(38, 10)"
+  }, {
+    "id" : 11,
+    "name" : "c_char",
+    "type" : "CHAR(5)"
+  }, {
+    "id" : 12,
+    "name" : "c_varchar",
+    "type" : "VARCHAR(20)"
+  }, {
+    "id" : 13,
+    "name" : "c_string",
+    "type" : "STRING"
+  }, {
+    "id" : 14,
+    "name" : "c_binary",
+    "type" : "BYTES"
+  }, {
+    "id" : 15,
+    "name" : "c_date",
+    "type" : "DATE"
+  }, {
+    "id" : 16,
+    "name" : "c_ts_ntz",
+    "type" : "TIMESTAMP(6)"
+  }, {
+    "id" : 17,
+    "name" : "c_ts_ltz",
+    "type" : "TIMESTAMP(6) WITH LOCAL TIME ZONE"
+  } ],
+  "highestFieldId" : 17,
+  "partitionKeys" : [ ],
+  "primaryKeys" : [ ],
+  "options" : {
+    "owner" : "smith",
+    "file.format" : "parquet"
+  },
+  "timeMillis" : 1785999844032
+}

@@ -7,7 +7,7 @@ description: "解码 Base64 编码的字符串，是 to_base64() 函数的反向
 
 
 
-同 [from_base64()](../crytographic-functions/from_base64.md) 函数，用于解码某个 Base64 编码的字符串，是 [to_base64()](../crytographic-functions/to_base64.md) 函数的反向函数。
+同 [from_base64()](./from_base64.md) 函数，用于解码某个 Base64 编码的字符串，是 [to_base64()](./to_base64.md) 函数的反向函数。
 
 该函数从 3.0 版本开始支持。
 

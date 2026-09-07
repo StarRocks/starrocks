@@ -130,6 +130,82 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
+    public void testDisableSharedFileSystemCache() throws StarRocksException {
+        Map<String, String> vended = new HashMap<>();
+        vended.put(ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT, "sas_token");
+
+        // vended-credentials-enabled=false yields no credential properties at all, so it matches none
+        // of the branches in buildConfFromProperties. That is the path that failed in production.
+        Map<String, String> noCredential = new HashMap<>();
+
+        Assertions.assertTrue(buildConf(vended, "abfss://c@a.dfs.core.windows.net/p")
+                .getBoolean("fs.abfss.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "abfss://c@a.dfs.core.windows.net/p")
+                .getBoolean("fs.abfss.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "abfs://c@a.dfs.core.windows.net/p")
+                .getBoolean("fs.abfs.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "wasbs://c@a.blob.core.windows.net/p")
+                .getBoolean("fs.wasbs.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "gs://bucket/p")
+                .getBoolean("fs.gs.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "adl://a.azuredatalakestore.net/p")
+                .getBoolean("fs.adl.impl.disable.cache", false));
+
+        // s3* is served by S3FileIO and never reaches HadoopFileIO. oss/cosn do reach it and do carry
+        // their credential in the Configuration, but bypassing the cache leaks an unclosed FileSystem
+        // per call - enough to exhaust FE threads on an oss-backed workload - so they are left alone
+        // until the cache can be keyed on the credential instead.
+        Assertions.assertFalse(buildConf(noCredential, "s3a://bucket/p")
+                .getBoolean("fs.s3a.impl.disable.cache", false));
+        Assertions.assertFalse(buildConf(noCredential, "oss://bucket/p")
+                .getBoolean("fs.oss.impl.disable.cache", false));
+        Assertions.assertFalse(buildConf(noCredential, "cosn://bucket/p")
+                .getBoolean("fs.cosn.impl.disable.cache", false));
+        Assertions.assertFalse(buildConf(noCredential, "hdfs://nn/p")
+                .getBoolean("fs.hdfs.impl.disable.cache", false));
+    }
+
+    @Test
+    public void testSchemeLessPathUsesDefaultFs() throws StarRocksException {
+        // Hadoop's Path keeps a scheme-less location as-is, so getScheme() is null. FileSystem.get()
+        // resolves such a path through fs.defaultFS and consults the flag only after that, so the flag
+        // has to follow the default scheme.
+        String schemeLess = "/warehouse/db/t/metadata/v1.metadata.json";
+
+        Assertions.assertFalse(buildConf(new HashMap<>(), schemeLess)
+                .getBoolean("fs.file.impl.disable.cache", false));
+
+        IcebergCachingFileIO onAzureDefaultFs = new IcebergCachingFileIO();
+        Configuration baseConf = new Configuration();
+        baseConf.set("fs.defaultFS", "abfss://c@a.dfs.core.windows.net");
+        onAzureDefaultFs.setConf(baseConf);
+
+        Assertions.assertTrue(onAzureDefaultFs.buildConfFromProperties(new HashMap<>(), schemeLess)
+                .getBoolean("fs.abfss.impl.disable.cache", false));
+    }
+
+    @Test
+    public void testFallThroughConfKeepsBaseValues() throws StarRocksException {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        Configuration baseConf = new Configuration();
+        baseConf.set("fs.azure.account.auth.type.account.dfs.core.windows.net", "OAuth");
+        cachingFileIO.setConf(baseConf);
+
+        Configuration configuration =
+                cachingFileIO.buildConfFromProperties(new HashMap<>(), "abfss://c@account.dfs.core.windows.net/p");
+
+        Assertions.assertEquals("OAuth",
+                configuration.get("fs.azure.account.auth.type.account.dfs.core.windows.net"));
+        Assertions.assertTrue(configuration.getBoolean("fs.abfss.impl.disable.cache", false));
+    }
+
+    private static Configuration buildConf(Map<String, String> properties, String path) throws StarRocksException {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        return cachingFileIO.buildConfFromProperties(properties, path);
+    }
+
+    @Test
     public void testBuildGCSConfFromProperties() throws StarRocksException {
         Map<String, String> properties = new HashMap<>();
         String accessToken = "access_token";

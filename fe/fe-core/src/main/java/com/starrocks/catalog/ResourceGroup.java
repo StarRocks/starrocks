@@ -61,6 +61,7 @@ public class ResourceGroup {
     public static final String DEFAULT_MEM_POOL = "default_mem_pool";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
+    public static final String MEM_USED_PCT_LIMIT = "mem_used_pct_limit";
 
     /**
      * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
@@ -134,6 +135,10 @@ public class ResourceGroup {
                     (rg, classifier) -> new DecimalFormat("#.##").format(
                             Objects.requireNonNullElse(rg.getSpillMemLimitThreshold(), 1.0) * 100) + "%"),
             new ColumnMeta(
+                    new Column(MEM_USED_PCT_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> !rg.isMemUsedPctLimitEffective() ? "null" :
+                            new DecimalFormat("#.##").format(rg.getMemUsedPctLimit() * 100) + "%"),
+            new ColumnMeta(
                     new Column(GROUP_TYPE, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),
             new ColumnMeta(
@@ -196,6 +201,8 @@ public class ResourceGroup {
     private Integer concurrencyLimit;
     @SerializedName(value = "spillMemLimitThreshold")
     private Double spillMemLimitThreshold;
+    @SerializedName(value = "memUsedPctLimit")
+    private Double memUsedPctLimit;
     @SerializedName(value = "workGroupType")
     private TWorkGroupType resourceGroupType;
     @SerializedName(value = "version")
@@ -441,6 +448,18 @@ public class ResourceGroup {
 
     public void setSpillMemLimitThreshold(double spillMemLimitThreshold) {
         this.spillMemLimitThreshold = spillMemLimitThreshold;
+    }
+
+    public boolean isMemUsedPctLimitEffective() {
+        return memUsedPctLimit != null && memUsedPctLimit > 0;
+    }
+
+    public Double getMemUsedPctLimit() {
+        return memUsedPctLimit;
+    }
+
+    public void setMemUsedPctLimit(double memUsedPctLimit) {
+        this.memUsedPctLimit = memUsedPctLimit;
     }
 
     public TWorkGroupType getResourceGroupType() {
