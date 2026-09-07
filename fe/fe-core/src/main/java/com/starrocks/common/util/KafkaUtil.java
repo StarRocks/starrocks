@@ -41,6 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.proto.PKafkaLoadInfo;
 import com.starrocks.proto.PKafkaMetaProxyRequest;
 import com.starrocks.proto.PKafkaOffsetBatchProxyRequest;
@@ -194,6 +195,9 @@ public class KafkaUtil {
         }
 
         private PProxyResult sendProxyRequest(PProxyRequest request) throws StarRocksException {
+            // Every public method of this proxy funnels here, and here the thread waits on the
+            // BE's answer, which the BE gets from Kafka. Routine-load DDL analysis reaches this.
+            BlockingCallValidator.validateNotUnderLock("kafka");
             // TODO: need to refactor after be split into cn + dn
             List<Long> nodeIds = new ArrayList<>();
             if (RunMode.isSharedDataMode()) {

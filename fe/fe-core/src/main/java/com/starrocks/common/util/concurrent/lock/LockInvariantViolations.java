@@ -87,14 +87,28 @@ public class LockInvariantViolations {
     private static final boolean STRICT_IN_TEST = Boolean.getBoolean("starrocks.lock.invariant.strict.in.test");
 
     /**
+     * The same escalation for the blocking-call rule, on its own property because the two rules are
+     * at different stages. The lock-target rule has a known-empty violation set and is enforced;
+     * the blocking-call rule is still <em>collecting</em> one, and until that set has stopped
+     * growing, escalating here would fail whichever tests happen to cover a site -- a fact about
+     * test coverage, not about the defect.
+     * <p>
+     * Not set anywhere yet, on purpose. Set it in {@code fe-core/pom.xml} next to the other one
+     * once the reported sites are fixed; that is what turns the rule from a report into a
+     * regression barrier, and it is a separate change with its own evidence.
+     */
+    private static final boolean BLOCKING_STRICT_IN_TEST =
+            Boolean.getBoolean("starrocks.lock.blocking.strict.in.test");
+
+    /**
      * Upper bound on distinct call sites tracked. Beyond it every further site shares one bucket:
      * the throttling budget degrades, memory does not.
      */
     private static final int MAX_TRACKED_SITES = 512;
     private static final String OVERFLOW_SITE = "<site-table-full>";
-    private static final String UNKNOWN_SITE = "<unknown>";
+    static final String UNKNOWN_SITE = "<unknown>";
 
-    private static final String LOCK_PACKAGE = LockInvariantViolations.class.getPackage().getName() + ".";
+    static final String LOCK_PACKAGE = LockInvariantViolations.class.getPackage().getName() + ".";
 
     /**
      * Leading token on every violation report, in the log and in the exception alike, so one grep
@@ -119,8 +133,12 @@ public class LockInvariantViolations {
 
     private static final ConcurrentHashMap<String, Site> SITES = new ConcurrentHashMap<>();
 
-    /** Cached parse of {@link Config#lock_target_validation_mode}, which is mutable at runtime. */
-    private static volatile ModeCache modeCache;
+    /**
+     * One gate per rule. They cache independently because they read different config fields and
+     * carry different test escalations.
+     */
+    private static final ModeGate LOCK_TARGET_GATE = new ModeGate(STRICT_IN_TEST);
+    private static final ModeGate BLOCKING_CALL_GATE = new ModeGate(BLOCKING_STRICT_IN_TEST);
 
     private static final class Site {
         private final AtomicLong count = new AtomicLong();
@@ -138,31 +156,58 @@ public class LockInvariantViolations {
         }
     }
 
+    /**
+     * Resolves one rule's config string to a {@link Mode}. Called on every guarded operation, so
+     * the string parse is cached against the config value's <em>identity</em>: {@link Config}
+     * replaces the reference when the value is set, and a stale comparison costs at most one
+     * redundant parse.
+     */
+    private static final class ModeGate {
+        private final boolean strictInTest;
+        private volatile ModeCache cache;
+
+        private ModeGate(boolean strictInTest) {
+            this.strictInTest = strictInTest;
+        }
+
+        private Mode resolve(String configured) {
+            ModeCache cached = cache;
+            if (cached != null && cached.raw == configured) {
+                return cached.mode;
+            }
+            Mode mode = Mode.parse(configured);
+            if (mode == Mode.WARN && strictInTest) {
+                mode = Mode.ERROR;
+            }
+            cache = new ModeCache(configured, mode);
+            return mode;
+        }
+    }
+
     private LockInvariantViolations() {
     }
 
     /**
-     * The mode the lock-target check runs in right now, honouring the unit-test escalation.
-     * <p>
-     * Called on every guarded lock acquisition, so the string parse is cached against the config
-     * value's identity; {@code Config} replaces the reference when the value is set, and a stale
-     * comparison costs at most one redundant parse.
+     * The mode the lock-target check ({@link LockTargetValidator}) runs in right now, honouring the
+     * unit-test escalation.
      */
     public static Mode currentMode() {
         return effectiveMode(Config.lock_target_validation_mode);
     }
 
     public static Mode effectiveMode(String configured) {
-        ModeCache cached = modeCache;
-        if (cached != null && cached.raw == configured) {
-            return cached.mode;
-        }
-        Mode mode = Mode.parse(configured);
-        if (mode == Mode.WARN && STRICT_IN_TEST) {
-            mode = Mode.ERROR;
-        }
-        modeCache = new ModeCache(configured, mode);
-        return mode;
+        return LOCK_TARGET_GATE.resolve(configured);
+    }
+
+    /**
+     * The mode the blocking-call check ({@link BlockingCallValidator}) runs in right now.
+     */
+    public static Mode currentBlockingCallMode() {
+        return effectiveBlockingCallMode(Config.lock_blocking_call_validation_mode);
+    }
+
+    public static Mode effectiveBlockingCallMode(String configured) {
+        return BLOCKING_CALL_GATE.resolve(configured);
     }
 
     /**
@@ -184,8 +229,19 @@ public class LockInvariantViolations {
         if (mode == Mode.OFF) {
             return;
         }
+        reportAtSite(kind, detail, remedy, mode, currentCallSite());
+    }
 
-        String callSite = currentCallSite();
+    /**
+     * As above, for a caller that resolved the call site itself because it knows which frames are
+     * its own -- see {@link BlockingCallValidator}, which has to skip the transport it is mounted
+     * on.
+     */
+    public static void reportAtSite(String kind, String detail, String remedy, Mode mode, String callSite) {
+        if (mode == Mode.OFF) {
+            return;
+        }
+
         Site site = siteFor(kind + "@" + callSite);
         long occurrences = site.count.incrementAndGet();
         String message = LOG_TAG + " kind=" + kind + " site=" + callSite + " detail=" + quoted(detail);
@@ -241,6 +297,8 @@ public class LockInvariantViolations {
     /**
      * The innermost frame that is neither the JDK's nor the lock layer's own — i.e. the code that
      * asked for the lock.
+     * <p>
+     * Walks the stack, so it is called only once a violation has already been established.
      */
     private static String currentCallSite() {
         for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {

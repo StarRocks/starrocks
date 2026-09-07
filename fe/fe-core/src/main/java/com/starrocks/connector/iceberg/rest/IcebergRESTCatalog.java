@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
@@ -136,6 +137,10 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         authRecoveryEnabled = restCatalogProperties.containsKey(OAuth2Properties.CREDENTIAL)
                 && securityConfig.getSecurity() != Security.JWT;
 
+        // initialize() below performs a GET /v1/config against the REST service, and an OAuth
+        // exchange when configured, so construction is itself a remote call -- reached before any
+        // of the guarded catalog actions, on the first resolve of a replayed connector.
+        BlockingCallValidator.validateNotUnderLock("iceberg-rest");
         try {
             RESTSessionCatalog restCatalog = new RESTSessionCatalog();
             configureHadoopConf(restCatalog, conf);
@@ -470,6 +475,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     private <T> T withAuthRecovery(Supplier<T> action) {
+        // Wraps the REST calls; runWithAuthRecovery delegates here too. Reached only on a cache
+        // miss, because CachingIcebergCatalog sits in front of this delegate.
+        BlockingCallValidator.validateNotUnderLock("iceberg-rest");
         try {
             return action.get();
         } catch (RuntimeException e) {

@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -95,6 +96,8 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu");
         if (metastore.isPresent()) {
             return metastore.get().getAllDatabaseNames().stream()
                     .filter(schemaName -> !HIVE_SYSTEM_SCHEMA.contains((schemaName)))
@@ -144,6 +147,8 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu");
         if (metastore.isPresent()) {
             List<String> allTableNames = metastore.get().getAllTableNames(dbName);
             return allTableNames.stream().filter(tableName -> {
@@ -174,6 +179,8 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public Database getDb(ConnectContext context, String dbName) {
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu");
         if (metastore.isPresent()) {
             return metastore.get().getDb(dbName);
         }
@@ -202,6 +209,8 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu");
         if (metastore.isPresent()) {
             return metastore.get().getTable(dbName, tblName);
         }
@@ -261,6 +270,8 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu");
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         KuduTable kuduTable = (KuduTable) table;
         String kuduTableName = getKuduFullTableName(kuduTable);
@@ -311,6 +322,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange versionRange) {
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu");
         Statistics.Builder builder = Statistics.builder()
                 .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
 

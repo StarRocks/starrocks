@@ -15,6 +15,7 @@
 package com.starrocks.rpc;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,6 +54,9 @@ public class ThriftRPCRequestExecutor {
             TNetworkAddress address,
             int timeoutMs, int tryTimes,
             MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
+        // The single door: the other three overloads all delegate here. Borrowing from the pool
+        // may open a socket, and the call itself waits for the peer.
+        BlockingCallValidator.validateNotUnderLock("thrift-rpc");
         SERVER_CLIENT client;
         try {
             client = genericPool.borrowObject(address, timeoutMs);

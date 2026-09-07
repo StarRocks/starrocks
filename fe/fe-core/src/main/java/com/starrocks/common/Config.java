@@ -4675,6 +4675,27 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long lock_invariant_violation_log_interval_ms = 10000;
 
+    /**
+     * How the FE reacts when it contacts an external system -- a Hive metastore, a JDBC source, an
+     * Iceberg REST catalog, a thrift peer -- while holding an FE metadata lock. The lock's hold
+     * time then becomes that system's round-trip time, and every waiter pays it: transaction
+     * publish takes the table lock with a 1000ms {@code tryLock}, so one slow call inside a
+     * critical section fails a load rather than merely delaying a query.
+     *
+     * The check sits at the last layer the FE owns before a socket is used, so a cache hit never
+     * reaches it: every violation reported is a request that really went out.
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with the offending caller's
+     * stack and lets the call proceed, {@code error} refuses it. Unlike
+     * {@link #lock_target_validation_mode} this rule ships knowing its violation set is not yet
+     * empty, so {@code warn} is the only sane default: it turns those sites from a reviewer's
+     * memory into a log you can aggregate by transport. Mutable, so a deployment can tighten to
+     * {@code error} without a restart once its logs are clean. Unrecognized values behave as
+     * {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_blocking_call_validation_mode = "warn";
+
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
     /**

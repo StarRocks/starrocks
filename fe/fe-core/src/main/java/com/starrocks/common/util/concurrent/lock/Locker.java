@@ -88,6 +88,10 @@ public class Locker {
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         lockManager.lock(rid, this, lockType, timeout);
+        // After the acquisition, never before: a timed-out or refused request holds nothing, and a
+        // depth raised by it would make every later call on this pooled thread look like it ran
+        // inside a critical section.
+        LockHoldDepth.enter();
     }
 
     public void lock(long rid, LockType lockType) throws LockException {
@@ -107,6 +111,13 @@ public class Locker {
         } catch (LockException e) {
             throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
+        // After the release, and only on success -- symmetric with lock(). A release that throws
+        // released nothing: LockManager refuses before touching the lock table when the rid is not
+        // held at all, and MultiUserLock throws only on the !hasOwner path, where no refcount was
+        // decremented. Decrementing anyway would let a thread that still holds a lock be talked
+        // down to depth 0 by repeated bogus releases, and from then on every blocking call it makes
+        // under that lock would be waved through in silence.
+        LockHoldDepth.exit();
     }
 
     public void setQueryId(UUID queryID) {

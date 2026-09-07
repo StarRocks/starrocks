@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 
 public class LockTestUtils {
     private static final String DEFAULT_LOCK_TARGET_VALIDATION_MODE = Config.lock_target_validation_mode;
+    private static final String DEFAULT_BLOCKING_CALL_VALIDATION_MODE = Config.lock_blocking_call_validation_mode;
 
     /**
      * Opt a test out of the lock-target check.
@@ -43,6 +44,22 @@ public class LockTestUtils {
 
     public static void restoreLockTargetValidation() {
         Config.lock_target_validation_mode = DEFAULT_LOCK_TARGET_VALIDATION_MODE;
+    }
+
+    /**
+     * Opt a test out of the blocking-call-under-lock check.
+     * <p>
+     * For a test that holds a metadata lock across a {@code @Blocking} call <em>on purpose</em> --
+     * one that reproduces such a site, or asserts what the FE does when the connector is slow.
+     * A test that merely happens to trip the check is reporting a real defect and must not use
+     * this. Pair with {@link #restoreBlockingCallValidation()} in teardown.
+     */
+    public static void disableBlockingCallValidation() {
+        Config.lock_blocking_call_validation_mode = "off";
+    }
+
+    public static void restoreBlockingCallValidation() {
+        Config.lock_blocking_call_validation_mode = DEFAULT_BLOCKING_CALL_VALIDATION_MODE;
     }
 
     public static void assertLockSuccess(Future<LockResult> lockTaskResultFuture) {

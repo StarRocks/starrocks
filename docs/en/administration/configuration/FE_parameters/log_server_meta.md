@@ -438,13 +438,22 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum number of rolled internal FE log files to retain for the internal appender (`fe.internal.log`). This value is used as the Log4j DefaultRolloverStrategy `max` attribute; when rollovers occur, StarRocks keeps up to `internal_log_roll_num` archived files and removes older ones (also governed by `internal_log_delete_age`). A lower value reduces disk usage but shortens log history; a higher value preserves more historical internal logs. This item works together with `internal_log_dir`, `internal_log_roll_interval`, and `internal_roll_maxsize`.
 - Introduced in: v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when it contacts an external system, such as a Hive Metastore, a JDBC source, an Iceberg REST catalog, or a thrift peer, while holding an FE metadata lock. The lock's hold time then becomes that external system's round-trip time, and every operation waiting on the same lock pays it. The check is placed at the last layer the FE owns before a network request is issued, so a cache hit never reaches it and every reported violation is a request that really went out. Valid values: `off` (do not check), `warn` (log the violation with the offending caller's stack trace and let the call proceed), and `error` (refuse the call). Any unrecognized value behaves as `warn`. Unlike `lock_target_validation_mode`, this check is expected to report violations on a cluster that is behaving normally, because the call sites it covers are still being migrated; `warn` therefore turns them into a log you can aggregate by transport, and `error` is only appropriate once those logs are clean. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION` with `kind=blocking_call_under_lock`; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
 ### `lock_invariant_violation_log_interval_ms`
 
 - Default: 10000
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode` is `warn`.
+- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode` or `lock_blocking_call_validation_mode` is `warn`.
 - Introduced in: v26.2
 
 ### `lock_target_validation_mode`

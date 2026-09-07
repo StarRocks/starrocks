@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.http.HttpUtils;
 import com.starrocks.qe.SessionVariable;
@@ -350,6 +351,8 @@ public class StarRocksFeClient {
     }
 
     private String httpPost(String path, String jsonBody) {
+        // The single door to the remote FE: every public method of this client posts through it.
+        BlockingCallValidator.validateNotUnderLock("starrocks-fe");
         Map<String, String> headers = buildHttpAuthHeaders();
         Exception lastError = null;
         for (int attempt = 0; attempt < httpAttemptCount(); attempt++) {
