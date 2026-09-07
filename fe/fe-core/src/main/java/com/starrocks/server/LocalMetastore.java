@@ -131,6 +131,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.listener.LoadJobMVListener;
 import com.starrocks.load.pipe.PipeManager;
@@ -1738,6 +1739,49 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    /**
+     * Best-effort compensation for the failure path of {@link #addSubPartitions}: delete the
+     * StarOS shards of physical partitions that were created (createShards had already been
+     * called for their tablets) but never committed to the FE catalog / edit log. All the shards
+     * belong to the existing shard group of the logical partition, so a whole failed
+     * automatic-bucketing attempt is undone without shrinking the group.
+     */
+    private void compensateUncommittedSubPartitions(Database db, OlapTable table, OlapTable copiedTable,
+                                                    List<PhysicalPartition> subPartitions,
+                                                    ComputeResource computeResource, Throwable cause) {
+        Set<Long> orphanShardIds = new HashSet<>();
+        for (PhysicalPartition subPartition : subPartitions) {
+            for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    orphanShardIds.add(tablet.getId());
+                }
+            }
+        }
+        if (orphanShardIds.isEmpty()) {
+            return;
+        }
+        // The copied table carries the same table id / shard group ids as the real table, and
+        // LakeTablet's tablet ids are the StarOS shard ids, so the shards are deleted directly.
+        try {
+            StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, new ArrayList<>(orphanShardIds),
+                    GlobalStateMgr.getCurrentState().getStarOSAgent(),
+                    copiedTable.isFileBundling(), false /* isRangeDistribution */);
+            LOG.info("deleted {} uncommitted shards of table {}.{}[{}] after automatic bucketing "
+                            + "partition creation failed, failure: {}",
+                    orphanShardIds.size(), db.getFullName(), table.getName(), table.getId(),
+                    cause.getMessage());
+        } catch (Throwable t) {
+            // Deleting an orphan at the tablet level can fail, e.g. when the table being cleaned
+            // up no longer exists on the CN. Never overwrite the original failure; the orphans are
+            // still reclaimed by the periodic deleteUnusedShardAndShardGroup pass later.
+            LOG.warn("failed to delete {} uncommitted shards of table {}.{}[{}] after automatic "
+                            + "bucketing partition creation failed; they will be reclaimed by "
+                            + "StarMgrMetaSyncer later, failure: {}",
+                    orphanShardIds.size(), db.getFullName(), table.getName(), table.getId(),
+                    t.getMessage(), t);
+        }
+    }
+
     private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable,
                                                       Partition partition, ComputeResource computeResource) throws DdlException {
         long partitionId = partition.getId();
@@ -1832,7 +1876,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             // build partitions
-            buildPartitions(db, copiedTable, subPartitions, computeResource);
+            try {
+                buildPartitions(db, copiedTable, subPartitions, computeResource);
+            } catch (DdlException | RuntimeException e) {
+                // buildPartitions fails after StarOS createShards has already created the shards
+                // of these not-yet-committed physical partitions (e.g. CN fails to write the
+                // SCHEMA_* object). Clean them up on the failure path, otherwise every failed
+                // automatic-bucketing attempt leaks a whole shard batch into the shard group
+                // (see #78574). Best-effort: if the cleanup itself fails, StarMgrMetaSyncer's
+                // periodic deleteUnusedShardAndShardGroup pass will still reclaim the orphans.
+                compensateUncommittedSubPartitions(db, table, copiedTable, subPartitions, computeResource, e);
+                throw e;
+            }
 
             // check again
             if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
