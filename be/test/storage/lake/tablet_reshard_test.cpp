@@ -1740,6 +1740,7 @@ protected:
         }
         std::vector<IndexValue> values(keys.size());
         RETURN_IF_ERROR(index->get(keys.size(), key_slices.data(), values.data()));
+        ++_cold_pk_lookup_batches;
         return values;
     }
 
@@ -2662,6 +2663,82 @@ protected:
         return fixture;
     }
 
+    StatusOr<std::string> cold_fixed_point_pk_signature(const TabletMetadataPtr& metadata,
+                                                        const std::vector<std::pair<int32_t, int32_t>>& expected_rows) {
+        // Every fixed-point fixture covers keys [0, 100). Query the whole domain,
+        // including key 1 (delvec-deleted) and key 60 after the DML delete/compaction.
+        std::map<int32_t, int32_t> expected(expected_rows.begin(), expected_rows.end());
+        if (expected.empty() || expected.size() != expected_rows.size()) {
+            return Status::Corruption("fixed-point PK scan must contain distinct live keys");
+        }
+        std::vector<std::string> keys;
+        for (int32_t key = 0; key < 100; ++key) keys.push_back(encode_int_primary_key(key));
+        ASSIGN_OR_RETURN(auto values, load_index_values(metadata, metadata->id(), keys));
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        std::map<uint32_t, std::vector<std::pair<int32_t, int32_t>>> expected_by_rssid;
+        std::map<uint32_t, uint64_t> segment_rows;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                const auto& segment = rowset.segment_metas(i);
+                segment_rows.emplace(rowset.id() + (segment.has_segment_idx() ? segment.segment_idx() : i),
+                                     segment.num_rows());
+            }
+        }
+        std::string signature;
+        size_t deleted_keys = 0;
+        for (int32_t key = 0; key < 100; ++key) {
+            auto found = expected.find(key);
+            if (found == expected.end()) {
+                if (values[key] != IndexValue(NullIndexValue)) {
+                    return Status::Corruption(fmt::format("cold PK lookup resurrected deleted key {}", key));
+                }
+                ++deleted_keys;
+                signature += fmt::format("pk-deleted={};", key);
+                continue;
+            }
+            const auto& value = values[key];
+            if (value == IndexValue(NullIndexValue) || !segment_rows.contains(value.get_rssid()) ||
+                value.get_rowid() >= segment_rows.at(value.get_rssid())) {
+                return Status::Corruption(fmt::format("cold PK lookup has no valid physical row for key {}", key));
+            }
+            rowids_by_rssid[value.get_rssid()].push_back(value.get_rowid());
+            expected_by_rssid[value.get_rssid()].push_back(*found);
+            signature += fmt::format("pk-row={}:{};", key, found->second);
+        }
+        if (deleted_keys == 0) return Status::Corruption("fixed-point PK lookup must exercise deleted keys");
+
+        // Resolve each returned (RSSID,rowid) to physical column values through the
+        // fixture manager, including active DCG overrides. Compare logical rows,
+        // never the projected RSSID numbers across reshard cycles.
+        lake::RssidFileInfoContainer files;
+        files.add_rssid_to_file(*metadata);
+        auto schema = TabletSchema::create(metadata->schema());
+        lake::Tablet tablet(_tablet_manager.get(), metadata->id());
+        TxnLogPB_OpWrite read_context;
+        read_context.mutable_txn_meta(); // enable DCG-aware physical column reads
+        lake::RowsetUpdateStateParams params{read_context, schema, metadata, &tablet, files};
+        MutableColumns columns;
+        columns.push_back(Int32Column::create());
+        columns.push_back(Int32Column::create());
+        RETURN_IF_ERROR(_update_manager->get_column_values(params, {0, 1}, false, rowids_by_rssid, &columns));
+        if (columns[0]->size() != expected.size() || columns[1]->size() != expected.size()) {
+            return Status::Corruption("cold PK physical row resolution has the wrong cardinality");
+        }
+        size_t offset = 0;
+        for (const auto& [rssid, rows] : expected_by_rssid) {
+            for (const auto& [key, value] : rows) {
+                if (columns[0]->get(offset).get_int32() != key || columns[1]->get(offset).get_int32() != value) {
+                    return Status::Corruption(
+                            fmt::format("cold PK lookup resolves to the wrong logical row for key {}", key));
+                }
+                ++offset;
+            }
+        }
+        _cold_pk_deleted_keys_checked += deleted_keys;
+        LOG(INFO) << "fixed-point cold PK lookup: live=" << expected.size() << " deleted=" << deleted_keys;
+        return signature;
+    }
+
     // Canonicalize logical state, not the protobuf's allocation/serialization choices.
     // Segment filenames and bundle offsets remain physical identity; generated sidecar
     // names, projected RSSIDs and the SST representation deliberately do not.
@@ -2752,6 +2829,10 @@ protected:
         for (const auto& record : records) append(&result, record);
         ASSIGN_OR_RETURN(auto rows, read_two_column_rows(cold));
         for (const auto& [key, value] : rows) result += fmt::format("row={}:{};", key, value);
+        if (cold->schema().keys_type() == PRIMARY_KEYS) {
+            ASSIGN_OR_RETURN(auto pk_signature, cold_fixed_point_pk_signature(cold, rows));
+            append(&result, pk_signature);
+        }
         return result;
     }
 
@@ -2887,7 +2968,13 @@ protected:
     }
 
     void expect_ten_fixed_point_cycles(TabletMetadataPtr current) {
+        const bool primary_key = current->schema().keys_type() == PRIMARY_KEYS;
+        size_t prior_lookup_batches = _cold_pk_lookup_batches;
+        size_t prior_deleted_keys = _cold_pk_deleted_keys_checked;
         ASSIGN_OR_ABORT(auto baseline_signature, semantic_reshard_signature(current));
+        ASSERT_EQ(prior_lookup_batches + static_cast<size_t>(primary_key), _cold_pk_lookup_batches)
+                << "every PK baseline must exercise a cold PK lookup batch";
+        if (primary_key) ASSERT_GT(_cold_pk_deleted_keys_checked, prior_deleted_keys);
         const auto baseline = collect_reshard_inventory(*current);
         // Conservative field census: tablet scalars plus per-rowset/segment/del,
         // sidecar and SST integer slots. Each varint can grow by at most 10 bytes.
@@ -2903,7 +2990,12 @@ protected:
         for (int cycle = 0; cycle < 10; ++cycle) {
             SCOPED_TRACE(fmt::format("fixed-point cycle {} keys_type {}", cycle, int(current->schema().keys_type())));
             current = run_no_write_split_merge_cycle(current, cycle % 2 == 0 ? 2 : 3);
+            prior_lookup_batches = _cold_pk_lookup_batches;
+            prior_deleted_keys = _cold_pk_deleted_keys_checked;
             ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
+            EXPECT_EQ(prior_lookup_batches + static_cast<size_t>(primary_key), _cold_pk_lookup_batches)
+                    << "every PK cycle must exercise a cold PK lookup batch";
+            if (primary_key) EXPECT_GT(_cold_pk_deleted_keys_checked, prior_deleted_keys);
             const auto inventory = collect_reshard_inventory(*current);
             EXPECT_EQ(baseline_signature, signature);
             EXPECT_EQ(baseline.rowsets, inventory.rowsets);
@@ -2918,6 +3010,8 @@ protected:
         }
     }
 
+    size_t _cold_pk_lookup_batches = 0;
+    size_t _cold_pk_deleted_keys_checked = 0;
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider;
@@ -2986,6 +3080,38 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_vacuum_eligible_attempt_objects
     auto current = run_no_write_split_merge_cycle(source, 3);
     ASSIGN_OR_ABORT(auto baseline, semantic_reshard_signature(current));
     const auto live_inventory = collect_reshard_inventory(*current);
+    ASSERT_FALSE(current->delvec_meta().delvecs().empty());
+    const auto& live_page = current->delvec_meta().delvecs().begin()->second;
+    const auto& live_delvec = current->delvec_meta().version_to_file().at(live_page.version()).name();
+    const auto live_txn_id = lake::extract_txn_id_prefix(live_delvec).value_or(0);
+    ASSERT_GT(live_txn_id, 0) << "the live delvec must be transaction-aged, not txnless";
+    std::set<std::string> expected_live_files;
+    for (const auto& rowset : current->rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) expected_live_files.insert(segment.filename());
+        for (const auto& del : rowset.del_files()) expected_live_files.insert(del.name());
+    }
+    for (const auto& [rssid, page] : current->delvec_meta().delvecs()) {
+        expected_live_files.insert(current->delvec_meta().version_to_file().at(page.version()).name());
+    }
+    for (const auto& [rssid, dcg] : current->dcg_meta().dcgs()) {
+        expected_live_files.insert(dcg.column_files().begin(), dcg.column_files().end());
+    }
+    lake::LakeIndexDeltaGroupLoader idg_loader(current);
+    for (const auto& [rssid, idg] : current->idg_meta().idgs()) {
+        lake::IndexDeltaGroupList active;
+        ASSERT_OK(idg_loader.load(TabletSegmentId(current->id(), rssid), current->version(), &active));
+        for (const auto& entry : active) expected_live_files.insert(entry.index_file);
+    }
+    for (const auto& sst : current->sstable_meta().sstables()) expected_live_files.insert(sst.filename());
+    ASSERT_EQ(live_inventory.live_files, expected_live_files.size());
+    auto expect_live_files_present = [&] {
+        for (const auto& name : expected_live_files) {
+            ASSERT_OK(FileSystem::Default()->path_exists(
+                    lake::join_path(_location_provider->segment_root_location(current->id()), name)));
+        }
+        ASSERT_OK(FileSystem::Default()->path_exists(_tablet_manager->delvec_location(current->id(), live_delvec)));
+    };
+    expect_live_files_present();
     // Leave actual objects from two failed MERGE writer attempts. Transaction
     // retention protects the second until min_active_txn_id explicitly advances.
     auto failed_attempt = [&](int64_t txn_id) {
@@ -3016,11 +3142,13 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_vacuum_eligible_attempt_objects
         EXPECT_EQ(1, attempts.size());
         return attempts;
     };
-    const auto eligible = failed_attempt(1);
-    const auto protected_attempt = failed_attempt(3);
+    const auto eligible = failed_attempt(live_txn_id - 1);
+    const auto protected_attempt = failed_attempt(live_txn_id + 2);
     ASSERT_EQ(1, eligible.size());
     ASSERT_EQ(1, protected_attempt.size());
     auto run_vacuum = [&](int64_t min_active_txn_id) {
+        EXPECT_LT(live_txn_id, min_active_txn_id)
+                << "live delvec protection must come from metadata references, not transaction retention";
         VacuumFullRequest request;
         request.set_partition_id(1);
         request.set_tablet_id(current->id());
@@ -3032,16 +3160,19 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_vacuum_eligible_attempt_objects
         lake::vacuum_full(_tablet_manager.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         ASSERT_EQ(0, response.status().status_code());
+        expect_live_files_present();
+        LOG(INFO) << "fixed-point vacuum: min_active_txn_id=" << min_active_txn_id
+                  << " live_delvec_txn_id=" << live_txn_id << " live_files_present=" << expected_live_files.size();
     };
-    run_vacuum(2);
+    run_vacuum(live_txn_id + 1);
     ASSIGN_OR_ABORT(auto retained, delvec_inventory(current->id()));
     EXPECT_FALSE(retained.contains(*eligible.begin()));
     EXPECT_TRUE(retained.contains(*protected_attempt.begin()));
-    run_vacuum(4);
+    run_vacuum(live_txn_id + 3);
     ASSIGN_OR_ABORT(auto converged, delvec_inventory(current->id()));
     EXPECT_FALSE(converged.contains(*eligible.begin()));
     EXPECT_FALSE(converged.contains(*protected_attempt.begin()));
-    run_vacuum(4);
+    run_vacuum(live_txn_id + 3);
     EXPECT_EQ(converged, delvec_inventory(current->id()).value());
     ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
     EXPECT_EQ(baseline, signature);
