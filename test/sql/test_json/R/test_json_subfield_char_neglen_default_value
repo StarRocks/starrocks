@@ -1,0 +1,131 @@
+-- name: test_json_subfield_char_neglen_default_value
+-- Regression for a BE crash on CAST(json->'$.x' AS char) over a JSON column the segment does not
+-- have. A length-less CHAR cast is a wildcard whose length is -1, and the JSONV2 path rewrite
+-- (cbo_json_v2_rewrite, on by default) materializes it as a synthetic CHAR scan column carrying
+-- that -1 as the column's declared width. When the JSON column is absent from the segment -- here
+-- because the rows were written before ADD COLUMN -- the scan falls back to the column's default
+-- value, and DefaultValueColumnIterator's CHAR branch allocated and memset a buffer of that width.
+-- The width is carried as size_t, so -1 arrived as ~SIZE_MAX: allocate() returned a non-null
+-- pointer for a nonsensical size and the memset ran off the end of the pool, killing the BE with
+-- SIGSEGV (ERROR 5905: No alive backend or compute node).
+--
+-- This has nothing to do with flat JSON: the column below holds no data at all, so it was never
+-- flattened. The trigger is the missing column, not the JSON layout.
+--
+-- The fix stops the -1 at the point where an extended column crosses into the storage layer, and
+-- makes the CHAR default value branch fall back to the value's own length when no width is
+-- declared. t2_${uuid0} stores the same subfield for real, and is the yardstick: with no declared
+-- width there is nothing to pad out to, so both tables must answer 'hello' un-padded.
+create table t_${uuid0} (k int, v int) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t_${uuid0} values (1,10),(2,20),(3,30);
+-- result:
+-- !result
+alter table t_${uuid0} add column j json default '{"f2":"hello"}';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+create table t2_${uuid0} (k int, v int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t2_${uuid0} values
+ (1,10,parse_json('{"f2":"hello"}')),
+ (2,20,parse_json('{"f2":"hello"}')),
+ (3,30,parse_json('{"f2":"hello"}'));
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+set cbo_prune_subfield = true;
+-- result:
+-- !result
+select k, cast(j->'$.f2' as char) as c from t_${uuid0} order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+-- !result
+select k, cast(j->'$.f2' as char) as c from t2_${uuid0} order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+-- !result
+select k, hex(cast(j->'$.f2' as char)) as c from t_${uuid0} order by k;
+-- result:
+1	68656C6C6F
+2	68656C6C6F
+3	68656C6C6F
+-- !result
+select k, hex(cast(j->'$.f2' as char)) as c from t2_${uuid0} order by k;
+-- result:
+1	68656C6C6F
+2	68656C6C6F
+3	68656C6C6F
+-- !result
+select k, hex(cast(j->'$.f2' as char(20))) as c from t_${uuid0} order by k;
+-- result:
+1	68656C6C6F000000000000000000000000000000
+2	68656C6C6F000000000000000000000000000000
+3	68656C6C6F000000000000000000000000000000
+-- !result
+select k, cast(j->'$.f2' as varchar) as c from t_${uuid0} order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+-- !result
+select k, cast(j->'$.f2' as string) as c from t_${uuid0} order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+-- !result
+select k, get_json_string(j, '$.f2') as c from t_${uuid0} order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+-- !result
+select k, j from t_${uuid0} order by k;
+-- result:
+1	{"f2": "hello"}
+2	{"f2": "hello"}
+3	{"f2": "hello"}
+-- !result
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char) = 'hello';
+-- result:
+3
+-- !result
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char) = 'nope';
+-- result:
+0
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, cast(j->'$.f2' as char) as c from t_${uuid0} order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+-- !result
+select k, hex(cast(j->'$.f2' as char)) as c from t_${uuid0} order by k;
+-- result:
+1	68656C6C6F
+2	68656C6C6F
+3	68656C6C6F
+-- !result
+drop table t_${uuid0};
+-- result:
+-- !result
+drop table t2_${uuid0};
+-- result:
+-- !result

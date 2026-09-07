@@ -197,4 +197,56 @@ TEST_F(DefaultValueColumnIteratorTest, no_leak_for_struct_default_value) {
     }
 }
 
+// A CHAR default value whose column declares no width.
+//
+// The width handed to this iterator is TabletColumn::length(), an int32_t. A materialized CHAR
+// column always declares one in [1, 255], but an extended JSON subfield column does not: it is
+// minted per scan from the query's cast target type, and `CAST(j->'$.x' AS char)` declares no
+// length, so the frontend sends -1. The constructor takes the width as size_t, so that -1 arrived
+// as ~SIZE_MAX and cast back to a negative int32_t inside init(): _pool.allocate() handed back a
+// non-null pointer for a nonsensical size, the null check did not fire, and the memset walked off
+// the end of the pool -- SIGSEGV, taking the whole BE down.
+TEST_F(DefaultValueColumnIteratorTest, char_default_value_without_declared_length) {
+    // Mint the width through TabletColumn, the way the extended-column producers do, so the
+    // int32_t -> size_t conversion under test is the production one.
+    TabletColumn column;
+    column.set_unique_id(0);
+    column.set_name("j.f2");
+    column.set_type(TYPE_CHAR);
+    column.set_is_nullable(true);
+    column.set_length(-1);
+    ASSERT_EQ(-1, column.length());
+
+    DefaultValueColumnIterator iter(true, "hello", true, get_type_info(TYPE_CHAR), column.length(), 3);
+    ColumnIteratorOptions opts;
+    ASSERT_TRUE(iter.init(opts).ok());
+
+    MutableColumnPtr dst = ColumnHelper::create_column(TypeDescriptor::create_char_type(-1), true);
+    size_t num_rows = 3;
+    ASSERT_TRUE(iter.next_batch(&num_rows, dst.get()).ok());
+    ASSERT_EQ(3, dst->size());
+    for (size_t i = 0; i < dst->size(); i++) {
+        ASSERT_FALSE(dst->is_null(i));
+        // No declared width means nothing to pad out to, so the value comes back as it is -- which is
+        // also what the same subfield reads back out of a segment that does store it.
+        ASSERT_EQ("hello", dst->get(i).get_slice().to_string());
+    }
+}
+
+// The other side of the guard above: a CHAR column that does declare a width still pads the default
+// value out to it, because that is how a materialized CHAR column is stored.
+TEST_F(DefaultValueColumnIteratorTest, char_default_value_keeps_declared_padding) {
+    DefaultValueColumnIterator iter(true, "hello", true, get_type_info(TYPE_CHAR), 20, 2);
+    ColumnIteratorOptions opts;
+    ASSERT_TRUE(iter.init(opts).ok());
+
+    MutableColumnPtr dst = ColumnHelper::create_column(TypeDescriptor::create_char_type(20), true);
+    size_t num_rows = 2;
+    ASSERT_TRUE(iter.next_batch(&num_rows, dst.get()).ok());
+    ASSERT_EQ(2, dst->size());
+    for (size_t i = 0; i < dst->size(); i++) {
+        ASSERT_EQ(std::string("hello") + std::string(15, '\0'), dst->get(i).get_slice().to_string());
+    }
+}
+
 } // namespace starrocks

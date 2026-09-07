@@ -450,7 +450,22 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
             }
             Status status = Status::OK();
             if (_type_info->type() == TYPE_CHAR) {
+                // _schema_length is the fixed width a materialized CHAR column is zero-padded out to,
+                // and it is the size of the buffer allocated below. A synthetic scan column can reach
+                // here without one: an extended JSON subfield column takes its width from the query's
+                // cast target type, and `CAST(j->'$.x' AS char)` declares none, so the frontend sends
+                // -1. The width is carried as size_t, so that -1 arrives as ~SIZE_MAX and casts back to
+                // a negative int32_t here -- allocate() then hands back a non-null pointer for a
+                // nonsensical size and the memset runs off the end of the pool.
+                //
+                // With no declared width there is nothing to pad out to, so fall back to the value's own
+                // length, exactly as the VARCHAR branch below does. That also makes the value returned
+                // for a missing column agree with the value the same subfield yields from a segment that
+                // does store it, which is un-padded too.
                 auto length = static_cast<int32_t>(_schema_length);
+                if (length <= 0) {
+                    length = static_cast<int32_t>(_default_value.length());
+                }
                 char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
                 if (UNLIKELY(string_buffer == nullptr)) {
                     return Status::InternalError("Mem usage has exceed the limit of BE");

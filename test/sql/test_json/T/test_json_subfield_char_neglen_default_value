@@ -1,0 +1,57 @@
+-- name: test_json_subfield_char_neglen_default_value
+-- Regression for a BE crash on CAST(json->'$.x' AS char) over a JSON column the segment does not
+-- have. A length-less CHAR cast is a wildcard whose length is -1, and the JSONV2 path rewrite
+-- (cbo_json_v2_rewrite, on by default) materializes it as a synthetic CHAR scan column carrying
+-- that -1 as the column's declared width. When the JSON column is absent from the segment -- here
+-- because the rows were written before ADD COLUMN -- the scan falls back to the column's default
+-- value, and DefaultValueColumnIterator's CHAR branch allocated and memset a buffer of that width.
+-- The width is carried as size_t, so -1 arrived as ~SIZE_MAX: allocate() returned a non-null
+-- pointer for a nonsensical size and the memset ran off the end of the pool, killing the BE with
+-- SIGSEGV (ERROR 5905: No alive backend or compute node).
+--
+-- This has nothing to do with flat JSON: the column below holds no data at all, so it was never
+-- flattened. The trigger is the missing column, not the JSON layout.
+--
+-- The fix stops the -1 at the point where an extended column crosses into the storage layer, and
+-- makes the CHAR default value branch fall back to the value's own length when no width is
+-- declared. t2_${uuid0} stores the same subfield for real, and is the yardstick: with no declared
+-- width there is nothing to pad out to, so both tables must answer 'hello' un-padded.
+create table t_${uuid0} (k int, v int) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t_${uuid0} values (1,10),(2,20),(3,30);
+-- Add the JSON column after the data is in, so the rowsets already written carry no j column.
+alter table t_${uuid0} add column j json default '{"f2":"hello"}';
+function: wait_alter_table_finish()
+create table t2_${uuid0} (k int, v int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t2_${uuid0} values
+ (1,10,parse_json('{"f2":"hello"}')),
+ (2,20,parse_json('{"f2":"hello"}')),
+ (3,30,parse_json('{"f2":"hello"}'));
+
+set cbo_json_v2_rewrite = true;
+set cbo_prune_subfield = true;
+
+-- The poison query: it took the BE down before the fix.
+select k, cast(j->'$.f2' as char) as c from t_${uuid0} order by k;
+-- The same query where the subfield is really stored. Both must answer alike.
+select k, cast(j->'$.f2' as char) as c from t2_${uuid0} order by k;
+-- hex() makes any zero padding visible: 68656C6C6F and nothing more, on both sides.
+select k, hex(cast(j->'$.f2' as char)) as c from t_${uuid0} order by k;
+select k, hex(cast(j->'$.f2' as char)) as c from t2_${uuid0} order by k;
+-- A cast that does declare a width keeps padding the default value out to it, unchanged.
+select k, hex(cast(j->'$.f2' as char(20))) as c from t_${uuid0} order by k;
+-- The paths that already worked stay as they were.
+select k, cast(j->'$.f2' as varchar) as c from t_${uuid0} order by k;
+select k, cast(j->'$.f2' as string) as c from t_${uuid0} order by k;
+select k, get_json_string(j, '$.f2') as c from t_${uuid0} order by k;
+select k, j from t_${uuid0} order by k;
+-- A predicate on the length-less char over the same missing column.
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char) = 'hello';
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char) = 'nope';
+-- With the rewrite off the cast stays an expression over the JSON column, and must agree.
+set cbo_json_v2_rewrite = false;
+select k, cast(j->'$.f2' as char) as c from t_${uuid0} order by k;
+select k, hex(cast(j->'$.f2' as char)) as c from t_${uuid0} order by k;
+drop table t_${uuid0};
+drop table t2_${uuid0};
