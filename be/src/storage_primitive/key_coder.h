@@ -68,12 +68,6 @@ public:
 
     void full_encode_ascending(const Datum& value, std::string* buf) const { _full_encode_ascending_datum(value, buf); }
 
-    // Number of bytes full_encode_ascending() appends for this type, or 0 for the variable-length
-    // types (CHAR/VARCHAR/VARBINARY). Lets callers size an encoded key without encoding it. The
-    // value comes from KeyCoderTraits, beside the encoder itself, and KeyCoder's constructor reads
-    // it -- so a new traits specialization that omits kFullEncodeSize fails to compile.
-    size_t full_encode_size() const { return _full_encode_size; }
-
     // similar to `full_encode_ascending`, but only encode part (the first `index_size` bytes) of the value.
     // only applicable to string type
     void encode_ascending(const void* value, size_t index_size, std::string* buf) const {
@@ -94,7 +88,6 @@ private:
     DecodeAscendingFunc _decode_ascending;
     FullEncodeAscendingFuncDatum _full_encode_ascending_datum;
     EncodeAscendingFuncDatum _encode_ascending_datum;
-    size_t _full_encode_size;
 };
 
 extern const KeyCoder* get_key_coder(LogicalType type);
@@ -108,9 +101,6 @@ class KeyCoderTraits<field_type, typename std::enable_if_t<std::is_integral_v<St
 public:
     using CppType = StorageCppType<field_type>;
     using UnsignedCppType = StorageUnsignedCppType<field_type>;
-
-    // Bytes full_encode_ascending() appends. Declared beside the encoder so the two cannot drift.
-    static constexpr size_t kFullEncodeSize = sizeof(UnsignedCppType);
 
     static void full_encode_ascending(const void* value, std::string* buf) {
         UnsignedCppType unsigned_val;
@@ -162,8 +152,6 @@ class KeyCoderTraits<TYPE_BOOLEAN> {
 public:
     using CppType = StorageCppType<TYPE_BOOLEAN>;
 
-    static constexpr size_t kFullEncodeSize = 1;
-
     static void full_encode_ascending(const void* value, std::string* buf) {
         bool v = *reinterpret_cast<const bool*>(value);
         static_assert(!std::is_signed_v<bool>);
@@ -205,8 +193,6 @@ public:
     using CppType = StorageCppType<TYPE_DATE_V1>;
     using UnsignedCppType = StorageUnsignedCppType<TYPE_DATE_V1>;
 
-    static constexpr size_t kFullEncodeSize = sizeof(UnsignedCppType);
-
     static void full_encode_ascending(const void* value, std::string* buf) {
         UnsignedCppType unsigned_val;
         memcpy(&unsigned_val, value, sizeof(unsigned_val));
@@ -246,10 +232,6 @@ public:
 template <>
 class KeyCoderTraits<TYPE_DECIMAL> {
 public:
-    // Encodes the integer part then the fraction part, so its width is the sum of theirs.
-    static constexpr size_t kFullEncodeSize =
-            KeyCoderTraits<TYPE_BIGINT>::kFullEncodeSize + KeyCoderTraits<TYPE_INT>::kFullEncodeSize;
-
     static void full_encode_ascending(const void* value, std::string* buf) {
         decimal12_t decimal_val;
         memcpy((void*)&decimal_val, value, sizeof(decimal12_t));
@@ -286,8 +268,6 @@ public:
 template <>
 class KeyCoderTraits<TYPE_DECIMALV2> {
 public:
-    static constexpr size_t kFullEncodeSize = KeyCoderTraits<TYPE_LARGEINT>::kFullEncodeSize;
-
     static void full_encode_ascending(const void* value, std::string* buf) {
         KeyCoderTraits<TYPE_LARGEINT>::full_encode_ascending(value, buf);
     }
@@ -318,9 +298,6 @@ template <>
 class KeyCoderTraits<TYPE_INT256> {
 public:
     using CppType = int256_t;
-
-    // Appends a fixed 32-byte big-endian buffer (16 bytes high + 16 bytes low).
-    static constexpr size_t kFullEncodeSize = 32;
 
     static void full_encode_ascending(const void* value, std::string* buf) {
         int256_t v;
@@ -376,9 +353,6 @@ class KeyCoderTraits<TYPE_DECIMAL256> : KeyCoderTraits<TYPE_INT256> {};
 template <>
 class KeyCoderTraits<TYPE_CHAR> {
 public:
-    // Variable length: the encoded size depends on the value, so callers must measure it.
-    static constexpr size_t kFullEncodeSize = 0;
-
     static void full_encode_ascending(const void* value, std::string* buf) {
         auto slice = reinterpret_cast<const Slice*>(value);
         buf->append(slice->get_data(), slice->get_size());
@@ -420,9 +394,6 @@ public:
 template <>
 class KeyCoderTraits<TYPE_VARCHAR> {
 public:
-    // Variable length: the encoded size depends on the value, so callers must measure it.
-    static constexpr size_t kFullEncodeSize = 0;
-
     static void full_encode_ascending(const void* value, std::string* buf) {
         auto slice = reinterpret_cast<const Slice*>(value);
         buf->append(slice->get_data(), slice->get_size());
