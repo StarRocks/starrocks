@@ -437,11 +437,12 @@ public class StreamLoadInfo {
     public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId dummyId = new TUniqueId();
         TFileFormatType fileFormatType = TFileFormatType.FORMAT_CSV_PLAIN;
-        if (routineLoadJob.getFormat().equals("json")) {
+        if (routineLoadJob.getFormat().equalsIgnoreCase("json")) {
             fileFormatType = TFileFormatType.FORMAT_JSON;
-        }
-        if (routineLoadJob.getFormat().equals("avro")) {
+        } else if (routineLoadJob.getFormat().equalsIgnoreCase("avro")) {
             fileFormatType = TFileFormatType.FORMAT_AVRO;
+        } else if (routineLoadJob.getFormat().equalsIgnoreCase("arrow")) {
+            fileFormatType = TFileFormatType.FORMAT_ARROW;
         }
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(dummyId, -1L /* dummy txn id */,
                 TFileType.FILE_STREAM, fileFormatType);

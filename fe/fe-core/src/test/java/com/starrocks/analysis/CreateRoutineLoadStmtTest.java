@@ -562,6 +562,17 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testAnalyzeArrowConfig() throws Exception {
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_arrow ON t1 " +
+                "PROPERTIES(\"format\" = \"arrow\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:9092\",\"kafka_topic\" = \"topic_0\");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        Assertions.assertEquals("arrow", createRoutineLoadStmt.getFormat());
+    }
+
+    @Test
     public void testAnalyzeCSVConfig() throws Exception {
         String createSQL = "CREATE ROUTINE LOAD db0.routine_load_1 ON t1 " +
                 "PROPERTIES(\"format\" = \"csv\", \"trim_space\"=\"true\", \"enclose\"=\"'\", \"escape\"=\"|\") " +
@@ -790,6 +801,57 @@ public class CreateRoutineLoadStmtTest {
         CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Assertions.assertEquals("CREATE ROUTINE LOAD routine_name ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
                 "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\", \"confluent.schema.registry.url\" = \"***\" )", AstToStringBuilder.toString(stmt));
+    }
+
+    @Test
+    public void testAnalyzeArrowFormat() throws Exception {
+        String sql = "CREATE ROUTINE LOAD routine_name ON table1\n"
+                + "PROPERTIES (\n"
+                + "\"desired_concurrent_number\" = \"3\",\n"
+                + "\"format\" = \"arrow\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(stmt, ctx);
+        Assertions.assertEquals("arrow", stmt.getFormat());
+
+        String uppercaseSql = "CREATE ROUTINE LOAD routine_name ON table1\n"
+                + "PROPERTIES (\n"
+                + "\"desired_concurrent_number\" = \"3\",\n"
+                + "\"format\" = \"ARROW\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        CreateRoutineLoadStmt uppercaseStmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(uppercaseSql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(uppercaseStmt, ctx);
+        Assertions.assertEquals("arrow", uppercaseStmt.getFormat());
+    }
+
+    @Test
+    public void testAnalyzeArrowFormatPulsar() throws Exception {
+        String sql = "CREATE ROUTINE LOAD routine_name ON table1\n"
+                + "PROPERTIES (\n"
+                + "\"desired_concurrent_number\" = \"3\",\n"
+                + "\"format\" = \"arrow\"\n"
+                + ")\n"
+                + "FROM PULSAR\n"
+                + "(\n"
+                + "\"pulsar_service_url\" = \"http://pulsar:6650\",\n"
+                + "\"pulsar_topic\" = \"topictest\",\n"
+                + "\"pulsar_subscription\" = \"subtest\"\n"
+                + ");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(stmt, ctx);
+        Assertions.assertEquals("arrow", stmt.getFormat());
     }
 
     private Map<String, String> getCustomProperties() {

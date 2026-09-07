@@ -163,7 +163,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `format`
 
 **Required**: No\
-**Description**:  The format of the data to be loaded. Valid values: `CSV`, `JSON`, and `Avro` (supported since v3.0.1). Default value: `CSV`. 
+**Description**:  The format of the data to be loaded. Valid values: `CSV`, `JSON`, `Avro` (supported since v3.0.1), and `Arrow` (supported since v3.4.0). Default value: `CSV`. 
 
 #### `trim_space`
 
