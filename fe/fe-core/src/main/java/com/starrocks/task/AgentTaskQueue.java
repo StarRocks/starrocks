@@ -84,7 +84,7 @@ public class AgentTaskQueue {
         // stale entry in a non-leader's queue that could shadow a same-signature task after
         // re-election. Refuse by returning false (the duplicate-signature convention below), NOT
         // by throwing: enqueues also happen inside WAL appliers (e.g. DROP TABLE ->
-        // OlapTable.onDrop -> sendDropAutoIncrementMapTask), where an exception after the journal
+        // OlapTable.onDrop -> sendDropAutoIncrementMapTaskBestEffort), where an exception after the journal
         // committed would tear the apply in half, and on follower-resident schedulers started by
         // image load / replay (e.g. CompactionControlScheduler), which run here on a timer.
         // Callers uniformly treat false as "not enqueued, skip" and the AgentBatchTask.run()
