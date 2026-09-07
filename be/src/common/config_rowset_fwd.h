@@ -58,6 +58,23 @@ CONF_mInt32(default_num_rows_per_column_file_block, "1024");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+// Gather every column's ordinal index into one run just before the footer, instead of leaving each
+// after its own column's data pages. A cold scan loads the ordinal index of every projected column
+// before it can read a data page; scattered, those cost a cache block and a round trip each, and at
+// the tail they share blocks and often the one the footer read already fetched. Nothing else moves
+// -- the short key index and the page zone maps keep the positions they have always had.
+//
+// A shared-nothing BE ignores this and keeps the original layout: there the scattered reads hit a
+// local disk. So does a partial-update rewrite, which copies an existing segment's prefix and
+// could only build a region covering the columns it appends. Vertical compaction does produce it.
+//
+// Cost: a one-column scan of a wide table pays roughly one extra remote block per segment, since
+// a hundred columns of ordinal index do not fit in the footer's block.
+//
+// Either layout is readable by any binary in either direction and the two coexist in one tablet,
+// so this can be flipped at any time without rewriting data.
+CONF_mBool(lake_enable_segment_tail_index_region, "true");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
