@@ -93,6 +93,17 @@ public:
     // position in the segment file.
     uint32_t physical_rowid_base() const { return _physical_rowid_base.value_or(0); }
 
+    // Collapse to the rows this iterator owns, after SegmentRewriter's owned-only rewrite has
+    // produced a segment holding exactly those, renumbered from zero.
+    //
+    // Filtering here rather than adjusting offsets is the point: the rewrite's output numbers the
+    // owned rows 0..N-1 in OWNED order, while the emit order still counts the siblings' rows, so no
+    // single base can translate between them. Dropping the unowned rows from the chunk and the
+    // encoded column, and clearing the mask -- an empty mask means "own every row", which is now
+    // true -- leaves one numbering space that every consumer already handles: the index upsert, the
+    // condition merge and the delete vector all name positions in the file publish just produced.
+    Status collapse_to_owned_rows();
+
     // Return the memory usage of this encode pk column.
     // If _lazy_load is true, return 0, because memory allocation is lazy.
     size_t memory_usage() const { return _memory_usage; }
