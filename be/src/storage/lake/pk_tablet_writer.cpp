@@ -156,6 +156,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
         wopts.encryption_info = pair.info;
         encryption_meta.swap(pair.encryption_meta);
     }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::check_delete_file_binary_column_size(deletes));
     std::unique_ptr<WritableFile> of;
     if (_location_provider && _fs) {
         ASSIGN_OR_RETURN(of, _fs->new_writable_file(_location_provider->del_location(_tablet_id, name)));

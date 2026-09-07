@@ -24,17 +24,33 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/variant_column.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "types/hll.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
 #include "util/json.h"
 #include "util/variant.h"
 
 namespace starrocks::serde {
+
+static BinaryColumn::MutablePtr make_unrepresentable_binary_column() {
+    constexpr uint64_t max_capacity_limit = Column::MAX_CAPACITY_LIMIT;
+    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
+    config::enable_zero_copy_from_page_cache = true;
+    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
+
+    // The size check must reject this view without reading its payload.
+    ContainerResource resource(nullptr, "x", max_capacity_limit);
+    BinaryColumn::Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(max_capacity_limit);
+    return BinaryColumn::create(std::move(resource), std::move(offsets));
+}
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
@@ -428,6 +444,18 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
             ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
         }
     }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serialize_rejects_unrepresentable_payload) {
+    auto column = make_unrepresentable_binary_column();
+    ASSERT_FALSE(column->is_payload_size_representable().ok());
+
+    std::vector<uint8_t> buffer(16);
+    auto st = ColumnArraySerde::serialize(*column, buffer.data());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.status().is_capacity_limit_exceeded()) << st.status();
+    ASSERT_NE(std::string::npos, std::string(st.status().message()).find("byte payload size")) << st.status();
 }
 
 // NOLINTNEXTLINE
