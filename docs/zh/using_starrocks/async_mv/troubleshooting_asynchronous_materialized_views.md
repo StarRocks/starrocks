@@ -56,7 +56,7 @@ last_refresh_error_message           |
 rows                                 | 0
 text                                 | CREATE MATERIALIZED VIEW `mv_pred_2` (`lo_quantity`, `lo_revenue`, `sum`)
 DISTRIBUTED BY HASH(`lo_quantity`, `lo_revenue`) BUCKETS 2
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "storage_medium" = "HDD"
@@ -173,7 +173,7 @@ MySQL > SHOW CREATE TABLE mv_agg\G
 Materialized View        | mv_agg
 Create Materialized View | CREATE MATERIALIZED VIEW `mv_agg` (`c_custkey`)
 DISTRIBUTED BY RANDOM
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "replicated_storage" = "true",
@@ -241,7 +241,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
   ```SQL
   CREATE MATERIALIZED VIEW <mv_name> 
-  REFRESH ASYNC -- 异步物化视图的刷新策略。
+  REFRESH <refresh_strategy> -- 异步物化视图的刷新策略。
   DISTRIBUTED BY HASH(<column>) -- 异步物化视图的数据分布策略。
   AS <query>
   ```
@@ -276,7 +276,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
   ```SQL
   -- 在创建物化视图时定义属性。
   CREATE MATERIALIZED VIEW mv1 
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PROPERTIES ( 'session.enable_spill'='true' )
   AS <query>;
 
@@ -405,7 +405,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
 示例1：物化视图 `mv1` 使用了嵌套聚合，因此无法用于重写查询。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv1 REFRESH ON_CHANGE AS
 select count(distinct cnt) 
 from (
     select c_city, count(*) cnt 
@@ -417,7 +417,7 @@ from (
 示例2：物化视图 `mv2` 使用了 Join 加聚合，因此无法用于重写查询。要解决这个问题，您可以创建一个带有聚合的物化视图，然后基于该物化视图创建带有 Join 的嵌套物化视图。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv2 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv2 REFRESH ON_CHANGE AS
 select *
 from (
     select lo_orderkey, lo_custkey, p_partkey, p_name
@@ -435,14 +435,14 @@ on lo.lo_custkey = cust.c_custkey;
 示例3：物化视图 `mv3` 无法改写模式为 `SELECT c_city, sum(tax) FROM tbl WHERE dt='2023-01-01' AND c_city = 'xxx'` 的查询，因为谓词引用的列不在 SELECT 表达式中。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT c_city, sum(tax) FROM tbl GROUP BY c_city;
 ```
 
 要解决这个问题，您可以按照以下方式创建物化视图：
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 ```
 

@@ -311,7 +311,7 @@ public class TunespaceTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH (p_brand, d_year, s_region, p_category) BUCKETS 64\n" +
                 "ORDER BY (p_brand, d_year, s_region)\n" +
-                "REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
+                "REFRESH SCHEDULE START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
                 "PROPERTIES (\n" +
                 "  \"replicated_storage\" = \"true\",\n" +
                 "  \"storage_medium\" = \"HDD\",\n" +

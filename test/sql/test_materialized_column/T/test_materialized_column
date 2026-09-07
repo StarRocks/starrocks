@@ -115,7 +115,7 @@ USE test_materialized_column_in_materialized_view;
 
 CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 
-CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(id) BUCKETS 10 REFRESH ASYNC AS SELECT id, mc FROM t;
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(id) BUCKETS 10 REFRESH ON_CHANGE AS SELECT id, mc FROM t;
 
 INSERT INTO t VALUES (1);
 SELECT * FROM t;

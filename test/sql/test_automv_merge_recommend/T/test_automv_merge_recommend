@@ -79,7 +79,7 @@ CREATE MATERIALIZED VIEW _mv_947cbb72498e2d35811884752afda5734ac8024e (
 COMMENT "MV recommended by AutoMV"
 DISTRIBUTED BY HASH (lo_quantity, lo_discount, d_yearmonthnum) BUCKETS 64
 ORDER BY (lo_quantity, lo_discount, d_yearmonthnum)
-REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "replicated_storage" = "true",
   "storage_medium" = "HDD",

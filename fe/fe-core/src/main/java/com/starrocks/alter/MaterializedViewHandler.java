@@ -559,8 +559,8 @@ public class MaterializedViewHandler extends AlterHandler {
                 throw new DdlException(
                     "Synchronous materialized view is not supported on tables with range distribution. " +
                     "Use an asynchronous materialized view instead: declare it with an explicit " +
-                    "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
-                    "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+                    "REFRESH clause or a DISTRIBUTED BY clause, " +
+                    "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH MANUAL AS SELECT ...");
             }
             throw new DdlException(
                 "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +

@@ -139,7 +139,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 + "\"excluded_refresh_tables\" = \"t2\"\n"
                 + ")\n"
                 + "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -179,7 +179,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                 "PARTITION BY date_trunc('day', k1)\n"
                 + "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -227,7 +227,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         withRefreshedMV("CREATE MATERIALIZED VIEW test2.mv1 \n" +
                 "PARTITION BY date_trunc('day', k1)\n"
                 + "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "select k1 from (SELECT * FROM test.t1 UNION ALL SELECT * FROM test.t2) t group by k1\n", () -> {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test2");
@@ -980,7 +980,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 "    'replication_num' = '1'\n" +
                 ");");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.mv_ttl_mv1\n" +
-                " REFRESH ASYNC " +
+                " REFRESH ON_CHANGE " +
                 " PARTITION BY k1\n" +
                 " PROPERTIES('partition_ttl'='2 month')" +
                 " AS SELECT k1, v1 FROM test.tbl1");
@@ -1084,7 +1084,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv_union_1 \n" +
                 "PARTITION BY date_trunc('day', observation_date)\n" +
                 "DISTRIBUTED BY HASH(leg_id)\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "SELECT * FROM mv_union_t1 t1\n" +
                 "UNION ALL\n" +
@@ -1118,7 +1118,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
         starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv_union_1 \n" +
                 "PARTITION BY p_time\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "select date_trunc(\"day\", a.datekey) as p_time FROM mv_union_t1 a group by p_time \n" +
                 "UNION ALL\n" +
@@ -1186,7 +1186,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
                     "PARTITION BY date_trunc('day', observation_date)\n" +
                     "DISTRIBUTED BY HASH(leg_id)\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM mv_union_t1 t1\n" +
                     "UNION ALL\n" +
@@ -1198,7 +1198,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
                     "PARTITION BY date_trunc('day', observation_date)\n" +
                     "DISTRIBUTED BY HASH(leg_id)\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM mv_union_t1 t1\n" +
                     "UNION ALL\n" +
@@ -1210,7 +1210,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             // create succeed, but refresh fail
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
                     "PARTITION BY date_trunc('day', observation_date)\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM mv_union_t1 t1\n" +
                     "UNION ALL\n" +
@@ -1261,7 +1261,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
                 "PARTITION BY date_trunc('day', k1)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "SELECT * FROM t1\n" +
                 "UNION ALL\n" +
@@ -1306,7 +1306,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                     "PARTITION BY date_trunc('day', k1)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM t1\n" +
                     "UNION ALL\n" +
@@ -1358,7 +1358,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                     "PARTITION BY date_trunc('day', k1)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM t1\n" +
                     "UNION ALL\n" +
@@ -1410,7 +1410,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                     "PARTITION BY date_trunc('day', k1)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -1489,7 +1489,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 .useDatabase("mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k1`)\n"
-                        + "REFRESH DEFERRED ASYNC\n"
+                        + "REFRESH DEFERRED ON_CHANGE\n"
                         + "AS SELECT k1 from trunc_db.trunc_db_t1;");
 
         executeInsertSql(connectContext, "insert into trunc_db.trunc_db_t1 values(2, 10)");
@@ -1530,7 +1530,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 .useDatabase("drop_mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k2`)\n"
-                        + "REFRESH DEFERRED ASYNC\n"
+                        + "REFRESH DEFERRED ON_CHANGE\n"
                         + "AS select k1, k2, v1  from drop_db.tbl_with_mv;");
 
         executeInsertSql(connectContext, "insert into drop_db.tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");

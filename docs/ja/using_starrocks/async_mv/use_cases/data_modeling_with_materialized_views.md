@@ -45,8 +45,8 @@ StarRocks の非同期マテリアライズドビューは、データモデリ�
 
 非同期マテリアライズドビューを作成する際に、REFRESH 句を使用してリフレッシュ戦略を指定できます。現在、StarRocks は以下の非同期マテリアライズドビューのリフレッシュ戦略をサポートしています：
 
-- **自動リフレッシュ** (`REFRESH ASYNC`): ベーステーブルのデータが変更されるたびにリフレッシュタスクがトリガーされます。データ依存関係はマテリアライズドビューによって自動的に管理されます。
-- **スケジュールリフレッシュ** (`REFRESH ASYNC EVERY (INTERVAL <refresh_interval>)`): 例えば、毎分、毎日、毎月など、定期的な間隔でリフレッシュタスクがトリガーされます。ベーステーブルにデータ変更がない場合、リフレッシュタスクはトリガーされません。
+- **自動リフレッシュ** (`REFRESH ON_CHANGE`): ベーステーブルのデータが変更されるたびにリフレッシュタスクがトリガーされます。データ依存関係はマテリアライズドビューによって自動的に管理されます。
+- **スケジュールリフレッシュ** (`REFRESH SCHEDULE EVERY (INTERVAL <refresh_interval>)`): 例えば、毎分、毎日、毎月など、定期的な間隔でリフレッシュタスクがトリガーされます。ベーステーブルにデータ変更がない場合、リフレッシュタスクはトリガーされません。
 - **手動リフレッシュ** (`REFRESH MANUAL`): リフレッシュタスクは、REFRESH MATERIALIZED VIEW を手動で実行することによってのみトリガーされます。このリフレッシュ戦略は、外部のスケジューリングフレームワークを使用してリフレッシュタスクをトリガーする場合に使用できます。
 
 構文：
@@ -54,8 +54,8 @@ StarRocks の非同期マテリアライズドビューは、データモデリ�
 ```SQL
 CREATE MATERIALIZED VIEW <name>
 REFRESH 
-    [ ASYNC | 
-      ASYNC [START <time>] EVERY(<interval>) | 
+    [ ON_CHANGE | 
+      SCHEDULE [START <time>] EVERY(<interval>) | 
       MANUAL
     ]
 AS <query>
@@ -73,7 +73,7 @@ AS <query>
 
 ```SQL
 CREATE MATERIALIZED VIEW <name>
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY 
     [
         <base_table_column> | 

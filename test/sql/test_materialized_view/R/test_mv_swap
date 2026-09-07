@@ -103,11 +103,11 @@ E: (1064, 'New name conflicts with rollup index name: mv1')
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW mv_on_mv_1 REFRESH ASYNC 
+CREATE MATERIALIZED VIEW mv_on_mv_1 REFRESH ON_CHANGE 
 AS SELECT sum(sum_pv) as sum_sum_pv FROM mv1;
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW mv_on_mv_2 REFRESH ASYNC 
+CREATE MATERIALIZED VIEW mv_on_mv_2 REFRESH ON_CHANGE 
 AS SELECT sum_sum_pv + 1 FROM mv_on_mv_1;
 -- result:
 -- !result
@@ -165,7 +165,7 @@ SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHE
 -- result:
 true	
 -- !result
-CREATE MATERIALIZED VIEW mv_on_table_1 REFRESH ASYNC 
+CREATE MATERIALIZED VIEW mv_on_table_1 REFRESH ON_CHANGE 
 AS SELECT ss.event_day, sum(ss.pv) as ss_sum_pv, sum(jj.pv) as jj_sum_pv
     FROM ss JOIN jj on (ss.event_day = jj.event_day) 
     GROUP BY ss.event_day;

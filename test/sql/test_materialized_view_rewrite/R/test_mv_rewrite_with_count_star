@@ -38,7 +38,7 @@ INSERT INTO t1 VALUES ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH DEFERRED ASYNC
+REFRESH DEFERRED ON_CHANGE
 as 
 select k1, k2, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, k2;
 -- result:
@@ -46,7 +46,7 @@ select k1, k2, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, k
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv2
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH DEFERRED ASYNC
+REFRESH DEFERRED ON_CHANGE
 as 
 select k1, k2, sum(cnt) as sum_cnt from test_mv1 group by k1, k2;
 -- result:

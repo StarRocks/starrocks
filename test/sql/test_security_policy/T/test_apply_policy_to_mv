@@ -19,7 +19,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
-create materialized view mv distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from t0;
+create materialized view mv distributed by hash(v1) buckets 10 REFRESH ON_CHANGE as select * from t0;
 
 alter materialized view mv modify column v1 set masking policy mp;
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
@@ -48,4 +48,4 @@ PROPERTIES (
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
-create materialized view mv2 distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from test_policy;
+create materialized view mv2 distributed by hash(v1) buckets 10 REFRESH ON_CHANGE as select * from test_policy;

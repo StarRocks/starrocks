@@ -45,7 +45,7 @@ public class MVTransformerContextTest extends MVTestBase  {
 
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 " +
                 "DISTRIBUTED BY HASH(empid) " +
-                "REFRESH ASYNC " +
+                "REFRESH ON_CHANGE " +
                 "AS select empid, deptno from view1");
         Assertions.assertFalse(view1.getRelatedMaterializedViews().isEmpty());
         Assertions.assertTrue(mvTransformerContext.isEnableViewBasedMVRewrite(view1));
@@ -66,7 +66,7 @@ public class MVTransformerContextTest extends MVTestBase  {
 
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 " +
                 "DISTRIBUTED BY HASH(empid) " +
-                "REFRESH ASYNC " +
+                "REFRESH ON_CHANGE " +
                 "AS select empid, deptno from view1");
         Assertions.assertFalse(view1.getRelatedMaterializedViews().isEmpty());
         Assertions.assertFalse(mvTransformerContext.isEnableViewBasedMVRewrite(view1));

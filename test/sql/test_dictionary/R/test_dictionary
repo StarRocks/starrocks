@@ -980,7 +980,7 @@ DROP MATERIALIZED VIEW IF EXISTS test_dictionary_source_mv;
 -- !result
 CREATE MATERIALIZED VIEW test_dictionary_source_mv
 DISTRIBUTED BY HASH(`id1`)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 AS SELECT
     t_dictionary_source_1.id1, t_dictionary_source_1.id2, t_dictionary_source_1.id3,
     t_dictionary_source_2.id4, t_dictionary_source_2.id5, t_dictionary_source_2.id6

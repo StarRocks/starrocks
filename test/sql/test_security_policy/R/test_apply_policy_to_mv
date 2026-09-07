@@ -27,7 +27,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-create materialized view mv distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from t0;
+create materialized view mv distributed by hash(v1) buckets 10 REFRESH ON_CHANGE as select * from t0;
 -- result:
 -- !result
 alter materialized view mv modify column v1 set masking policy mp;
@@ -80,7 +80,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-create materialized view mv2 distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from test_policy;
+create materialized view mv2 distributed by hash(v1) buckets 10 REFRESH ON_CHANGE as select * from test_policy;
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Can't create materialized view with table which has security policy.")
 -- !result

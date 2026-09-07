@@ -96,7 +96,7 @@ public class LakeInformationSchemaDataSourceTest {
 
         String createMvStmtStr = "CREATE MATERIALIZED VIEW db1.mv1 " +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 10 " +
-                "REFRESH ASYNC " +
+                "REFRESH ON_CHANGE " +
                 "AS SELECT k1, k2 " +
                 "FROM db1.tbl1 ";
 

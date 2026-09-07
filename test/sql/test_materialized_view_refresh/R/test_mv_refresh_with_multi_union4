@@ -64,7 +64,7 @@ INSERT INTO u2 (id,dt) VALUES
 CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv1`
 PARTITION BY date_trunc('day', `dt`)
 DISTRIBUTED BY HASH(`dt`)
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS 
     select dt from u1
     union all
@@ -74,7 +74,7 @@ AS
 CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv2`
 PARTITION BY dt
 DISTRIBUTED BY HASH(`dt`)
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS 
 select dt, sum(s_id) as s_id
 from
@@ -88,7 +88,7 @@ from
 CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv3`
 PARTITION BY date_trunc('day', dt) 
 DISTRIBUTED BY HASH(`dt`)
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS 
 select dt, sum(s_id) as s_id
 from
@@ -102,7 +102,7 @@ from
 CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv4`
 PARTITION BY dt
 DISTRIBUTED BY HASH(`dt`)
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS 
 select dt, sum(s_id) as s_id
 from

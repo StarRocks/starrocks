@@ -144,7 +144,7 @@ public class GeneratorTest {
                 "COMMENT \"MV recommended by AutoMV\"\n" +
                 "DISTRIBUTED BY HASH (i_brand) BUCKETS 64\n" +
                 "ORDER BY (i_brand)\n" +
-                "REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
+                "REFRESH SCHEDULE START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
                 "PROPERTIES (\n" +
                 "  \"replicated_storage\" = \"true\",\n" +
                 "  \"session.enable_spill\" = \"true\",\n" +

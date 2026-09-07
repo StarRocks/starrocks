@@ -15,14 +15,14 @@ create materialized view tvd distributed by hash(k) buckets 10
 PROPERTIES (
     "replication_num" = "1"
 )
-REFRESH ASYNC as select k, sum(v) from t1 group by k;
+REFRESH ON_CHANGE as select k, sum(v) from t1 group by k;
 -- result:
 -- !result
 show create materialized view tvd;
 -- result:
 tvd	CREATE MATERIALIZED VIEW `tvd` (`k`, `sum(v)`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replicated_storage" = "true",
 "replication_num" = "1",
@@ -37,14 +37,14 @@ create materialized view tvb distributed by hash(k) buckets 10
 PROPERTIES (
     "replication_num" = "1"
 )
-REFRESH ASYNC as select k, sum(v) from t1 group by k;
+REFRESH ON_CHANGE as select k, sum(v) from t1 group by k;
 -- result:
 -- !result
 show create materialized view tvb;
 -- result:
 tvb	CREATE MATERIALIZED VIEW `tvb` (`k`, `sum(v)`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replicated_storage" = "false",
 "replication_num" = "1",

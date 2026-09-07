@@ -190,10 +190,10 @@ create table t(k int, v int);
 insert into t values(1,1),(1,2);
 -- result:
 -- !result
-create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
+create materialized view tva REFRESH ON_CHANGE as select k, sum(v) from t group by k;
 -- result:
 -- !result
-function: assert_query_contains("show create materialized view tva", "CREATE MATERIALIZED VIEW `tva`", "DISTRIBUTED BY RANDOM", "REFRESH ASYNC")
+function: assert_query_contains("show create materialized view tva", "CREATE MATERIALIZED VIEW `tva`", "DISTRIBUTED BY RANDOM", "REFRESH ON_CHANGE")
 -- result:
 None
 -- !result
@@ -208,7 +208,7 @@ create table t(k int, v int);
 insert into t values(1,1);
 -- result:
 -- !result
-create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
+create materialized view tva REFRESH ON_CHANGE as select k, sum(v) from t group by k;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW tva WITH SYNC MODE;

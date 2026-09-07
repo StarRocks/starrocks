@@ -17,6 +17,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
@@ -292,13 +293,67 @@ public class ShowCreateMaterializedViewStmtTest {
         starRocksAssert.dropMaterializedView(mvName);
     }
 
+    @Test
+    public void testOnChangeAndBareAsyncBothRenderAsOnChange() throws Exception {
+        final String mvName = "test_mv_on_change";
+        starRocksAssert.ddl("drop materialized view if exists " + mvName);
+        // Spelled ASYNC on purpose: this half is the pre-26.2 compatibility path.
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                " DISTRIBUTED BY HASH(`k1`) BUCKETS 3" +
+                " REFRESH ASYNC" +
+                " AS SELECT k1, k2 FROM test.tbl1");
+        MaterializedView mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
+        Assertions.assertTrue(mv.isLoadTriggeredRefresh());
+
+        List<String> ddl = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(mv, ddl, null, null, false, true);
+        Assertions.assertTrue(ddl.get(0).contains("REFRESH ON_CHANGE"),
+                "SHOW CREATE should display ON_CHANGE, got: " + ddl.get(0));
+        Assertions.assertFalse(ddl.get(0).contains("REFRESH ASYNC"),
+                "SHOW CREATE should not display ASYNC, got: " + ddl.get(0));
+        starRocksAssert.dropMaterializedView(mvName);
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                " DISTRIBUTED BY HASH(`k1`) BUCKETS 3" +
+                " REFRESH ON_CHANGE" +
+                " AS SELECT k1, k2 FROM test.tbl1");
+        MaterializedView onChangeMv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
+        Assertions.assertEquals(MaterializedViewRefreshType.ASYNC, onChangeMv.getRefreshScheme().getType());
+        Assertions.assertNull(onChangeMv.getRefreshScheme().getAsyncRefreshContext().getTimeUnit());
+        Assertions.assertTrue(onChangeMv.isLoadTriggeredRefresh());
+
+        ddl.clear();
+        AstToStringBuilder.getDdlStmt(onChangeMv, ddl, null, null, false, true);
+        Assertions.assertTrue(ddl.get(0).contains("REFRESH ON_CHANGE"),
+                "SHOW CREATE should display ON_CHANGE, got: " + ddl.get(0));
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testDeferredOnChangeKeepsRefreshMoment() throws Exception {
+        final String mvName = "test_mv_deferred_on_change";
+        starRocksAssert.ddl("drop materialized view if exists " + mvName);
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                " DISTRIBUTED BY HASH(`k1`) BUCKETS 3" +
+                " REFRESH DEFERRED ON_CHANGE" +
+                " AS SELECT k1, k2 FROM test.tbl1");
+        MaterializedView mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
+        Assertions.assertEquals(MaterializedView.RefreshMoment.DEFERRED, mv.getRefreshScheme().getMoment());
+        Assertions.assertTrue(mv.isLoadTriggeredRefresh());
+
+        List<String> ddl = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(mv, ddl, null, null, false, true);
+        Assertions.assertTrue(ddl.get(0).contains("REFRESH DEFERRED ON_CHANGE"),
+                "SHOW CREATE should display DEFERRED ON_CHANGE, got: " + ddl.get(0));
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
     public static Stream<Arguments> genTestArguments() {
-        // Bare ASYNC (without EVERY) is the legacy form retained for backward compatibility;
-        // SCHEDULE is the preferred keyword for scheduled refresh and requires EVERY.
+        // ON_CHANGE and SCHEDULE are the two preferred forms; SCHEDULE requires EVERY.
         List<String> refreshArgumentsList = Lists.newArrayList(
                 "REFRESH MANUAL",
                 "REFRESH DEFERRED MANUAL",
-                "REFRESH ASYNC",
+                "REFRESH ON_CHANGE",
                 "REFRESH SCHEDULE EVERY(INTERVAL 1 HOUR)",
                 "REFRESH SCHEDULE START(\"1998-01-01 00:00:00\") EVERY(INTERVAL 1 HOUR)"
         );

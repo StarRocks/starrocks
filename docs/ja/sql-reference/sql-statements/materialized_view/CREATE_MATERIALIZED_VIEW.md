@@ -167,7 +167,9 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC | SCHEDULE [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
+    [ON_CHANGE
+     | [ASYNC | SCHEDULE] [START (<start_time>)] EVERY (INTERVAL <refresh_interval>)
+     | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -252,7 +254,7 @@ AS
 
 非同期マテリアライズドビューのリフレッシュ戦略。有効な値:
 
-- `ASYNC`: 自動リフレッシュモード。ベーステーブルデータが変更されるたびに、マテリアライズドビューが自動的にリフレッシュされます。
+- `ON_CHANGE`: ベーステーブル変更トリガーモード。ベーステーブルデータが変更されるたびに、マテリアライズドビューが自動的にリフレッシュされます。互換性のため `ASYNC`（`EVERY` なし）も引き続き受け付けますが、`SHOW CREATE MATERIALIZED VIEW` の出力は常に `ON_CHANGE` で表示されます。
 - `SCHEDULE [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定期リフレッシュモード。定義された間隔でマテリアライズドビューが定期的にリフレッシュされます。間隔は`EVERY (interval n day/hour/minute/second)`として指定できます。使用可能な単位は`DAY`、`HOUR`、`MINUTE`、`SECOND`です。デフォルト値は`10 MINUTE`です。リフレッシュ開始時間を`START('yyyy-MM-dd hh:mm:ss')`としてさらに指定できます。開始時間が指定されていない場合、現在の時間が使用されます。例: `SCHEDULE START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。互換性のため `ASYNC [START (...)] EVERY (...)` も引き続き受け付けますが、`SHOW CREATE MATERIALIZED VIEW` の出力は常に `SCHEDULE` で表示されます。
 - `MANUAL`: 手動リフレッシュモード。リフレッシュタスクを手動でトリガーしない限り、マテリアライズドビューはリフレッシュされません。
 
@@ -880,7 +882,7 @@ PROPERTIES (
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
 ORDER BY (`lo_custkey`)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 AS
 select
     lo_orderkey, 
@@ -900,7 +902,7 @@ CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
 ORDER BY (`lo_custkey`)
-REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
     lo_orderkey,
@@ -917,7 +919,7 @@ group by lo_orderkey, lo_orderdate, lo_custkey;
 CREATE MATERIALIZED VIEW order_mv1
 PARTITION BY date_trunc('month', `dt`)
 DISTRIBUTED BY HASH(`order_id`)
-REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
     dt,
@@ -1090,7 +1092,7 @@ CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
 ORDER BY (`lo_custkey`)
-REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
     lo_orderkey,

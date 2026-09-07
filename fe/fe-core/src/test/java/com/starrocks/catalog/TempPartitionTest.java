@@ -758,7 +758,7 @@ public class TempPartitionTest extends StarRocksTestBase {
                         "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
                         "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("CREATE MATERIALIZED VIEW db_mv_replace.mv_base\n" +
-                        "REFRESH ASYNC AS\n" +
+                        "REFRESH ON_CHANGE AS\n" +
                         "SELECT k1, v1 FROM db_mv_replace.base_tbl;");
 
         ctx.setDatabase("db_mv_replace");
@@ -798,7 +798,7 @@ public class TempPartitionTest extends StarRocksTestBase {
                         "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
                         "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("CREATE MATERIALIZED VIEW db_mv_exclude.mv_excluded\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"excluded_trigger_tables\" = \"base_tbl\"\n" +
                         ")\n" +

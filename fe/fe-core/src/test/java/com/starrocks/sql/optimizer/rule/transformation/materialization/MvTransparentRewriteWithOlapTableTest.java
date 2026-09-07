@@ -1317,7 +1317,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                     "'2025-01-20 05:17:02', '1', '1');");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
                             "PARTITION BY (data_date)\n" +
-                            "REFRESH DEFERRED ASYNC\n" +
+                            "REFRESH DEFERRED ON_CHANGE\n" +
                             "PROPERTIES (\n" +
                             "\"partition_refresh_number\" = \"1\",\n" +
                             "\"transparent_mv_rewrite_mode\" = \"true\"\n" +

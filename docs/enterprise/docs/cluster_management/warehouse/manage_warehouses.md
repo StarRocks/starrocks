@@ -403,7 +403,7 @@ You can set the warehouse for the refresh task of materialized views by declarin
 ```SQL
 CREATE MATERIALIZED VIEW order_mv
 DISTRIBUTED BY HASH(`order_id`)
-REFRESH ASYNC EVERY (interval 1 MINUTE) 
+REFRESH SCHEDULE EVERY (interval 1 MINUTE) 
 PROPERTIES ("warehouse" = "wh1")
 AS SELECT 
     order_list.order_id,

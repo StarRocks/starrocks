@@ -60,7 +60,7 @@ INSERT INTO t2 VALUES
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY date_trunc('day', `k1`)
 DISTRIBUTED BY HASH(`k1`)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 as 
 select * from t1
 union all
@@ -88,7 +88,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY date_trunc('day', `k1`)
 DISTRIBUTED BY HASH(`k1`)
-REFRESH DEFERRED ASYNC
+REFRESH DEFERRED ON_CHANGE
 as 
 select * from t1
 union all
@@ -112,7 +112,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH DEFERRED ASYNC
+REFRESH DEFERRED ON_CHANGE
 as 
 select * from t1
 union all
@@ -136,7 +136,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH DEFERRED ASYNC
+REFRESH DEFERRED ON_CHANGE
 as 
 select * from t1
 union all
@@ -155,7 +155,7 @@ drop materialized view test_mv1;
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
-REFRESH DEFERRED ASYNC
+REFRESH DEFERRED ON_CHANGE
 as 
     select t1.k1, t1.k2 as k12, concat(t1.k3, '[', t1.k4, ']') as v1, t1.k9 as k19 from t1 join t2 on t1.k1=t2.k1
     union all

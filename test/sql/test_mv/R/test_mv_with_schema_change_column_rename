@@ -33,7 +33,7 @@ INSERT INTO duplicate_table_with_null_partition VALUES
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 PARTITION BY k1 
 DISTRIBUTED BY HASH(k1) BUCKETS 10
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS SELECT k1, count(k2) as count_datetime, min(k3) as min_char, max(k4) as max_varchar, sum(k5) as sum_boolean, avg(k6) as avg_tinyint FROM duplicate_table_with_null_partition GROUP BY k1;
 -- result:
 -- !result

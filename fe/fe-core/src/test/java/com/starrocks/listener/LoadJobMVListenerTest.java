@@ -65,7 +65,7 @@ public class LoadJobMVListenerTest extends MVTestBase {
                 ")\n" +
                 "DUPLICATE KEY(k1);");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lt_mv1\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS select sum(k1), k2, k3 from lt_base_t1 group by k2, k3;");
         MaterializedView mv = getMv("lt_mv1");
         mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
@@ -86,7 +86,7 @@ public class LoadJobMVListenerTest extends MVTestBase {
                 ")\n" +
                 "DUPLICATE KEY(k1);");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lt_mv2\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS select sum(k1), k2, k3 from lt_base_t2 group by k2, k3;");
         MaterializedView mv = getMv("lt_mv2");
         // A reason that is NOT in MVActiveChecker's non-auto-activatable set -- retry should still
@@ -109,7 +109,7 @@ public class LoadJobMVListenerTest extends MVTestBase {
                 ")\n" +
                 "DUPLICATE KEY(k1);");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lt_mv3\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS select sum(k1), k2, k3 from lt_base_t3 group by k2, k3;");
 
         AtomicInteger callCount = mockRefreshCallCount();

@@ -137,7 +137,7 @@ public class MvRewriteJoinTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "AS SELECT a.k1, a.v1, a.v2, b.v1 as b_v1\n" +
                         "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b on a.k1=b.k1;");
         // should not be rollup
@@ -187,7 +187,7 @@ public class MvRewriteJoinTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "AS SELECT a.k1, a.v1, a.v2, b.v1 as b_v1, sum(a.v1) as sum_v1 " +
                         "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b on a.k1=b.k1 " +
                         "group by a.k1, a.v1, a.v2, b.v1;");
@@ -242,13 +242,13 @@ public class MvRewriteJoinTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl1_colocate_mv1\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC PROPERTIES ('colocate_with' = 'cg_1')\n" +
+                        "REFRESH ON_CHANGE PROPERTIES ('colocate_with' = 'cg_1')\n" +
                         "AS SELECT v2 + 1, k1, v1, v2 FROM test_partition_tbl1;");
 
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl1_colocate_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC PROPERTIES ('colocate_with' = 'cg_1')\n" +
+                        "REFRESH ON_CHANGE PROPERTIES ('colocate_with' = 'cg_1')\n" +
                         "AS SELECT v2 + 1, k1, v1, v2 + 2 FROM test_partition_tbl1 where v1 > 1 ;");
 
         String query = "select t1.v2 + 1, t2.v2 + 1 from test_partition_tbl1 t1 join " +
@@ -411,7 +411,7 @@ public class MvRewriteJoinTest extends MVTestBase {
 
         createAndRefreshMv("CREATE MATERIALIZED VIEW mv_s026\n" +
                 "DISTRIBUTED BY HASH(dt) BUCKETS 4\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES('replication_num'='1')\n" +
                 "AS SELECT a.dt, a.region, SUM(b.amount) AS total_amount, COUNT(*) AS cnt\n" +
                 "FROM t1_s026 a FULL OUTER JOIN t2_s026 b ON a.id = b.id\n" +

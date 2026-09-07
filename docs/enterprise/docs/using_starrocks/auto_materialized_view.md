@@ -142,7 +142,7 @@ Return:
 COMMENT "MV recommended by AutoMV"
 DISTRIBUTED BY HASH (lo_discount, lo_quantity, d_year, d_weeknuminyear, d_yearmonthnum) BUCKETS 64
 ORDER BY (lo_discount, lo_quantity, d_year)
-REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "replicated_storage" = "true",
   "session.enable_spill" = "true",
@@ -509,7 +509,7 @@ SHOW RECOMMENDATIONS FROM ts1 LIMIT 1\G
 COMMENT "MV recommended by AutoMV"
 DISTRIBUTED BY HASH (lo_discount, lo_quantity, d_year, d_weeknuminyear, d_yearmonthnum) BUCKETS 64
 ORDER BY (lo_discount, lo_quantity, d_year)
-REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "replicated_storage" = "true",
   "storage_medium" = "HDD",
@@ -614,7 +614,7 @@ SHOW RECOMMENDATIONS FROM ts2 LIMIT 1\G
 COMMENT "MV recommended by AutoMV"
 DISTRIBUTED BY HASH (lo_discount, lo_quantity, d_year, d_weeknuminyear, d_yearmonthnum) BUCKETS 64
 ORDER BY (lo_discount, lo_quantity, d_year)
-REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "replicated_storage" = "true",
   "storage_medium" = "HDD",
@@ -681,7 +681,7 @@ CREATE MATERIALIZED VIEW _mv_3f05a0e6f04a36bd61254f443081acaa7b0633b4 (
 COMMENT "MV recommended by AutoMV"
 DISTRIBUTED BY HASH (lo_discount, lo_quantity, d_year, d_weeknuminyear, d_yearmonthnum) BUCKETS 64
 ORDER BY (lo_discount, lo_quantity, d_year)
-REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "replicated_storage" = "true",
   "storage_medium" = "HDD",
@@ -770,7 +770,7 @@ SHOW RECOMMENDATIONS FROM ts3 LIMIT 1\G
 COMMENT "MV recommended by AutoMV"
 DISTRIBUTED BY HASH (lo_discount, lo_quantity, d_year, d_weeknuminyear, d_yearmonthnum) BUCKETS 64
 ORDER BY (lo_discount, lo_quantity, d_year)
-REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "replicated_storage" = "true",
   "storage_medium" = "HDD",
@@ -882,7 +882,7 @@ SHOW RECOMMENDATIONS FROM ts4 LIMIT 1\G
 COMMENT "MV recommended by AutoMV"
 DISTRIBUTED BY HASH (lo_discount, lo_quantity, d_year, d_weeknuminyear, d_yearmonthnum) BUCKETS 64
 ORDER BY (lo_discount, lo_quantity, d_year)
-REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "replicated_storage" = "true",
   "storage_medium" = "HDD",

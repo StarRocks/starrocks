@@ -2144,13 +2144,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (refreshScheme == null) {
             sb.append("\nREFRESH ").append("UNKNOWN");
         } else {
-            // Prefer the SCHEDULE keyword for scheduled refresh (ASYNC + EVERY). ASYNC is kept
-            // as the legacy synonym in the parser; for bare ASYNC (no EVERY) we still emit
-            // ASYNC because bare SCHEDULE is not a valid form.
+            // Must stay parseable by the current grammar: AlterJobMgr.recreateMVQuery renders the MV
+            // back to DDL and re-parses it when activating, driven by the MVActiveChecker daemon.
             String typeName = refreshScheme.getType().name();
-            if (refreshScheme.getType() == MaterializedViewRefreshType.ASYNC
-                    && refreshScheme.getAsyncRefreshContext().getTimeUnit() != null) {
-                typeName = "SCHEDULE";
+            if (refreshScheme.getType() == MaterializedViewRefreshType.ASYNC) {
+                typeName = refreshScheme.getAsyncRefreshContext().getTimeUnit() != null
+                        ? "SCHEDULE" : "ON_CHANGE";
             }
             if (refreshScheme.getMoment().equals(RefreshMoment.DEFERRED)) {
                 sb.append(String.format("\nREFRESH %s %s", refreshScheme.getMoment(), typeName));

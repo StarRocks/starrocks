@@ -10019,8 +10019,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else if (context.IMMEDIATE() != null) {
             refreshMoment = RefreshSchemeClause.RefreshMoment.IMMEDIATE;
         }
-        // SCHEDULE is the preferred keyword; ASYNC is kept as a synonym for compatibility.
-        if (context.ASYNC() != null || context.SCHEDULE() != null) {
+        // SCHEDULE / ON_CHANGE are the preferred keywords; ASYNC is the legacy synonym for both.
+        if (context.ASYNC() != null || context.SCHEDULE() != null || context.ON_CHANGE() != null) {
             boolean defineStartTime = false;
             if (context.START() != null) {
                 NodePosition timePos = createPos(context.string());

@@ -258,7 +258,7 @@ public class LocalMetastoreLakeBookmarkTest extends BookmarkTestBase {
         String mvName = "mv_" + NAME_COUNTER.getAndIncrement();
         String ddl = "CREATE MATERIALIZED VIEW " + inDb + "." + mvName + "\n"
                 + "DISTRIBUTED BY HASH(k) BUCKETS 1\n"
-                + "REFRESH ASYNC\n"
+                + "REFRESH ON_CHANGE\n"
                 + "PROPERTIES (\"replication_num\" = \"1\")\n"
                 + "AS SELECT k, dt FROM " + inDb + "." + base.getName() + ";";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(ddl, connectContext);

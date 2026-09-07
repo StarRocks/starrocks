@@ -86,7 +86,7 @@ public class InfoSchemaDbTest {
         starRocksAssert.withTable("create table db.tbl " + createTblStmtStr);
         starRocksAssert.withView("create view db.v as select * from db.tbl");
         starRocksAssert.withMaterializedView(
-                "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
+                "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ON_CHANGE as select * from db.tbl");
 
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
         GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgrEPack(new AuthorizationProviderEPack()));

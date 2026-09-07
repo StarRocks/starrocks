@@ -2791,7 +2791,7 @@ public class AlterTest {
                     .withMaterializedView("CREATE MATERIALIZED VIEW `mv2` (a comment \"a1\", b comment \"b2\", c)\n" +
                                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                                 "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
-                                "REFRESH ASYNC\n" +
+                                "REFRESH ON_CHANGE\n" +
                                 "PROPERTIES (\n" +
                                 "\"replication_num\" = \"1\",\n" +
                                 "\"replicated_storage\" = \"true\",\n" +

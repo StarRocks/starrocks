@@ -538,7 +538,7 @@ GROUP BY lo_orderkey, c_name;
 ```SQL
 CREATE MATERIALIZED VIEW order_agg_mv1
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
-REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2022-09-01 10:00:00') EVERY (interval 1 day)
 AS
 SELECT
     order_date,

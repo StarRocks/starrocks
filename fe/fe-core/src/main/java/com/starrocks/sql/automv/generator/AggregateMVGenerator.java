@@ -99,7 +99,7 @@ public class AggregateMVGenerator {
         //TODO(by satanson): At AutoMV-L2 stage, it is hard to infer a robust mv refresh policy, so
         // MV expert should specify one. in future (since AutoMV-L3 stage), a sophisticated refresh
         // policy will be developed.
-        mvSchema.add("REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)").newLine();
+        mvSchema.add("REFRESH SCHEDULE START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)").newLine();
         Optional<String> optCollocateGroup = optCollocateBucketKey.map(ignored -> mvName);
         mvSchema.addSuperStep(PropertiesPolicy.getProperties(aggPiece, columnAliases, optPartitionExpr.isPresent(),
                 optCollocateGroup, dist.first));

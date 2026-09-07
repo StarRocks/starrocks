@@ -31,7 +31,7 @@ public class MvRewriteEnumerateTest extends MVTestBase {
         starRocksAssert.useTable("json_tbl");
         createAndRefreshMv("CREATE MATERIALIZED VIEW IF NOT EXISTS `mv_array`\n" +
                 "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "SELECT \n" +
                 "    get_json_string(`d_user`, 'region') AS `region`, \n" +
@@ -52,7 +52,7 @@ public class MvRewriteEnumerateTest extends MVTestBase {
         starRocksAssert.useTable("json_tbl");
         createAndRefreshMv("CREATE MATERIALIZED VIEW IF NOT EXISTS `mv_array`\n" +
                 "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "SELECT \n" +
                 "    get_json_string(`d_user`, 'region') AS `region`, \n" +

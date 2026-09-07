@@ -1,15 +1,15 @@
 -- name: test_ivm_auto_refresh_on_retraction_dml @cloud
 -- lifecycle/multi_mv's test_ivm_auto_refresh_fanout covers auto-refresh on INSERT. A retraction DML
 -- has to reach the same trigger: a DELETE and an UPDATE must each wake the MV exactly once, and the
--- MV must land correct afterwards. Auto-refresh only happens on REFRESH ASYNC -- a DEFERRED MANUAL MV
--- never self-refreshes, so this drives ASYNC and counts refreshes instead of issuing REFRESH.
+-- MV must land correct afterwards. Auto-refresh only happens on REFRESH ON_CHANGE -- a DEFERRED MANUAL MV
+-- never self-refreshes, so this drives ON_CHANGE and counts refreshes instead of issuing REFRESH.
 CREATE TABLE afr_pk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 2
 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO afr_pk VALUES (1,10),(2,20),(3,30);
 CREATE MATERIALIZED VIEW mv_afr
 DISTRIBUTED BY HASH(id) BUCKETS 2
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT id, v FROM afr_pk;
 function: wait_mv_refresh_count("${db[0]}", "mv_afr", 1)

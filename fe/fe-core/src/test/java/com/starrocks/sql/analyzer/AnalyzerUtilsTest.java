@@ -86,7 +86,7 @@ public class AnalyzerUtilsTest {
                         "\"replication_num\" = \"1\"\n" +
                         ");")
                 .withView("CREATE VIEW relation_view AS SELECT k1 FROM relation_src;")
-                .withMaterializedView("CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS " +
+                .withMaterializedView("CREATE MATERIALIZED VIEW mv1 REFRESH ON_CHANGE AS " +
                         "SELECT * FROM bill_detail;");
     }
 

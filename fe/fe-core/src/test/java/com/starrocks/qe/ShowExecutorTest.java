@@ -615,7 +615,7 @@ public class ShowExecutorTest {
                 "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
                 "PARTITION BY (`col1`)\n" +
                 "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES (\n" +
                 "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\",\n" +
                 "\"storage_medium\" = \"SSD\"\n" +

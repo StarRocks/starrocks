@@ -42,7 +42,7 @@ db_a832548c24ca415286ad6c9c05ba293f_2.t1	analyze	status	OK
 -- !result
 CREATE MATERIALIZED VIEW mv1
 DISTRIBUTED BY HASH(k1) BUCKETS 10
-REFRESH ASYNC
+REFRESH ON_CHANGE
 AS SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4
 FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1;
 -- result:

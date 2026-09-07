@@ -529,7 +529,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
                     "PROPERTIES (\n" +
                     "\"partition_refresh_number\" = \"10\"\n" +
                     ")\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS SELECT\n" +
                     "item_id1,\n" +
                     "sum(price) as total\n" +
@@ -1423,7 +1423,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
                 .withMaterializedView("CREATE MATERIALIZED VIEW mv_db.mv_cross_db_test \n" +
                         "PARTITION BY (k1)\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES('replication_num' = '1')\n" +
                         "AS SELECT k1, k2 FROM mv_db.base_t1;");
 

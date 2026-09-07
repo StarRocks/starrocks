@@ -165,7 +165,9 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC | SCHEDULE [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
+    [ON_CHANGE
+     | [ASYNC | SCHEDULE] [START (<start_time>)] EVERY (INTERVAL <refresh_interval>)
+     | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -248,7 +250,7 @@ AS
 
 物化视图的刷新方式。该参数支持如下值：
 
-- `ASYNC`: 自动刷新模式。每当基表数据发生变化时，物化视图会自动刷新。
+- `ON_CHANGE`: 基表变更触发模式。每当基表数据发生变化时，物化视图会自动刷新。为兼容旧版本，`ASYNC`（不带 `EVERY`）仍然被接受，但 `SHOW CREATE MATERIALIZED VIEW` 输出该模式时始终使用 `ON_CHANGE`。
 - `SCHEDULE [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定时刷新模式。物化视图将按照定义的间隔定时刷新。您可以使用 `DAY`（天）、`HOUR`（小时）、`MINUTE`（分钟）和 `SECOND`（秒）作为单位指定间隔，格式为 `EVERY (interval n day/hour/minute/second)`。默认值为 `10 MINUTE`（10 分钟）。您还可以进一步指定刷新起始时间，格式为 `START('yyyy-MM-dd hh:mm:ss')`。如未指定起始时间，默认使用当前时间。示例：`SCHEDULE START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。为兼容旧版本，`ASYNC [START (...)] EVERY (...)` 仍然被接受，但 `SHOW CREATE MATERIALIZED VIEW` 输出的定时刷新部分始终使用 `SCHEDULE`。
 - `MANUAL`: 手动刷新模式。除非手动触发刷新任务，否则物化视图不会刷新。
 
@@ -866,7 +868,7 @@ PROPERTIES (
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
 ORDER BY (`lo_custkey`)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 AS
 select
     lo_orderkey, 
@@ -886,7 +888,7 @@ CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
 ORDER BY (`lo_custkey`)
-REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
     lo_orderkey,
@@ -904,7 +906,7 @@ group by lo_orderkey, lo_orderdate, lo_custkey;
 CREATE MATERIALIZED VIEW order_mv1
 PARTITION BY date_trunc('month', `dt`)
 DISTRIBUTED BY HASH(`order_id`)
-REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
     dt,
@@ -1076,7 +1078,7 @@ CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
 ORDER BY (`lo_custkey`)
-REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
     lo_orderkey,

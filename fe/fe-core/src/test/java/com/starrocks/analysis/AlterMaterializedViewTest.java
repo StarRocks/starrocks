@@ -145,17 +145,17 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         MaterializedView mv = starRocksAssert.getMv("test", mvName);
         String taskDefinition = mv.getTaskDefinition();
         for (String refresh : refreshSchemes) {
-            // alter — ASYNC is kept as a legacy synonym; SCHEDULE is the preferred keyword
-            // for the EVERY form and is what SHOW CREATE displays.
+            // Inputs stay spelled ASYNC on purpose: this asserts the legacy synonym still
+            // parses on the ALTER path.
             String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
             starRocksAssert.ddl(sql);
 
             mv = starRocksAssert.getMv("test", mvName);
             String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
-            // SHOW CREATE rewrites "ASYNC ... EVERY ..." to "SCHEDULE ... EVERY ..." but leaves
-            // bare ASYNC (no EVERY) unchanged.
-            String expected = refresh.contains("EVERY")
-                    ? refresh.replaceFirst("^ASYNC", "SCHEDULE")
+            // SHOW CREATE always renders the preferred keyword: SCHEDULE for the EVERY form,
+            // ON_CHANGE for bare ASYNC.
+            String expected = refresh.startsWith("ASYNC")
+                    ? refresh.replaceFirst("^ASYNC", refresh.contains("EVERY") ? "SCHEDULE" : "ON_CHANGE")
                     : refresh;
             Assertions.assertTrue(showCreateStmt.contains(expected),
                     String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt));
@@ -359,7 +359,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.withView("CREATE VIEW view1 as select v1, sum(v2) as k2 from t0 group by v1");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
                 "                DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
-                "                REFRESH DEFERRED ASYNC\n" +
+                "                REFRESH DEFERRED ON_CHANGE\n" +
                 "                PROPERTIES(\n" +
                 "                    \"replication_num\" = \"1\"\n" +
                 "                )\n" +

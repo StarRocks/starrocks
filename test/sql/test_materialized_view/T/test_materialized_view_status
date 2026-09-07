@@ -23,7 +23,7 @@ insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),(
 CREATE MATERIALIZED VIEW mv1
                PARTITION BY k1
                DISTRIBUTED BY HASH(k1) BUCKETS 10
-               REFRESH ASYNC
+               REFRESH ON_CHANGE
                AS SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
 drop table t1;
 

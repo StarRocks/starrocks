@@ -333,7 +333,7 @@ public class AlterMaterializedViewTest extends MVTestBase {
                 "PROPERTIES('replication_num' = '1');");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
@@ -402,7 +402,7 @@ public class AlterMaterializedViewTest extends MVTestBase {
                 "PROPERTIES('replication_num' = '1');");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_add_drop_col1\n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
@@ -492,7 +492,7 @@ public class AlterMaterializedViewTest extends MVTestBase {
                 "PROPERTIES('replication_num' = '1');");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_uid_test\n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
