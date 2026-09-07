@@ -908,10 +908,15 @@ void OlapChunkSource::_update_counter() {
     // Data sampling
     if (_params.sample_options.enable_sampling) {
         _runtime_profile->add_info_string("SampleMethod", to_string(_params.sample_options.sample_method));
+<<<<<<< HEAD
         _runtime_profile->add_info_string("SamplePercent",
                                           std::to_string(_params.sample_options.probability_percent) + "%");
         COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", parent_name),
                        _reader->stats().sample_population_size);
+=======
+        _runtime_profile->add_info_string("SamplePercent", std::to_string(sample_percent) + "%");
+        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", parent_name), _reader->stats().sample_time_ns);
+>>>>>>> a789af9 ([BugFix] Report elapsed time in the scan SampleTime counter (#78732))
         COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleBuildHistogramTime", parent_name),
                        _reader->stats().sample_build_histogram_time_ns);
         COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SampleSize", TUnit::UNIT, parent_name),
