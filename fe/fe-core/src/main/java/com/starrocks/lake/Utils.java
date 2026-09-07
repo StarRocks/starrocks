@@ -218,7 +218,7 @@ public class Utils {
                                       boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
         publishVersion(tablets, txnInfo, baseVersion, newVersion, compactionScores, tabletRanges, computeResource,
-                tabletStats, useAggregatePublish, vectorIndexBuildInfos, false);
+                tabletStats, useAggregatePublish, false);
     }
 
     /**
@@ -232,7 +232,6 @@ public class Utils {
                                       Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
                                       Map<Long, TabletStatPB> tabletStats,
                                       boolean useAggregatePublish,
-                                      List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                       boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
@@ -241,12 +240,7 @@ public class Utils {
                     compactionScores, tabletRanges, null, computeResource, tabletStats);
         } else {
             aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores,
-<<<<<<< HEAD
-                    tabletRanges, null, computeResource, tabletStats);
-=======
-                    tabletRanges, null, computeResource, tabletStats, vectorIndexBuildInfos,
-                    preferSharedInitialMetadata);
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
+                    tabletRanges, null, computeResource, tabletStats, preferSharedInitialMetadata);
         }
     }
 
@@ -295,31 +289,6 @@ public class Utils {
         return computeNode;
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Whether this aggregate request publishes an UNSHARE compaction -- the publish that retires a
-     * split's parent view, and therefore the one that must not be handed parent metadata to build.
-     *
-     * <p>The marker comes from the persisted transaction attachment rather than the scheduler's
-     * in-memory job map, so it stays correct when a committed UNSHARE transaction is published by a new
-     * FE leader.
-     *
-     * <p>Read across every batch already in the request, not only the one being added. One request can
-     * be filled twice ({@code PublishVersionDaemon#aggregatePublishWithCarryForward}), both batches
-     * share a single {@code parentTabletPublishInfos} list, and the carry-forward batch carries
-     * synthetic {@code TXN_EMPTY} infos that do not repeat the marker -- so a per-batch answer would let
-     * the second batch re-attach the parent view the first one correctly withheld.
-     */
-    @VisibleForTesting
-    static boolean publishesUnshareCompaction(List<TxnInfoPB> txnInfos, List<PublishVersionRequest> publishReqs) {
-        return Optional.ofNullable(txnInfos).orElseGet(List::<TxnInfoPB>of).stream()
-                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()))
-                || Optional.ofNullable(publishReqs).orElseGet(List::<PublishVersionRequest>of).stream()
-                .flatMap(req -> Optional.ofNullable(req.getTxnInfos()).orElseGet(List::<TxnInfoPB>of).stream())
-                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()));
-    }
-
     /**
      * Whether every tablet of {@code partition} resolves its {@code baseVersion} metadata from the
      * single partition-shared initial-metadata object (tablet id 0) instead of its own per-tablet key.
@@ -357,7 +326,6 @@ public class Utils {
                 && partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size() == 1;
     }
 
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
     public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                                            long baseVersion, long newVersion,
                                                            Map<ComputeNode, List<Long>> nodeToTablets,
@@ -560,7 +528,7 @@ public class Utils {
                                                Map<Long, TabletStatPB> tabletStats)
             throws NoAliveBackendException, RpcException {
         aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores, tabletRanges,
-                nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos, false);
+                nodeToTablets, computeResource, tabletStats, false);
     }
 
     /**
@@ -575,7 +543,6 @@ public class Utils {
                                                Map<ComputeNode, List<Long>> nodeToTablets,
                                                ComputeResource computeResource,
                                                Map<Long, TabletStatPB> tabletStats,
-                                               List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                                boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();

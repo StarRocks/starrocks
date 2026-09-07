@@ -183,12 +183,7 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-<<<<<<< HEAD
-                                            bool skip_write_tablet_metadata) {
-=======
-                                            bool skip_write_tablet_metadata, int64_t fe_built_version,
-                                            InitialMetadataOrder base_version_order) {
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
+                                            bool skip_write_tablet_metadata, InitialMetadataOrder base_version_order) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;

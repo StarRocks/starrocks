@@ -333,13 +333,8 @@ public class SplitTabletJobTest {
                                        long baseVersion, long newVersion, Map<Long, Double> compactionScores,
                                        Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
-<<<<<<< HEAD
-                                       boolean useAggregatePublish) {
-=======
                                        boolean useAggregatePublish,
-                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                        boolean preferSharedInitialMetadata) {
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
                 actualResource.set(computeResource);
                 actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }
@@ -410,7 +405,6 @@ public class SplitTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
-                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                        boolean preferSharedInitialMetadata) {
                 actualBaseVersion.set(baseVersion);
                 actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);

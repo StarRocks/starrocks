@@ -652,16 +652,12 @@ public class PublishVersionDaemonTest {
 
         PublishVersionDaemon.aggregatePublishWithCarryForward(touched, txnInfos, carryForward,
                 4L, 6L, null, WarehouseManager.DEFAULT_RESOURCE, new java.util.HashMap<>(),
-<<<<<<< HEAD
-                new java.util.HashMap<>());
-=======
-                new java.util.HashMap<>(), new ArrayList<>(), true);
+                new java.util.HashMap<>(), true);
 
         // The version-1 layout hint must reach BOTH batches: the carry-forward tablets belong to the
         // same physical partition, so a hint that covered only the touched tablets would leave them
         // probing a per-tablet key that was never written.
         Assertions.assertEquals(List.of(true, true), capturedPreferSharedInitialMetadata);
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
 
         // Exactly two sub-requests, both attached to the SAME request, sent exactly once.
         Assertions.assertEquals(2, capturedRequests.size());

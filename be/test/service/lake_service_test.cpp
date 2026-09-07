@@ -22,15 +22,12 @@
 
 #include <algorithm>
 #include <atomic>
-<<<<<<< HEAD
-=======
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"

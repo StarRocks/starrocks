@@ -532,13 +532,8 @@ public class MergeTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
-<<<<<<< HEAD
-                                       boolean useAggregatePublish) throws Exception {
-=======
                                        boolean useAggregatePublish,
-                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                        boolean preferSharedInitialMetadata) throws Exception {
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
                 throw new RuntimeException("mock");
             }
         };
@@ -572,13 +567,8 @@ public class MergeTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
-<<<<<<< HEAD
-                                       boolean useAggregatePublish) {
-=======
                                        boolean useAggregatePublish,
-                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                        boolean preferSharedInitialMetadata) {
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
                 actualResource.set(computeResource);
                 actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }

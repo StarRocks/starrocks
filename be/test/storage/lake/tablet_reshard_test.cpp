@@ -11623,9 +11623,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_stamps_
     EXPECT_EQ(new_version, out_sst.generation_version()) << "rebuilt (new) file must carry the merge version";
 }
 
-<<<<<<< HEAD
 // =============================================================================
-=======
+
 // A reshard of a partition still at version 1 -- an empty `file_bundling` partition pre-split ahead
 // of its first load -- reads old-tablet metadata that exists only in the partition-shared version-1
 // object. With FE's hint threaded through publish_resharding_tablet(), that read goes straight to the
@@ -11682,5 +11681,4 @@ TEST_F(LakeTabletReshardTest, publish_resharding_tablet_shared_first_skips_per_t
     EXPECT_EQ(1, count_ending_with(lake::tablet_initial_metadata_filename()));
 }
 
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
 } // namespace starrocks

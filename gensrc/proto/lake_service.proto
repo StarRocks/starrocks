@@ -44,12 +44,6 @@ message PublishVersionRequest {
     // 1. The split or merge tablet transaction, in which the txn type in txn_infos is TXN_TABLET_RESHARD.
     // 2. The nornal write transaction but need cross-publish during tablet splitting or merging.
     repeated ReshardingTabletInfoPB resharding_tablet_infos = 10;
-<<<<<<< HEAD
-=======
-    // Async vector index build: tablet_id -> builtVersion from FE pending set.
-    // BE writes max(pre_metadata_bv, this_value) into new metadata to prevent stale FE values
-    // from overwriting the real watermark after FE leader change.
-    map<int64, int64> tablet_built_versions = 11;
     // Lookup-order HINT for this request's |base_version| metadata reads, not a statement about what
     // storage holds: when set, try the single partition-shared initial-metadata object (tablet id 0)
     // before the tablet's own per-tablet key. Either order resolves the metadata, because whichever is
@@ -74,7 +68,6 @@ message PublishVersionRequest {
     // never reach another index's tablets. Absent from an older FE, which simply keeps the default
     // order.
     optional bool prefer_shared_initial_metadata = 12;
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
 }
 
 // Per-tablet stats returned by the lake publish RPC. The FE also reuses this as a plain in-process

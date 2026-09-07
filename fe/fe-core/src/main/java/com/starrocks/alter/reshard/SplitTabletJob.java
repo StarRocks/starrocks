@@ -615,11 +615,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
-<<<<<<< HEAD
-                    computeResource, null, useAggregatePublish);
-=======
-                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos, preferSharedInitialMetadata);
->>>>>>> 6f66ce9 ([BugFix] Read lake version-1 metadata from the partition-shared object (#78731))
+                    computeResource, null, useAggregatePublish, preferSharedInitialMetadata);
 
             return tabletRange;
         } catch (Exception e) {
