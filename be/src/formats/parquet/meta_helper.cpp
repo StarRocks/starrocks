@@ -86,20 +86,9 @@ Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* 
         element.__isset.converted_type || (geography && geometry)) {
         return Status::InvalidArgument("Invalid Parquet geo annotation: " + field.name);
     }
-    if (geo != nullptr) {
-        if (!geo->__isset.kind || !geo->__isset.crs || !geo->__isset.edge_algorithm || geo->crs.empty() ||
-            (geo->kind != TIcebergGeoKind::GEOGRAPHY && geo->kind != TIcebergGeoKind::GEOMETRY) ||
-            (geo->kind == TIcebergGeoKind::GEOMETRY && geo->edge_algorithm != "PLANAR")) {
-            return Status::InvalidArgument("Invalid Iceberg geo metadata: " + field.name);
-        }
-        if (geo->kind == TIcebergGeoKind::GEOGRAPHY && geo->edge_algorithm != "SPHERICAL" &&
-            geo->edge_algorithm != "VINCENTY" && geo->edge_algorithm != "THOMAS" && geo->edge_algorithm != "ANDOYER" &&
-            geo->edge_algorithm != "KARNEY") {
-            return Status::NotSupported("Unknown Iceberg geo edge algorithm: " + field.name);
-        }
-        if (!geography && !geometry && element.__isset.logicalType) {
-            return Status::InvalidArgument("Iceberg geo field has a non-geo Parquet annotation: " + field.name);
-        }
+    // Source geo metadata is supplied by FE; only validate the file-side contract here.
+    if (geo != nullptr && !geography && !geometry && element.__isset.logicalType) {
+        return Status::InvalidArgument("Iceberg geo field has a non-geo Parquet annotation: " + field.name);
     }
     // Unannotated WKB may inherit semantics from the Iceberg schema.
     if (!geography && !geometry) return Status::OK();

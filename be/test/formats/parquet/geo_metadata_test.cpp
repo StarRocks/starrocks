@@ -319,9 +319,10 @@ TEST(GeoMetadataTest, IcebergConflictsAndUnannotatedFallback) {
         EXPECT_TRUE(validate_geo_field(field, &opposite).is_invalid_argument());
         lake.geo_metadata.__set_crs("EPSG:4326");
         EXPECT_FALSE(validate_geo_field(field, &lake).ok());
-        lake = geography ? lake_geo() : lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR");
-        lake.geo_metadata.__set_edge_algorithm("KARNEY");
-        EXPECT_FALSE(validate_geo_field(field, &lake).ok());
+        if (geography) {
+            lake = lake_geo(TIcebergGeoKind::GEOGRAPHY, "KARNEY");
+            EXPECT_TRUE(validate_geo_field(field, &lake).is_invalid_argument());
+        }
         // An older FE without geo metadata cannot prove a binary/geo conflict.
         TIcebergSchemaField old_fe;
         EXPECT_TRUE(validate_geo_field(field, &old_fe).ok());
@@ -357,26 +358,33 @@ TEST(GeoMetadataTest, GeoValidationDoesNotRecurseIntoContainers) {
     EXPECT_TRUE(validate_geo_field(container.children[0], &lake).ok());
 }
 
-TEST(GeoMetadataTest, IcebergMetadataMustBeConsistentEvenWithoutParquetAnnotation) {
+TEST(GeoMetadataTest, UnannotatedWkbUsesSourceGeoSemantics) {
     auto element = geo_element();
     element.__isset.logicalType = false;
     SchemaDescriptor schema;
     ASSERT_TRUE(schema.from_thrift(schema_of(element), true).ok());
     const auto& field = *schema.get_stored_column_by_field_idx(0);
-    auto lake = lake_geo();
-    lake.geo_metadata.__set_kind(static_cast<TIcebergGeoKind::type>(127));
-    EXPECT_TRUE(validate_geo_field(field, &lake).is_invalid_argument());
-    lake = lake_geo();
-    lake.geo_metadata.__set_edge_algorithm("FUTURE_EDGE");
-    EXPECT_TRUE(validate_geo_field(field, &lake).is_not_supported());
-    lake = lake_geo();
-    lake.geo_metadata.__isset.crs = false;
-    EXPECT_TRUE(validate_geo_field(field, &lake).is_invalid_argument());
-    lake = lake_geo();
+    for (const auto& edge : {"SPHERICAL", "VINCENTY", "THOMAS", "ANDOYER", "KARNEY"}) {
+        auto lake = lake_geo(TIcebergGeoKind::GEOGRAPHY, edge);
+        lake.geo_metadata.__set_crs("EPSG:4326");
+        EXPECT_TRUE(validate_geo_field(field, &lake).ok());
+    }
+    auto lake = lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR");
+    lake.geo_metadata.__set_crs("EPSG:3857");
+    EXPECT_TRUE(validate_geo_field(field, &lake).ok());
+    // The trusted source descriptor still cannot agree with a text-annotated file.
     element.__set_converted_type(tparquet::ConvertedType::UTF8);
     SchemaDescriptor text_schema;
     ASSERT_TRUE(text_schema.from_thrift(schema_of(element), true).ok());
     EXPECT_TRUE(validate_geo_field(*text_schema.get_stored_column_by_field_idx(0), &lake).is_invalid_argument());
+    element.__isset.converted_type = false;
+    tparquet::LogicalType logical;
+    logical.__set_STRING(tparquet::StringType());
+    element.__set_logicalType(logical);
+    SchemaDescriptor logical_text_schema;
+    ASSERT_TRUE(logical_text_schema.from_thrift(schema_of(element), true).ok());
+    EXPECT_TRUE(
+            validate_geo_field(*logical_text_schema.get_stored_column_by_field_idx(0), &lake).is_invalid_argument());
 }
 
 TEST(GeoMetadataTest, EveryGeographyAlgorithmMatchesWithoutEnablingCompute) {
