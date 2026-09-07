@@ -178,7 +178,10 @@ void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& n
             } else {
                 vpack::Builder builder;
                 builder.add(vpack::Value(vpack::ValueType::Object));
-                if (_root_node != nullptr) {
+                // whether the node being built is the one _descend_remain_to_root() found in the
+                // remain, which is what lets an empty merge result be told apart from a missing key
+                const bool node_found_in_remain = _root_node != nullptr;
+                if (node_found_in_remain) {
                     // _descend_remain_to_root() already walked this row's remain down to the re-rooted
                     // node, so merge from there. Starting at _src_root instead would walk the same
                     // levels a second time -- the OP_ROOT hop below is that very descent -- and the
@@ -202,7 +205,17 @@ void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& n
                 builder.close();
                 auto slice = builder.slice();
                 json_result.append(JsonValue(slice));
-                null_result.append(slice.isEmptyObject());
+                // An empty merge result does not mean the row has no such key. The flattener writes
+                // the skeleton of a key into the remain whenever the document really has it -- it
+                // only ever walks keys that are there -- so the remain holding an object at
+                // `_root_path` is proof the key exists, and the row is a value ({}), not a NULL.
+                // Judging by slice.isEmptyObject() here reported a row storing {"o":{}} as SQL NULL
+                // once every leaf under `o` had been extracted and was null for that row:
+                // json_exists($.o) said 0 and `count(*) ... where json_exists($.o)` under-counted,
+                // while `select j` on the same row still showed {"o": {}}.
+                // Nothing above says that for the other branch -- merging the whole column, or a
+                // root path the flat tree has no node for -- so it keeps deciding by the result.
+                null_result.append(!node_found_in_remain && slice.isEmptyObject());
             }
         }
     } else {
