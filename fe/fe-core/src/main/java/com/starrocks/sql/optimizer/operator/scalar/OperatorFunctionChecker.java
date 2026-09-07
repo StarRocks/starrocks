@@ -26,9 +26,13 @@ import java.util.function.Predicate;
 public class OperatorFunctionChecker {
     static class FunctionCheckerVisitor extends ScalarOperatorVisitor<Pair<Boolean, String>, Void> {
         private final Predicate<CallOperator> predicate;
+        // A cast is checked separately from the call predicate: whether a cast is acceptable depends
+        // on what the caller is asking. Every cast is FE-evaluable, but only some keep the order.
+        private final Predicate<CastOperator> castPredicate;
 
-        public FunctionCheckerVisitor(Predicate<CallOperator> predicate) {
+        public FunctionCheckerVisitor(Predicate<CallOperator> predicate, Predicate<CastOperator> castPredicate) {
             this.predicate = predicate;
+            this.castPredicate = castPredicate;
         }
 
         @Override
@@ -48,11 +52,7 @@ public class OperatorFunctionChecker {
             if (!result.first) {
                 return result;
             }
-            // Only some type pairs keep the order. Crossing between strings and numbers or dates
-            // does not: '99845' sorts after '998425506019' while 99845 is far below 998425506019,
-            // so a range predicate mapped through such a cast prunes partitions that hold matching
-            // rows. A narrowing numeric cast wraps or saturates and breaks the order the same way.
-            if (!isOrderPreservingCast(cast.fromType(), cast.getType())) {
+            if (!castPredicate.test(cast)) {
                 return Pair.create(false, cast.toString());
             }
             return Pair.create(true, "");
@@ -88,6 +88,18 @@ public class OperatorFunctionChecker {
         return -1;
     }
 
+    /**
+     * Only some type pairs keep the order. Crossing between strings and numbers or dates does not:
+     * '99845' sorts after '998425506019' while 99845 is far below 998425506019, so a range predicate
+     * mapped through such a cast prunes partitions that hold matching rows. A narrowing numeric cast
+     * wraps or saturates and breaks the order the same way.
+     * <p>
+     * This is a question about monotonicity alone. Equality maps soundly through any deterministic
+     * function -- a = c implies f(a) = f(c) whatever f does to the order -- so the FE-constant check,
+     * which is what the callers use to license the equality rewrite, must not apply it. See
+     * ListPartitionPruner.deduceExtraConjuncts, which gates on FE-constant-ness first and only
+     * demands monotonicity for the non-equality case.
+     */
     private static boolean isOrderPreservingCast(Type from, Type to) {
         if (from.equals(to)) {
             return true;
@@ -102,13 +114,20 @@ public class OperatorFunctionChecker {
         return (from.isDate() && to.isDatetime()) || (from.isDatetime() && to.isDate());
     }
 
+    /**
+     * Checks the calls only. Casts are accepted whatever the predicate says, so a caller that cares
+     * about the order values come out in - anything driving partition pruning off a range predicate -
+     * wants onlyContainMonotonicFunctions instead of passing a monotonicity predicate through here.
+     */
     public static Pair<Boolean, String> onlyContainPredicates(ScalarOperator scalarOperator,
                                                               Predicate<CallOperator> predicate) {
-        return scalarOperator.accept(new FunctionCheckerVisitor(predicate), null);
+        return scalarOperator.accept(new FunctionCheckerVisitor(predicate, cast -> true), null);
     }
 
     public static Pair<Boolean, String> onlyContainMonotonicFunctions(ScalarOperator scalarOperator) {
-        return onlyContainPredicates(scalarOperator, call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call));
+        return scalarOperator.accept(
+                new FunctionCheckerVisitor(call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call),
+                        cast -> isOrderPreservingCast(cast.fromType(), cast.getType())), null);
     }
 
     public static Pair<Boolean, String> onlyContainFEConstantFunctions(ScalarOperator scalarOperator) {

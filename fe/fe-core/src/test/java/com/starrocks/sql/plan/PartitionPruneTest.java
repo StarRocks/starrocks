@@ -440,6 +440,38 @@ public class PartitionPruneTest extends PlanTestBase {
                 .explainContains("partitions=3/3");
         starRocksAssert.query("select count(*) from t_gen_cast where c1 <= '998425506019' ")
                 .explainContains("partitions=3/3");
+
+        // Equality maps soundly through any deterministic function, order or no order: c1 = '99845'
+        // holds exactly for the rows whose c2 is cast('99845' as bigint). Restricting the cast must
+        // not cost the equality deduction its pruning.
+        starRocksAssert.query("select count(*) from t_gen_cast where c1 = '99845' ")
+                .explainContains("partitions=1/3");
+    }
+
+    @Test
+    public void testGeneratedColumnPruneSkipsCaseWhen() throws Exception {
+        // A guard, not a regression test: nothing here is known to be broken today.
+        //
+        // FunctionCheckerVisitor only intercepts CastOperator. CaseWhenOperator is also a
+        // CallOperator, but ScalarOperatorVisitor routes it to visitCaseWhenOperator, which the
+        // checker does not override, so it falls through to visit() and is accepted as monotonic
+        // even though this CASE inverts the order. What keeps the deduction harmless is further
+        // down: substituting the constant leaves a CASE expression rather than a constant, and the
+        // pruner can only match a constant against the partition value map, so it gives up. Should
+        // that expression ever fold, "c1 > 100" would deduce "c2 >= 1" and keep no partition at all
+        // while every matching row lives in p0. This asserts it stays at 2/2.
+        starRocksAssert.withTable("CREATE TABLE t_gen_case (" +
+                " c1 int NOT NULL," +
+                " c2 tinyint NULL AS (case when c1 > 100 then 0 else 1 end) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_case ADD PARTITION p0 VALUES IN ('0')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_case ADD PARTITION p1 VALUES IN ('1')");
+
+        starRocksAssert.query("select count(*) from t_gen_case where c1 > 100 ")
+                .explainContains("partitions=2/2");
     }
 
     @Test
