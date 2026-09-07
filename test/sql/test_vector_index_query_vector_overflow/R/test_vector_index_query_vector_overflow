@@ -1,0 +1,31 @@
+-- name: test_vector_index_query_vector_overflow @sequential @native
+CREATE TABLE `t_ivfpq_overflow` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v` ARRAY<FLOAT> NOT NULL COMMENT "",
+  INDEX idx_v (`v`) USING VECTOR ("index_type" = "ivfpq", "dim" = "4", "metric_type" = "l2_distance", "is_vector_normed" = "false", "nbits" = "8", "nlist" = "16", "M_IVFPQ" = "2", "index_build_threshold" = "16")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_ivfpq_overflow SELECT number, [CAST(number AS FLOAT), 0, 0, 0] FROM TABLE(generate_series(1, 64)) t(number);
+-- result:
+-- !result
+select id from t_ivfpq_overflow order by approx_l2_distance(ARRAY<FLOAT>[1.0, 0.0, 0.0, 0.0], v) limit 1;
+-- result:
+1
+-- !result
+select id from t_ivfpq_overflow order by approx_l2_distance(ARRAY<FLOAT>[1e308, 0.0, 0.0, 0.0], v) limit 1;
+-- result:
+[REGEX].*invalid query vector element.*
+-- !result
+select id from t_ivfpq_overflow order by approx_l2_distance(ARRAY<TINYINT>[100, 100, 100, 100], v) limit 1;
+-- result:
+[REGEX]\d+
+-- !result

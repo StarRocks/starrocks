@@ -331,6 +331,40 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.sample_options = thrift_lake_scan_node.sample_options;
     }
 
+<<<<<<< HEAD:be/src/connector/lake_connector.cpp
+=======
+    _params.use_vector_index = _use_vector_index;
+    if (_use_vector_index) {
+        const auto& vector_options = thrift_lake_scan_node.vector_search_options;
+        _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
+        _params.vector_search_option->k = vector_options.vector_limit_k;
+        for (const std::string& str : vector_options.query_vector) {
+            // std::stof throws std::out_of_range / std::invalid_argument on a value that overflows
+            // float or is not a number, and the throw is uncaught here, so a query vector element the
+            // planner produced from a wrong-typed or out-of-range literal (e.g. 1e308, which exceeds
+            // FLT_MAX) aborts the BE. Parse without throwing and reject the query cleanly instead.
+            StringParser::ParseResult parse_result;
+            float value = StringParser::string_to_float<float>(str.data(), str.size(), &parse_result);
+            if (parse_result != StringParser::PARSE_SUCCESS) {
+                return Status::InvalidArgument(
+                        fmt::format("invalid query vector element for vector search: '{}'", str));
+            }
+            _params.vector_search_option->query_vector.push_back(value);
+        }
+        if (_runtime_state->query_options().__isset.ann_params) {
+            _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
+        }
+        _params.vector_search_option->vector_range = vector_options.vector_range;
+        _params.vector_search_option->has_vector_range = vector_options.__isset.has_vector_range
+                                                                 ? vector_options.has_vector_range
+                                                                 : vector_options.vector_range >= 0;
+        _params.vector_search_option->result_order = vector_options.result_order;
+        _params.vector_search_option->refine_distance = _refine_distance;
+        _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
+        _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
+    }
+
+>>>>>>> 2b4fc52 ([BugFix] Reject an out-of-range vector-search query vector instead of aborting the BE (#78658)):be/src/connector/lake/lake_connector.cpp
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
     _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
     if (_params.enable_join_runtime_filter_pushdown) {
