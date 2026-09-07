@@ -2662,12 +2662,391 @@ protected:
         return fixture;
     }
 
+    // Canonicalize logical state, not the protobuf's allocation/serialization choices.
+    // Segment filenames and bundle offsets remain physical identity; generated sidecar
+    // names, projected RSSIDs and the SST representation deliberately do not.
+    StatusOr<std::string> semantic_reshard_signature(const TabletMetadataPtr& metadata) {
+        _update_manager->unload_and_remove_primary_index(metadata->id());
+        _tablet_manager->prune_metacache();
+        ASSIGN_OR_RETURN(auto cold, _tablet_manager->get_tablet_metadata(metadata->id(), metadata->version()));
+        std::vector<std::string> records;
+        auto append = [](std::string* out, const std::string& value) {
+            *out += fmt::format("{}:", value.size()) + value;
+        };
+        for (const auto& rowset : cold->rowsets()) {
+            std::string record =
+                    fmt::format("uid={}:{};version={};", rowset.uid().hi(), rowset.uid().lo(), rowset.version());
+            const auto& range = rowset.has_range() ? rowset.range() : cold->range();
+            append(&record, range.SerializeAsString());
+            if (rowset.has_delete_predicate()) {
+                record = fmt::format("predicate-version={};", rowset.version());
+                append(&record, rowset.delete_predicate().SerializeAsString());
+            }
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                const auto& segment = rowset.segment_metas(i);
+                const uint32_t original_idx = segment.has_segment_idx() ? segment.segment_idx() : i;
+                const uint32_t rssid = rowset.id() + original_idx;
+                record += fmt::format("segment={};slice={}:{};rows={};", original_idx, segment.bundle_file_offset(),
+                                      segment.size(), segment.num_rows());
+                append(&record, segment.filename());
+                if (cold->delvec_meta().delvecs().contains(rssid)) {
+                    DelVector delvec;
+                    RETURN_IF_ERROR(_update_manager->get_del_vec_in_meta(TabletSegmentId(cold->id(), rssid),
+                                                                         cold->version(), false, &delvec));
+                    record += "delvec={";
+                    if (delvec.roaring() != nullptr) {
+                        for (uint32_t rowid : *delvec.roaring()) record += fmt::format("{},", rowid);
+                    }
+                    record += "};";
+                }
+                if (auto dcg = cold->dcg_meta().dcgs().find(rssid); dcg != cold->dcg_meta().dcgs().end()) {
+                    std::set<uint32_t> active_columns;
+                    for (int j = 0; j < dcg->second.column_files_size(); ++j) {
+                        if (dcg->second.versions(j) > cold->version()) continue;
+                        for (auto uid : dcg->second.unique_column_ids(j).column_ids()) {
+                            if (!active_columns.insert(uid).second) continue;
+                            // These fixtures have one integer value column. Read the actual .cols
+                            // segment including rows masked by delvec, not merely the scan output.
+                            if (uid != 1002) return Status::InvalidArgument("unexpected fixed-point DCG column");
+                            record += fmt::format("dcg-column={};values=", uid);
+                            for (int32_t value : read_c1_only_cols_file(cold->id(), dcg->second.column_files(j))) {
+                                record += fmt::format("{},", value);
+                            }
+                        }
+                    }
+                }
+                lake::LakeIndexDeltaGroupLoader loader(cold);
+                lake::IndexDeltaGroupList active;
+                RETURN_IF_ERROR(loader.load(TabletSegmentId(cold->id(), rssid), cold->version(), &active));
+                std::set<std::pair<int32_t, int>> active_keys;
+                for (const auto& entry : active) {
+                    ASSIGN_OR_RETURN(auto payload, read_sidecar_payload(_tablet_manager->segment_location(
+                                                                                cold->id(), entry.index_file),
+                                                                        entry.encryption_meta));
+                    for (const auto& key : entry.keys) {
+                        active_keys.emplace(key.col_unique_id, key.index_type);
+                        record += fmt::format("idg-active={}:{};", key.col_unique_id, int(key.index_type));
+                        append(&record, payload);
+                    }
+                }
+                if (auto idg = cold->idg_meta().idgs().find(rssid); idg != cold->idg_meta().idgs().end()) {
+                    for (const auto& entry : idg->second.entries()) {
+                        for (const auto& key : entry.dropped_keys()) {
+                            if (active_keys.contains({key.col_unique_id(), key.index_type()})) {
+                                return Status::Corruption("cold IDG lookup returned a dropped key");
+                            }
+                            record += fmt::format("idg-dropped={}:{};", key.col_unique_id(), int(key.index_type()));
+                        }
+                    }
+                }
+            }
+            for (const auto& del : rowset.del_files()) {
+                // op_offset is a stable operation ordinal; origin_rowset_id is projected.
+                record += fmt::format("del-version={};op={};", del.version(), del.op_offset());
+                append(&record, del.name());
+            }
+            records.emplace_back(std::move(record));
+        }
+        std::sort(records.begin(), records.end());
+        std::string result;
+        for (const auto& record : records) append(&result, record);
+        ASSIGN_OR_RETURN(auto rows, read_two_column_rows(cold));
+        for (const auto& [key, value] : rows) result += fmt::format("row={}:{};", key, value);
+        return result;
+    }
+
+    struct ReshardInventory {
+        size_t rowsets;
+        size_t segments;
+        size_t dels;
+        size_t live_sidecars;
+        size_t live_files;
+        size_t raw_bytes;
+    };
+
+    ReshardInventory collect_reshard_inventory(const TabletMetadataPB& metadata) {
+        ReshardInventory result{.rowsets = static_cast<size_t>(metadata.rowsets_size()),
+                                .raw_bytes = metadata.ByteSizeLong()};
+        std::set<std::string> files;
+        std::set<std::string> sidecars;
+        for (const auto& rowset : metadata.rowsets()) {
+            result.segments += rowset.segment_metas_size();
+            result.dels += rowset.del_files_size();
+            for (const auto& segment : rowset.segment_metas()) files.insert(segment.filename());
+            for (const auto& del : rowset.del_files()) files.insert(del.name());
+        }
+        for (const auto& [rssid, page] : metadata.delvec_meta().delvecs()) {
+            sidecars.insert(metadata.delvec_meta().version_to_file().at(page.version()).name());
+        }
+        for (const auto& [rssid, dcg] : metadata.dcg_meta().dcgs()) {
+            for (const auto& name : dcg.column_files()) sidecars.insert(name);
+        }
+        for (const auto& [rssid, idg] : metadata.idg_meta().idgs()) {
+            for (const auto& entry : idg.entries()) {
+                if (entry.keys_size() > entry.dropped_keys_size()) sidecars.insert(entry.index_file());
+            }
+        }
+        result.live_sidecars = sidecars.size();
+        files.insert(sidecars.begin(), sidecars.end());
+        for (const auto& sst : metadata.sstable_meta().sstables()) files.insert(sst.filename());
+        result.live_files = files.size();
+        return result;
+    }
+
+    TabletMetadataPtr run_no_write_split_merge_cycle(const TabletMetadataPtr& source, int child_count) {
+        CHECK_OK(put_tablet_metadata(source));
+        SplittingTabletInfoPB split;
+        split.set_old_tablet_id(source->id());
+        for (int i = 0; i < child_count; ++i) {
+            split.add_new_tablet_ids(next_id());
+            auto* range = split.add_new_tablet_ranges();
+            range->mutable_lower_bound()->CopyFrom(generate_sort_key(i * 100 / child_count));
+            range->set_lower_bound_included(true);
+            range->mutable_upper_bound()->CopyFrom(generate_sort_key((i + 1) * 100 / child_count));
+            range->set_upper_bound_included(false);
+        }
+        TxnInfoPB txn;
+        txn.set_txn_id(next_id());
+        txn.set_commit_time(1);
+        ASSIGN_OR_ABORT(auto children,
+                        lake::split_tablet(_tablet_manager.get(), source, split, source->version() + 1, txn));
+        EXPECT_EQ(child_count, children.size());
+        std::vector<TabletMetadataPtr> sources;
+        for (auto id : split.new_tablet_ids()) sources.push_back(children.at(id));
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        const int64_t target = next_id();
+        CHECK_OK(publish_resharding_merge(sources, target, source->version() + 1, source->version() + 2, next_id(),
+                                          published));
+        return published.at(target);
+    }
+
+    TabletMetadataPtr fixed_point_source(bool primary_key) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(next_id());
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(10);
+        set_two_column_pk_schema(metadata.get(), 4001);
+        metadata->mutable_schema()->set_keys_type(primary_key ? PRIMARY_KEYS : UNIQUE_KEYS);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        metadata->set_enable_persistent_index(primary_key);
+        if (primary_key) metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(100);
+        rowset->set_overlapped(false);
+        lake::tablet_reshard_helper::set_rowset_uid(rowset);
+        for (int i = 0; i < 2; ++i) {
+            const auto name = fmt::format("fixed_{}_{}.dat", metadata->id(), i);
+            const auto size =
+                    write_two_column_segment(metadata->id(), name, 50, [](int key) { return key * 10; }, i * 50);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(name);
+            segment->set_size(size);
+            segment->set_num_rows(50);
+            segment->set_segment_idx(i == 0 ? 0 : 7);
+            segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(i * 50));
+            segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(i * 50 + 49));
+            rowset->set_data_size(rowset->data_size() + size);
+        }
+        if (primary_key) {
+            const std::string stem = fmt::format("fixed_{}", metadata->id());
+            DelVector delvec;
+            const uint32_t deleted = 1;
+            delvec.init(1, &deleted, 1);
+            add_delvec(metadata.get(), metadata->id(), 1, 1, stem + ".delvec", delvec.save());
+            rowset->set_num_dels(1);
+            const auto size = write_c1_only_cols_file(metadata->id(), stem + ".cols", 50,
+                                                      [](int row) { return row * 10 + 1000; });
+            add_dcg_with_columns(metadata.get(), 1, stem + ".cols", {1002}, 1);
+            metadata->mutable_dcg_meta()->mutable_dcgs()->at(1).add_column_file_sizes(size);
+            auto file = write_sidecar_payload(_tablet_manager->segment_location(metadata->id(), stem + ".idx"),
+                                              "fixed-point-index-payload", false);
+            add_idg_with_key(metadata.get(), 1, stem + ".idx", 1002, BITMAP, 1);
+            add_idg_key(metadata.get(), 1, 1003, BITMAP);
+            add_idg_dropped_key(metadata.get(), 1, 1003, BITMAP);
+            metadata->mutable_idg_meta()->mutable_idgs()->at(1).mutable_entries(0)->set_file_size(file.filesize);
+            auto* del = rowset->add_del_files();
+            del->set_name(stem + ".del");
+            del->set_origin_rowset_id(1);
+            del->set_op_offset(7);
+            del->set_version(1);
+            del->set_num_rows(0);
+            write_binary_del_file(metadata->id(), del->name(), {});
+        } else {
+            metadata->set_version(2);
+            auto* predicate = add_rowset_with_predicate(metadata.get(), 9, 2, true);
+            predicate->mutable_delete_predicate()->mutable_binary_predicates(0)->set_value("98");
+        }
+        CHECK_OK(put_tablet_metadata(metadata));
+        return metadata;
+    }
+
+    void expect_ten_fixed_point_cycles(TabletMetadataPtr current) {
+        ASSIGN_OR_ABORT(auto baseline_signature, semantic_reshard_signature(current));
+        const auto baseline = collect_reshard_inventory(*current);
+        // Conservative field census: tablet scalars plus per-rowset/segment/del,
+        // sidecar and SST integer slots. Each varint can grow by at most 10 bytes.
+        const size_t live_volatile_integer_fields =
+                16 + 8 * baseline.rowsets + 8 * baseline.segments + 8 * baseline.dels + 8 * baseline.live_sidecars;
+        const size_t live_generated_filenames = baseline.live_files;
+        const size_t raw_byte_limit =
+                baseline.raw_bytes + 10 * live_volatile_integer_fields + 64 * live_generated_filenames + 4096;
+        LOG(INFO) << "fixed-point baseline: rowsets=" << baseline.rowsets << " segments=" << baseline.segments
+                  << " dels=" << baseline.dels << " sidecars=" << baseline.live_sidecars
+                  << " files=" << baseline.live_files << " raw_bytes=" << baseline.raw_bytes
+                  << " raw_byte_limit=" << raw_byte_limit;
+        for (int cycle = 0; cycle < 10; ++cycle) {
+            SCOPED_TRACE(fmt::format("fixed-point cycle {} keys_type {}", cycle, int(current->schema().keys_type())));
+            current = run_no_write_split_merge_cycle(current, cycle % 2 == 0 ? 2 : 3);
+            ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
+            const auto inventory = collect_reshard_inventory(*current);
+            EXPECT_EQ(baseline_signature, signature);
+            EXPECT_EQ(baseline.rowsets, inventory.rowsets);
+            EXPECT_EQ(baseline.segments, inventory.segments);
+            EXPECT_EQ(baseline.dels, inventory.dels);
+            EXPECT_EQ(baseline.live_sidecars, inventory.live_sidecars);
+            EXPECT_EQ(baseline.live_files, inventory.live_files);
+            EXPECT_LE(inventory.raw_bytes,
+                      baseline.raw_bytes + 10 * live_volatile_integer_fields + 64 * live_generated_filenames + 4096);
+            LOG(INFO) << "fixed-point cycle=" << cycle << " raw_bytes=" << inventory.raw_bytes;
+            if (HasFailure()) return;
+        }
+    }
+
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
 };
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_no_write_cycles_are_fixed_point) {
+    for (bool primary_key : {true, false}) {
+        expect_ten_fixed_point_cycles(fixed_point_source(primary_key));
+        if (HasFailure()) return;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_post_dml_cycles_are_fixed_point) {
+    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
+    config::enable_pk_index_parallel_compaction = false;
+    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
+    auto source = fixed_point_source(true);
+    ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(source->id(), source->version(), 10, 7777, 60));
+    const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
+    config::lake_pk_compaction_min_input_segments = 1;
+    DeferOp restore([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
+    ASSIGN_OR_ABORT(auto compacted, compact_tablet(written->id(), written->version(), true));
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(compacted));
+    EXPECT_NE(rows.end(), std::find(rows.begin(), rows.end(), std::pair<int32_t, int32_t>{10, 7777}));
+    EXPECT_TRUE(std::none_of(rows.begin(), rows.end(), [](const auto& row) { return row.first == 60; }));
+    // DML and normal compaction are over: establish a fresh baseline here.
+    expect_ten_fixed_point_cycles(compacted);
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_sidecar_and_sst_cold_read_smoke) {
+    auto source = fixed_point_source(true);
+    ASSIGN_OR_ABORT(auto baseline, semantic_reshard_signature(source));
+    ASSIGN_OR_ABORT(auto expected_rows, read_two_column_rows(source));
+    auto current = run_no_write_split_merge_cycle(source, 3);
+    ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
+    EXPECT_EQ(baseline, signature);
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(current, current->version()));
+    ASSERT_GT(flushed->sstable_meta().sstables_size(), 0);
+    ASSERT_OK(put_tablet_metadata(flushed));
+    _update_manager->unload_and_remove_primary_index(flushed->id());
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(flushed->id(), flushed->version()));
+    assert_published_sstables_reopen(cold);
+    expect_lifecycle_oracle(cold, expected_rows, {1});
+    ASSIGN_OR_ABORT(auto cold_signature, semantic_reshard_signature(cold));
+    EXPECT_EQ(baseline, cold_signature);
+    // Carry persisted SST state through another SPLIT/MERGE. The merged index may
+    // retain SSTs or use the supported native rebuild representation; both must
+    // honor the same delvec/DCG/IDG and point-lookup oracle after a cold reopen.
+    auto resharded_sst = run_no_write_split_merge_cycle(cold, 2);
+    _update_manager->unload_and_remove_primary_index(resharded_sst->id());
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(resharded_sst->id(), resharded_sst->version()));
+    assert_published_sstables_reopen(reopened);
+    expect_lifecycle_oracle(reopened, expected_rows, {1});
+    ASSIGN_OR_ABORT(auto final_signature, semantic_reshard_signature(reopened));
+    EXPECT_EQ(baseline, final_signature);
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_vacuum_eligible_attempt_objects_converge) {
+    auto source = fixed_point_source(true);
+    auto current = run_no_write_split_merge_cycle(source, 3);
+    ASSIGN_OR_ABORT(auto baseline, semantic_reshard_signature(current));
+    const auto live_inventory = collect_reshard_inventory(*current);
+    // Leave actual objects from two failed MERGE writer attempts. Transaction
+    // retention protects the second until min_active_txn_id explicitly advances.
+    auto failed_attempt = [&](int64_t txn_id) {
+        ASSIGN_OR_ABORT(auto before, delvec_inventory(current->id()));
+        set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::ENABLE);
+        DeferOp restore(
+                [&] { set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::DISABLE); });
+        std::unordered_map<int64_t, TabletMetadataPtr> unpublished;
+        const int64_t failed_target = next_id();
+        auto status = publish_resharding_merge({current}, failed_target, current->version(), current->version() + 1,
+                                               txn_id, unpublished);
+        EXPECT_FALSE(status.ok());
+        // The error path may return prepared source entries, but none is persisted
+        // and no completed target references the abandoned writer output.
+        EXPECT_FALSE(unpublished.contains(failed_target));
+        EXPECT_TRUE(
+                FileSystem::Default()
+                        ->path_exists(_tablet_manager->tablet_metadata_location(failed_target, current->version() + 1))
+                        .is_not_found());
+        EXPECT_TRUE(
+                FileSystem::Default()
+                        ->path_exists(_tablet_manager->tablet_metadata_location(current->id(), current->version() + 1))
+                        .is_not_found());
+        ASSIGN_OR_ABORT(auto after, delvec_inventory(current->id()));
+        std::set<std::string> attempts;
+        std::set_difference(after.begin(), after.end(), before.begin(), before.end(),
+                            std::inserter(attempts, attempts.end()));
+        EXPECT_EQ(1, attempts.size());
+        return attempts;
+    };
+    const auto eligible = failed_attempt(1);
+    const auto protected_attempt = failed_attempt(3);
+    ASSERT_EQ(1, eligible.size());
+    ASSERT_EQ(1, protected_attempt.size());
+    auto run_vacuum = [&](int64_t min_active_txn_id) {
+        VacuumFullRequest request;
+        request.set_partition_id(1);
+        request.set_tablet_id(current->id());
+        request.set_min_active_txn_id(min_active_txn_id);
+        request.set_grace_timestamp(time(nullptr) + 1);
+        request.set_min_check_version(0);
+        request.set_max_check_version(1);
+        VacuumFullResponse response;
+        lake::vacuum_full(_tablet_manager.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code());
+    };
+    run_vacuum(2);
+    ASSIGN_OR_ABORT(auto retained, delvec_inventory(current->id()));
+    EXPECT_FALSE(retained.contains(*eligible.begin()));
+    EXPECT_TRUE(retained.contains(*protected_attempt.begin()));
+    run_vacuum(4);
+    ASSIGN_OR_ABORT(auto converged, delvec_inventory(current->id()));
+    EXPECT_FALSE(converged.contains(*eligible.begin()));
+    EXPECT_FALSE(converged.contains(*protected_attempt.begin()));
+    run_vacuum(4);
+    EXPECT_EQ(converged, delvec_inventory(current->id()).value());
+    ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
+    EXPECT_EQ(baseline, signature);
+    EXPECT_EQ(live_inventory.live_files, collect_reshard_inventory(*current).live_files);
+}
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_repeated_four_cycle_lifecycle) {
     ASSIGN_OR_ABORT(auto result, run_repeated_four_cycle_lifecycle(/*enable_tde=*/false));
