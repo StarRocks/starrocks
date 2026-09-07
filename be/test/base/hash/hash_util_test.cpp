@@ -242,6 +242,10 @@ TEST(HashUtilTest, CrcHashUnalignedInput) {
 }
 
 TEST(HashUtilTest, CrcHashDeterministicVectors) {
+    if (!hardware_crc_available()) {
+        GTEST_SKIP() << "Hardware CRC-32C is not available on this CPU/build; skipping hardware vector checks";
+    }
+
     const std::string_view text = "StarRocks ARM64 CRC-32C Acceleration Engine.";
     ASSERT_EQ(text.size(), 44);
     const uint32_t seed32 = 0x811C9DC5;
