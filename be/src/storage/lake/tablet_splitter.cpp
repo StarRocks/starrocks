@@ -766,6 +766,8 @@ static StatusOr<RangeSplitResult> calculate_range_split_boundaries_impl(
 static Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
                                                const TabletSchema& tablet_schema,
                                                std::vector<SegmentSplitInfo>* segments);
+static bool rowset_has_sampleless_segment(const RowsetMetadataPB& rowset);
+static bool rowset_schema_resolves_to_valid_id(const TabletMetadataPB& tablet_metadata, uint32_t rowset_id);
 
 namespace {
 
@@ -882,18 +884,24 @@ Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitB
     return fallback;
 }
 
-// Count-only reshard planning consumes metadata once per immutable physical slice.
-// The public segment loader retains its full-index sampling contract.
+// Count-only reshard planning samples each immutable physical slice once. Preserve
+// the existing loader's opportunistic full-index sampling and metadata fallback,
+// but charge the shared SPLIT budget before opens and full-key sample decoding.
 Status build_unique_boundary_segments(TabletManager* tablet_manager, const TabletMetadataPtr& metadata,
                                       const TabletSchema& schema, SplitMetadataVisitBudget* budget,
                                       std::vector<SegmentSplitInfo>* segments) {
     TEST_SYNC_POINT_CALLBACK("tablet_splitter:boundary_planner", nullptr);
     ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(schema));
     PhysicalSlices slices;
-    for (const auto& rowset : metadata->rowsets()) {
-        RETURN_IF_ERROR(budget->consume(1, "boundary rowset"));
-        for (const auto& sm : rowset.segment_metas()) {
-            RETURN_IF_ERROR(budget->consume(1 + sm.deprecated_sort_key_samples_size(), "boundary segment samples"));
+    for (int rowset_index = 0; rowset_index < metadata->rowsets_size(); ++rowset_index) {
+        const auto& rowset = metadata->rowsets(rowset_index);
+        RETURN_IF_ERROR(budget->consume(1 + rowset.segment_metas_size(), "boundary rowset and segment declarations"));
+        const bool may_load = tablet_manager != nullptr && rowset_has_sampleless_segment(rowset) &&
+                              rowset_schema_resolves_to_valid_id(*metadata, rowset.id());
+        TabletSchemaPtr historical_schema;
+        for (int meta_pos = 0; meta_pos < rowset.segment_metas_size(); ++meta_pos) {
+            const auto& sm = rowset.segment_metas(meta_pos);
+            RETURN_IF_ERROR(budget->consume(sm.deprecated_sort_key_samples_size(), "boundary metadata samples"));
             if (sm.num_rows() < 0 || sm.size() < 0) {
                 return Status::Corruption("tablet split has negative physical segment statistics");
             }
@@ -904,7 +912,39 @@ Status build_unique_boundary_segments(TabletManager* tablet_manager, const Table
             RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
             segment.num_rows = sm.num_rows();
             segment.data_size = sm.size();
-            RETURN_IF_ERROR(segment.load_sort_key_samples(sm));
+            bool loaded_full_samples = false;
+            if (may_load) {
+                RETURN_IF_ERROR(budget->consume(1, "boundary segment open"));
+                if (historical_schema == nullptr) {
+                    historical_schema = Rowset(tablet_manager, metadata, rowset_index, 0).tablet_schema();
+                }
+                FileInfo file_info{.path = tablet_manager->segment_location(metadata->id(), sm.filename())};
+                if (sm.has_size()) file_info.size = sm.size();
+                if (sm.has_bundle_file_offset()) file_info.bundle_file_offset = sm.bundle_file_offset();
+                if (sm.has_encryption_meta()) file_info.encryption_meta = sm.encryption_meta();
+                const int segment_id = sm.has_segment_idx() ? sm.segment_idx() : meta_pos;
+                TEST_SYNC_POINT_CALLBACK("tablet_splitter:segment_open", nullptr);
+                auto opened = tablet_manager->load_segment(file_info, segment_id, LakeIOOptions{},
+                                                           /*fill_meta_cache=*/false, historical_schema);
+                if (opened.ok()) {
+                    RETURN_IF_ERROR(budget->consume(1, "boundary short-key index"));
+                    if (opened.value()->load_index().ok() && opened.value()->has_full_sort_key_index_page()) {
+                        // Full-page geometry is validated against the legacy index.
+                        // Charge that known bound before loading/decoding the full page.
+                        const size_t item_count = opened.value()->decoder()->num_items();
+                        RETURN_IF_ERROR(budget->consume(std::max<size_t>(1, item_count), "boundary full-key samples"));
+                        if (opened.value()->ensure_full_sort_key_index_usable()) {
+                            const auto rowset_schema = ChunkHelper::convert_schema(historical_schema);
+                            ASSIGN_OR_RETURN(loaded_full_samples, segment.load_samples_from_short_key_index(
+                                                                          *opened.value(), rowset_schema,
+                                                                          historical_schema->sort_key_idxes()));
+                        }
+                    }
+                }
+                // Missing/legacy/unusable optional index data retains the existing
+                // metadata/coarse fallback. Outward loader statuses still propagate.
+            }
+            if (!loaded_full_samples) RETURN_IF_ERROR(segment.load_sort_key_samples(sm));
             projection.project(&segment.min_key);
             projection.project(&segment.max_key);
             for (auto& sample : segment.sort_key_samples) projection.project(&sample);

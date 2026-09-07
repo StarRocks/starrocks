@@ -178,9 +178,9 @@ struct TabletRangeInfo {
 // testing (parity comparison with the external-boundaries path); the production call site
 // is in split_tablet().
 //
-// Uses unique physical segment metadata for boundaries, then projects each rowset's
-// recorded statistics onto eligible children. This metadata-only helper accepts a null manager
-// and applies the SPLIT metadata-visit budget; it does not load segment or delvec files.
+// Uses unique physical segments for boundaries, then projects each rowset's recorded
+// statistics onto eligible children. With a manager it may sample on-disk full sort-key
+// indexes under the SPLIT metadata-visit budget; null uses metadata only. Delvecs are not read.
 Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
                                int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
                                int32_t colocate_column_count = 0);

@@ -6274,11 +6274,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
     EXPECT_EQ(6, total_child_num_dels);
 }
 
-// Verify the fallback path: when the parent rowset predates num_dels (has_num_dels() ==
-// false), split derives D from the persisted delvec. A child rowset that cannot retrieve
-// D through either path must still carry an explicit num_dels (0) so that the Step 2
-// router in lake_service sees has_range() but has_num_dels() -> defaults to zero dels.
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for_num_dels) {
+// Current producers record the rowset delete anchor explicitly. SPLIT conserves
+// that anchor without deriving historical missing statistics from the delvec.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_explicit_num_dels_conservation) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
     const int64_t tablet_id = next_id();
@@ -6296,7 +6294,7 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for
     rowset->set_overlapped(true);
     rowset->set_num_rows(8);
     rowset->set_data_size(800);
-    // num_dels intentionally not set -> exercises get_rowset_num_deletes fallback.
+    rowset->set_num_dels(4);
 
     {
         auto* sm = rowset->add_segment_metas();
@@ -6349,7 +6347,7 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for
         EXPECT_TRUE(child_rowset.has_num_dels());
         total_child_num_dels += child_rowset.num_dels();
     }
-    // Σ child.num_dels should equal the delvec cardinality recovered via fallback (4).
+    // Σ child.num_dels equals the explicit current-producer anchor.
     EXPECT_EQ(4, total_child_num_dels);
 }
 
@@ -6473,11 +6471,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
     EXPECT_EQ(11, totals[4].num_dels);
 }
 
-// Pathological metadata: parent rowset has num_dels > num_rows. The anchor
-// builder clamps num_dels up front (with WARNING) so cap-and-redistribute
-// has a feasible input. After split, Σ children.num_dels equals the clamped
-// parent.num_rows, and per-child num_dels stays within rows.
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_parent_dels) {
+// Contradictory parent statistics are Corruption, not a clamped estimate or an
+// identical fallback. Rejection must occur before the required PK flush.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_rejects_invalid_parent_dels_before_flush) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
     const int64_t tablet_id = next_id();
@@ -6518,7 +6514,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
         sm->set_num_rows(5);
     }
 
-    EXPECT_OK(put_tablet_metadata(metadata));
+    lake::tablet_reshard_helper::set_rowset_uid(rowset);
+    for (int i = 0; i < rowset->segment_metas_size(); ++i) rowset->mutable_segment_metas(i)->set_segment_idx(i);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
     ReshardingTabletInfoPB resharding;
     auto& splitting = *resharding.mutable_splitting_tablet_info();
@@ -6534,25 +6532,18 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
 
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
-                                              false, tablet_metadatas, tablet_ranges));
-
-    int64_t total_child_num_rows = 0;
-    int64_t total_child_num_dels = 0;
-    for (int64_t cid : {child_id_1, child_id_2}) {
-        auto it = tablet_metadatas.find(cid);
-        ASSERT_TRUE(it != tablet_metadatas.end());
-        ASSERT_EQ(1, it->second->rowsets_size());
-        const auto& child_rs = it->second->rowsets(0);
-        EXPECT_TRUE(child_rs.has_num_dels());
-        EXPECT_LE(child_rs.num_dels(), child_rs.num_rows());
-        total_child_num_rows += child_rs.num_rows();
-        total_child_num_dels += child_rs.num_dels();
-    }
-    // num_rows still conserves at parent.num_rows; num_dels conserves at the
-    // *clamped* parent value (= parent.num_rows = 10), not the bogus 15.
-    EXPECT_EQ(10, total_child_num_rows);
-    EXPECT_EQ(10, total_child_num_dels);
+    auto* sync = SyncPoint::GetInstance();
+    int flushes = 0;
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_EQ(0, flushes);
 }
 
 // Anchor input fallback: legacy / incomplete metadata may omit
@@ -17094,6 +17085,48 @@ TEST_F(LakeTabletReshardTest, test_split_publish_stamps_fresh_sstable_with_new_v
         }
     }
     EXPECT_TRUE(saw_sstable) << "split should have produced a flushed PK sstable from the rebuilt index";
+}
+
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_sampling_deduplicates_and_budgets_opens) {
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    DeferOp restore_config([&] { config::enable_full_sort_key_index = old_enable; });
+    const std::string filename = "unique-full-key.dat";
+    const auto size = write_two_column_segment(tablet_id, filename, 300, [](int i) { return i; });
+    auto metadata = make_single_segment_pk_tablet(tablet_id, 2, filename, size, 300);
+    auto* rowset = metadata->mutable_rowsets(0);
+    rowset->set_num_dels(0);
+    rowset->mutable_segment_metas(0)->set_segment_idx(0);
+    *rowset->mutable_segment_metas(0)->mutable_sort_key_min() = generate_sort_key(0);
+    *rowset->mutable_segment_metas(0)->mutable_sort_key_max() = generate_sort_key(299);
+    auto* duplicate = metadata->add_rowsets();
+    *duplicate = *rowset;
+    duplicate->set_id(2);
+    duplicate->mutable_segment_metas(0)->set_segment_idx(7);
+    duplicate->mutable_segment_metas(0)->set_shared(true);
+
+    auto* sync = SyncPoint::GetInstance();
+    int opens = 0;
+    sync->SetCallBack("tablet_splitter:segment_open", [&](void*) { ++opens; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::vector<lake::TabletRangeInfo> ranges;
+    auto status = lake::get_tablet_split_ranges(_tablet_manager.get(), metadata, 3, &ranges);
+    EXPECT_OK(status);
+    EXPECT_EQ(3, ranges.size());
+    EXPECT_EQ(1, opens) << "one physical full-key index must be opened only once";
+
+    opens = 0;
+    ranges.clear();
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [](void* p) { *static_cast<size_t*>(p) = 2; });
+    status = lake::get_tablet_split_ranges(_tablet_manager.get(), metadata, 3, &ranges);
+    EXPECT_TRUE(status.is_capacity_limit_exceeded()) << status;
+    EXPECT_EQ(0, opens) << "the shared budget must be charged before opening the first physical slice";
 }
 
 TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conservation) {
