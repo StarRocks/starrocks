@@ -215,11 +215,14 @@ public class Config extends ConfigBase {
             "events into the table starrocks_audit_db__.starrocks_audit_tbl__. Disabled by default. It stays " +
             "inert while an external dynamic AUDIT plugin is installed, to avoid importing audit data twice.")
     public static boolean enable_audit_loader = false;
-    @ConfField(mutable = true, comment = "Max interval in seconds between two builtin audit loader flushes.")
+    @ConfField(mutable = true, comment = "Max interval in seconds between two builtin audit loader flushes. " +
+            "0 means flushing on every daemon cycle; negative values are treated as 0, and values above one " +
+            "day are clamped down to one day.")
     public static long audit_loader_load_interval_seconds = 60;
     @ConfField(mutable = true, comment = "Per-FE byte cap of the builtin audit loader buffer, also the max " +
-            "size of a single load batch. Events beyond the cap are dropped and counted. Note a flush " +
-            "transiently holds up to ~3x the batch size in extra copies, so keep this conservative.")
+            "size of a single load batch. Events beyond the cap are dropped and counted. A flush also holds " +
+            "a copy of the batch while it is assembled and sent, so leave the FE heap room for that on top " +
+            "of the buffer. Values outside 1.2MB (one worst-case row) to 512MB are clamped into that range.")
     public static long audit_loader_batch_max_bytes = 52428800L; // 50MB
 
     @ConfField(mutable = true)

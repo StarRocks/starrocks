@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.gson.JsonArray;
@@ -47,10 +48,7 @@ public class LogUtil {
                 }
             }
         }
-        // The builtin audit loader persists connection events into the audit table, so the
-        // events must be generated while it is enabled even if the "connection" audit log
-        // module is off (the file logger of that module then simply stays silent).
-        if (!enableConnectionLog && !Config.enable_audit_loader) {
+        if (shouldSkipConnectionEvent(enableConnectionLog)) {
             return;
         }
         AuditEvent.AuditEventBuilder builder = new AuditEvent.AuditEventBuilder()
@@ -68,6 +66,11 @@ public class LogUtil {
                 .setErrorMessage(ctx.getState().getErrorMessage());
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(builder.build());
 
+        // The audit loader only consumes the audit event above. Keep the query detail queue on its
+        // original gating so enabling the loader does not also change what /api/query_detail shows.
+        if (!enableConnectionLog) {
+            return;
+        }
         QueryDetail queryDetail = new QueryDetail();
         queryDetail.setQueryId(DebugUtil.printId(UUIDUtil.genUUID()));
         queryDetail.setState(ctx.getState().isError() ?
@@ -78,6 +81,27 @@ public class LogUtil {
         queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
         queryDetail.setCatalog(ctx.getCurrentCatalog());
         QueryDetailQueue.addQueryDetail(queryDetail);
+    }
+
+    /**
+     * Whether to skip generating the connection audit event entirely. True unless either the
+     * "connection" audit log module is on, or the builtin audit loader is both enabled and will
+     * actually consume the event itself.
+     *
+     * <p>The second half is deliberately not just {@code Config.enable_audit_loader}:
+     * AuditEventProcessor fans every audit event out to ALL active AUDIT plugins, not just the
+     * builtin one, so generating the event whenever the config is merely true would also feed an
+     * unrelated external AUDIT plugin extra events neither it nor the operator asked for, whenever
+     * the two happen to coexist. The builtin loader's own "stay inert on conflict" only stops it
+     * from consuming the event itself; it does not stop the event from being generated and
+     * broadcast in the first place, so that has to be checked here too.
+     */
+    @VisibleForTesting
+    static boolean shouldSkipConnectionEvent(boolean enableConnectionLog) {
+        boolean enableBuiltinAuditLoader = Config.enable_audit_loader
+                && GlobalStateMgr.getCurrentState().getAuditLoaderMgr() != null
+                && !GlobalStateMgr.getCurrentState().getAuditLoaderMgr().isDisabledByConflict();
+        return !enableConnectionLog && !enableBuiltinAuditLoader;
     }
 
     public static List<String> getCurrentStackTraceToList(int trimHeadLevels, int reserveLevels) {

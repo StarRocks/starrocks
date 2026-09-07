@@ -21,6 +21,8 @@ import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.summary.AuditLoaderMgr;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -69,6 +71,58 @@ public class LogUtilTest {
         Assertions.assertEquals(1, events.size());
         Assertions.assertEquals("Access denied for user 'u' State=OK", events.get(0).errorCode);
         Assertions.assertEquals("Access denied for user 'u' State=OK", events.get(0).errorMessage);
+    }
+
+    @Test
+    public void testAuditLoaderDoesNotFeedQueryDetailQueue() {
+        // Enabling the audit loader makes the connection audit event be generated even when the
+        // "connection" audit log module is off, but it must not also start pushing connection
+        // entries into the query detail queue behind /api/query_detail.
+        String[] origModules = Config.audit_log_modules;
+        boolean origLoader = Config.enable_audit_loader;
+        try {
+            Config.audit_log_modules = new String[] {"slow_query", "query"};
+            Config.enable_audit_loader = true;
+            long before = QueryDetailQueue.getTotalQueriesCount();
+            LogUtil.logConnectionInfoToAuditLogAndQueryQueue(new ConnectContext(), null);
+            Assertions.assertEquals(before, QueryDetailQueue.getTotalQueriesCount());
+        } finally {
+            Config.audit_log_modules = origModules;
+            Config.enable_audit_loader = origLoader;
+        }
+    }
+
+    @Test
+    public void testShouldSkipConnectionEventGatesOnConflict() {
+        // AuditEventProcessor fans every audit event out to ALL active AUDIT plugins, not just the
+        // builtin loader, so the connection event must not be generated when an external AUDIT
+        // plugin is present (the builtin loader disabled by conflict), even with
+        // enable_audit_loader on: otherwise that external plugin would get events the operator
+        // never asked for via audit_log_modules.
+        boolean origLoader = Config.enable_audit_loader;
+        AuditLoaderMgr mgr = GlobalStateMgr.getCurrentState().getAuditLoaderMgr();
+        Assertions.assertNotNull(mgr);
+        boolean origDisabledByConflict = mgr.isDisabledByConflict();
+        try {
+            Config.enable_audit_loader = false;
+            mgr.setDisabledByConflict(false);
+            Assertions.assertTrue(LogUtil.shouldSkipConnectionEvent(false),
+                    "must skip when neither connection logging nor the builtin loader is enabled");
+
+            Config.enable_audit_loader = true;
+            Assertions.assertFalse(LogUtil.shouldSkipConnectionEvent(false),
+                    "must generate the event when the builtin loader is enabled and will consume it");
+
+            mgr.setDisabledByConflict(true);
+            Assertions.assertTrue(LogUtil.shouldSkipConnectionEvent(false),
+                    "must not generate the event once an external AUDIT plugin has disabled the builtin loader");
+
+            Assertions.assertFalse(LogUtil.shouldSkipConnectionEvent(true),
+                    "the \"connection\" audit log module alone must still generate the event either way");
+        } finally {
+            Config.enable_audit_loader = origLoader;
+            mgr.setDisabledByConflict(origDisabledByConflict);
+        }
     }
 
     @Test
