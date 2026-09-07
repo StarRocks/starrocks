@@ -2111,33 +2111,38 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     }
 
     SplitMetadataVisitBudget budget;
-    Status status = validate_split_inputs(*tablet_metadata, &budget);
     auto can_fallback_identical = [](const Status& outcome) {
         return outcome.is_not_supported() || outcome.is_capacity_limit_exceeded();
     };
-    if (!status.ok() && !can_fallback_identical(status)) return status;
     ASSIGN_OR_RETURN(const auto split_schema, materialize_sort_key_schema(tablet_metadata->schema()));
+    const bool is_external_boundaries = splitting_tablet.new_tablet_ranges_size() > 0;
+    std::vector<TabletRangeInfo> split_ranges;
+    Status status;
+    // Validate FE input before source preflight can select identical fallback or
+    // exhaust the shared budget. A source-level no-split outcome must not hide
+    // malformed external structure, bound types, or arity.
+    if (is_external_boundaries) {
+        if (splitting_tablet.new_tablet_ranges_size() != splitting_tablet.new_tablet_ids_size()) {
+            return Status::InvalidArgument("new_tablet_ranges count does not match new_tablet_ids");
+        }
+        status = compute_split_ranges_from_external_boundaries_impl(
+                tablet_manager, tablet_metadata, splitting_tablet.new_tablet_ranges(), &split_ranges, &budget);
+    }
+    if (status.ok()) status = validate_split_inputs(*tablet_metadata, &budget);
+    if (!status.ok() && !can_fallback_identical(status)) return status;
     const bool separate_sort = split_schema->keys_type() == PRIMARY_KEYS && split_schema->has_separate_sort_key();
     if (separate_sort && ((tablet_metadata->has_dcg_meta() && !tablet_metadata->dcg_meta().dcgs().empty()) ||
                           (tablet_metadata->has_idg_meta() && !tablet_metadata->idg_meta().idgs().empty()))) {
         return Status::NotSupported("range-tablet split with ORDER BY != PK does not support DCG or IDG yet");
     }
-    const bool is_external_boundaries = splitting_tablet.new_tablet_ranges_size() > 0;
-    std::vector<TabletRangeInfo> split_ranges;
     std::vector<RowsetOwnership> ownership;
     std::vector<bool> prunable;
     RowsetEmissionMask emission;
 
     // Paths 1/2 finish range validation and projection against the input metadata.
     // Path 3 validates source coordinates/stats here but needs the flushed PK SSTs.
-    if (is_external_boundaries && splitting_tablet.new_tablet_ranges_size() != splitting_tablet.new_tablet_ids_size()) {
-        return Status::InvalidArgument("new_tablet_ranges count does not match new_tablet_ids");
-    }
     if (status.ok() && (is_external_boundaries || !separate_sort)) {
-        if (is_external_boundaries) {
-            status = compute_split_ranges_from_external_boundaries_impl(
-                    tablet_manager, tablet_metadata, splitting_tablet.new_tablet_ranges(), &split_ranges, &budget);
-        } else {
+        if (!is_external_boundaries) {
             status = get_tablet_split_ranges_impl(tablet_manager, tablet_metadata,
                                                   splitting_tablet.new_tablet_ids_size(), &split_ranges,
                                                   txn_info.colocate_column_count(), &budget);

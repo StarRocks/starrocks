@@ -4665,6 +4665,47 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_absent_segment_idx_falls_bac
     expect_split_fallback_after_flush(m);
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_source_fallback_does_not_mask_invalid_external_ranges) {
+    auto* sync = SyncPoint::GetInstance();
+    int flushes = 0;
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    for (int malformed = 0; malformed < 3; ++malformed) {
+        auto metadata = split_source();
+        metadata->mutable_rowsets(0)->mutable_segment_metas(0)->clear_segment_idx();
+        ASSERT_OK(_tablet_manager->put_tablet_metadata(metadata));
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(metadata->id());
+        splitting.add_new_tablet_ids(next_id());
+        splitting.add_new_tablet_ids(next_id());
+        auto* left = splitting.add_new_tablet_ranges();
+        *left->mutable_upper_bound() = generate_sort_key(50);
+        left->set_upper_bound_included(false);
+        auto* right = splitting.add_new_tablet_ranges();
+        right->set_lower_bound_included(true);
+        if (malformed == 0) {
+            *right->mutable_lower_bound() = generate_sort_key(60); // gap
+        } else {
+            VariantTuple boundary;
+            if (malformed == 1) {
+                boundary.append(DatumVariant(get_type_info(TYPE_BIGINT), Datum(int64_t{50})));
+            } else {
+                boundary.append(DatumVariant(get_type_info(TYPE_INT), Datum(50)));
+                boundary.append(DatumVariant(get_type_info(TYPE_INT), Datum(50)));
+            }
+            boundary.to_proto(left->mutable_upper_bound());
+            *right->mutable_lower_bound() = left->upper_bound();
+        }
+        auto result = lake::split_tablet(_tablet_manager.get(), metadata, splitting, 2, TxnInfoPB());
+        EXPECT_TRUE(result.status().is_invalid_argument()) << "malformed range case " << malformed;
+        EXPECT_EQ(0, flushes) << "malformed range case " << malformed;
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_splitting_duplicate_segment_idx_is_corruption) {
     auto m = split_source();
     m->mutable_rowsets(0)->mutable_segment_metas(1)->set_segment_idx(0);
