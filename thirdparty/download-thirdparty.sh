@@ -312,6 +312,55 @@ do
         continue
     fi
 
+    # git-sourced packages (e.g. vectorscan/starcache on riscv64, which have
+    # no prebuilt binary tarball): clone instead of calling download_func,
+    # which treats an empty DOWNLOAD URL as a hard error. A package is a git
+    # source when its <PKG>_GIT_URL variable is non-empty.
+    GIT_URL_VAR=$TP_ARCH"_GIT_URL"
+    GIT_BRANCH_VAR=$TP_ARCH"_GIT_BRANCH"
+    GIT_COMMIT_VAR=$TP_ARCH"_GIT_COMMIT"
+    SOURCE_VAR=$TP_ARCH"_SOURCE"
+    if [[ -n "${!GIT_URL_VAR}" ]]; then
+        if [[ -d "$TP_SOURCE_DIR/${!SOURCE_VAR}" ]]; then
+            echo "Git source ${!SOURCE_VAR} already exists, skip clone."
+        else
+            echo "Cloning ${!SOURCE_VAR} from ${!GIT_URL_VAR} (${!GIT_BRANCH_VAR})"
+            git clone --depth 1 -b "${!GIT_BRANCH_VAR}" "${!GIT_URL_VAR}" "$TP_SOURCE_DIR/${!SOURCE_VAR}"
+            if [[ $? -ne 0 ]]; then
+                echo "Failed to git clone ${!SOURCE_VAR}"
+                exit 1
+            fi
+            # A branch tip is mutable: the same StarRocks commit could build
+            # different code as the fork advances. When <PKG>_GIT_COMMIT is
+            # set, check out that exact revision so builds are reproducible.
+            # (--depth 1 -b fetched only the branch tip, so if the pinned
+            # commit is not the tip, fetch it explicitly first.)
+            if [[ -n "${!GIT_COMMIT_VAR}" ]]; then
+                git -C "$TP_SOURCE_DIR/${!SOURCE_VAR}" cat-file -e "${!GIT_COMMIT_VAR}^{commit}" 2>/dev/null || \
+                git -C "$TP_SOURCE_DIR/${!SOURCE_VAR}" fetch --depth 1 origin "${!GIT_COMMIT_VAR}" || {
+                    echo "Failed to fetch ${!GIT_COMMIT_VAR} for ${!SOURCE_VAR}"
+                    exit 1
+                }
+                git -C "$TP_SOURCE_DIR/${!SOURCE_VAR}" checkout -q "${!GIT_COMMIT_VAR}" || {
+                    echo "Failed to pin ${!SOURCE_VAR} at commit ${!GIT_COMMIT_VAR}"
+                    exit 1
+                }
+            fi
+        fi
+        continue
+    fi
+
+    # Packages that are neither a git source nor a tarball download (empty
+    # <PKG>_DOWNLOAD with no <PKG>_GIT_URL) are excluded packages on this
+    # architecture (e.g. tenann/pprof on riscv64, filtered out of the build by
+    # package-manifest.sh but still present in the static TP_ARCHIVES list).
+    # Skip them instead of letting download_func fail on the empty URL.
+    URL=$TP_ARCH"_DOWNLOAD"
+    if [[ -z "${!URL}" ]]; then
+        echo "Skip ${TP_ARCH}: no download URL and not a git source (excluded package)."
+        continue
+    fi
+
     NAME=$TP_ARCH"_NAME"
     MD5SUM=$TP_ARCH"_MD5SUM"
     if test "x$REPOSITORY_URL" = x; then
@@ -527,6 +576,7 @@ if [[ -d $TP_SOURCE_DIR/$ROCKSDB_SOURCE ]] ; then
         apply_patch -p1 $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
         apply_patch -p1 $TP_PATCH_DIR/rocksdb-6.22.1-gcc14.patch
         apply_patch -p1 $TP_PATCH_DIR/rocksdb-6.22.1-gcc14-extra.patch
+        apply_patch -p1 $TP_PATCH_DIR/rocksdb-6.22.1-riscv64-toku_time.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -551,7 +601,10 @@ if [[ -d $TP_SOURCE_DIR/$BRPC_SOURCE ]] ; then
         touch $PATCHED_MARK
     fi
     if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
-        apply_patch $TP_PATCH_DIR/brpc-1.9.0.patch
+        apply_patch -p1 $TP_PATCH_DIR/brpc-1.9.0.patch
+        apply_patch -p1 $TP_PATCH_DIR/brpc-1.9.0-riscv64.patch
+        apply_patch -p1 $TP_PATCH_DIR/brpc-1.9.0-riscv64-atomic64.patch
+        apply_patch -p1 $TP_PATCH_DIR/brpc-1.9.0-riscv64-fcontext.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -601,6 +654,13 @@ if [[ -d $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE ]] ; then
     if [ ! -f $PATCHED_MARK ] && [ $GPERFTOOLS_SOURCE = "gperftools-gperftools-2.7" ]; then
         apply_patch -p1 $TP_PATCH_DIR/tcmalloc_hook.patch
         apply_patch -p1 $TP_PATCH_DIR/gperftools_20251105.patch
+        apply_patch -p1 $TP_PATCH_DIR/gperftools-2.7-riscv64-cacheline.patch
+        apply_patch -p1 $TP_PATCH_DIR/gperftools-2.7-riscv64-futex.patch
+        apply_patch -p1 $TP_PATCH_DIR/gperftools-2.7-riscv64-mmap.patch
+        apply_patch -p1 $TP_PATCH_DIR/gperftools-2.7-riscv64-pc-from-ucontext.patch
+        # LSS riscv64 fallback: must come after the pc-from-ucontext patch so
+        # the patch chain stays in the same order as this list.
+        apply_patch -p1 $TP_PATCH_DIR/gperftools-2.7-riscv64-lss.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -760,6 +820,13 @@ if [[ -d $TP_SOURCE_DIR/$SERDES_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $SERDES_SOURCE = "libserdes-7.3.1" ]; then
         apply_patch -p0 $TP_PATCH_DIR/libserdes-7.3.1.patch
+        # Rename tinycthread's once_flag/call_once/ONCE_FLAG_INIT to
+        # tct_once_flag/tct_call_once/TCT_ONCE_FLAG_INIT. This host's glibc
+        # declares the C2x once_flag/call_once even in gnu17 mode (not gated
+        # by __STDC_VERSION__ as upstream glibc is), so the emulating macros
+        # clash with glibc's declarations regardless of the -std= flag. The
+        # rename removes the collision unconditionally.
+        apply_patch -p1 $TP_PATCH_DIR/libserdes-7.3.1-tinycthread-c23.patch
         touch $PATCHED_MARK
     fi
     echo "Finished patching $SERDES_SOURCE"
@@ -774,9 +841,34 @@ if [[ -d $TP_SOURCE_DIR/$SASL_SOURCE ]] ; then
         apply_patch -p1 $TP_PATCH_DIR/sasl2-gcc14.patch
         # Keep md5.h ANSI prototypes enabled for the compilers StarRocks uses.
         apply_patch -p1 $TP_PATCH_DIR/sasl2-makemd5-prototypes.patch
+        # Fix K&R signal-handler declarations in saslauthd: handle_sigchld()/
+        # server_exit() are assigned to sa_handler (__sighandler_t = void(int))
+        # but declared void() (K&R empty params). GCC 14 turns the resulting
+        # -Wincompatible-pointer-types into a hard error by default.
+        apply_patch -p1 $TP_PATCH_DIR/sasl2-saslauthd-signal-handlers.patch
         touch $PATCHED_MARK
     fi
     echo "Finished patching $SASL_SOURCE"
+    cd -
+fi
+
+# patch openssl
+if [[ -d $TP_SOURCE_DIR/$OPENSSL_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$OPENSSL_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $OPENSSL_SOURCE = "openssl-3.5.7" ]; then
+        # 3.5.7 is the first pinned openssl with a riscv64 assembly path
+        # (aes-riscv64.pl). AES_set_decrypt_key tail-calls AES_set_encrypt_key
+        # with a bare `jal ra,<sym>` -- the only symbol-jal in all riscv64 asm
+        # generators. JAL reaches +/-1MiB and the linker cannot relax it wider
+        # into auipc+jalr, so any consumer statically linking the whole
+        # libcrypto.a into a large .so (e.g. libbrpc.so) exceeds the range and
+        # fails with "relocation truncated to fit: R_RISCV_JAL". Replace it
+        # with the `call` pseudo-instruction (auipc+jalr, +/-2GiB), which is
+        # what the callee-saved sequence around it already assumes.
+        apply_patch -p1 $TP_PATCH_DIR/openssl-3.5.7-riscv64-jal-range.patch
+        touch $PATCHED_MARK
+    fi
+    echo "Finished patching $OPENSSL_SOURCE"
     cd -
 fi
 

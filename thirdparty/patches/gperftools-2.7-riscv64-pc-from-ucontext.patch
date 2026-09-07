@@ -1,0 +1,17 @@
+diff --git a/m4/pc_from_ucontext.m4 b/m4/pc_from_ucontext.m4
+index 8b3e9a4..1c2f5d3 100644
+--- a/m4/pc_from_ucontext.m4
++++ b/m4/pc_from_ucontext.m4
+@@ -24,6 +24,12 @@
+    pc_fields="           uc_mcontext.gregs[[REG_PC]]"  # Solaris x86 (32 + 64 bit)
+    pc_fields="$pc_fields uc_mcontext.gregs[[REG_EIP]]" # Linux (i386)
+    pc_fields="$pc_fields uc_mcontext.gregs[[REG_RIP]]" # Linux (x86_64)
++  dnl glibc riscv64: mcontext_t exposes the register array as __gregs (no
++  dnl __ctx() renaming like x86's gregs) and defines REG_PC == 0 under
++  dnl _GNU_SOURCE, which this probe's test program already defines. Without
++  dnl this candidate the probe fails, configure silently disables the cpu
++  dnl profiler, and libprofiler + gperftools/profiler.h never get installed.
++  pc_fields="$pc_fields uc_mcontext.__gregs[[REG_PC]]" # Linux (riscv64)
+    pc_fields="$pc_fields uc_mcontext.sc_ip"            # Linux (ia64)
+    pc_fields="$pc_fields uc_mcontext.pc"               # Linux (mips)
+    pc_fields="$pc_fields uc_mcontext.uc_regs->gregs[[PT_NIP]]" # Linux (ppc)

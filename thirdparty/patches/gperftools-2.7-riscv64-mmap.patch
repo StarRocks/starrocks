@@ -1,0 +1,43 @@
+diff --git a/src/malloc_hook_mmap_linux.h b/src/malloc_hook_mmap_linux.h
+index 2f6116f..86635ff 100644
+--- a/src/malloc_hook_mmap_linux.h
++++ b/src/malloc_hook_mmap_linux.h
+@@ -46,6 +46,30 @@
+ #include <errno.h>
+ #include "base/linux_syscall_support.h"
+ 
++#include <sys/syscall.h>
++#include <unistd.h>
++
++// gperftools 2.7's bundled linux_syscall_support.h is a no-op on riscv64 (its
++// top-level arch guard lists only x86/arm/mips/ppc/aarch64/s390), so sys_mmap,
++// sys_munmap and sys_mremap are never declared. Provide them via the glibc
++// syscall() wrapper, matching the LSS signatures so do_mmap64/munmap/mremap
++// below compile unchanged. riscv64 uses the plain 6-arg mmap syscall (no
++// mmap2), same as aarch64/x86_64. __off64_t matches do_mmap64's offset type.
++#if defined(__riscv) && !defined(sys_mmap)
++static inline void* sys_mmap(void *start, size_t length, int prot, int flags,
++                             int fd, __off64_t offset) {
++  return (void*)syscall(__NR_mmap, start, length, prot, flags, fd, offset);
++}
++static inline int sys_munmap(void *start, size_t length) {
++  return (int)syscall(__NR_munmap, start, length);
++}
++static inline void* sys_mremap(void *old_address, size_t old_size,
++                               size_t new_size, int flags, void *new_address) {
++  return (void*)syscall(__NR_mremap, old_address, old_size, new_size, flags,
++                        new_address);
++}
++#endif
++
+ // The x86-32 case and the x86-64 case differ:
+ // 32b has a mmap2() syscall, 64b does not.
+ // 64b and 32b have different calling conventions for mmap().
+@@ -55,6 +79,7 @@
+ #if defined(__x86_64__) \
+     || defined(__PPC64__) \
+     || defined(__aarch64__) \
++    || defined(__riscv) \
+     || (defined(_MIPS_SIM) && (_MIPS_SIM == _ABI64 || _MIPS_SIM == _ABIN32)) \
+     || defined(__s390__)
+ 

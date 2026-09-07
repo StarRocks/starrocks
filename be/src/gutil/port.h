@@ -338,6 +338,10 @@ inline void* memrchr(const void* bytes, int find_char, size_t len) {
 // Cache line sizes for aarch64(huawei kunpeng):
 // https://support.huaweicloud.com/tuningtip-kunpenggrf/kunpengtuning_12_0052.html
 #define CACHELINE_SIZE 128
+#elif defined(__riscv) && __riscv_xlen == 64
+// Cache line size is implementation-defined on RISC-V; 64 bytes matches
+// current riscv64 cores (e.g. SpacemiT X60). Only used for alignment hints.
+#define CACHELINE_SIZE 64
 #endif
 
 // This is a NOP if CACHELINE_SIZE is not defined.

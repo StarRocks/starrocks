@@ -4555,4 +4555,190 @@ struct kernel_statfs {
 #endif
 
 #endif
+
+/* ------------------------------------------------------------------------
+ * riscv64 fallback for breakpad.
+ *
+ * The stock LSS above compiles away entirely on riscv64: its top-level #if
+ * lists only x86-32/64, ARM, MIPS, PPC, s390(x) and aarch64, and everything
+ * -- the kernel_* structs and all sys_* wrappers -- lives inside that guard.
+ * breakpad (which upstream assumes a riscv64-aware LSS) then fails with
+ * 'sys_mmap was not declared'. This block redefines the small subset
+ * breakpad actually uses, backed by glibc (raw ecall where glibc has no
+ * wrapper). That trades away LSS's "no libc needed after a crash" property
+ * on riscv64 only -- acceptable for the best-effort dump-writing path.
+ * Other architectures are completely unaffected.
+ * ---------------------------------------------------------------------- */
+#if defined(__riscv) && __riscv_xlen == 64
+
+/* gettid()/tgkill() and the full struct sigaction need _GNU_SOURCE */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/prctl.h>
+#include <sys/ptrace.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/wait.h>
+
+/* ---- kernel_* types ----------------------------------------------------
+ * breakpad refers to them as `struct kernel_X', so token-level #defines to
+ * the glibc names expand correctly. On riscv64 (new-world asm-generic ABI)
+ * the glibc and kernel layouts coincide for all of these, and using the
+ * glibc types keeps CMSG_FIRSTHDR()/st_size & co. type-checking clean.
+ * ---------------------------------------------------------------------- */
+#define kernel_stat       stat
+#define kernel_stat64     stat
+#define kernel_sigset_t   sigset_t
+#define kernel_iovec      iovec
+#define kernel_msghdr     msghdr
+
+/* breakpad accesses LSS's sa_handler_ spelling on a kernel_sigaction, which
+ * glibc's struct sigaction does not have (it is sa_handler). Keep LSS's
+ * layout; sys_rt_sigaction converts to the glibc one. */
+struct kernel_sigaction {
+  void        (*sa_handler_)(int);
+  unsigned long sa_flags;
+  sigset_t   sa_mask;
+};
+
+/* riscv64 (asm-generic ABI) only has getdents64. breakpad's directory_reader
+ * reads only d_reclen/d_name, which the getdents64 record provides. */
+struct kernel_dirent {
+  uint64_t d_ino;
+  int64_t  d_off;
+  unsigned short d_reclen;
+  unsigned char  d_type;
+  char     d_name[];
+};
+
+/* breakpad accesses LSS's sa_handler_ spelling on a kernel_sigaction, which
+ * glibc's struct sigaction does not have. Provide the LSS layout and convert
+ * in the sys_rt_sigaction wrapper below. */
+struct lss_sigaction {
+  void        (*sa_handler_)(int);
+  unsigned long sa_flags;
+  sigset_t   sa_mask;
+};
+
+/* ---- sys_* entry points backed by glibc --------------------------------
+ * Real wrapper functions, NOT `#define sys_X X' token pastes: a macro would
+ * be hijacked by any enclosing C++ member/local of the same name (e.g.
+ * log.cc's logger::write turned `sys_write(2, buf, n)' into a call to the
+ * member). Distinct function names keep lookup unambiguous.
+ * ---------------------------------------------------------------------- */
+static inline int      sys_close(int fd) { return close(fd); }
+static inline void     sys_exit(int status) { _exit(status); }
+static inline int      sys_fstat(int fd, struct kernel_stat* st) { return fstat(fd, st); }
+static inline int      sys_fstat64(int fd, struct kernel_stat64* st) { return fstat(fd, st); }
+static inline pid_t    sys_getpid(void) { return getpid(); }
+static inline off_t    sys_lseek(int fd, off_t off, int whence) { return lseek(fd, off, whence); }
+static inline void*    sys_mmap(void* addr, size_t len, int prot, int flags, int fd, off_t off) { return mmap(addr, len, prot, flags, fd, off); }
+static inline int      sys_munmap(void* addr, size_t len) { return munmap(addr, len); }
+static inline int      sys_open(const char* path, int flags, mode_t mode) { return open(path, flags, mode); }
+static inline int      sys_pipe(int fds[2]) { return pipe(fds); }
+static inline int      sys_prctl(int option, unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5) { return prctl(option, a2, a3, a4, a5); }
+/* glibc's ptrace takes enum __ptrace_request as its first parameter in C++,
+ * which an int cannot convert to implicitly; cast explicitly. */
+static inline long     sys_ptrace(int request, pid_t pid, void* addr, void* data) { return ptrace((__ptrace_request)request, pid, addr, data); }
+static inline ssize_t  sys_read(int fd, void* buf, size_t count) { return read(fd, buf, count); }
+static inline ssize_t  sys_readlink(const char* path, char* buf, size_t size) { return readlink(path, buf, size); }
+static inline ssize_t  sys_sendmsg(int fd, const struct kernel_msghdr* msg, int flags) { return sendmsg(fd, msg, flags); }
+static inline int      sys_sigaltstack(const stack_t* ss, stack_t* oss) { return sigaltstack(ss, oss); }
+static inline int      sys_sigemptyset(kernel_sigset_t* set) { return sigemptyset(set); }
+static inline int      sys_stat(const char* path, struct kernel_stat* st) { return stat(path, st); }
+static inline pid_t    sys_waitpid(pid_t pid, int* status, int options) { return waitpid(pid, status, options); }
+static inline ssize_t  sys_write(int fd, const void* buf, size_t count) { return write(fd, buf, count); }
+
+/* ---- wrappers where the LSS signature differs from glibc's ------------- */
+
+/* LSS: 4 args (sigsetsize), kernel_sigaction is the LSS layout with the
+ * sa_handler_ field. breakpad always passes old=NULL. */
+static inline int sys_rt_sigaction(int sig, const struct kernel_sigaction* ksa,
+                                   struct kernel_sigaction* kold,
+                                   size_t sigsetsize) {
+  (void)sigsetsize;
+  const struct lss_sigaction* in = (const struct lss_sigaction*)ksa;
+  struct lss_sigaction* out = (struct lss_sigaction*)kold;
+  struct sigaction gsa;
+  struct sigaction gold;
+  struct sigaction* goldp = out ? &gold : NULL;
+  memset(&gsa, 0, sizeof(gsa));
+  if (in) {
+    gsa.sa_handler = in->sa_handler_;
+    gsa.sa_flags = (int)in->sa_flags;
+    memcpy(&gsa.sa_mask, &in->sa_mask, sizeof(gsa.sa_mask));
+  }
+  if (sigaction(sig, in ? &gsa : NULL, goldp) != 0)
+    return -1;
+  if (out) {
+    out->sa_handler_ = gold.sa_handler;
+    out->sa_flags = (unsigned long)gold.sa_flags;
+    memcpy(&out->sa_mask, &gold.sa_mask, sizeof(out->sa_mask));
+  }
+  return 0;
+}
+
+/* glibc has no getdents/getdents64 wrapper; raw syscall. */
+static inline int sys_getdents(int fd, struct kernel_dirent* buf, size_t len) {
+  return (int)syscall(__NR_getdents64, fd, buf, len);
+}
+
+/* glibc only exposes gettid()/tgkill() with _GNU_SOURCE (and tgkill from
+ * 2.30); either may be missing depending on what the including TU pulled in
+ * first. Raw syscalls avoid both hazards. */
+static inline pid_t sys_gettid(void) {
+  return (pid_t)syscall(__NR_gettid);
+}
+
+static inline int sys_tgkill(pid_t tgid, pid_t tid, int sig) {
+  return (int)syscall(__NR_tgkill, tgid, tid, sig);
+}
+
+/* LSS clone(fnc, child_stack, flags, arg, ...) runs fnc(arg) in the child
+ * and exits with its return value; the raw __NR_clone syscall only sets up
+ * the child's stack/registers. Mirrors LSS's x86_64 semantics with a riscv64
+ * ecall. */
+static inline pid_t sys_clone(int (*fnc)(void*), void* child_stack, int flags,
+                              void* arg, pid_t* parent_tidptr, void* newtls,
+                              pid_t* child_tidptr) {
+  /* riscv64 clone ABI: a0=flags, a1=newsp, a2=parent_tidptr,
+   * a3=child_tidptr, a4=tls (same register order as glibc's clone.S). The
+   * kernel adopts newsp as the child's sp, so no userspace stack switch. */
+  register long a0 __asm__("a0") = (long)flags;
+  register long a1 __asm__("a1") = (long)child_stack;
+  register long a2 __asm__("a2") = (long)parent_tidptr;
+  register long a3 __asm__("a3") = (long)child_tidptr;
+  register long a4 __asm__("a4") = (long)newtls;
+  register long a7 __asm__("a7") = (long)__NR_clone;
+  __asm__ __volatile__("ecall"
+                       : "+r"(a0)
+                       : "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a7)
+                       : "memory", "a5", "a6");
+  if (a0 < 0) {
+    errno = (int)-a0;
+    return -1;
+  }
+  if (a0 == 0) {
+    /* child: run fnc(arg), then exit with its value, never returning */
+    long rc = (long)fnc(arg);
+    register long e0 __asm__("a0") = rc;
+    register long e7 __asm__("a7") = (long)__NR_exit;
+    __asm__ __volatile__("ecall" : "+r"(e0) : "r"(e7) : "memory");
+    __builtin_unreachable();
+  }
+  return (pid_t)a0;
+}
+
+#endif /* __riscv && __riscv_xlen == 64 */
 #endif

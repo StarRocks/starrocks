@@ -200,6 +200,17 @@ inline int64 CycleClock::Now() {
     return virtual_timer_value;
 }
 // ----------------------------------------------------------------
+#elif defined(__riscv) && (__riscv_xlen == 64)
+inline int64 CycleClock::Now() {
+    // RISC-V `rdtime` reads the mtime counter (a monotonically increasing,
+    // high-resolution timer). Its frequency is implementation-defined and can be
+    // obtained from the `timebase-frequency` device-tree property; CycleClock only
+    // requires a monotonic high-resolution source, so the raw counter suffices.
+    int64_t t;
+    asm volatile("rdtime %0" : "=r"(t));
+    return t;
+}
+// ----------------------------------------------------------------
 #else
 // The soft failover to a generic implementation is automatic only for some
 // platforms.  For other platforms the developer is expected to make an attempt

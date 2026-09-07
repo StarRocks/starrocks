@@ -90,6 +90,8 @@ inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
     return crc32(seed, (const unsigned char*)&value, sizeof(uint64_t));
 #elif defined(__aarch64__)
     return __crc32cd(seed, value);
+#elif defined(__riscv)
+    return crc32c_sw_u64(static_cast<uint32_t>(seed), value);
 #else
 #error "Not supported architecture"
 #endif
@@ -105,6 +107,9 @@ inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed
 #elif defined(__aarch64__)
     uint64_t hash = __crc32cd(seed, value0);
     hash = __crc32cd(hash, value1);
+#elif defined(__riscv)
+    uint32_t hash = crc32c_sw_u64(static_cast<uint32_t>(seed), value0);
+    hash = crc32c_sw_u64(hash, value1);
 #else
 #error "Not supported architecture"
 #endif
