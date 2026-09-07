@@ -190,6 +190,16 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### ai_topn_pushdown_max_global_limit
+
+* **Description**: Selects the candidate TopN strategy below an AI projection when `enable_ai_topn_pushdown` is `true`. For an eligible positive SQL `LIMIT N`, `N` less than or equal to this threshold uses a global candidate bound of at most `N` rows; larger values use a local candidate bound of at most `N` rows per fragment instance, not per BE or pipeline driver. `0` selects local-only candidate pruning; it does not disable the optimization. Both strategies retain the original TopN above the AI projection.
+* **Default**: 1000
+* **Data type**: long
+* **Range**: [0, 9223372036854775807]
+* **Scope**: Session, Global
+
+The candidate bound applies to the rewritten AI projection, not all AI work in the query. Set this variable with `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint; no restart is required. It is independent of `cbo_push_down_topn_limit` and does not affect ordinary queries without an AI projection. The default is an initial policy choice, not a benchmark-derived optimum. This threshold is not an HTTP request, token, or memory limit and does not guarantee savings or lower latency. For eligibility, parallelism trade-offs, and examples, see [Reducing AI input rows](sql-functions/scalar-functions/ai_complete.md#reducing-ai-input-rows).
+
 ### ann_params
 
 * **Description**: Specifies query-time parameters for approximate nearest neighbor (ANN) vector index searches. The value is a JSON object string whose keys and values are strings. HNSW supports `efsearch`; IVFPQ supports `nprobe`, `max_codes`, `scan_table_threshold`, `polysemous_ht`, and `range_search_confidence`. You can set the variable for a session or a single statement, for example `SET ann_params = '{"efsearch":"256"}'` or `SET_VAR (ann_params='{"efsearch":"256"}')`.
@@ -604,6 +614,16 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
 * **Default**: false
 * **Introduced in**: v2.5
+
+### enable_ai_topn_pushdown
+
+* **Description**: Whether to enable candidate TopN pushdown below eligible AI projections. `false` skips this candidate rewrite, without affecting ordinary TopN optimization for queries without an AI projection. When enabled, `ai_topn_pushdown_max_global_limit` selects global or per-fragment-instance candidate pruning; its value `0` means local-only pruning, not disabled.
+* **Default**: true
+* **Data type**: Boolean
+* **Valid values**: `true`, `false`
+* **Scope**: Session, Global
+
+Set this variable with `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint; no restart is required. For examples, see [AI TopN pushdown](sql-functions/scalar-functions/ai_complete.md#ai-topn-pushdown).
 
 ### enable_bucket_aware_execution_on_lake
 

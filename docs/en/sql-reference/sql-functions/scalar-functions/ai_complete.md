@@ -59,7 +59,62 @@ Returns a nullable VARCHAR containing `choices[0].message.content` from a succes
 The function is non-deterministic. The same arguments can return different text or fail differently as provider state,
 model behavior, and runtime conditions change.
 
+### Reducing AI input rows
+
+For an `ORDER BY ... LIMIT` query with a positive `LIMIT` and no `OFFSET`, StarRocks can select the top rows before
+evaluating `ai_complete` when every ordering column passes through the AI projection and any optional ordinary Project
+unchanged from its input. With [`enable_ai_topn_pushdown`](../../System_variable.md#enable_ai_topn_pushdown) enabled
+(the default), [`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit)
+selects the candidate strategy for SQL `LIMIT N`:
+
+- `N` less than or equal to the threshold (default `1000`): an ordinary `FINAL` candidate TopN bounds input to the
+  rewritten AI projection to at most `N` rows globally.
+- `N` greater than the threshold: an ordinary `PARTIAL` candidate TopN bounds input to that AI projection to at most `N` rows per
+  fragment instance, not per BE or pipeline driver. It is not a per-pipeline TopN.
+
+Both strategies retain the original TopN above the AI projection to preserve the requested output order and limit.
+Use `EXPLAIN` to check the candidate TopN below the AI projection and the original TopN above it.
+
+The bound applies to the rewritten AI projection, not all AI work in the query. For nested AI calls, a local candidate
+TopN can remain between two AI projections, so the inner AI call can still process the original input rows.
+
+This optimization does not move a TopN below an AI call needed for ordering or filtering. It also does not cross
+an existing limit on the AI projection or its immediate input, or unsafe projection or predicate barriers.
+Partitioned TopN operations and those using `RANK` or `DENSE_RANK` are not eligible. These eligibility checks apply to
+both strategies.
+
+The global strategy can trade MPP parallelism across AI execution instances for fewer AI input rows. The local strategy
+adds no global gather before AI execution, but ordinary local merging can reduce AI pipeline parallelism within a
+fragment instance; AI requests remain asynchronous. Already-gathered input need not become distributed. Neither
+strategy guarantees fewer AI input rows, lower provider cost, or lower latency. These row bounds are not HTTP request,
+token, or memory limits: separate AI calls and retries can still produce multiple requests per row.
+
+The error policy for executed AI calls is unchanged. Pruned input rows do not execute AI calls, so errors those calls
+might have produced are not observed.
+
 ## Configuration
+
+### AI TopN pushdown
+
+[`enable_ai_topn_pushdown`](../../System_variable.md#enable_ai_topn_pushdown) is a Boolean session variable with default
+`true`; `false` skips the candidate rewrite. [`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit)
+is a `long` session variable with default `1000` and range `[0, 9223372036854775807]`. Setting the threshold to `0`
+selects local-only candidate pruning for eligible queries; it does not disable pushdown. The defaults are an initial
+policy choice, not a benchmark-derived optimum.
+
+Both variables support `SET` for the current session, `SET GLOBAL` for future sessions, and a statement-level `SET_VAR`
+hint, without restarting. They are independent of `cbo_push_down_topn_limit` and do not affect ordinary queries without
+an AI projection.
+
+```sql
+-- Disable candidate TopN pushdown below AI projections.
+SET enable_ai_topn_pushdown = false;
+-- Enable hybrid pruning: global for LIMIT <= 1000, local for larger LIMITs.
+SET enable_ai_topn_pushdown = true;
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- Use local-only candidate pruning while pushdown remains enabled.
+SET ai_topn_pushdown_max_global_limit = 0;
+```
 
 ### FE SYSTEM model configuration
 

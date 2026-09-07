@@ -58,6 +58,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -74,6 +75,85 @@ public class VariableMgrTest {
     @AfterEach
     public void tearDown() {
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testAITopNHybridVariablesAreRegistered() {
+        VariableMgr variableMgr = new VariableMgr();
+        List<List<String>> variables = variableMgr.dump(SetType.SESSION, variableMgr.newSessionVariable(), null);
+        Assertions.assertTrue(variables.stream().anyMatch(row ->
+                row.get(0).equals("enable_ai_topn_pushdown") && row.get(1).equals("true")));
+        Assertions.assertTrue(variables.stream().anyMatch(row ->
+                row.get(0).equals("ai_topn_pushdown_max_global_limit") && row.get(1).equals("1000")));
+        Assertions.assertFalse(variables.stream().anyMatch(row -> row.get(0).equals("ai_topn_pushdown_max_limit")));
+    }
+
+    @Test
+    public void testAITopNSwitchSessionAndGlobalSettings() throws Exception {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable session = variableMgr.newSessionVariable();
+        String name = SessionVariable.ENABLE_AI_TOPN_PUSHDOWN;
+        for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+            for (boolean value : List.of(false, true)) {
+                SystemVariable variable = new SystemVariable(scope, name, new StringLiteral(Boolean.toString(value)));
+                SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
+                variableMgr.setSystemVariable(session, variable, false);
+                Assertions.assertEquals(value, session.isEnableAiTopnPushdown());
+                Assertions.assertEquals(scope != SetType.GLOBAL || value,
+                        variableMgr.newSessionVariable().isEnableAiTopnPushdown());
+            }
+        }
+        variableMgr.applySessionVariable(Map.of(name, "false"), session);
+        Assertions.assertFalse(session.isEnableAiTopnPushdown());
+        Assertions.assertThrows(DdlException.class,
+                () -> variableMgr.applySessionVariable(Map.of(name, "invalid"), session));
+        Assertions.assertFalse(session.isEnableAiTopnPushdown());
+    }
+
+    @Test
+    public void testAITopNThresholdSessionAndGlobalSettings() throws Exception {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable session = variableMgr.newSessionVariable();
+        String name = SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT;
+        Assertions.assertTrue(variableMgr.dump(SetType.SESSION, session, null).stream()
+                .anyMatch(row -> row.get(0).equals(name) && row.get(1).equals("1000")));
+        for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+            for (long value : new long[] {0, 1, 1000, Long.MAX_VALUE}) {
+                SystemVariable variable = new SystemVariable(scope, name, new IntLiteral(value));
+                SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
+                variableMgr.setSystemVariable(session, variable, false);
+                Assertions.assertEquals(value, session.getAiTopnPushdownMaxGlobalLimit());
+                Assertions.assertEquals(scope == SetType.GLOBAL ? value : 1000,
+                        variableMgr.newSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+            }
+        }
+    }
+
+    @Test
+    public void testInvalidAITopNThresholdRejectedBeforeGlobalPersistence() {
+        for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+            for (String value : List.of("-1", "9223372036854775808", "invalid")) {
+                SystemVariable variable = new SystemVariable(
+                        scope, SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT, new StringLiteral(value));
+                // Reject invalid SET GLOBAL values before VariableMgr can write a journal entry.
+                Assertions.assertThrows(SemanticException.class,
+                        () -> SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null));
+            }
+        }
+    }
+
+    @Test
+    public void testAITopNThresholdHintValidation() throws Exception {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable session = variableMgr.newSessionVariable();
+        String name = SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT;
+        variableMgr.applySessionVariable(Map.of(name, "0"), session);
+        Assertions.assertEquals(0, session.getAiTopnPushdownMaxGlobalLimit());
+        for (String value : List.of("-1", "9223372036854775808", "invalid")) {
+            Assertions.assertThrows(DdlException.class,
+                    () -> variableMgr.applySessionVariable(Map.of(name, value), session));
+            Assertions.assertEquals(0, session.getAiTopnPushdownMaxGlobalLimit());
+        }
     }
 
     @Test
@@ -317,6 +397,23 @@ public class VariableMgrTest {
             Assertions.assertEquals("Variable 'warehouse' is a SESSION variable and can't be used with SET GLOBAL",
                     e.getMessage());
         }
+    }
+
+    @Test
+    public void testAITopNVariablesReplayAndImagePersist() throws Exception {
+        VariableMgr mgr = new VariableMgr();
+        GlobalVarPersistInfo info = new GlobalVarPersistInfo();
+        info.setPersistJsonString("{\"enable_ai_topn_pushdown\":false,\"ai_topn_pushdown_max_global_limit\":0}");
+        mgr.replayGlobalVariableV2(info);
+        Assertions.assertFalse(mgr.newSessionVariable().isEnableAiTopnPushdown());
+        Assertions.assertEquals(0, mgr.newSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+
+        PseudoImage image = new PseudoImage();
+        mgr.save(image.getImageWriter());
+        VariableMgr restored = new VariableMgr();
+        restored.load(image.getMetaBlockReader());
+        Assertions.assertFalse(restored.newSessionVariable().isEnableAiTopnPushdown());
+        Assertions.assertEquals(0, restored.newSessionVariable().getAiTopnPushdownMaxGlobalLimit());
     }
 
     @Test

@@ -49,7 +49,40 @@ OpenAI 互換レスポンスが成功した場合、`choices[0].message.content`
 
 この関数は非決定的です。同じ引数でも、プロバイダーの状態、モデルの動作、実行時の条件によって、異なるテキストが返されたり、異なる方法で失敗したりすることがあります。
 
+### AI 入力行数の削減
+
+`LIMIT` が正の値で `OFFSET` のない `ORDER BY ... LIMIT` クエリでは、すべてのソート列が入力から AI projection を通じて変更されずに渡され、通常の Project がある場合はそこでも変更されないとき、StarRocks は上位の行を選択してから `ai_complete` を評価できます。[`enable_ai_topn_pushdown`](../../System_variable.md#enable_ai_topn_pushdown) が有効な場合（デフォルト）、[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) が SQL `LIMIT N` の候補戦略を選択します。
+
+- `N` がしきい値（デフォルト `1000`）以下の場合：通常の `FINAL` 候補 TopN が、リライト対象の AI projection への入力行数をグローバルで最大 `N` 行に制限します。
+- `N` がしきい値を超える場合：通常の `PARTIAL` 候補 TopN が、その AI projection への入力行数をフラグメントインスタンスごとに最大 `N` 行に制限します。BE ごとやパイプラインドライバーごとの上限ではありません。この TopN は per-pipeline TopN ではありません。
+
+どちらの戦略でも、要求された出力順序と行数制限を維持するため、AI projection の上の元の TopN は残ります。`EXPLAIN` で AI projection の下の候補 TopN と、その上の元の TopN を確認できます。
+
+この上限はリライト対象の AI projection に適用され、クエリ内のすべての AI 処理量を制限するものではありません。ネストした AI 呼び出しでは、ローカル候補 TopN が 2 つの AI projection の間に残る場合があり、内側の AI 呼び出しは引き続き元の入力行を処理する可能性があります。
+
+ソートやフィルターが AI 呼び出しの結果に依存する場合、この最適化は該当する AI 呼び出しの前に TopN を移動しません。また、AI projection またはその直下の入力の既存の行数制限や、安全でない projection または述語の境界も越えません。パーティション単位の TopN と、`RANK` または `DENSE_RANK` を使用する TopN 操作は対象外です。これらの適用条件は両方の戦略に適用されます。
+
+グローバル戦略は、AI 実行インスタンス間の MPP 並列度と引き換えに AI 入力行数を減らす場合があります。ローカル戦略は AI 実行前にグローバル Gather を追加しませんが、通常のローカルマージによってフラグメントインスタンス内の AI パイプライン並列度が低下する場合があります。AI リクエストは引き続き非同期で実行されます。既に Gather で集められた入力が分散実行に変わるとは限りません。どちらの戦略も AI 入力行数、プロバイダー料金、レイテンシの削減を保証しません。これらの行数制限は HTTP リクエスト数、トークン数、メモリの上限ではありません。独立した複数の AI 呼び出しやリトライによって、1 行に複数のリクエストが発生することがあります。
+
+実行された AI 呼び出しのエラーポリシーは変わりません。プルーニングされた入力行では AI 呼び出しが実行されないため、それらの呼び出しで発生し得たエラーは観測されません。
+
 ## 設定
+
+### AI TopN プッシュダウン
+
+[`enable_ai_topn_pushdown`](../../System_variable.md#enable_ai_topn_pushdown) は Boolean 型のセッション変数で、デフォルト値は `true` です。`false` は候補リライトをスキップします。[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) は `long` 型のセッション変数で、デフォルト値は `1000`、範囲は `[0, 9223372036854775807]` です。しきい値を `0` にすると、適用条件を満たすクエリでローカルのみの候補プルーニングが選択され、プッシュダウン自体は無効になりません。デフォルト値は初期ポリシーの選択であり、ベンチマークから求めた最適値ではありません。
+
+両方の変数は、現在のセッションに適用する `SET`、今後のセッションに適用する `SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントをサポートし、再起動は不要です。`cbo_push_down_topn_limit` とは独立しており、AI projection を含まない通常のクエリには影響しません。
+
+```sql
+-- AI projection の下への候補 TopN プッシュダウンを無効にします。
+SET enable_ai_topn_pushdown = false;
+-- ハイブリッドプルーニングを有効化：LIMIT <= 1000 はグローバル、それ以外はローカルです。
+SET enable_ai_topn_pushdown = true;
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- プッシュダウンを有効のまま、ローカルのみの候補プルーニングを使用します。
+SET ai_topn_pushdown_max_global_limit = 0;
+```
 
 ### FE SYSTEM モデル設定
 

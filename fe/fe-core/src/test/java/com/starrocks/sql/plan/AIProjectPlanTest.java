@@ -17,13 +17,17 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Stopwatch;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.AIProjectNode;
+import com.starrocks.planner.AnalyticEvalNode;
+import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.SlotId;
+import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -38,14 +42,17 @@ import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
@@ -63,12 +70,14 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -662,6 +671,288 @@ public class AIProjectPlanTest extends PlanTestBase {
         Assertions.assertTrue(limits.stream()
                         .anyMatch(limit -> limit.getLimit() == 5 && limit.getOffset() == 3),
                 Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns()));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"asc, first", "desc, last", "asc, last", "desc, first"})
+    public void testTopNReducesAIInputByPassthroughKey(String direction, String nullOrder) throws Exception {
+        ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7 order by k1 "
+                + direction + " nulls " + nullOrder + " limit 5");
+        assertTopNBoundsAIInput(execPlan, 5);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "select concat(ai_complete(k1), 'x') from t7 order by k1 limit 5",
+            "select ai_complete(concat(k1, k2)) from t7 order by k2 desc, k1 asc limit 5",
+            "select ai_complete(ai_complete(k1)) from t7 order by k1 limit 5",
+            "select ai_complete(k1), ai_complete(k1) from t7 order by k1 limit 5"
+    })
+    public void testTopNReducesAIInputAcrossProjectionShapes(String sql) throws Exception {
+        ExecPlan execPlan = getExecPlan(sql);
+        assertTopNBoundsAIInput(execPlan, 5);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "select ai_complete(k1) from t7 order by k1 limit 5 offset 3",
+            "select ai_complete(k1) from t7 order by k1",
+            "select ai_complete(k1) as answer from t7 order by k1, answer limit 5",
+            "select ai_complete(k1) as answer from t7 order by length(answer) limit 5",
+            "select k1 from t7 where ai_complete(k1) = 'x' order by k1 limit 5"
+    })
+    public void testTopNKeepsUnsafeAIInputsUnbounded(String sql) throws Exception {
+        ExecPlan execPlan = getExecPlan(sql);
+        assertAIProjectHasNoPushedLimit(execPlan);
+        OptExpression aiProject = findPhysicalOperators(
+                execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_AI_PROJECT).get(0);
+        Assertions.assertTrue(findPhysicalOperators(aiProject.inputAt(0), OperatorType.PHYSICAL_TOPN).isEmpty(),
+                Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 4})
+    public void testTopNProvidesGlobalAIInputBound(int dop) throws Exception {
+        int oldDop = connectContext.getSessionVariable().getPipelineDop();
+        UtFrameUtils.addMockBackend(10002);
+        try {
+            connectContext.getSessionVariable().setPipelineDop(dop);
+            ExecPlan execPlan = getExecPlan("select ai_complete(cast(v2 as varchar)) from t0 order by v1 limit 5");
+            assertTopNBoundsAIInput(execPlan, 5);
+            AIProjectNode aiProject = findOnlyAIProjectNode(execPlan);
+            ExchangeNode merge = Assertions.assertInstanceOf(ExchangeNode.class, aiProject.getChild(0));
+            Assertions.assertTrue(merge.isMerge());
+            Assertions.assertEquals(DistributionSpec.DistributionType.GATHER, merge.getDistributionType());
+            Assertions.assertEquals(5, merge.getLimit());
+        } finally {
+            connectContext.getSessionVariable().setPipelineDop(oldDop);
+            UtFrameUtils.dropMockBackend(10002);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true, 1, false", "true, 1, true", "true, 4, false", "true, 4, true",
+            "false, 1, false", "false, 1, true", "false, 4, false", "false, 4, true"})
+    public void testWindowConsumesPreservedAIInputOrdering(boolean enabled, int dop, boolean parallelMerge) throws Exception {
+        boolean oldEnable = connectContext.getSessionVariable().isEnableAiTopnPushdown();
+        int oldDop = connectContext.getSessionVariable().getPipelineDop();
+        boolean oldParallelMerge = connectContext.getSessionVariable().isEnableParallelMerge();
+        UtFrameUtils.addMockBackend(10002);
+        try {
+            connectContext.getSessionVariable().setEnableAiTopnPushdown(enabled);
+            connectContext.getSessionVariable().setPipelineDop(dop);
+            connectContext.getSessionVariable().setEnableParallelMerge(parallelMerge);
+            ExecPlan execPlan = getExecPlan("select a, row_number() over (order by k1) rn "
+                    + "from (select k1, ai_complete(k1) a "
+                    + "from (select k1 from t7 order by k1 limit 100) x) s");
+
+            assertStrictAncestor(execPlan, OperatorType.PHYSICAL_WINDOW, OperatorType.PHYSICAL_AI_PROJECT);
+            List<OptExpression> windows = findPhysicalOperators(execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_WINDOW);
+            List<OptExpression> aiProjects = findPhysicalOperators(
+                    execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_AI_PROJECT);
+            Assertions.assertEquals(1, windows.size());
+            Assertions.assertEquals(1, aiProjects.size());
+            OptExpression window = windows.get(0);
+            OptExpression physicalAI = aiProjects.get(0);
+            Assertions.assertFalse(physicalAI.getOutputProperty().getSortProperty().isEmpty());
+            Assertions.assertEquals(physicalAI.inputAt(0).getOutputProperty(), physicalAI.getOutputProperty());
+            Assertions.assertTrue(window.inputAt(0).getOutputProperty().isSatisfy(window.getRequiredProperties().get(0)));
+            Assertions.assertFalse(hasStrictAncestor(
+                    execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_TOPN, OperatorType.PHYSICAL_AI_PROJECT));
+
+            AIProjectNode aiProject = findOnlyAIProjectNode(execPlan);
+            ExchangeNode merge = Assertions.assertInstanceOf(ExchangeNode.class, aiProject.getChild(0));
+            Assertions.assertTrue(merge.isMerge());
+            Assertions.assertEquals(DistributionSpec.DistributionType.GATHER, merge.getDistributionType());
+            Assertions.assertEquals(100, merge.getLimit());
+            Assertions.assertFalse(aiProject.getFragment().isPartitioned());
+
+            List<AnalyticEvalNode> analytics = new ArrayList<>();
+            aiProject.getFragment().getPlanRoot().collect(AnalyticEvalNode.class, analytics);
+            Assertions.assertEquals(1, analytics.size());
+            PlanNode windowInput = analytics.get(0).getChild(0);
+            while (windowInput instanceof ProjectNode && !(windowInput instanceof AIProjectNode)) {
+                windowInput = windowInput.getChild(0);
+            }
+            Assertions.assertSame(aiProject, windowInput,
+                    "Window must consume AI output without an intervening Sort or Exchange");
+        } finally {
+            connectContext.getSessionVariable().setEnableAiTopnPushdown(oldEnable);
+            connectContext.getSessionVariable().setPipelineDop(oldDop);
+            connectContext.getSessionVariable().setEnableParallelMerge(oldParallelMerge);
+            UtFrameUtils.dropMockBackend(10002);
+        }
+    }
+
+    @Test
+    public void testTopNKeepsExistingInputLimit() throws Exception {
+        ExecPlan execPlan = getExecPlan("select ai_complete(cast(v2 as varchar)) "
+                + "from (select v1, v2 from t0 limit 20) s order by v1 limit 5");
+        OptExpression aiProject = findPhysicalOperators(
+                execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_AI_PROJECT).get(0);
+        Assertions.assertTrue(findPhysicalOperators(aiProject.inputAt(0), OperatorType.PHYSICAL_TOPN).isEmpty(),
+                Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns()));
+        Assertions.assertEquals(20, aiProject.inputAt(0).getOp().getLimit());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1, false", "1, true", "4, false", "4, true"})
+    public void testLargeTopNKeepsAIDistributed(int dop, boolean parallelMerge) throws Exception {
+        int oldDop = connectContext.getSessionVariable().getPipelineDop();
+        boolean oldParallelMerge = connectContext.getSessionVariable().isEnableParallelMerge();
+        UtFrameUtils.addMockBackend(10002);
+        try {
+            connectContext.getSessionVariable().setPipelineDop(dop);
+            connectContext.getSessionVariable().setEnableParallelMerge(parallelMerge);
+            ExecPlan execPlan = getExecPlan(
+                    "select ai_complete(cast(v2 as varchar)) from t0 order by v1 limit 50000");
+            assertLocalTopNBoundsAIInput(execPlan, 50000);
+            AIProjectNode aiProject = findOnlyAIProjectNode(execPlan);
+            Assertions.assertSame(execPlan.getScanNodes().get(0).getFragment(), aiProject.getFragment());
+            Assertions.assertTrue(aiProject.getFragment().isPartitioned());
+            SortNode localSort = (SortNode) aiProject.getChild(0);
+            Assertions.assertEquals(parallelMerge, localSort.isUseParallelMerge());
+        } finally {
+            connectContext.getSessionVariable().setPipelineDop(oldDop);
+            connectContext.getSessionVariable().setEnableParallelMerge(oldParallelMerge);
+            UtFrameUtils.dropMockBackend(10002);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0, 5, false", "4, 5, false", "5, 5, true", "6, 5, true",
+            "1000, 1000, true", "1000, 1001, false"})
+    public void testTopNThresholdHint(long threshold, long limit, boolean global) throws Exception {
+        long oldThreshold = connectContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit();
+        ExecPlan execPlan = getExecPlan("select /*+ SET_VAR(ai_topn_pushdown_max_global_limit=" + threshold
+                + ") */ ai_complete(k1) from t7 order by k1 limit " + limit);
+        if (global) {
+            assertTopNBoundsAIInput(execPlan, limit);
+        } else {
+            assertLocalTopNBoundsAIInput(execPlan, limit);
+        }
+        Assertions.assertEquals(oldThreshold, connectContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+        assertTopNBoundsAIInput(getExecPlan("select ai_complete(k1) from t7 order by k1 limit 5"), 5);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {5, 50000})
+    public void testTopNSwitchHintRestoresSession(long limit) throws Exception {
+        boolean oldEnable = connectContext.getSessionVariable().isEnableAiTopnPushdown();
+        ExecPlan execPlan = getExecPlan("select /*+ SET_VAR(enable_ai_topn_pushdown=false) */ "
+                + "ai_complete(k1) from t7 order by k1 limit " + limit);
+        OptExpression aiProject = findPhysicalOperators(
+                execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_AI_PROJECT).get(0);
+        Assertions.assertTrue(findPhysicalOperators(aiProject.inputAt(0), OperatorType.PHYSICAL_TOPN).isEmpty());
+        Assertions.assertEquals(Operator.DEFAULT_LIMIT, findOnlyAIProjectNode(execPlan).getLimit());
+        Assertions.assertEquals(oldEnable, connectContext.getSessionVariable().isEnableAiTopnPushdown());
+        assertTopNBoundsAIInput(getExecPlan("select ai_complete(k1) from t7 order by k1 limit 5"), 5);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "select concat(ai_complete(k1), 'x') from t7 order by k1 desc nulls last limit 50000",
+            "select ai_complete(concat(k1, k2)) from t7 order by k2 desc nulls first, k1 asc limit 50000",
+            "select ai_complete(k1), ai_complete(k1) from t7 order by k1 limit 50000",
+            "select ai_complete(cast(v1 as varchar)) from "
+                    + "(select v1 from t0 union all select v4 from t1) u order by v1 limit 50000",
+            "select ai_complete(cast(t0.v2 as varchar)) from t0 left join t1 on t0.v1=t1.v4 "
+                    + "order by t0.v1 limit 50000",
+            "select ai_complete(cast(total as varchar)) from "
+                    + "(select v1, sum(v2) total from t0 group by v1) a order by v1 limit 50000"
+    })
+    public void testLocalTopNAcrossProjectionAndChildShapes(String sql) throws Exception {
+        assertLocalTopNBoundsAIInput(getExecPlan(sql), 50000);
+    }
+
+    @Test
+    public void testLocalTopNDoesNotBoundNestedAIInput() throws Exception {
+        ExecPlan execPlan = getExecPlan("select /*+ SET_VAR(ai_topn_pushdown_max_global_limit=0) */ "
+                + "ai_complete(ai_complete(k1)) from t7 order by k1 limit 5");
+        List<OptExpression> aiProjects = findPhysicalOperators(
+                execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_AI_PROJECT);
+        Assertions.assertEquals(2, aiProjects.size());
+        PhysicalTopNOperator candidates = Assertions.assertInstanceOf(
+                PhysicalTopNOperator.class, aiProjects.get(0).inputAt(0).getOp());
+        Assertions.assertEquals(SortPhase.PARTIAL, candidates.getSortPhase());
+        Assertions.assertEquals(5, candidates.getLimit());
+        Assertions.assertFalse(candidates.isPerPipeline());
+        Assertions.assertTrue(findPhysicalOperators(
+                aiProjects.get(1).inputAt(0), OperatorType.PHYSICAL_TOPN).isEmpty());
+        Assertions.assertEquals(Operator.DEFAULT_LIMIT, aiProjects.get(1).inputAt(0).getOp().getLimit());
+        assertTopNSortsAIOutput(execPlan, 5);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "9223372036854775808", "invalid"})
+    public void testInvalidTopNThresholdHintDoesNotChangeSession(String value) {
+        long oldThreshold = connectContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit();
+        Assertions.assertThrows(DdlException.class, () -> getExecPlan(
+                "select /*+ SET_VAR(ai_topn_pushdown_max_global_limit='" + value
+                        + "') */ ai_complete(k1) from t7 order by k1 limit 5"));
+        Assertions.assertEquals(oldThreshold, connectContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+    }
+
+    @Test
+    public void testAITopNThresholdDoesNotChangeOrdinaryTopNPlan() throws Exception {
+        String query = "v1 from t0 union all select v4 from t1 order by v1 limit 5";
+        Assertions.assertEquals(
+                getFragmentPlan("select /*+ SET_VAR(ai_topn_pushdown_max_global_limit=0) */ " + query),
+                getFragmentPlan("select /*+ SET_VAR(ai_topn_pushdown_max_global_limit=50000) */ " + query));
+        Assertions.assertEquals(getFragmentPlan("select " + query),
+                getFragmentPlan("select /*+ SET_VAR(enable_ai_topn_pushdown=false) */ " + query));
+    }
+
+    private static void assertLocalTopNBoundsAIInput(ExecPlan execPlan, long limit) {
+        assertStrictAncestor(execPlan, OperatorType.PHYSICAL_TOPN, OperatorType.PHYSICAL_AI_PROJECT);
+        OptExpression physicalAI = findPhysicalOperators(
+                execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_AI_PROJECT).get(0);
+        PhysicalTopNOperator candidates = Assertions.assertInstanceOf(
+                PhysicalTopNOperator.class, physicalAI.inputAt(0).getOp());
+        Assertions.assertEquals(SortPhase.PARTIAL, candidates.getSortPhase());
+        Assertions.assertEquals(limit, candidates.getLimit());
+        Assertions.assertFalse(candidates.isPerPipeline());
+        AIProjectNode aiProject = findOnlyAIProjectNode(execPlan);
+        SortNode localSort = Assertions.assertInstanceOf(SortNode.class, aiProject.getChild(0));
+        Assertions.assertEquals(limit, localSort.getLimit());
+        Assertions.assertFalse(localSort.isPerPipeline());
+        Assertions.assertSame(localSort.getFragment(), aiProject.getFragment());
+        Assertions.assertEquals(limit, findOnlyAIProjectThriftNode(execPlan).getLimit());
+        TPlanNode serializedSort = localSort.treeToThrift().getNodes().get(0);
+        Assertions.assertEquals(limit, serializedSort.getLimit());
+        Assertions.assertFalse(serializedSort.getSort_node().isPer_pipeline());
+        assertTopNSortsAIOutput(execPlan, limit);
+    }
+
+    private static void assertTopNBoundsAIInput(ExecPlan execPlan, long limit) {
+        assertStrictAncestor(execPlan, OperatorType.PHYSICAL_TOPN, OperatorType.PHYSICAL_AI_PROJECT);
+        for (OptExpression aiProject : findPhysicalOperators(
+                execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_AI_PROJECT)) {
+            PhysicalTopNOperator candidates = Assertions.assertInstanceOf(
+                    PhysicalTopNOperator.class, aiProject.inputAt(0).getOp(),
+                    Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns()));
+            Assertions.assertTrue(candidates.getSortPhase().isFinal());
+            Assertions.assertEquals(limit, candidates.getLimit());
+        }
+        assertTopNSortsAIOutput(execPlan, limit);
+    }
+
+    private static void assertTopNSortsAIOutput(ExecPlan execPlan, long limit) {
+        List<PlanNode> nodes = execPlan.getFragments().stream()
+                .flatMap(fragment -> fragment.collectNodes().stream()).toList();
+        List<TPlanNode> thriftNodes = execPlan.getFragments().stream()
+                .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream()).toList();
+        for (AIProjectNode aiProject : findAIProjectNodes(execPlan)) {
+            PlanNode upperSort = nodes.stream().filter(SortNode.class::isInstance).filter(sort -> {
+                List<AIProjectNode> descendants = new ArrayList<>();
+                sort.collect(AIProjectNode.class, descendants);
+                return sort.getLimit() == limit && descendants.contains(aiProject);
+            }).findFirst().orElseThrow(() -> new AssertionError("The original TopN must still sort the AI output"));
+            TPlanNode thriftSort = thriftNodes.stream()
+                    .filter(node -> node.getNode_id() == upperSort.getId().asInt()).findFirst().orElseThrow();
+            Assertions.assertEquals(TPlanNodeType.SORT_NODE, thriftSort.getNode_type());
+            Assertions.assertEquals(limit, thriftSort.getLimit());
+        }
     }
 
     @Test
