@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TableRenameClause;
 import org.apache.commons.collections4.MapUtils;
 
 import java.util.HashSet;
@@ -131,28 +132,40 @@ public class ViewAnalyzer {
             }
 
             AlterClause alterClause = stmt.getAlterClause();
-            AlterViewClause alterViewClause = (AlterViewClause) alterClause;
-
-            Analyzer.analyze(alterViewClause.getQueryStatement(), context);
-            AnalyzerUtils.prohibitTimeTravelQuery(alterViewClause.getQueryStatement(), "alter view");
-            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
-            if (hasTemporaryTable) {
-                throw new SemanticException("View can't base on temporary table");
+            if (alterClause instanceof TableRenameClause) {
+                // Renaming re-keys the view in the database's name index, which only the internal catalog
+                // owns. External catalogs route ALTER VIEW to their connector, where a rename clause would
+                // otherwise fall through to a message about ALTER VIEW AS.
+                if (!CatalogMgr.isInternalCatalog(catalog)) {
+                    throw new SemanticException("Rename view is not supported for catalog: " + catalog);
+                }
             }
-
-            List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
-                    alterViewClause.getColWithComments());
-            alterViewClause.setColumns(viewColumns);
-            String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
-            alterViewClause.setInlineViewDef(viewSql);
-            Preconditions.checkArgument(stmt.getOrigStmt() != null, "View's original statement is null");
-            String originalViewDef = stmt.getOrigStmt().originStmt;
-            Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
-            Preconditions.checkArgument(alterViewClause.getQueryStartIndex() >= 0 &&
-                            alterViewClause.getQueryStopIndex() >= alterViewClause.getQueryStartIndex(),
-                    "View's query start or stop index is invalid");
-            alterViewClause.setOriginalViewDefineSql(
-                    originalViewDef.substring(alterViewClause.getQueryStartIndex(), alterViewClause.getQueryStopIndex()));
+            if (alterClause instanceof AlterViewClause) {
+                AlterViewClause alterViewClause = (AlterViewClause) alterClause;
+                Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+                AnalyzerUtils.prohibitTimeTravelQuery(alterViewClause.getQueryStatement(), "alter view");
+                boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(alterViewClause.getQueryStatement());
+                if (hasTemporaryTable) {
+                    throw new SemanticException("View can't base on temporary table");
+                }
+                List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
+                        alterViewClause.getColWithComments());
+                alterViewClause.setColumns(viewColumns);
+                String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
+                alterViewClause.setInlineViewDef(viewSql);
+                Preconditions.checkArgument(stmt.getOrigStmt() != null, "View's original statement is null");
+                String originalViewDef = stmt.getOrigStmt().originStmt;
+                Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
+                Preconditions.checkArgument(alterViewClause.getQueryStartIndex() >= 0 &&
+                                alterViewClause.getQueryStopIndex() >= alterViewClause.getQueryStartIndex(),
+                        "View's query start or stop index is invalid");
+                alterViewClause.setOriginalViewDefineSql(
+                        originalViewDef.substring(alterViewClause.getQueryStartIndex(),
+                                alterViewClause.getQueryStopIndex()));
+            } else {
+                AlterTableClauseAnalyzer alterTableClauseAnalyzer = new AlterTableClauseAnalyzer(table);
+                alterTableClauseAnalyzer.analyze(context, alterClause);
+            }
             return null;
         }
 

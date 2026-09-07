@@ -701,6 +701,14 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
 
+    // ALTER VIEW ... RENAME. Deliberately not folded into OP_RENAME_TABLE_V2: sharing that op would
+    // force replayRenameTable to accept any Table instead of an OlapTable, and an FE that predates
+    // this op would then hit a ClassCastException that is silently swallowed (the op is ignorable),
+    // leaving that node's view name diverged from the leader's. A distinct op makes such an FE stop
+    // on an unknown operation type instead.
+    @IgnorableOnReplayFailed
+    public static final short OP_RENAME_VIEW = 13559;
+
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */

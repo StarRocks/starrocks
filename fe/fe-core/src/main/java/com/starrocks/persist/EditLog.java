@@ -389,6 +389,11 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().replayAlterView(info);
                     break;
                 }
+                case OperationType.OP_RENAME_VIEW: {
+                    TableInfo info = (TableInfo) journal.data();
+                    globalStateMgr.getLocalMetastore().replayRenameView(info);
+                    break;
+                }
                 case OperationType.OP_SET_VIEW_SECURITY_LOG: {
                     AlterViewInfo info = (AlterViewInfo) journal.data();
                     globalStateMgr.getAlterJobMgr().updateViewSecurity(info);
@@ -1862,6 +1867,10 @@ public class EditLog {
 
     public void logModifyViewDef(AlterViewInfo alterViewInfo, WALApplier walApplier) {
         logJsonObject(OperationType.OP_MODIFY_VIEW_DEF, alterViewInfo, walApplier);
+    }
+
+    public void logViewRename(TableInfo tableInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_VIEW, tableInfo, walApplier);
     }
 
     public void logRollupRename(TableInfo tableInfo, WALApplier walApplier) {

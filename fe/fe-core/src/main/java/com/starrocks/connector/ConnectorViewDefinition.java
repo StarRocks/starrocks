@@ -64,7 +64,7 @@ public class ConnectorViewDefinition {
     }
 
     public static ConnectorViewDefinition fromAlterViewStmt(AlterViewStmt stmt) {
-        AlterViewClause alterViewClause = stmt.getAlterClause();
+        AlterViewClause alterViewClause = (AlterViewClause) stmt.getAlterClause();
         return new ConnectorViewDefinition(
                 stmt.getCatalog(),
                 stmt.getDbName(),

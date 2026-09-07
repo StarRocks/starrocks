@@ -25,7 +25,7 @@ public class AlterViewStmt extends DdlStmt {
     private final boolean security;
     private final AlterDialectType alterDialect;
     private final Map<String, String> properties;
-    private final AlterViewClause alterClause;
+    private final AlterClause alterClause;
 
     public enum AlterDialectType {
         NONE,
@@ -34,7 +34,7 @@ public class AlterViewStmt extends DdlStmt {
     }
 
     public AlterViewStmt(TableRef tableRef, boolean security, AlterDialectType alterDialect, Map<String, String> properties,
-                         AlterViewClause alterClause, NodePosition pos) {
+                         AlterClause alterClause, NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
         this.security = security;
@@ -93,17 +93,20 @@ public class AlterViewStmt extends DdlStmt {
         return properties;
     }
 
-    public AlterViewClause getAlterClause() {
+    public AlterClause getAlterClause() {
         return alterClause;
     }
 
     public String getOriginalViewDefineSql() {
-        return alterClause == null ? null : alterClause.getOriginalViewDefineSql();
+        if (alterClause instanceof AlterViewClause) {
+            return ((AlterViewClause) alterClause).getOriginalViewDefineSql();
+        }
+        return null;
     }
 
     public void setOriginalViewDefineSql(String originalViewDefineSql) {
-        if (alterClause != null) {
-            alterClause.setOriginalViewDefineSql(originalViewDefineSql);
+        if (alterClause instanceof AlterViewClause) {
+            ((AlterViewClause) alterClause).setOriginalViewDefineSql(originalViewDefineSql);
         }
     }
 

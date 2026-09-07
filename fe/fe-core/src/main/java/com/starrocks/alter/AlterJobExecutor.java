@@ -32,6 +32,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.View;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -289,7 +290,28 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             return null;
         }
 
-        AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
+        AlterClause alterViewClause = statement.getAlterClause();
+        if (alterViewClause instanceof TableRenameClause) {
+            // RENAME re-keys the view in the database's nameToTable/idToTable maps -- DB-level state --
+            // so it takes the plain DB WRITE lock here, for the same reason ALTER TABLE / ALTER
+            // MATERIALIZED VIEW rename do (an intensive table lock only takes IX on the db, and IX is
+            // compatible with IS/IX, so a concurrent name lookup could observe a torn map). It also
+            // cannot go through visitTableRenameClause below: that handler is shared with ALTER TABLE
+            // and casts the table to OlapTable.
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                if (!db.isExist()) {
+                    throw new AlterJobException("alter view failed. database:" + db.getFullName() + " not exist");
+                }
+                ErrorReport.wrapWithRuntimeException(() ->
+                        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .renameView(db, (View) table, (TableRenameClause) alterViewClause));
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+            }
+            return null;
+        }
         visit(alterViewClause, context);
         return null;
     }

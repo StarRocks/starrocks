@@ -1,0 +1,33 @@
+-- name: test_rename_view
+-- description: ALTER VIEW ... RENAME re-keys the view in the database, keeps the view usable
+--              under the new name, and rejects a name that is already taken.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1(c1 bigint, c2 bigint);
+insert into t1 values (1, 2);
+
+create view v1 comment 'view comment' as select * from t1;
+
+alter view v1 rename v2;
+
+-- the view is registered under the new name only, and keeps its comment
+select TABLE_NAME from information_schema.views where TABLE_SCHEMA = 'db_${uuid0}';
+select TABLE_NAME, TABLE_COMMENT from information_schema.tables where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'v2';
+
+-- the renamed view still resolves its base table
+select * from v2;
+
+-- the old name is gone
+select * from v1;
+
+-- a name that is already taken is rejected, and the view keeps its current name
+alter view v2 rename t1;
+select TABLE_NAME from information_schema.views where TABLE_SCHEMA = 'db_${uuid0}';
+
+-- renaming to the current name is rejected
+alter view v2 rename v2;
+
+-- ALTER TABLE is still not a way to rename a view
+alter table v2 rename v3;

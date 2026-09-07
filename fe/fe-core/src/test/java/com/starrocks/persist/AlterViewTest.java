@@ -27,6 +27,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -137,5 +138,98 @@ public class AlterViewTest {
         editLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
 
         Assertions.assertTrue(((View) table).isSecurity());
+    }
+
+    private static MockedLocalMetaStore setUpViewForRename(ConnectContext context) throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(globalStateMgr);
+
+        MockedLocalMetaStore localMetastore = new MockedLocalMetaStore(globalStateMgr, globalStateMgr.getRecycleBin(), null);
+        globalStateMgr.setLocalMetastore(localMetastore);
+
+        MockedMetadataMgr mockedMetadataMgr = new MockedMetadataMgr(localMetastore, globalStateMgr.getConnectorMgr());
+        globalStateMgr.setMetadataMgr(mockedMetadataMgr);
+
+        localMetastore.createDb("db1");
+
+        String createTable = "create table db1.tbl1 (c1 bigint, c2 bigint, c3 bigint)";
+        CreateTableStmt createTableStmt =
+                (CreateTableStmt) SqlParser.parseSingleStatement(createTable, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(createTableStmt, context);
+        localMetastore.createTable(createTableStmt);
+
+        String createView = "create view db1.view1 as select * from db1.tbl1";
+        CreateViewStmt createViewStmt =
+                (CreateViewStmt) SqlParser.parseSingleStatement(createView, SqlModeHelper.MODE_DEFAULT);
+        Analyzer.analyze(createViewStmt, context);
+        localMetastore.createView(createViewStmt);
+
+        return localMetastore;
+    }
+
+    private static void alterView(String sql, ConnectContext context) {
+        AlterViewStmt stmt = (AlterViewStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Analyzer.analyze(stmt, context);
+        new AlterJobExecutor().process(stmt, context);
+    }
+
+    @Test
+    public void testRenameView() throws Exception {
+        ConnectContext context = new ConnectContext();
+        MockedLocalMetaStore localMetastore = setUpViewForRename(context);
+
+        Table view = localMetastore.getTable("db1", "view1");
+        Assertions.assertTrue(view.isView());
+
+        alterView("alter view db1.view1 rename view2", context);
+
+        Assertions.assertEquals("view2", view.getName());
+        Assertions.assertNull(localMetastore.getTable("db1", "view1"));
+        Assertions.assertSame(view, localMetastore.getTable("db1", "view2"));
+
+        TableInfo info = (TableInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_RENAME_VIEW);
+        Assertions.assertEquals(localMetastore.getDb("db1").getId(), info.getDbId());
+        Assertions.assertEquals(view.getId(), info.getTableId());
+        Assertions.assertEquals("view2", info.getNewTableName());
+    }
+
+    @Test
+    public void testRenameViewToUsedName() throws Exception {
+        ConnectContext context = new ConnectContext();
+        MockedLocalMetaStore localMetastore = setUpViewForRename(context);
+
+        Table view = localMetastore.getTable("db1", "view1");
+
+        Assertions.assertThrows(Exception.class, () -> alterView("alter view db1.view1 rename tbl1", context));
+        // the failed rename leaves both the view and the occupied name untouched
+        Assertions.assertEquals("view1", view.getName());
+        Assertions.assertSame(view, localMetastore.getTable("db1", "view1"));
+        Assertions.assertNotNull(localMetastore.getTable("db1", "tbl1"));
+    }
+
+    @Test
+    public void testRenameViewToSameName() throws Exception {
+        ConnectContext context = new ConnectContext();
+        setUpViewForRename(context);
+
+        Assertions.assertThrows(SemanticException.class, () -> alterView("alter view db1.view1 rename view1", context));
+    }
+
+    @Test
+    public void testReplayRenameView() throws Exception {
+        ConnectContext context = new ConnectContext();
+        MockedLocalMetaStore localMetastore = setUpViewForRename(context);
+
+        Table view = localMetastore.getTable("db1", "view1");
+        Database database = localMetastore.getDb("db1");
+
+        TableInfo tableInfo = TableInfo.createForTableRename(database.getId(), view.getId(), "view2");
+        EditLog editLog = new EditLog(null);
+        editLog.loadJournal(GlobalStateMgr.getCurrentState(), new JournalEntity(OperationType.OP_RENAME_VIEW, tableInfo));
+
+        Assertions.assertEquals("view2", view.getName());
+        Assertions.assertNull(localMetastore.getTable("db1", "view1"));
+        Assertions.assertSame(view, localMetastore.getTable("db1", "view2"));
     }
 }

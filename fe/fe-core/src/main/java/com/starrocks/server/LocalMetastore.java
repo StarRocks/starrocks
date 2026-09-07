@@ -3888,6 +3888,73 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
     }
 
+    /**
+     * Entry of the view rename operation. The caller must hold the database WRITE lock: renaming
+     * re-keys the view in the database's nameToTable map, and an intensive table lock only takes IX
+     * on the database, which a concurrent IS/IX holder could observe mid-update. Mirrors the table
+     * and materialized-view rename paths.
+     */
+    public void renameView(Database db, View view, TableRenameClause tableRenameClause) throws DdlException {
+        String oldViewName = view.getName();
+        String newViewName = tableRenameClause.getNewTableName();
+        if (oldViewName.equals(newViewName)) {
+            throw new DdlException("Same view name");
+        }
+
+        // The view was resolved before the caller took the database lock. Re-check that it is still
+        // registered: a DROP VIEW that won the race would otherwise be undone here, because the rename
+        // re-registers the object, while replaying the log elsewhere finds no such id and skips.
+        if (getTable(db.getId(), view.getId()) == null) {
+            throw new DdlException("View[" + oldViewName + "] does not exist");
+        }
+
+        // check if name is already used
+        if (getTable(db.getFullName(), newViewName) != null) {
+            throw new DdlException("Table name[" + newViewName + "] is already used");
+        }
+
+        TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), view.getId(), newViewName);
+        GlobalStateMgr.getCurrentState().getEditLog().logViewRename(tableInfo, wal -> {
+            view.setName(newViewName);
+            db.dropTable(oldViewName);
+            db.registerTableUnlocked(view);
+        });
+        // Materialized views built on this view store the view's name in their definition SQL, so they
+        // can no longer be refreshed or used for rewrite. Same treatment as a renamed base table and as
+        // a redefined base view.
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
+                MaterializedViewExceptions.inactiveReasonForBaseViewRenamed(oldViewName));
+        LOG.info("rename view[{}] to {}, viewId: {}", oldViewName, newViewName, view.getId());
+    }
+
+    public void replayRenameView(TableInfo tableInfo) {
+        long dbId = tableInfo.getDbId();
+        long tableId = tableInfo.getTableId();
+        String newViewName = tableInfo.getNewTableName();
+
+        Database db = getDb(dbId);
+        if (db == null) {
+            LOG.warn("db {} does not exist when replaying rename view, tableId: {}", dbId, tableId);
+            return;
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            View view = (View) getTable(db.getId(), tableId);
+            if (view == null) {
+                LOG.warn("view {} does not exist when replaying rename view in db {}", tableId, dbId);
+                return;
+            }
+            String viewName = view.getName();
+            db.dropTable(viewName);
+            view.setName(newViewName);
+            db.registerTableUnlocked(view);
+            LOG.info("replay rename view[{}] to {}, viewId: {}", viewName, newViewName, view.getId());
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
     public void replayRenameTable(TableInfo tableInfo) {
         long dbId = tableInfo.getDbId();
         long tableId = tableInfo.getTableId();

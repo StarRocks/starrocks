@@ -105,6 +105,10 @@ public class MaterializedViewExceptions {
         return "base-view changed: " + tableName;
     }
 
+    public static String inactiveReasonForBaseViewRenamed(String tableName) {
+        return "base-view renamed: " + tableName;
+    }
+
     public static String inactiveReasonForBaseInfoMissed() {
         return "base-info missed";
     }

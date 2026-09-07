@@ -685,6 +685,7 @@ alterViewStatement
     | ALTER VIEW qualifiedName SET SECURITY (NONE | INVOKER)
     | ALTER VIEW qualifiedName SET properties
     | ALTER VIEW qualifiedName (ADD | MODIFY) DIALECT (STARROCKS)?  queryStatement
+    | ALTER VIEW qualifiedName tableRenameClause
     ;
 
 dropViewStatement

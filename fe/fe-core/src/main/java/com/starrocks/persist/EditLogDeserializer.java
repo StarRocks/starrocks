@@ -112,6 +112,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_RENAME_COLUMN_V2, ColumnRenameInfo.class)
             .put(OperationType.OP_MODIFY_VIEW_DEF, AlterViewInfo.class)
             .put(OperationType.OP_SET_VIEW_SECURITY_LOG, AlterViewInfo.class)
+            .put(OperationType.OP_RENAME_VIEW, TableInfo.class)
             .put(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_RENAME_MATERIALIZED_VIEW, RenameMaterializedViewLog.class)
             .put(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, AlterMaterializedViewStatusLog.class)
