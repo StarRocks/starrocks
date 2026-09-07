@@ -48,7 +48,7 @@ under the License.
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.8</spark.version>
         <parquet.version>1.15.2</parquet.version>
-        <hadoop.version>3.5.0</hadoop.version>
+        <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.27</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>1.2.0</hudi.version>
