@@ -51,15 +51,16 @@ static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
 }
 
 static BinaryColumn::MutablePtr make_unrepresentable_binary_column() {
+    constexpr uint64_t max_capacity_limit = Column::MAX_CAPACITY_LIMIT;
     const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
     config::enable_zero_copy_from_page_cache = true;
     DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
 
     // The size check must reject this view without reading its payload.
-    ContainerResource resource(nullptr, "x", Column::MAX_CAPACITY_LIMIT);
+    ContainerResource resource(nullptr, "x", max_capacity_limit);
     BinaryColumn::Offsets offsets;
     offsets.emplace_back(0);
-    offsets.emplace_back(Column::MAX_CAPACITY_LIMIT);
+    offsets.emplace_back(max_capacity_limit);
     return BinaryColumn::create(std::move(resource), std::move(offsets));
 }
 
