@@ -214,6 +214,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 **必需**：否\
 **描述**：指定在遇到不可恢复的数据解析错误时是否自动暂停作业。有效值：`true` 和 `false`。默认值：`false`。此参数自 v3.3.12/v3.4.2 起支持。<br />此类解析错误通常由非法数据格式引起，例如：<ul><li>导入 JSON 数组但未设置 `strip_outer_array`。</li><li>导入 JSON 数据，但 Kafka 消息包含非法 JSON，如 `abcd`。</li></ul>
 
+#### `skip_on_fatal_parse_error`
+
+**必需**：否\
+**描述**：指定 BE 在遇到 JSON 非法的 Kafka/Pulsar 消息时是否跳过该消息而不是让导入任务失败。有效值：`true` 和 `false`。默认值：`false`。<br />未开启时，这样的一条消息会让每个读到它的任务都以 `parse error` 失败，位点永不前进：`pause_on_fatal_parse_error` 为 `false` 时作业保持 `RUNNING` 而消费延迟无限增长，为 `true` 时作业被暂停。开启后 BE 只丢弃这一条消息（仅限未压缩 JSON）：计为一行过滤行，连同 topic、partition、offset 写入错误日志，记一条 BE `WARNING`，并计入 BE 指标 `starrocks_be_routine_load{type="skipped_malformed_messages"}`。同批次其他行正常导入，位点越过坏消息前进。<br />注意：<ul><li>两种形态的非法 JSON 都会被跳过，且各自恰好计为一行过滤行：完全不是 JSON 的消息（如 `abcd`，在读取任何行之前即被拒绝），以及只有在读取行的过程中才发现文档被截断的消息（如 `{"a": 1, "b": }`：失败的那一行和它所属的消息只计一次，而不是两次）。</li><li>被跳过的消息计入错误阈值，但两个阈值的反应不同。`max_error_number` 是作业级累计值：一旦超过，越过阈值的那个任务仍会提交，然后作业被暂停。`max_filter_ratio` 按任务判定：一旦超过，该任务失败，其中的数据一概不提交，并从同一位点重试。因此开启本选项的作业应把 `max_filter_ratio` 保持在较高值（如 `1.0`），用 `max_error_number` 作为熔断器。</li><li>可与 `pause_on_fatal_parse_error` 同时设置；BE 先跳过，因此后者仅在解析错误仍到达 FE 时生效（例如 BE 尚不支持本选项）。</li><li>对 Stream Load、Broker Load 和压缩流无效，它们遇到非法 JSON 仍然失败。</li></ul>
+
 #### `data_source`, `data_source_properties`
 
 必需。数据源及相关属性。

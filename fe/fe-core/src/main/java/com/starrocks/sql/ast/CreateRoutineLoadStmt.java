@@ -123,6 +123,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String ESCAPE = "escape";
 
     public static final String PAUSE_ON_FATAL_PARSE_ERROR = "pause_on_fatal_parse_error";
+    // Opt-in. Forwarded to the BE JSON scanner (TBrokerScanRangeParams.properties), which then
+    // drops a structurally malformed Kafka/Pulsar message as ONE filtered row and keeps consuming, instead
+    // of failing the task and replaying the same offset forever. Counts toward max_error_number.
+    public static final String SKIP_ON_FATAL_PARSE_ERROR = "skip_on_fatal_parse_error";
 
     // kafka type properties
     public static final String KAFKA_BROKER_LIST_PROPERTY = "kafka_broker_list";
@@ -158,6 +162,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(MAX_BATCH_ROWS_PROPERTY)
             .add(MAX_BATCH_SIZE_PROPERTY)
             .add(PAUSE_ON_FATAL_PARSE_ERROR)
+            .add(SKIP_ON_FATAL_PARSE_ERROR)
             .add(FORMAT)
             .add(JSONPATHS)
             .add(STRIP_OUTER_ARRAY)
@@ -219,6 +224,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private String mergeConditionStr;
     private String partialUpdateMode = "row";
     private boolean pauseOnFatalParseError = RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
+    private boolean skipOnFatalParseError = RoutineLoadJob.DEFAULT_SKIP_ON_FATAL_PARSE_ERROR;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -400,6 +406,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public boolean isPauseOnFatalParseError() {
         return pauseOnFatalParseError;
+    }
+
+    public boolean isSkipOnFatalParseError() {
+        return skipOnFatalParseError;
     }
 
     public String getFormat() {
@@ -628,6 +638,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         pauseOnFatalParseError = Util.getBooleanPropertyOrDefault(jobProperties.get(PAUSE_ON_FATAL_PARSE_ERROR),
                 RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR,
                 PAUSE_ON_FATAL_PARSE_ERROR + " should be a boolean");
+        // Both may be true: the BE skips first, so PARSE_ERROR normally never reaches the FE; if it does
+        // (a BE that predates the skip), pause_on_fatal_parse_error still acts as the safety net.
+        skipOnFatalParseError = Util.getBooleanPropertyOrDefault(jobProperties.get(SKIP_ON_FATAL_PARSE_ERROR),
+                RoutineLoadJob.DEFAULT_SKIP_ON_FATAL_PARSE_ERROR,
+                SKIP_ON_FATAL_PARSE_ERROR + " should be a boolean");
 
         format = jobProperties.get(FORMAT);
         if (format != null) {

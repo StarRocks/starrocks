@@ -18,6 +18,7 @@
 #include <zlib.h>
 
 #include <fstream>
+#include <map>
 #include <random>
 #include <sstream>
 #include <utility>
@@ -31,6 +32,7 @@
 #include "common/config_exec_fwd.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_pipe.h"
+#include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -48,7 +50,8 @@ protected:
                                                      const std::vector<TBrokerRangeDesc>& ranges,
                                                      const std::vector<std::string>& col_names,
                                                      size_t file_size_limit = 1024 * 1024,
-                                                     const std::vector<TRoutineLoadMetaColumn>& meta_cols = {}) {
+                                                     const std::vector<TRoutineLoadMetaColumn>& meta_cols = {},
+                                                     const std::map<std::string, std::string>& properties = {}) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -91,6 +94,9 @@ protected:
 
         if (!meta_cols.empty()) {
             params->__set_stream_source_meta_columns(meta_cols);
+        }
+        if (!properties.empty()) {
+            params->__set_properties(properties);
         }
 
         TBrokerScanRange* broker_scan_range = _pool.add(new TBrokerScanRange());
@@ -1758,6 +1764,227 @@ TEST_F(JsonScannerTest, file_stream) {
 
     EXPECT_EQ("[1, 2]", chunk->debug_row(0));
     EXPECT_EQ("[3, 4]", chunk->debug_row(1));
+}
+
+// ---------------------------------------------------------------------------
+// skip_on_fatal_parse_error: routine-load style input, one Kafka message per
+// pipe buffer via KafkaConsumerPipe::append_json.
+// ---------------------------------------------------------------------------
+namespace {
+
+// Appends each message as its own buffer stamped with kafka topic/partition/offset, exactly what
+// KafkaDataConsumerGroup::start_all does for FORMAT_JSON.
+void append_kafka_messages(KafkaConsumerPipe& pipe, const std::vector<std::string>& messages) {
+    int64_t offset = 100;
+    for (const auto& msg : messages) {
+        StreamMessageMeta meta(ByteBufferMetaType::KAFKA);
+        meta.set_topic("t");
+        meta.set_partition(54);
+        meta.set_offset(offset++);
+        ASSERT_OK(pipe.append_json(msg.data(), msg.size(), &meta));
+    }
+    ASSERT_OK(pipe.finish());
+}
+
+TBrokerRangeDesc stream_range(const UniqueId& load_id) {
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_STREAM;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_load_id(load_id.to_thrift());
+    return range;
+}
+
+// Drains the scanner until EOF. Empty OK chunks are legal (the catch-site skip returns a partial
+// chunk), so rows are accumulated across calls.
+std::vector<std::string> drain_rows(JsonScanner* scanner, Status* final_status) {
+    std::vector<std::string> rows;
+    while (true) {
+        auto res = scanner->get_next();
+        if (!res.ok()) {
+            *final_status = res.status();
+            return rows;
+        }
+        const ChunkPtr& chunk = res.value();
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            rows.emplace_back(chunk->debug_row(i));
+        }
+        if (chunk->num_rows() == 0) {
+            // JsonScanner::get_next returns an empty chunk on EOF of the current reader; the
+            // next call surfaces EndOfFile once there is no further range.
+            auto next = scanner->get_next();
+            if (!next.ok()) {
+                *final_status = next.status();
+                return rows;
+            }
+            for (size_t i = 0; i < next.value()->num_rows(); ++i) {
+                rows.emplace_back(next.value()->debug_row(i));
+            }
+            if (next.value()->num_rows() == 0) {
+                *final_status = Status::EndOfFile("drained");
+                return rows;
+            }
+        }
+    }
+}
+
+const std::map<std::string, std::string> kSkipOn = {{"skip_on_fatal_parse_error", "true"}};
+
+} // namespace
+
+// Mixed stream: a non-JSON message (fails in _check_ndjson, the _read_chunk_with_except site) and a
+// JSON array in ndjson mode (fails in get_current, the _read_rows site) between two valid messages.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_mixed_messages) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe, {R"({"key1": 1, "key2": 2})", "not json at all", R"([{"key1": 9, "key2": 9}])",
+                                  R"({"key1": 5, "key2": 6})"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    auto scanner = create_json_scanner(types, {stream_range(load_id)}, {"key1", "key2"}, 1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_end_of_file()) << final_status;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("[1, 2]", rows[0]);
+    EXPECT_EQ("[5, 6]", rows[1]);
+    // Exactly one filtered row per skipped message at these two sites.
+    EXPECT_EQ(2, _counter->num_rows_filtered);
+}
+
+// The first message of the pipe is malformed: JsonReader::open() must tolerate it.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_first_message_malformed) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe, {"garbage", R"({"key1": 7, "key2": 8})"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    auto scanner = create_json_scanner(types, {stream_range(load_id)}, {"key1", "key2"}, 1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_end_of_file()) << final_status;
+    ASSERT_EQ(1, rows.size());
+    EXPECT_EQ("[7, 8]", rows[0]);
+    EXPECT_EQ(1, _counter->num_rows_filtered);
+}
+
+// A structurally truncated document — the common poison-message shape (TAPE_ERROR /
+// UNESCAPED_CHARS). simdjson is lazy: parse() succeeds, _construct_row fails on the truncated
+// value, then the next get_current()/advance() reports the structural error for the same document.
+// The contract is "one bad message = one filtered row": _read_rows must not count the message a
+// second time when the row it just filtered came from the same document. Pinning EQ (not a range)
+// is what makes this test detect a double count regardless of which call surfaces the error.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_truncated_document) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe,
+                          {R"({"key1": 1, "key2": 2})", R"({"key1": 3, "key2": })", R"({"key1": 5, "key2": 6})"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    auto scanner = create_json_scanner(types, {stream_range(load_id)}, {"key1", "key2"}, 1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_end_of_file()) << final_status;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("[1, 2]", rows[0]);
+    EXPECT_EQ("[5, 6]", rows[1]);
+    EXPECT_EQ(1, _counter->num_rows_filtered);
+}
+
+// A `[...]` message after a `{...}` message must not inherit the previous message's ndjson mode.
+// With json_root set the parser is chosen by _is_ndjson; before _check_ndjson() reset it per
+// message, the array message went to the document-stream parser and was rejected as "array type
+// in json document stream" — which, with skipping on, would silently drop a valid message.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_does_not_inherit_ndjson_mode) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe, {R"({"data": {"key1": 1, "key2": 2}})", R"([{"data": {"key1": 3, "key2": 4}}])"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    auto range = stream_range(load_id);
+    range.__set_json_root("$.data");
+    auto scanner = create_json_scanner(types, {range}, {"key1", "key2"}, 1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_end_of_file()) << final_status;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("[1, 2]", rows[0]);
+    EXPECT_EQ("[3, 4]", rows[1]);
+    EXPECT_EQ(0, _counter->num_rows_filtered);
+}
+
+// Option off (the default): the same input must fail the scan with a parse error exactly as
+// before. This pins that the opt-in changes nothing for everyone else.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_off_keeps_current_behaviour) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe, {R"({"key1": 1, "key2": 2})", "not json at all", R"({"key1": 5, "key2": 6})"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    auto scanner = create_json_scanner(types, {stream_range(load_id)}, {"key1", "key2"});
+    ASSERT_OK(scanner->open());
+
+    // First chunk carries the row before the poison message and the failure ends the scan.
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_data_quality_error()) << final_status;
+    EXPECT_TRUE(final_status.message().find("parse error") != std::string::npos) << final_status;
+    EXPECT_EQ(1, _counter->num_rows_filtered);
+}
+
+// The property is ignored for non-stream sources: a malformed local file still fails the scan
+// rather than silently dropping the remainder of the file.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_ignored_for_file_sources) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/illegal.json");
+    ranges.emplace_back(range);
+
+    auto scanner =
+            create_json_scanner(types, ranges, {"f_float", "f_bool", "f_int", "f_float_in_string", "f_int_in_string"},
+                                1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+    auto st = scanner->get_next().status();
+    ASSERT_TRUE(st.is_data_quality_error()) << st;
+    ASSERT_TRUE(st.message().find("parse error. illegal json started with") != std::string::npos);
 }
 
 // Regression test for #11412: a gzip-compressed JSON stream load (FILE_STREAM + FORMAT_JSON
