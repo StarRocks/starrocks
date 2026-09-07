@@ -14,9 +14,21 @@
 
 #pragma once
 
+<<<<<<< HEAD:be/src/util/utf8_encoding.h
 #include "column/column_hash.h"
 #include "util/slice.h"
 #include "util/utf8.h"
+=======
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <vector>
+
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
+#include "gutil/strings/fastmem.h"
+>>>>>>> 51266d0 ([BugFix] Fix substr returning bytes of neighboring rows on invalid UTF-8 (#78722)):be/src/base/string/utf8_encoding.h
 
 namespace starrocks {
 
@@ -65,8 +77,10 @@ public:
 };
 
 static inline size_t encode_utf8_chars(const Slice& str, std::vector<EncodedUtf8Char>* encoded_values) {
-    for (int i = 0, char_size = 0; i < str.size; i += char_size) {
-        char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])];
+    for (size_t i = 0, char_size = 0; i < str.size; i += char_size) {
+        // A truncated/invalid UTF-8 lead byte at the tail can claim more bytes than remain;
+        // clamp to the rest of the string to avoid an out-of-bounds read of adjacent memory.
+        char_size = std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])], str.size - i);
         encoded_values->emplace_back(str.data + i, char_size);
     }
     return encoded_values->size();
