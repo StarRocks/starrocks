@@ -306,12 +306,17 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
         // An owned-only rewrite drops the rows this tablet does not own, so the replacement holds
-        // fewer than the metadata copied from op_write says. Nothing else refreshes this, and both
-        // the persistent-index rebuild accounting and the split statistics read it, so carry the real
-        // count. Zero means the rewrite did not filter (the copy-and-append path) and the source's
-        // count still stands.
-        if (replace_seg.second.num_rows > 0) {
+        // fewer of them, over a narrower stretch of the sort key, than the metadata copied from
+        // op_write says. Nothing else refreshes either: the row count is read by the persistent-index
+        // rebuild accounting and the split statistics, and the sort-key bounds and samples by tablet
+        // splitting and range-split compaction, which would otherwise sample rows this file no longer
+        // holds. Take both from the rewrite whenever it filtered -- keyed on the flag, not on a
+        // positive count, because a split child that owns none of a cross-published segment's rows
+        // legitimately produces a zero-row file. The copy-and-append path leaves the flag false and
+        // the source's metadata standing.
+        if (replace_seg.second.dropped_unowned_rows) {
             segment_meta->set_num_rows(replace_seg.second.num_rows);
+            replace_seg.second.sort_key_fields_to_proto(segment_meta);
         }
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
@@ -1684,13 +1689,12 @@ Status MetaFileBuilder::set_final_rowset() {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
-        // An owned-only rewrite drops the rows this tablet does not own, so the replacement holds
-        // fewer than the metadata copied from op_write says. Nothing else refreshes this, and both
-        // the persistent-index rebuild accounting and the split statistics read it, so carry the real
-        // count. Zero means the rewrite did not filter (the copy-and-append path) and the source's
-        // count still stands.
-        if (replace_seg.second.num_rows > 0) {
+        // See apply_opwrite: a filtered rewrite's own row count and sort-key fields replace the ones
+        // copied from op_write, keyed on the flag so a legitimate zero-row output is not read as
+        // "unfiltered".
+        if (replace_seg.second.dropped_unowned_rows) {
             segment_meta->set_num_rows(replace_seg.second.num_rows);
+            replace_seg.second.sort_key_fields_to_proto(segment_meta);
         }
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);

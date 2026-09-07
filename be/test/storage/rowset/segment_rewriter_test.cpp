@@ -35,6 +35,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -137,13 +138,21 @@ TEST_F(SegmentRewriterTest, rewrite_owned_only_drops_the_unowned_rows) {
     }
 
     std::string dst_name = kSegmentDir + "/owned_only_dst";
-    FileInfo dst_file_info{.path = dst_name};
+    SegmentFileInfo dst_file_info;
+    dst_file_info.path = dst_name;
     ASSERT_OK(SegmentRewriter::rewrite_partial_update_owned_only(src_file_info, &dst_file_info, tablet_schema,
                                                                  resolved_column_ids, resolved_columns, owned,
                                                                  kEmittedBase, 0, partial_rowset_footer));
 
     EXPECT_EQ(encryption_pair.encryption_meta, dst_file_info.encryption_meta)
             << "the output must be readable with the source's key";
+    // The replacement metadata is otherwise copied from the source segment, so the rewrite has to
+    // hand back its own count and sort-key fields, flagged so a zero-row output is not mistaken for
+    // an unfiltered one.
+    EXPECT_TRUE(dst_file_info.dropped_unowned_rows);
+    EXPECT_EQ(static_cast<int64_t>(expected_keys.size()), dst_file_info.num_rows);
+    EXPECT_FALSE(dst_file_info.sort_key_min.empty()) << "the kept rows' own sort-key bounds";
+    EXPECT_FALSE(dst_file_info.sort_key_max.empty());
     ASSIGN_OR_ABORT(auto segment,
                     Segment::open(_fs, FileInfo{.path = dst_name, .encryption_meta = dst_file_info.encryption_meta}, 0,
                                   tablet_schema));
@@ -174,6 +183,102 @@ TEST_F(SegmentRewriterTest, rewrite_owned_only_drops_the_unowned_rows) {
     }
     seg_iterator->close();
     EXPECT_EQ(expected_keys, got_keys) << "rows must come out renumbered from zero in owned order";
+}
+
+// Regression: the rewrite reads its source in DEFAULT_CHUNK_SIZE chunks while |owned| covers only the
+// emitted run, so a run that ends before the source's last chunk must not be sliced per chunk -- that
+// reads past the mask's end, which is undefined behavior and surfaced as a crash or a permanently
+// failing publish. A short source hides it by arriving in a single chunk, so this one is deliberately
+// several chunks long with the run confined to the first. A sort-key == PK child produces exactly this
+// shape: its tablet range resolves to a rowid interval, so the publish iterator emits a slice.
+TEST_F(SegmentRewriterTest, rewrite_owned_only_reads_past_the_emitted_run) {
+    std::shared_ptr<TabletSchema> partial_tablet_schema =
+            TabletSchemaHelper::create_tablet_schema({create_int_key_pb(1), create_int_value_pb(4)});
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_value_pb(3), create_int_value_pb(4)});
+    const std::vector<uint32_t> resolved_column_ids{1};
+
+    constexpr int kSegmentRows = 3 * DEFAULT_CHUNK_SIZE; // the read spans several chunks
+    constexpr uint32_t kEmittedBase = 100;
+    constexpr int kEmittedRows = 200; // ... and the emitted run ends inside the first one
+
+    std::string src_name = kSegmentDir + "/emitted_run_src";
+    ASSIGN_OR_ABORT(
+            auto wfile,
+            _fs->new_writable_file(WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE}, src_name));
+    SegmentWriter writer(std::move(wfile), 0, partial_tablet_schema, SegmentWriterOptions{});
+    ASSERT_OK(writer.init());
+    auto partial_schema = ChunkHelper::convert_schema(partial_tablet_schema);
+    auto partial_chunk = ChunkFactory::new_chunk(partial_schema, kSegmentRows);
+    for (int i = 0; i < kSegmentRows; ++i) {
+        partial_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        partial_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * 10)));
+    }
+    ASSERT_OK(writer.append_chunk(*partial_chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+    FooterPointerPB partial_rowset_footer;
+    partial_rowset_footer.set_position(footer_position);
+    partial_rowset_footer.set_size(file_size - footer_position);
+    FileInfo src_file_info{.path = src_name};
+
+    Filter owned(kEmittedRows, 0);
+    std::vector<int> expected_keys;
+    for (int i = 0; i < kEmittedRows; ++i) {
+        if (i % 7 == 0) {
+            owned[i] = 1;
+            expected_keys.push_back(static_cast<int>(kEmittedBase) + i);
+        }
+    }
+    MutableColumns resolved_columns(resolved_column_ids.size());
+    for (size_t c = 0; c < resolved_column_ids.size(); ++c) {
+        auto tablet_column = tablet_schema->column(resolved_column_ids[c]);
+        auto column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        resolved_columns[c] = column->clone_empty();
+        for (int i = 0; i < kEmittedRows; ++i) {
+            resolved_columns[c]->append_datum(Datum(static_cast<int32_t>((kEmittedBase + i) * 100)));
+        }
+    }
+
+    std::string dst_name = kSegmentDir + "/emitted_run_dst";
+    SegmentFileInfo dst_file_info;
+    dst_file_info.path = dst_name;
+    ASSERT_OK(SegmentRewriter::rewrite_partial_update_owned_only(src_file_info, &dst_file_info, tablet_schema,
+                                                                 resolved_column_ids, resolved_columns, owned,
+                                                                 kEmittedBase, 0, partial_rowset_footer));
+    EXPECT_EQ(static_cast<int64_t>(expected_keys.size()), dst_file_info.num_rows);
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{.path = dst_name}, 0, tablet_schema));
+    ASSERT_EQ(expected_keys.size(), segment->num_rows())
+            << "rows beyond the emitted run belong to no one here and must be dropped too";
+
+    SegmentReadOptions seg_options;
+    seg_options.fs = _fs;
+    OlapReaderStatistics stats;
+    seg_options.stats = &stats;
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
+    ASSIGN_OR_ABORT(auto seg_iterator, segment->new_iterator(schema, seg_options));
+    auto chunk = ChunkFactory::new_chunk(schema, DEFAULT_CHUNK_SIZE);
+    std::vector<int> got_keys;
+    while (true) {
+        chunk->reset();
+        auto st = seg_iterator->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            const int k = chunk->get(i)[0].get_int32();
+            got_keys.push_back(k);
+            EXPECT_EQ(k * 10, chunk->get(i)[2].get_int32()) << "key " << k;
+            EXPECT_EQ(k * 100, chunk->get(i)[1].get_int32()) << "key " << k;
+        }
+    }
+    seg_iterator->close();
+    EXPECT_EQ(expected_keys, got_keys);
 }
 
 TEST_F(SegmentRewriterTest, rewrite_test) {

@@ -17,6 +17,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 
@@ -121,29 +122,35 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
-// Turn a cross-publish ownership mask into a selection over the SOURCE segment's rows.
+// Turn a cross-publish ownership mask into a selection over the source rows
+// [|source_row_base|, +|num_rows|).
 //
 // |owned| covers the run of rows the publish iterator emitted, which starts at |emitted_rowid_base|:
 // a rowid-narrowed read -- what a sort-key == PK tablet gets, because there the tablet range does
 // resolve to a rowid interval -- emits a slice rather than the whole file. A source row outside that
 // run was never offered to this tablet and belongs to no one here, so it is dropped along with the
-// rows the mask excludes. Shared by both owned-only rewrites so the arithmetic exists once.
-Filter SegmentRewriter::build_owned_selection(size_t num_rows, uint32_t emitted_rowid_base, const Filter& owned) {
+// rows the mask excludes. Shared by both owned-only rewrites so the arithmetic exists once, and the
+// window is what lets a caller reading its source in chunks translate into the mask rather than slice
+// it: the emitted run can stop well before the source ends, and a slice taken past the mask's end is
+// undefined behavior.
+Filter SegmentRewriter::build_owned_selection(size_t source_row_base, size_t num_rows, uint32_t emitted_rowid_base,
+                                              const Filter& owned) {
     Filter selection(num_rows, 0);
     for (size_t i = 0; i < num_rows; i++) {
-        if (i >= emitted_rowid_base && i - emitted_rowid_base < owned.size()) {
-            selection[i] = owned[i - emitted_rowid_base];
+        const size_t source_row = source_row_base + i;
+        if (source_row >= emitted_rowid_base && source_row - emitted_rowid_base < owned.size()) {
+            selection[i] = owned[source_row - emitted_rowid_base];
         }
     }
     return selection;
 }
 
 Status SegmentRewriter::rewrite_partial_update_owned_only(
-        const FileInfo& src, FileInfo* dest, const std::shared_ptr<const TabletSchema>& tschema,
+        const FileInfo& src, SegmentFileInfo* dest, const std::shared_ptr<const TabletSchema>& tschema,
         const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,
         uint32_t emitted_rowid_base, uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
         SegmentFileMark segment_file_mark, RewriteVectorIndexOptions vector_index_opts,
-        std::vector<int64_t>* out_vector_index_ids, size_t* out_num_rows) {
+        std::vector<int64_t>* out_vector_index_ids) {
     RETURN_ERROR_IF_FALSE(resolved_column_ids.size() == resolved_columns.size(),
                           "resolved column ids and columns disagree");
     RETURN_ERROR_IF_FALSE(!owned.empty(), "owned-only rewrite needs an ownership mask");
@@ -204,14 +211,11 @@ Status SegmentRewriter::rewrite_partial_update_owned_only(
         if (chunk_rows == 0) {
             continue;
         }
-        // Rebase the mask onto this chunk: the helper works in source-row terms, so shift the run's
-        // start by how many rows the read has already delivered.
-        const uint32_t chunk_base =
-                emitted_rowid_base > source_row ? static_cast<uint32_t>(emitted_rowid_base - source_row) : 0;
-        const Filter chunk_owned = source_row > emitted_rowid_base
-                                           ? Filter(owned.begin() + (source_row - emitted_rowid_base), owned.end())
-                                           : owned;
-        chunk->filter(build_owned_selection(chunk_rows, chunk_base, chunk_owned));
+        // This read is not narrowed, so it walks the whole source while |owned| covers only the
+        // emitted run: hand the helper this chunk's absolute position in the source and let it
+        // translate. Re-slicing the mask per chunk instead reads past its end as soon as the read
+        // passes the run, which is any narrowed run that does not reach the last chunk.
+        chunk->filter(build_owned_selection(source_row, chunk_rows, emitted_rowid_base, owned));
         source_row += chunk_rows;
         kept->append(*chunk);
     }
@@ -254,13 +258,16 @@ Status SegmentRewriter::rewrite_partial_update_owned_only(
 
     record_rewrite_vector_index_ids(writer, out_vector_index_ids);
     dest->size = segment_file_size;
-    // The output holds fewer rows than its source and nothing downstream can infer that: the
-    // replacement metadata is copied from the source segment, so unless the caller carries the real
-    // count into it the segment goes on advertising the shared segment's, which the persistent-index
-    // rebuild accounting and the split statistics both read.
-    if (out_num_rows != nullptr) {
-        *out_num_rows = out->num_rows();
-    }
+    // The output holds fewer rows than its source, over a narrower stretch of the sort key, and
+    // nothing downstream can infer either: the replacement metadata is copied from the source
+    // segment, so unless this rewrite hands over its own the segment goes on advertising the shared
+    // segment's -- a row count the persistent-index rebuild accounting and the split statistics both
+    // read, and sort-key bounds and samples that tablet splitting and range-split compaction read,
+    // the latter addressing rows this file no longer holds. The writer collected the sort-key fields
+    // over exactly the rows that were kept.
+    writer.write_sort_key_fields_to(*dest);
+    dest->num_rows = static_cast<int64_t>(out->num_rows());
+    dest->dropped_unowned_rows = true;
     return Status::OK();
 }
 
@@ -369,12 +376,11 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
 Status SegmentRewriter::rewrite_auto_increment_lake(
-        const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
+        const FileInfo& src, SegmentFileInfo* dest, const TabletSchemaCSPtr& tschema,
         starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
         const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
         const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts,
-        std::vector<int64_t>* out_vector_index_ids, const Filter& owned, uint32_t emitted_rowid_base,
-        size_t* out_num_rows) {
+        std::vector<int64_t>* out_vector_index_ids, const Filter& owned, uint32_t emitted_rowid_base) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
@@ -434,7 +440,9 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     // the whole file -- so a source row outside that run is not this tablet's either, and the columns
     // the caller supplies are indexed like |owned| and take the same mask.
     if (!owned.empty()) {
-        const size_t kept_rows = read_chunk->filter(build_owned_selection(num_rows, emitted_rowid_base, owned));
+        // The whole source arrives in one chunk here (chunk_size == num_rows above), so the window
+        // starts at source row 0.
+        const size_t kept_rows = read_chunk->filter(build_owned_selection(0, num_rows, emitted_rowid_base, owned));
         if (unmodified_column_data != nullptr) {
             for (auto& column : *unmodified_column_data) {
                 RETURN_ERROR_IF_FALSE(column->size() == owned.size(),
@@ -497,10 +505,13 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
 
     record_rewrite_vector_index_ids(writer, out_vector_index_ids);
     dest->size = segment_file_size;
-    // Same duty as the owned-only rewrite above when a mask filtered rows out; num_rows already
-    // tracks what survived.
-    if (out_num_rows != nullptr) {
-        *out_num_rows = num_rows;
+    // Same duty as the owned-only rewrite above once a mask filtered rows out; num_rows already
+    // tracks what survived. With no mask this rewrite reproduces every source row in place, so the
+    // source's own count and sort-key fields still describe the output and are left alone.
+    if (!owned.empty()) {
+        writer.write_sort_key_fields_to(*dest);
+        dest->num_rows = static_cast<int64_t>(num_rows);
+        dest->dropped_unowned_rows = true;
     }
     return Status::OK();
 }

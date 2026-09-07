@@ -40,6 +40,14 @@ struct SegmentFileInfo : public FileInfo {
     std::vector<VariantTuple> sort_key_samples;
     int64_t sort_key_sample_row_interval = 0;
     int64_t num_rows = 0;
+    // Set by a rewrite that dropped the rows this tablet does not own, marking |num_rows| and the
+    // sort-key fields above as the rewrite's own output rather than its source's. The replace paths in
+    // MetaFileBuilder then persist both instead of leaving the metadata copied from the source segment
+    // in place -- num_rows included when it is zero, which a split child owning none of a
+    // cross-published segment's rows legitimately produces and which is otherwise indistinguishable
+    // from this field's default. The copy-and-append rewrite leaves it false: its output reproduces
+    // every source row in place, so the source's metadata still describes it.
+    bool dropped_unowned_rows = false;
     // IDs of vector indexes whose .vi file belongs to this segment (one .vi file per id).
     std::vector<int64_t> vector_index_ids;
     // Per-segment vector index uid embedded in this segment's .vi filenames (value = writer tablet id),
@@ -52,6 +60,11 @@ struct SegmentFileInfo : public FileInfo {
     // (placed first so callers cannot forget it): a contiguous positional index at write time, or a
     // sparse one after compaction/merge.
     void to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const;
+
+    // Serialize just the sort-key fields (min, max, samples, interval) into |segment_meta|, replacing
+    // whatever it already held. Shared by to_proto() and the replace paths, which refresh these fields
+    // on a segment_meta copied from a different file.
+    void sort_key_fields_to_proto(SegmentMetadataPB* segment_meta) const;
 };
 
 } // namespace starrocks

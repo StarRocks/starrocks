@@ -670,15 +670,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         SegmentFileInfo file_info;
         file_info.path = params.tablet->segment_location(dest_path);
-        size_t ai_kept_rows = 0;
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                 unmodified_column_ids, has_partial_update_state(params) ? rewrite_write_columns : nullptr,
                 params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids, owned,
-                _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0, &ai_kept_rows));
-        if (filter_unowned_rows) {
-            file_info.num_rows = static_cast<int64_t>(ai_kept_rows);
-        }
+                _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0));
         file_info.path = dest_path;
         stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
@@ -688,13 +684,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         file_info.path = params.tablet->segment_location(dest_path);
 
         if (filter_unowned_rows) {
-            size_t kept_rows = 0;
             RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update_owned_only(
                     src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, owned,
                     _upserts[segment_id]->physical_rowid_base(), segment_id, partial_rowset_footer,
                     {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
-                    &file_info.vector_index_ids, &kept_rows));
-            file_info.num_rows = static_cast<int64_t>(kept_rows);
+                    &file_info.vector_index_ids));
         } else {
             RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                     src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, segment_id,
