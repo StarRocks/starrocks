@@ -255,9 +255,13 @@ void Rowset::_update_metadata_cache_charge(size_t charge) {
     if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
 #ifdef BE_TEST
         TEST_SYNC_POINT_CALLBACK("Rowset::_update_metadata_cache_charge", &charge);
-#else
-        MetadataCache::instance()->update_rowset_charge(this, charge);
+        // Most unit tests do not create the global metadata cache. Tests that
+        // install one exercise the same charge update as production.
+        if (MetadataCache::instance() == nullptr) {
+            return;
+        }
 #endif
+        MetadataCache::instance()->update_rowset_charge(this, charge);
     }
 }
 

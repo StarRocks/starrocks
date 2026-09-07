@@ -463,6 +463,130 @@ TEST_F(MetadataCacheTest, skip_charge_calculation_for_ineligible_rowsets) {
     ASSERT_EQ(1, segment_memory_usage_calls);
 }
 
+class MetadataCacheReaderTest : public MetadataCacheTest {
+public:
+    void SetUp() override {
+        MetadataCacheTest::SetUp();
+        _previous_cache = MetadataCache::_s_instance;
+        _previous_cache_percent = config::metadata_cache_memory_limit_percent;
+        _metadata_cache = std::make_unique<MetadataCache>(10 * 1024 * 1024);
+        MetadataCache::_s_instance = _metadata_cache.get();
+        config::metadata_cache_memory_limit_percent = 30;
+    }
+
+    void TearDown() override {
+        MetadataCache::_s_instance = _previous_cache;
+        config::metadata_cache_memory_limit_percent = _previous_cache_percent;
+        _metadata_cache.reset();
+        MetadataCacheTest::TearDown();
+    }
+
+protected:
+    std::unique_ptr<MetadataCache> _metadata_cache;
+    MetadataCache* _previous_cache = nullptr;
+    int32_t _previous_cache_percent = 0;
+};
+
+TEST_F(MetadataCacheReaderTest, close_refreshes_charge_only_after_last_reader) {
+    const std::vector<int64_t> keys{1, 2, 3};
+    auto tablet = create_tablet(1008, 10011);
+    auto rowset = create_rowset(tablet, keys);
+    ASSERT_TRUE(rowset->load().ok());
+    _metadata_cache->cache_rowset(rowset.get());
+    const size_t initial_rowset_size = rowset->segment_memory_usage();
+    const size_t initial_cache_usage = _metadata_cache->get_memory_usage();
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+
+    // Exercise release through TabletReader's production implementation, with
+    // two overlapping readers retaining the same rowset.
+    TabletReader first_reader(tablet, Version(0, 0), schema, std::vector<RowsetSharedPtr>{rowset});
+    ASSERT_TRUE(first_reader.prepare().ok());
+    TabletReader last_reader(tablet, Version(0, 0), schema, std::vector<RowsetSharedPtr>{rowset});
+    ASSERT_TRUE(last_reader.prepare().ok());
+    ASSERT_EQ(2, rowset->refs_by_reader());
+
+    std::vector<std::string> short_keys;
+    ASSERT_TRUE(rowset->get_segment_sk_index(&short_keys).ok());
+    const size_t loaded_rowset_size = rowset->segment_memory_usage();
+    ASSERT_GT(loaded_rowset_size, initial_rowset_size);
+
+    first_reader.close();
+    ASSERT_EQ(1, rowset->refs_by_reader());
+    ASSERT_EQ(initial_cache_usage, _metadata_cache->get_memory_usage());
+    last_reader.close();
+    ASSERT_EQ(0, rowset->refs_by_reader());
+    ASSERT_EQ(initial_cache_usage + loaded_rowset_size - initial_rowset_size, _metadata_cache->get_memory_usage());
+    ASSERT_EQ(loaded_rowset_size, rowset->segment_memory_usage());
+    ASSERT_FALSE(rowset->segments().front()->consume_lazy_mem_update());
+
+    const size_t updated_cache_usage = _metadata_cache->get_memory_usage();
+    TabletReader clean_reader(tablet, Version(0, 0), schema, std::vector<RowsetSharedPtr>{rowset});
+    ASSERT_TRUE(clean_reader.prepare().ok());
+    clean_reader.close();
+    ASSERT_EQ(0, rowset->refs_by_reader());
+    ASSERT_EQ(updated_cache_usage, _metadata_cache->get_memory_usage());
+    ASSERT_EQ(0, _metadata_cache->_cache->get_lookup_count());
+}
+
+TEST_F(MetadataCacheReaderTest, close_finishes_deferred_rowset_unload) {
+    const std::vector<int64_t> keys{1, 2, 3};
+    auto tablet = create_tablet(1009, 10012);
+    auto rowset = create_rowset(tablet, keys);
+    ASSERT_TRUE(rowset->load().ok());
+    _metadata_cache->cache_rowset(rowset.get());
+    const size_t loaded_rowset_size = rowset->segment_memory_usage();
+    ASSERT_GT(loaded_rowset_size, 0);
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+
+    TabletReader first_reader(tablet, Version(0, 0), schema, std::vector<RowsetSharedPtr>{rowset});
+    ASSERT_TRUE(first_reader.prepare().ok());
+    TabletReader last_reader(tablet, Version(0, 0), schema, std::vector<RowsetSharedPtr>{rowset});
+    ASSERT_TRUE(last_reader.prepare().ok());
+
+    // Eviction requests close(), but both readers still need the segments.
+    _metadata_cache->evict_rowset(rowset.get());
+    ASSERT_EQ(0, _metadata_cache->get_memory_usage());
+    ASSERT_EQ(loaded_rowset_size, rowset->segment_memory_usage());
+    first_reader.close();
+    ASSERT_EQ(1, rowset->refs_by_reader());
+    ASSERT_EQ(loaded_rowset_size, rowset->segment_memory_usage());
+    last_reader.close();
+    ASSERT_EQ(0, rowset->refs_by_reader());
+    ASSERT_EQ(0, rowset->segment_memory_usage());
+    ASSERT_EQ(0, _metadata_cache->get_memory_usage());
+
+    // The last close must finish the transition to UNLOADED, allowing a reload.
+    ASSERT_TRUE(rowset->load().ok());
+    ASSERT_GT(rowset->segment_memory_usage(), 0);
+}
+
+TEST_F(MetadataCacheReaderTest, charge_growth_can_evict_rowset_on_close) {
+    const std::vector<int64_t> keys{1, 2, 3};
+    auto tablet = create_tablet(1010, 10013);
+    auto rowset = create_rowset(tablet, keys);
+    ASSERT_TRUE(rowset->load().ok());
+    const size_t initial_rowset_size = rowset->segment_memory_usage();
+    const size_t initial_charge = initial_rowset_size + LRUCache::key_handle_size(CacheKey(rowset->rowset_id_str()));
+    _metadata_cache->set_capacity(initial_charge * kNumShards);
+    _metadata_cache->cache_rowset(rowset.get());
+    ASSERT_EQ(initial_charge, _metadata_cache->get_memory_usage());
+
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, 0), schema, std::vector<RowsetSharedPtr>{rowset});
+    ASSERT_TRUE(reader.prepare().ok());
+    std::vector<std::string> short_keys;
+    ASSERT_TRUE(rowset->get_segment_sk_index(&short_keys).ok());
+    ASSERT_GT(rowset->segment_memory_usage(), initial_rowset_size);
+    ASSERT_EQ(initial_charge, _metadata_cache->get_memory_usage());
+
+    // Refreshing the charge now exceeds the shard capacity. Its deleter calls
+    // Rowset::close(), which must run after release() drops the rowset lock.
+    reader.close();
+    ASSERT_EQ(0, rowset->refs_by_reader());
+    ASSERT_EQ(0, _metadata_cache->get_memory_usage());
+    ASSERT_EQ(0, rowset->segment_memory_usage());
+}
+
 TEST_F(MetadataCacheTest, test_concurrency_issue) {
     const size_t N = 100;
     vector<int64_t> keys;
