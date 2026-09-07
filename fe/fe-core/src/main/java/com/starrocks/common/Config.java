@@ -4800,6 +4800,21 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int group_provider_refresh_thread_num = 4;
 
+    /**
+     * Groups whose members may be the target of `EXECUTE AS` without having been registered with
+     * `CREATE USER` first. Such a target becomes an ephemeral user identity: it owns no privileges of
+     * its own, so its authorization comes entirely from the roles mapped to the groups the group
+     * providers report for it. If there are multiple, separate them with commas.
+     * <p>Impersonating an unregistered user still requires the IMPERSONATE privilege on it, which in
+     * practice means `GRANT IMPERSONATE ON ALL USERS` - a per-user grant cannot name a user that does
+     * not exist, and one left over from a dropped namesake does not cover it either.
+     * <p>Empty (the default) disables the feature: `EXECUTE AS` then fails with `cannot find user` for
+     * anyone who was not created. That also makes it the kill switch, available at runtime via
+     * ADMIN SET FRONTEND CONFIG.
+     */
+    @ConfField(mutable = true)
+    public static String[] execute_as_external_user_allowed_groups = {};
+
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
 
