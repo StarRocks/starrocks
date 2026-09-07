@@ -401,6 +401,7 @@ public class AstToSQLBuilderTest {
         Analyzer.analyze(analyzed, AnalyzeTestUtil.getConnectContext());
         Assertions.assertTrue(toPrettySQL(analyzed).contains("ORDER BY 1 ASC"), toPrettySQL(analyzed));
     }
+    @Test
     public void testCreateTableAsSelect() {
         // CTAS used to have no deparse visitor and fell through to visitNode() which returns an empty
         // string, so the profile and audit log of a CTAS in a multi-statement request showed no SQL.
