@@ -20,7 +20,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.qe.ConnectContext;
@@ -245,7 +244,10 @@ public class TabletReshardJobMgrTest {
                 "the reshard daemon must be up before it is stopped; otherwise a later start() would "
                         + "clear the stop request and resurrect the racing tick");
         sharedMgr.setStop();
-        LeaderDaemon.awaitQuiesced(List.<LeaderDaemon>of(sharedMgr), 30_000L);
+        // Daemon checks the stop flag only between ticks, so wait for the thread to actually exit
+        // (the tick interval is 10ms) rather than racing an in-flight cycle.
+        sharedMgr.join(30_000L);
+        Assertions.assertFalse(sharedMgr.isAlive(), "the reshard daemon did not exit after setStop()");
 
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
