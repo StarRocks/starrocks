@@ -528,6 +528,20 @@ public class PaimonPredicateConverterTest {
     }
 
     @Test
+    public void testDecimalLiteralExceedingColumnPrecisionIsNotPushedDown() {
+        // 21 digits do not fit DECIMAL(15,2); Decimal.fromBigDecimal returns null instead of truncating
+        Predicate result = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.GT,
+                ConstantOperator.createDecimal(new BigDecimal("100000000000000000000"),
+                        com.starrocks.type.DecimalType.DEFAULT_DECIMAL128));
+        Assertions.assertNull(result);
+        // 13 integer digits is the most DECIMAL(15,2) holds
+        Predicate fits = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.GT,
+                ConstantOperator.createDecimal(new BigDecimal("9999999999999.99"),
+                        new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 2)));
+        assertDecimalLeaf(fits, GreaterThan.class, "9999999999999.99", 15, 2);
+    }
+
+    @Test
     public void testDecimalLiteralWiderScaleThanColumnIsNotPushedDown() {
         Predicate result = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
                 ConstantOperator.createDecimal(new BigDecimal("5.005"),
