@@ -230,6 +230,25 @@ public class TabletReshardJobMgrTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+
+        // In shared-data mode the singleton TabletReshardJobMgr is started as a leader daemon and
+        // ticks every tablet_reshard_job_scheduler_interval_ms (10ms), running the very code these
+        // cases drive by hand: it drains reshardCandidates, creates jobs into tabletReshardJobs and
+        // calls createTabletReshardJob -- which several cases replace with a counting MockUp that a
+        // class-level MockUp also applies to the singleton. So the daemon thread would race the test
+        // thread and land its effects between a `before` read and the assertion, exactly like the
+        // ColocateChecker race stubbed out in SplitTabletJobColocateTest (#73662). Quiesce it once
+        // here so every tick in this class is an explicit runAfterCatalogReadyForTest() call.
+        TabletReshardJobMgr sharedMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        Assertions.assertTrue(sharedMgr.isRunning(),
+                "the reshard daemon must be up before it is stopped; otherwise a later start() would "
+                        + "clear the stop request and resurrect the racing tick");
+        sharedMgr.setStop();
+        // Daemon checks the stop flag only between ticks, so wait for the thread to actually exit
+        // (the tick interval is 10ms) rather than racing an in-flight cycle.
+        sharedMgr.join(30_000L);
+        Assertions.assertFalse(sharedMgr.isAlive(), "the reshard daemon did not exit after setStop()");
+
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         Config.enable_range_distribution = true;
