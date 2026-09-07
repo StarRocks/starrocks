@@ -115,6 +115,13 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             this.columnRefFactory = columnRefFactory;
         }
 
+<<<<<<< HEAD
+=======
+        private record OutputExchangeTemplate(DistributionSpec distributionSpec, ColumnRefSet usedColumns,
+                                              PhysicalDistributionOperator exchangeOp) {
+        }
+
+>>>>>>> 555818d ([BugFix] Keep global dict exprs when skew join v2 replaces the shuffle exchanges (#78672))
         @Override
         public OptExpression visit(OptExpression optExpr, Void context) {
             return visitChild(optExpr, context);
@@ -246,7 +253,16 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                         (PhysicalDistributionOperator) nonSkewSideChild.getOp();
 
                 PhysicalDistributionOperator newExchangeForBroadcastJoin =
+<<<<<<< HEAD
                         new PhysicalDistributionOperator(rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec());
+=======
+                        new PhysicalDistributionOperator(outputExchangeTemplate.distributionSpec());
+                // the fragment above this exchange decodes the same dict columns as above the original
+                // join's exchanges, so it needs the same global dicts and derived-dict expressions
+                newExchangeForBroadcastJoin.setGlobalDicts(outputExchangeTemplate.exchangeOp().getGlobalDicts());
+                newExchangeForBroadcastJoin.setGlobalDictsExpr(
+                        outputExchangeTemplate.exchangeOp().getGlobalDictsExpr());
+>>>>>>> 555818d ([BugFix] Keep global dict exprs when skew join v2 replaces the shuffle exchanges (#78672))
                 // we need add exchange node to make broadcast join's output distribution can be same as shuffle join's
                 rightChildOfConcatenate = OptExpression.builder().setOp(newExchangeForBroadcastJoin)
                         .setInputs(Collections.singletonList(newBroadcastJoin))
@@ -327,6 +343,13 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalSplitConsumeOperator splitConsumerOptForBroadcastJoin =
                     new PhysicalSplitConsumeOperator(splitProduceOperator.getSplitId(), tablePredicates.first,
                             distributionSpecForBroadCastJoin, splitOutputColumns);
+            // Both consumers stand where the original exchange stood: the fragments built above them
+            // evaluate the same dict expressions the low-cardinality rewrite attached to that exchange.
+            for (PhysicalSplitConsumeOperator consumer : List.of(splitConsumerOptForShuffleJoin,
+                    splitConsumerOptForBroadcastJoin)) {
+                consumer.setGlobalDicts(exchangeOpOfOriginalShuffleJoin.getGlobalDicts());
+                consumer.setGlobalDictsExpr(exchangeOpOfOriginalShuffleJoin.getGlobalDictsExpr());
+            }
 
             OptExpression splitConsumerOptExpForShuffleJoin =
                     OptExpression.builder().setOp(splitConsumerOptForShuffleJoin).setInputs(Collections.emptyList())
@@ -344,6 +367,92 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     splitConsumerOptExpForBroadcastJoin);
         }
 
+<<<<<<< HEAD
+=======
+        private OptExpression buildBroadcastJoinBranch(OptExpression opt,
+                                                      List<PhysicalPropertySet> requiredPropertiesForBroadcastJoin,
+                                                      PhysicalHashJoinOperator newBroadcastJoinOpt,
+                                                      int skewSideChildIndex,
+                                                      SplitProducerAndConsumer leftSplit,
+                                                      SplitProducerAndConsumer rightSplit) {
+            boolean skewOnRight = skewSideChildIndex == 1;
+            // If skew is on the original right child, swap inputs ONLY for the broadcast branch so that
+            // skew side becomes the left(probe/round-robin) input and the other side is broadcast(build).
+            OptExpression broadcastLeft = skewOnRight ? rightSplit.splitConsumerOptForBroadcastJoin
+                    : leftSplit.splitConsumerOptForBroadcastJoin;
+            OptExpression broadcastRight = skewOnRight ? leftSplit.splitConsumerOptForBroadcastJoin
+                    : rightSplit.splitConsumerOptForBroadcastJoin;
+
+            return OptExpression.builder().setOp(newBroadcastJoinOpt).setInputs(newArrayList(broadcastLeft, broadcastRight))
+                    .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                    .setRequiredProperties(requiredPropertiesForBroadcastJoin).setCost(opt.getCost()).build();
+        }
+
+        private OptExpression buildNullFastBranch(OptExpression joinOpt,
+                                                 OptExpression leftNullRows,
+                                                 OptExpression leftChild,
+                                                 OptExpression rightChild,
+                                                 List<ColumnRefOperator> outputColumns,
+                                                 ColumnRefSet requiredColumnsForOutputExchange) {
+            ColumnRefSet leftOutputCols = leftChild.getOutputColumns();
+            ColumnRefSet rightOutputCols = rightChild.getOutputColumns();
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+            for (ColumnRefOperator outputColumn : outputColumns) {
+                if (leftOutputCols.contains(outputColumn)) {
+                    columnRefMap.put(outputColumn, outputColumn);
+                } else if (rightOutputCols.contains(outputColumn)) {
+                    columnRefMap.put(outputColumn, ConstantOperator.createNull(outputColumn.getType()));
+                } else {
+                    Map<ColumnRefOperator, ScalarOperator> joinOutput = joinOpt.getRowOutputInfo().getColumnRefMap();
+                    columnRefMap.put(outputColumn, joinOutput.getOrDefault(outputColumn, outputColumn));
+                }
+            }
+
+            addTypedNullColumnsIfMissing(columnRefMap, requiredColumnsForOutputExchange);
+            PhysicalProjectOperator projectOperator = new PhysicalProjectOperator(columnRefMap, Collections.emptyMap());
+            return OptExpression.builder().setOp(projectOperator)
+                    .setInputs(Collections.singletonList(leftNullRows))
+                    .setLogicalProperty(joinOpt.getLogicalProperty())
+                    .setStatistics(joinOpt.getStatistics()).setCost(joinOpt.getCost())
+                    .build();
+        }
+
+
+        private OutputExchangeTemplate getOutputExchangeTemplateIfRequired(OptExpression joinOpt, int skewSideChildIndex) {
+            if (!joinOpt.isExistRequiredDistribution()) {
+                return null;
+            }
+            OptExpression template = joinOpt.inputAt(1 - skewSideChildIndex);
+            PhysicalDistributionOperator exchangeOp = template.getOp().cast();
+            ColumnRefSet used = exchangeOp.getRowOutputInfo(template.getInputs()).getUsedColumnRefSet();
+            return new OutputExchangeTemplate(exchangeOp.getDistributionSpec(), used, exchangeOp);
+        }
+
+        private void addIdentityColumnsToProjectionIfMissing(Projection projection,
+                                                             List<ColumnRefOperator> alreadyOutputColumns,
+                                                             ColumnRefSet requiredColumns) {
+            if (projection == null || requiredColumns == null || requiredColumns.isEmpty()) {
+                return;
+            }
+            ColumnRefSet alreadyOutputSet = new ColumnRefSet(alreadyOutputColumns);
+            ColumnRefSet missing = requiredColumns.clone();
+            missing.except(alreadyOutputSet);
+            for (ColumnRefOperator c : missing.getColumnRefOperators(columnRefFactory)) {
+                projection.getColumnRefMap().putIfAbsent(c, c);
+            }
+        }
+
+        private void addTypedNullColumnsIfMissing(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+                                                  ColumnRefSet requiredColumns) {
+            if (requiredColumns == null || requiredColumns.isEmpty()) {
+                return;
+            }
+            for (ColumnRefOperator c : requiredColumns.getColumnRefOperators(columnRefFactory)) {
+                columnRefMap.putIfAbsent(c, ConstantOperator.createNull(c.getType()));
+            }
+        }
+
+>>>>>>> 555818d ([BugFix] Keep global dict exprs when skew join v2 replaces the shuffle exchanges (#78672))
         /**
          * Build split predicates for skew/non-skew branches.
          * <p>
