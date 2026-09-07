@@ -238,8 +238,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         BASELINE_MISSING,
         /** A version in the window was published while change data capture was off on that base table. */
         CHANGE_CAPTURE_DISABLED,
-        /** A forced refresh, which re-materializes rather than reading a delta. */
-        FORCE_REFRESH,
         /**
          * A fallback nothing above classifies. Reaching this means an internal invariant broke or a
          * new fallback path was added without a reason; the error message carries the detail.

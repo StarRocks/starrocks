@@ -833,11 +833,6 @@ public abstract class MVRefreshProcessor {
      * True for the run that leads a batch. A later batch of the same job inherits the lead run's mode
      * decision rather than making its own, so it must not overwrite the reason that decision recorded.
      */
-    protected boolean isBatchLeadRun() {
-        TaskRunStatus status = mvContext.getStatus();
-        return status == null || isBatchLeadRun(status.getStartTaskRunId(), status.getTaskRunId());
-    }
-
     @VisibleForTesting
     static boolean isBatchLeadRun(String startTaskRunId, String taskRunId) {
         return startTaskRunId == null || startTaskRunId.equals(taskRunId);

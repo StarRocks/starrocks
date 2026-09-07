@@ -58,11 +58,6 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         if (!isPctOnly(mvRefreshParams)) {
             return switchToIVMRefresh(taskRunContext);
         }
-        // A partial request carries no reason: the analyzer rejects an explicit one, so the only run that
-        // reaches here partial is a later batch of a pct job, which inherits the lead run's decision.
-        if (mvRefreshParams.isNonTentativeForce() && isBatchLeadRun()) {
-            recordRefreshModeReason(MaterializedView.RefreshModeReason.FORCE_REFRESH, null);
-        }
         return switchToPCTRefresh(taskRunContext);
     }
 

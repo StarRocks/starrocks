@@ -35,6 +35,7 @@ public class MVHybridRefreshProcessorTest {
 
     private static MVRefreshParams rangePartitionedParams(Map<String, String> properties) {
         MaterializedView mv = Mockito.mock(MaterializedView.class);
+        Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.PCT);
         PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
         Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
         Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(false);

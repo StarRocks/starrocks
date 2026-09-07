@@ -64,6 +64,11 @@ public class MVRefreshParams {
         if (Boolean.parseBoolean(properties.get(TaskRun.FORCE))) {
             return true;
         }
+        // What follows are standing settings, not the per-request keyword the analyzer already rejects on
+        // such a view. Honouring them refuses the same thing for the life of the view rather than once.
+        if (mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
+            return false;
+        }
         MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy =
                 mv.getPartitionRefreshStrategy();
         if (partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE) {

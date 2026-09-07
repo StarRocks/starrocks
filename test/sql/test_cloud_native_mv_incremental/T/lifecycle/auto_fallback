@@ -292,26 +292,6 @@ SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.t
 SELECT dt, k, v FROM mv_pd ORDER BY dt, k;
 SELECT dt, k, v FROM pd_base ORDER BY dt, k;
 
--- name: test_ivm_auto_force_strategy_reports_force_refresh @cloud
--- A force strategy re-materializes rather than reading a delta, so the run is pct by request rather than
--- by anything the base table did. The REFRESH ... FORCE keyword cannot reach this: the analyzer rejects it
--- on an AUTO view, leaving the property and the config as the only ways in.
-CREATE TABLE fr_base (dt date, k int, v bigint)
-DUPLICATE KEY(dt, k)
-PARTITION BY date_trunc('day', dt)
-DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
-INSERT INTO fr_base VALUES ('2026-03-01',1,10),('2026-03-02',2,20);
-CREATE MATERIALIZED VIEW mv_fr
-PARTITION BY dt
-DISTRIBUTED BY HASH(k) BUCKETS 1
-REFRESH DEFERRED MANUAL
-PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_strategy' = 'force')
-AS SELECT dt, k, v FROM fr_base;
-REFRESH MATERIALIZED VIEW mv_fr WITH SYNC MODE;
-SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
-FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fr';
-SELECT dt, k, v FROM mv_fr ORDER BY dt, k;
-
 -- name: test_ivm_auto_fallback_batches_keep_the_lead_runs_reason @cloud
 -- partition_refresh_number=1 splits the bootstrap into one task run per partition. Only the run that
 -- chose the mode records a reason; the followers record none. Without that guard every follower would
