@@ -292,8 +292,8 @@ public:
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
         ASSIGN_OR_ABORT(auto* entry, _update_mgr->prepare_primary_index(metadata, &builder, 2, 2, write_guard));
         CHECK_EQ(2, entry->get_ref());
-        CHECK_OK(entry->value().sync_flush_persistent_index(10'000'000));
-        CHECK_OK(entry->value().commit(metadata, &builder));
+        CHECK_OK(entry->value().sync_flush_all_memtables(10'000'000));
+        CHECK_OK(entry->value().commit(&builder));
         write_guard.reset();
         _update_mgr->release_primary_index_cache(entry);
         _update_mgr->unlock_shard_pk_index_shard(metadata->id());
