@@ -19,15 +19,56 @@
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "runtime/descriptors.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
+
+namespace {
+
+// A zone map keeps the source column's min/max in the form that column writes them, and
+// ColumnReader::_get_zone_map_parse_type() reads them back as the predicate's type. Forwarding a zone
+// map across a cast is therefore only sound when that reinterpretation preserves both the value and
+// the ordering.
+bool zone_map_survives_cast(LogicalType source_type, LogicalType target_type) {
+    // Integer widening, the shape a fast schema evolution leaves behind: min/max are decimal literals
+    // that every integer type reads alike, ordered numerically on both sides.
+    if (is_integer_type(source_type) && is_integer_type(target_type)) {
+        return true;
+    }
+    // A CHAR or VARCHAR length change, the second shape. CHAR and VARCHAR share the byte-wise
+    // ordering, and _get_zone_map_parse_type() already forces the CHAR parse that strips the padding a
+    // CHAR zone map carries.
+    if (is_string_type(source_type) && is_string_type(target_type)) {
+        return true;
+    }
+    // A DATE widened to DATETIME, the third shape. A DATE zone map is written as "YYYY-MM-DD";
+    // TimestampValue::from_string() reads a date-only string as that day's midnight, which is exactly
+    // where the cast puts every stored DATE, so the reinterpreted range is both exact and ordered the
+    // same way. Only this direction. Turning a DATETIME back into a DATE is a rewriting schema change
+    // today, so no one reads a DATETIME zone map through a DATE predicate and there is no pruning to
+    // win by opening it -- and the cost of being wrong is asymmetric: DateValue::from_string()
+    // answers a string it cannot read by substituting 1400-01-01 instead of failing, and a min and a
+    // max that both collapse there prune the column away in silence.
+    if (source_type == TYPE_DATE && target_type == TYPE_DATETIME) {
+        return true;
+    }
+    // Everything else compares one type's written form against another type's reader. A string zone
+    // map against a numeric predicate and the reverse are the reason this function exists, but the
+    // float widenings are no safer: FloatToBuffer() writes the shortest decimal that reads back as the
+    // same FLOAT, and that decimal read as a DOUBLE is a different number which can land below the
+    // page's true maximum -- enough to drop a page that holds a match.
+    return false;
+}
+
+} // namespace
 
 CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_iter, const TypeDescriptor& source_type,
                                        const TypeDescriptor& target_type, bool nullable_source)
         : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
           _obj_pool(new ObjectPool()),
 
-          _source_chunk() {
+          _source_chunk(),
+          _zone_map_forwardable(zone_map_survives_cast(source_type.type, target_type.type)) {
     auto slot_id = SlotId{0};
     auto column = ColumnHelper::create_column(source_type, nullable_source);
     auto slot_desc = SlotDescriptor(slot_id, "", source_type);

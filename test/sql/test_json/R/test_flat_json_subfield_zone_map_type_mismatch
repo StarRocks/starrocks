@@ -1,0 +1,316 @@
+-- name: test_flat_json_subfield_zone_map_type_mismatch
+create table t_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_ctl_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t_${uuid0} values
+  (1, parse_json('{"x":1,"s":"1"}')),
+  (2, parse_json('{"x":5,"s":"5"}')),
+  (3, parse_json('{"x":9,"s":"9"}')),
+  (4, parse_json('{"x":10,"s":"10"}')),
+  (5, parse_json('{"x":42,"s":"42"}')),
+  (6, parse_json('{"x":99,"s":"99"}')),
+  (7, parse_json('{"x":100,"s":"100"}')),
+  (8, parse_json('{"x":101,"s":"101"}')),
+  (9, parse_json('{"x":500,"s":"500"}')),
+  (10, parse_json('{"x":1000,"s":"1000"}')),
+  (11, parse_json('{"x":4096,"s":"4096"}')),
+  (12, parse_json('{"x":20000,"s":"20000"}')),
+  (13, parse_json('{"s":"7"}'));
+-- result:
+-- !result
+insert into t_ctl_${uuid0} select k, j from t_${uuid0};
+-- result:
+-- !result
+select flat_json_meta(j) from t_${uuid0}[_META_];
+-- result:
+["nulls(TINYINT), s(VARCHAR), x(BIGINT)"]
+-- !result
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select k, get_json_string(j,'$.x') as x from t_${uuid0} order by k;
+-- result:
+1	1
+2	5
+3	9
+4	10
+5	42
+6	99
+7	100
+8	101
+9	500
+10	1000
+11	4096
+12	20000
+13	None
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.x') = '9' order by k;
+-- result:
+3
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.x') >= '5' order by k;
+-- result:
+2
+3
+6
+9
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.x') > '4' order by k;
+-- result:
+2
+3
+5
+6
+9
+11
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.x') between '9' and '99' order by k;
+-- result:
+3
+6
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.s') = 100 order by k;
+-- result:
+7
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.s') > 99 order by k;
+-- result:
+7
+8
+9
+10
+11
+12
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.s') between 100 and 1000 order by k;
+-- result:
+7
+8
+9
+10
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.x') = 9 order by k;
+-- result:
+3
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.x') > 99 order by k;
+-- result:
+7
+8
+9
+10
+11
+12
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.s') = '9' order by k;
+-- result:
+3
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.s') > '4' order by k;
+-- result:
+2
+3
+5
+6
+9
+11
+13
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, get_json_string(j,'$.x') as x from t_${uuid0} order by k;
+-- result:
+1	1
+2	5
+3	9
+4	10
+5	42
+6	99
+7	100
+8	101
+9	500
+10	1000
+11	4096
+12	20000
+13	None
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.x') = '9' order by k;
+-- result:
+3
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.x') >= '5' order by k;
+-- result:
+2
+3
+6
+9
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.x') > '4' order by k;
+-- result:
+2
+3
+5
+6
+9
+11
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.x') between '9' and '99' order by k;
+-- result:
+3
+6
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.s') = 100 order by k;
+-- result:
+7
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.s') > 99 order by k;
+-- result:
+7
+8
+9
+10
+11
+12
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.s') between 100 and 1000 order by k;
+-- result:
+7
+8
+9
+10
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.x') = 9 order by k;
+-- result:
+3
+-- !result
+select k from t_${uuid0} where get_json_int(j,'$.x') > 99 order by k;
+-- result:
+7
+8
+9
+10
+11
+12
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.s') = '9' order by k;
+-- result:
+3
+-- !result
+select k from t_${uuid0} where get_json_string(j,'$.s') > '4' order by k;
+-- result:
+2
+3
+5
+6
+9
+11
+13
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select k, get_json_string(j,'$.x') as x from t_ctl_${uuid0} order by k;
+-- result:
+1	1
+2	5
+3	9
+4	10
+5	42
+6	99
+7	100
+8	101
+9	500
+10	1000
+11	4096
+12	20000
+13	None
+-- !result
+select k from t_ctl_${uuid0} where get_json_string(j,'$.x') = '9' order by k;
+-- result:
+3
+-- !result
+select k from t_ctl_${uuid0} where get_json_string(j,'$.x') >= '5' order by k;
+-- result:
+2
+3
+6
+9
+-- !result
+select k from t_ctl_${uuid0} where get_json_string(j,'$.x') > '4' order by k;
+-- result:
+2
+3
+5
+6
+9
+11
+-- !result
+select k from t_ctl_${uuid0} where get_json_string(j,'$.x') between '9' and '99' order by k;
+-- result:
+3
+6
+-- !result
+select k from t_ctl_${uuid0} where get_json_int(j,'$.s') = 100 order by k;
+-- result:
+7
+-- !result
+select k from t_ctl_${uuid0} where get_json_int(j,'$.s') > 99 order by k;
+-- result:
+7
+8
+9
+10
+11
+12
+-- !result
+select k from t_ctl_${uuid0} where get_json_int(j,'$.s') between 100 and 1000 order by k;
+-- result:
+7
+8
+9
+10
+-- !result
+select k from t_ctl_${uuid0} where get_json_int(j,'$.x') = 9 order by k;
+-- result:
+3
+-- !result
+select k from t_ctl_${uuid0} where get_json_int(j,'$.x') > 99 order by k;
+-- result:
+7
+8
+9
+10
+11
+12
+-- !result
+select k from t_ctl_${uuid0} where get_json_string(j,'$.s') = '9' order by k;
+-- result:
+3
+-- !result
+select k from t_ctl_${uuid0} where get_json_string(j,'$.s') > '4' order by k;
+-- result:
+2
+3
+5
+6
+9
+11
+13
+-- !result
+drop table t_${uuid0};
+-- result:
+-- !result
+drop table t_ctl_${uuid0};
+-- result:
+-- !result

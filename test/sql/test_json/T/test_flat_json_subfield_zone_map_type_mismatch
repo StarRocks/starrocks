@@ -1,0 +1,85 @@
+-- name: test_flat_json_subfield_zone_map_type_mismatch
+-- A flat JSON sub-column is stored in the type the flattener chose -- x lands as BIGINT and s as
+-- VARCHAR here. When the v2 rewrite asks for that sub-column at another type, the reader wraps the
+-- sub-column in a CastColumnIterator, and that decorator used to forward get_row_ranges_by_zone_map
+-- straight to the sub-column's own reader. ColumnReader parses a zone map with the *predicate's*
+-- type, so x's numeric min/max 1 and 20000 were compared against a VARCHAR predicate as the strings
+-- "1" and "20000" -- under which "9" sorts above the maximum. The page was dropped and the matching
+-- rows silently disappeared; the same thing happened the other way round, with s's lexicographic
+-- min/max read back as numbers.
+-- The values below are deliberately of uneven width, so that their numeric order and their string
+-- order disagree: 9 > 20000 as strings, 9 < 20000 as numbers.
+create table t_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_ctl_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+insert into t_${uuid0} values
+  (1, parse_json('{"x":1,"s":"1"}')),
+  (2, parse_json('{"x":5,"s":"5"}')),
+  (3, parse_json('{"x":9,"s":"9"}')),
+  (4, parse_json('{"x":10,"s":"10"}')),
+  (5, parse_json('{"x":42,"s":"42"}')),
+  (6, parse_json('{"x":99,"s":"99"}')),
+  (7, parse_json('{"x":100,"s":"100"}')),
+  (8, parse_json('{"x":101,"s":"101"}')),
+  (9, parse_json('{"x":500,"s":"500"}')),
+  (10, parse_json('{"x":1000,"s":"1000"}')),
+  (11, parse_json('{"x":4096,"s":"4096"}')),
+  (12, parse_json('{"x":20000,"s":"20000"}')),
+  (13, parse_json('{"s":"7"}'));
+insert into t_ctl_${uuid0} select k, j from t_${uuid0};
+-- Pin the flat schema: the queries below only mean something while x really is a BIGINT sub-column
+-- and s a VARCHAR one.
+select flat_json_meta(j) from t_${uuid0}[_META_];
+set cbo_prune_json_subfield = true;
+set cbo_json_v2_rewrite = true;
+-- A BIGINT sub-column read as VARCHAR. Every predicate here sorts above the string form of the
+-- page's maximum, so forwarding the zone map dropped the whole page.
+select k, get_json_string(j,'$.x') as x from t_${uuid0} order by k;
+select k from t_${uuid0} where get_json_string(j,'$.x') = '9' order by k;
+select k from t_${uuid0} where get_json_string(j,'$.x') >= '5' order by k;
+select k from t_${uuid0} where get_json_string(j,'$.x') > '4' order by k;
+select k from t_${uuid0} where get_json_string(j,'$.x') between '9' and '99' order by k;
+-- A VARCHAR sub-column read as BIGINT: the reverse direction, where the page's lexicographic
+-- min/max "1" and "99" were read back as the numeric range [1, 99].
+select k from t_${uuid0} where get_json_int(j,'$.s') = 100 order by k;
+select k from t_${uuid0} where get_json_int(j,'$.s') > 99 order by k;
+select k from t_${uuid0} where get_json_int(j,'$.s') between 100 and 1000 order by k;
+-- The pruning that has to stay: a sub-column read at its own type still answers through its zone map.
+select k from t_${uuid0} where get_json_int(j,'$.x') = 9 order by k;
+select k from t_${uuid0} where get_json_int(j,'$.x') > 99 order by k;
+select k from t_${uuid0} where get_json_string(j,'$.s') = '9' order by k;
+select k from t_${uuid0} where get_json_string(j,'$.s') > '4' order by k;
+-- Ground truth 1: the same queries with the rewrite off, so no sub-column and no zone map is read.
+set cbo_json_v2_rewrite = false;
+select k, get_json_string(j,'$.x') as x from t_${uuid0} order by k;
+select k from t_${uuid0} where get_json_string(j,'$.x') = '9' order by k;
+select k from t_${uuid0} where get_json_string(j,'$.x') >= '5' order by k;
+select k from t_${uuid0} where get_json_string(j,'$.x') > '4' order by k;
+select k from t_${uuid0} where get_json_string(j,'$.x') between '9' and '99' order by k;
+select k from t_${uuid0} where get_json_int(j,'$.s') = 100 order by k;
+select k from t_${uuid0} where get_json_int(j,'$.s') > 99 order by k;
+select k from t_${uuid0} where get_json_int(j,'$.s') between 100 and 1000 order by k;
+select k from t_${uuid0} where get_json_int(j,'$.x') = 9 order by k;
+select k from t_${uuid0} where get_json_int(j,'$.x') > 99 order by k;
+select k from t_${uuid0} where get_json_string(j,'$.s') = '9' order by k;
+select k from t_${uuid0} where get_json_string(j,'$.s') > '4' order by k;
+-- Ground truth 2: the same rows without the flat layout at all. Flat JSON is a storage layout, so
+-- every answer above must equal the corresponding answer here.
+set cbo_json_v2_rewrite = true;
+select k, get_json_string(j,'$.x') as x from t_ctl_${uuid0} order by k;
+select k from t_ctl_${uuid0} where get_json_string(j,'$.x') = '9' order by k;
+select k from t_ctl_${uuid0} where get_json_string(j,'$.x') >= '5' order by k;
+select k from t_ctl_${uuid0} where get_json_string(j,'$.x') > '4' order by k;
+select k from t_ctl_${uuid0} where get_json_string(j,'$.x') between '9' and '99' order by k;
+select k from t_ctl_${uuid0} where get_json_int(j,'$.s') = 100 order by k;
+select k from t_ctl_${uuid0} where get_json_int(j,'$.s') > 99 order by k;
+select k from t_ctl_${uuid0} where get_json_int(j,'$.s') between 100 and 1000 order by k;
+select k from t_ctl_${uuid0} where get_json_int(j,'$.x') = 9 order by k;
+select k from t_ctl_${uuid0} where get_json_int(j,'$.x') > 99 order by k;
+select k from t_ctl_${uuid0} where get_json_string(j,'$.s') = '9' order by k;
+select k from t_ctl_${uuid0} where get_json_string(j,'$.s') > '4' order by k;
+drop table t_${uuid0};
+drop table t_ctl_${uuid0};

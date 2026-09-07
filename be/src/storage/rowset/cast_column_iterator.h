@@ -52,6 +52,28 @@ public:
         return Status::OK();
     }
 
+    // A zone map holds the source column's min/max, but ColumnReader parses those bytes with the
+    // *predicate's* type. That is deliberate -- it is what lets a page written before a fast schema
+    // evolution still be pruned by a predicate carrying the new type -- and it only holds while both
+    // types read the same bytes the same way. This iterator exists precisely because the two types
+    // differ, and for a pair such as BIGINT on disk against a VARCHAR predicate the reinterpretation
+    // is nonsense: a page of a flat JSON subfield whose numeric min/max are 1 and 4096 is compared as
+    // the strings "1" and "4096", under which "9" sorts above the maximum, so the page is dropped and
+    // the matching row silently disappears. Forward the zone map only for the pairs whose stored form
+    // orders alike, and hand back the whole column otherwise -- the same answer
+    // JsonFlatColumnIterator and JsonMergeIterator give, and the counterpart of the bloom filter and
+    // dictionary already disabled above.
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override {
+        if (!_zone_map_forwardable) {
+            return ColumnIterator::get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation,
+                                                              src_range);
+        }
+        return ColumnIteratorDecorator::get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation,
+                                                                   src_range);
+    }
+
     // Disable dict encoding
     bool all_page_dict_encoded() const override { return false; }
     int dict_lookup(const Slice& word) override {
@@ -72,6 +94,9 @@ private:
     Expr* _cast_expr{nullptr};
     // Chunk for holding data read from the source column iterator
     Chunk _source_chunk;
+    // Whether the source column's zone map can be parsed as the target type without changing the
+    // value or the ordering. Computed once from the two types by the constructor.
+    bool _zone_map_forwardable{false};
 };
 
 } // namespace starrocks
