@@ -15,6 +15,7 @@
 #include <benchmark/benchmark.h>
 
 #include <cstring>
+#include <mutex>
 #include <vector>
 
 #include "base/hash/hash_util.hpp"
@@ -22,6 +23,7 @@
 namespace starrocks {
 
 static char __attribute__((aligned((64)))) g_bench_buf[2048];
+static std::once_flag g_bench_buf_init;
 
 static void init_bench_buffer() {
     for (size_t i = 0; i < sizeof(g_bench_buf); ++i) {
@@ -30,7 +32,7 @@ static void init_bench_buffer() {
 }
 
 static void BM_HashUtil_Hash32(benchmark::State& state) {
-    init_bench_buffer();
+    std::call_once(g_bench_buf_init, init_bench_buffer);
     int32_t len = state.range(0);
     uint32_t seed = 0x811C9DC5;
     uint32_t res = 0;
@@ -42,7 +44,7 @@ static void BM_HashUtil_Hash32(benchmark::State& state) {
 }
 
 static void BM_HashUtil_Hash64(benchmark::State& state) {
-    init_bench_buffer();
+    std::call_once(g_bench_buf_init, init_bench_buffer);
     int32_t len = state.range(0);
     uint64_t seed = 0x1234567890abcdefULL;
     uint64_t res = 0;
@@ -54,7 +56,7 @@ static void BM_HashUtil_Hash64(benchmark::State& state) {
 }
 
 static void BM_HashUtil_CrcHash32(benchmark::State& state) {
-    init_bench_buffer();
+    std::call_once(g_bench_buf_init, init_bench_buffer);
     int32_t len = state.range(0);
     uint32_t seed = 0x13579bdu;
     uint32_t res = 0;
@@ -66,7 +68,7 @@ static void BM_HashUtil_CrcHash32(benchmark::State& state) {
 }
 
 static void BM_HashUtil_CrcHash64(benchmark::State& state) {
-    init_bench_buffer();
+    std::call_once(g_bench_buf_init, init_bench_buffer);
     int32_t len = state.range(0);
     uint64_t seed = 0x12345678abcdef90ULL;
     uint64_t res = 0;
@@ -97,10 +99,10 @@ static void BM_HashUtil_RowsetIdHash64(benchmark::State& state) {
     state.SetBytesProcessed(int64_t(state.iterations()) * 24);
 }
 
-BENCHMARK(BM_HashUtil_Hash32)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
-BENCHMARK(BM_HashUtil_Hash64)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
-BENCHMARK(BM_HashUtil_CrcHash32)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
-BENCHMARK(BM_HashUtil_CrcHash64)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
+BENCHMARK(BM_HashUtil_Hash32)->Arg(0)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
+BENCHMARK(BM_HashUtil_Hash64)->Arg(0)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
+BENCHMARK(BM_HashUtil_CrcHash32)->Arg(0)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
+BENCHMARK(BM_HashUtil_CrcHash64)->Arg(0)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
 BENCHMARK(BM_HashUtil_RowsetIdHash64);
 
 } // namespace starrocks
