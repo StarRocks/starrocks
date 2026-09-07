@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvRefreshArbiter;
@@ -26,8 +28,10 @@ import com.starrocks.connector.adbc.MockedADBCMetadata;
 import com.starrocks.planner.ADBCScanNode;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.Explain;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.summary.QueryHistory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -125,6 +129,31 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN ADBC");
         assertContains(plan, "OlapScanNode");
+    }
+
+    @Test
+    public void testADBCOptimizerPlanAndQueryHistory() throws Exception {
+        String sql = "select t1.a, t2.v1 from adbc0.test_db0.tbl0 t1 join test.t0 t2 " +
+                "on t1.c = t2.v1 where t1.c > 10 limit 5";
+        ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        assertEquals(2, plan.getScanNodes().size());
+        String rendered = Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
+        assertContains(rendered, "ADBC-SCAN [tbl0]", "Estimates:", "predicate:");
+
+        StmtExecutor previousExecutor = connectContext.getExecutor();
+        try {
+            connectContext.setExecutor(new StmtExecutor(connectContext,
+                    UtFrameUtils.parseStmtWithNewParser(sql, connectContext)));
+            QueryHistory history = Deencapsulation.newInstance(QueryHistory.class, connectContext, plan);
+            String json = Deencapsulation.invoke(history, "toJSON");
+            JsonObject record = JsonParser.parseString(json).getAsJsonObject();
+            assertEquals(sql, record.get("sql").getAsString());
+            assertContains(record.get("plan").getAsString(), "ADBC-SCAN [tbl0]", "predicate:");
+            assertTrue(record.has("sql_digest"));
+            assertTrue(record.has("plan_costs"));
+        } finally {
+            connectContext.setExecutor(previousExecutor);
+        }
     }
 
     @Test
