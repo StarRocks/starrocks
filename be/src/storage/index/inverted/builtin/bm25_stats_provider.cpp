@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "common/config_storage_fwd.h"
+#include "common/runtime_profile.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
@@ -31,6 +32,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/storage_stats.h"
 
 namespace starrocks {
 
@@ -90,6 +92,7 @@ StatusOr<std::shared_ptr<BM25Stats>> build_tablet_bm25_stats(const TabletSchema&
                                                              const std::vector<std::shared_ptr<Segment>>& segments,
                                                              const LakeIOOptions& lake_io_opts, bool use_page_cache,
                                                              OlapReaderStatistics* stats) {
+    SCOPED_RAW_TIMER(&stats->bm25_stats_build_ns);
     // Resolve the FE's stable column_id to the column's unique id, the same way the MATCH predicate does:
     // field_index(column_id) -> tablet column -> its unique id. Phase-2 (segment iterator) re-resolves the
     // same column_id against its own segment schema, so the resolved id is not stored on the shared option.
@@ -165,6 +168,11 @@ StatusOr<std::shared_ptr<BM25Stats>> build_tablet_bm25_stats(const TabletSchema&
     computed.shared_threshold = std::make_shared<std::atomic<double>>(0.0);
     *result = std::move(computed);
     return result;
+}
+
+void merge_bm25_phase1_stats(const OlapReaderStatistics& phase1, OlapReaderStatistics* to) {
+    to->bm25_stats_build_ns += phase1.bm25_stats_build_ns;
+    to->bm25_stats_io_ns += phase1.io_ns;
 }
 
 } // namespace starrocks

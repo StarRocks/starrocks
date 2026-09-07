@@ -616,6 +616,45 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
     return {};
 }
 
+// BM25 Phase-1 (shared-nothing): compute tablet-local stats over the same rowsets this scan reads, before
+// _reader->open consumes them. Shared with the lake path via build_tablet_bm25_stats; only obtaining the
+// segments differs (local rowsets, loaded on demand -- Rowset::load() is idempotent).
+Status OlapChunkSource::_fold_bm25_stats(const std::vector<RowsetSharedPtr>& rowsets) {
+    std::vector<SegmentSharedPtr> segments;
+    {
+        // Rowset::load() parses every segment footer, which can dominate Phase-1 on a cold scan, and
+        // build_tablet_bm25_stats times only itself. Time the collection here; the scoped timer ends
+        // before that call, so the two accumulate into bm25_stats_build_ns without overlapping.
+        SCOPED_RAW_TIMER(&_bm25_phase1_stats.bm25_stats_build_ns);
+        for (const auto& rowset : rowsets) {
+            RETURN_IF_ERROR(rowset->load());
+            auto segs = rowset->get_segments();
+            segments.insert(segments.end(), segs.begin(), segs.end());
+        }
+    }
+    ASSIGN_OR_RETURN(_params.bm25_stats,
+                     build_tablet_bm25_stats(*_tablet_schema, *_params.bm25_search_option, segments, LakeIOOptions{},
+                                             _params.use_page_cache, &_bm25_phase1_stats));
+    return Status::OK();
+}
+
+Status OlapChunkSource::_init_bm25_stats(const std::vector<RowsetSharedPtr>& rowsets) {
+    _bm25_phase1_stats = OlapReaderStatistics{};
+    if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable) {
+        return Status::OK();
+    }
+    Status st = _fold_bm25_stats(rowsets);
+    if (!st.ok()) {
+        // Phase-1 spent time before failing (unscoreable column, corrupt index, IO error) and no reader
+        // will ever exist -- ScanOperator drops the chunk source without close(). Publish what it spent
+        // here, or the failure a user needs to diagnose carries no BM25 timing at all.
+        OlapReaderStatistics failed_stats;
+        merge_bm25_phase1_stats(_bm25_phase1_stats, &failed_stats);
+        _update_bm25_phase1_counter(failed_stats);
+    }
+    return st;
+}
+
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -680,24 +719,13 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
     }
 
-    // BM25 Phase-1 (shared-nothing): compute tablet-local stats over the same rowsets this scan reads, before
-    // _reader->open consumes them. Shared with the lake path via build_tablet_bm25_stats; only obtaining the
-    // segments differs (local rowsets, loaded on demand -- Rowset::load() is idempotent).
-    if (_params.bm25_search_option != nullptr && _params.bm25_search_option->enable) {
-        std::vector<SegmentSharedPtr> segments;
-        for (const auto& rowset : rowsets) {
-            RETURN_IF_ERROR(rowset->load());
-            auto segs = rowset->get_segments();
-            segments.insert(segments.end(), segs.begin(), segs.end());
-        }
-        OlapReaderStatistics phase1_stats;
-        ASSIGN_OR_RETURN(_params.bm25_stats,
-                         build_tablet_bm25_stats(*_tablet_schema, *_params.bm25_search_option, segments,
-                                                 LakeIOOptions{}, _params.use_page_cache, &phase1_stats));
-    }
+    RETURN_IF_ERROR(_init_bm25_stats(rowsets));
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), std::move(rowsets), &_tablet_schema);
+    // Phase-1 ran before the reader existed, so it wrote into its own statistics object. Fold it in now
+    // that there is a reader, otherwise the fold's cost never reaches the profile.
+    merge_bm25_phase1_stats(_bm25_phase1_stats, _reader->mutable_stats());
     _reader->set_use_gtid(_morsel->get_olap_scan_range()->__isset.gtid);
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
@@ -854,6 +882,45 @@ void OlapChunkSource::_update_realtime_counter(Chunk* chunk) {
     }
 }
 
+void OlapChunkSource::_update_bm25_phase1_counter(const OlapReaderStatistics& stats) {
+    if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable) {
+        return;
+    }
+    // Created here rather than in _init_counter so a non-scoring scan does not carry a group of constant
+    // zeros (same as DictDecode / LateMaterialize below). Parents first: add_counter DCHECKs the parent.
+    // Root, not under IOTaskExecTime: Phase-1 runs in prepare() on the driver thread, outside the io task
+    // that timer wraps, so nesting it there would report time the parent never measured (and on the
+    // Phase-1 failure path the parent stays zero). Matches the lake path, which publishes it at the root.
+    auto* stats_build = ADD_TIMER(_runtime_profile, "BM25StatsBuild");
+    COUNTER_UPDATE(stats_build, stats.bm25_stats_build_ns);
+    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25StatsIOTime", "BM25StatsBuild"), stats.bm25_stats_io_ns);
+}
+
+void OlapChunkSource::_update_bm25_counter(const OlapReaderStatistics& stats) {
+    if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable) {
+        return;
+    }
+    _update_bm25_phase1_counter(stats);
+
+    auto* score = ADD_CHILD_TIMER(_runtime_profile, "BM25Score", "SegmentInit");
+    COUNTER_UPDATE(score, stats.bm25_scoring_ns);
+    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25IndexOpen", "BM25Score"), stats.bm25_index_open_ns);
+    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25PostingScan", "BM25Score"), stats.bm25_posting_scan_ns);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25CandidateRows", TUnit::UNIT, "BM25Score"),
+                   stats.bm25_candidate_rows);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25ScoredRows", TUnit::UNIT, "BM25Score"),
+                   stats.bm25_scored_rows);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25SegmentsScored", TUnit::UNIT, "BM25Score"),
+                   stats.bm25_segments_scored);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25SegmentsNoPruning", TUnit::UNIT, "BM25Score"),
+                   stats.bm25_segments_no_pruning);
+
+    // Score-column materialization runs after the SegmentRead timer is stamped, so it hangs off the scan
+    // root like DictDecode rather than under SegmentRead.
+    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25ScoreColumn", IO_TASK_EXEC_TIMER_NAME),
+                   stats.bm25_score_column_ns);
+}
+
 void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
@@ -940,6 +1007,8 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
     COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
     COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
+
+    _update_bm25_counter(_reader->stats());
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);

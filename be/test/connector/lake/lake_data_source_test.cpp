@@ -1012,6 +1012,86 @@ TEST_F(LakeDataSourceTest, open_with_bm25_search_options) {
     EXPECT_GT(k_to_score[2], k_to_score[1]);
 }
 
+// Phase-1 can fail after it has already spent time: an unscoreable column, a corrupt GIN index, an IO
+// error. No reader is ever created on that path, so close() skips update_counter() -- the cost has to be
+// published at the failure site or the profile is empty exactly when a failed query needs diagnosing.
+TEST_F(LakeDataSourceTest, bm25_phase1_failure_publishes_stats_counters) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    auto plan_node = create_lake_plan_node();
+    plan_node.lake_scan_node.__set_is_preaggregation(true);
+    // `c1` is a plain INT column with no builtin GIN index, so Phase-1 fails while resolving the index.
+    TBM25SearchOptions bm25;
+    bm25.__set_enable(true);
+    bm25.__set_score_column_name("__bm25_score");
+    bm25.__set_score_slot_id(1);
+    bm25.__set_k1(1.2);
+    bm25.__set_b(0.75);
+    TBM25ColumnQuery col_query;
+    col_query.__set_column_id("c1");
+    col_query.__set_query("apple");
+    bm25.__set_columns({col_query});
+    plan_node.lake_scan_node.__set_bm25_search_options(bm25);
+
+    auto runtime_state = create_runtime_state_for_test();
+
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot);
+    tuple_desc_builder.build(&desc_tbl_builder);
+
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(),
+                                    &desc_tbl, config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    TTableDescriptor table_descriptor;
+    table_descriptor.__set_id(0);
+    table_descriptor.__set_tableType(TTableType::OLAP_TABLE);
+    table_descriptor.__set_tableName("test_table");
+    table_descriptor.__set_dbName("test_db");
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(table_descriptor));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id(), _tablet_metadata->version()));
+    std::vector<BaseRowsetSharedPtr> base_rowsets;
+    for (auto& rowset : tablet.get_rowsets()) {
+        base_rowsets.emplace_back(rowset);
+    }
+    pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+    morsel.set_rowsets(base_rowsets);
+
+    connector::LakeDataSource data_source(&provider, scan_range);
+    RuntimeProfile parent_profile("LakeDataSourceTest");
+    data_source.set_runtime_profile(&parent_profile);
+    data_source.set_morsel(&morsel);
+    DeferOp close_guard([&] { data_source.close(runtime_state.get()); });
+
+    auto st = data_source.open(runtime_state.get());
+    ASSERT_FALSE(st.ok()) << "a column without a builtin GIN index must not be scoreable";
+    EXPECT_EQ(nullptr, data_source.TEST_params().bm25_stats);
+
+    RuntimeProfile* profile = data_source._runtime_profile;
+    ASSERT_NE(profile, nullptr);
+    auto* stats_build = profile->get_counter("BM25StatsBuild");
+    ASSERT_NE(stats_build, nullptr) << "a failed Phase-1 published no BM25StatsBuild";
+    EXPECT_GT(stats_build->value(), 0);
+    EXPECT_NE(profile->get_counter("BM25StatsIOTime"), nullptr);
+    // Nothing was ever scored, so the scoring subtree stays absent.
+    EXPECT_EQ(nullptr, profile->get_counter("BM25Score"));
+}
+
 TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
     // Build a PK tablet schema: c0 (key), c1 (key), c2 (value)
     TabletSchemaPB pk_schema_pb;

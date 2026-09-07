@@ -53,7 +53,7 @@ public:
     Status run(std::unordered_map<rowid_t, double>* id2score) override;
 
     // Documents fully scored (matched docs minus pruned); exposed for tests and diagnostics.
-    int64_t docs_scored() const { return _docs_scored; }
+    int64_t docs_scored() const override { return _docs_scored; }
 
 private:
     struct TermCursor {

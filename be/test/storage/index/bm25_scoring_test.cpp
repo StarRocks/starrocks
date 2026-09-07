@@ -197,6 +197,38 @@ TEST_F(Bm25ScoringTest, score_all_accumulates_across_terms) {
     EXPECT_GT(out[2], out[1]);
 }
 
+// A read that fails part way through a run must not erase the work already done: the segment iterator
+// reports docs_scored() next to timers it has already stamped, so a partial count has to survive the error.
+TEST_F(Bm25ScoringTest, score_all_keeps_docs_scored_on_a_failed_run) {
+    auto seg = open_segment(kTestDir + "/scorer_failed_run", INVERTED_INDEX_PARSER_ENGLISH,
+                            {{"apple banana apple"}, {"banana cherry"}, {"apple cherry cherry cherry"}});
+    ASSERT_TRUE(seg->br()->has_freqs());
+    ASSIGN_OR_ABORT(auto freqs, seg->br()->new_freqs_iterator(*seg->opts));
+
+    std::vector<Slice> terms{Slice("apple")};
+    std::vector<int64_t> ords;
+    ASSERT_OK(seg->br()->lookup_term_ordinals(*seg->opts, terms, &ords));
+    ASSERT_EQ(1u, ords.size());
+    // A dict ordinal past the end of the posting directory: its read fails after "apple" has scored.
+    ords.push_back(1 << 20);
+
+    BM25Stats s;
+    s.N = 3;
+    s.avgdl = 3.0;
+    s.k1 = 1.2;
+    s.b = 0.75;
+    s.idf = {bm25_idf(3, 2), bm25_idf(3, 1)};
+
+    ScoreAllScorer scorer(s, freqs.get(), *seg->opts, ords, /*candidates=*/nullptr, /*topk=*/0);
+    std::unordered_map<rowid_t, double> out;
+    auto st = scorer.run(&out);
+    ASSERT_FALSE(st.ok()) << "an out-of-range term ordinal must not read successfully";
+
+    // "apple" scored rows 0 and 2 before the failure; the reported count keeps them.
+    EXPECT_EQ(2u, out.size());
+    EXPECT_EQ(2, scorer.docs_scored());
+}
+
 TEST_F(Bm25ScoringTest, score_all_respects_candidate_bitmap) {
     auto seg = open_segment(kTestDir + "/scorer_cand", INVERTED_INDEX_PARSER_ENGLISH,
                             {{"apple banana apple"}, {"banana cherry"}, {"apple cherry cherry cherry"}});
@@ -250,6 +282,41 @@ TEST_F(Bm25ScoringTest, score_all_applies_topk) {
         std::unordered_map<rowid_t, double> out;
         ASSERT_OK(scorer.run(&out));
         ASSERT_EQ(3u, out.size());
+    }
+}
+
+// docs_scored() feeds BM25ScoredRows in the scan profile, where it is only meaningful against
+// BM25CandidateRows as a pruning ratio. So it must report the scoring work done, not the rows kept: the
+// top-k trim must not shrink it, while a candidate bitmap must.
+TEST_F(Bm25ScoringTest, score_all_reports_scoring_work_not_rows_kept) {
+    auto seg = open_segment(kTestDir + "/scorer_docs_scored", INVERTED_INDEX_PARSER_ENGLISH,
+                            {{"apple banana apple"}, {"banana cherry"}, {"apple cherry cherry cherry"}});
+    std::vector<Slice> terms{Slice("apple"), Slice("cherry")};
+    std::vector<int64_t> ords;
+    ASSERT_OK(seg->br()->lookup_term_ordinals(*seg->opts, terms, &ords));
+    BM25Stats s;
+    s.N = 3;
+    s.avgdl = 3.0;
+    s.idf = {bm25_idf(3, 2), bm25_idf(3, 2)};
+
+    // Every row carries apple or cherry, so all three are scored even though topk keeps only one.
+    {
+        ASSIGN_OR_ABORT(auto freqs, seg->br()->new_freqs_iterator(*seg->opts));
+        ScoreAllScorer scorer(s, freqs.get(), *seg->opts, ords, /*candidates=*/nullptr, /*topk=*/1);
+        std::unordered_map<rowid_t, double> out;
+        ASSERT_OK(scorer.run(&out));
+        ASSERT_EQ(1u, out.size());
+        EXPECT_EQ(3, scorer.docs_scored());
+    }
+    // Rows the bitmap excludes cost nothing, so they must not be counted as scored.
+    {
+        roaring::Roaring candidates;
+        candidates.add(2);
+        ASSIGN_OR_ABORT(auto freqs, seg->br()->new_freqs_iterator(*seg->opts));
+        ScoreAllScorer scorer(s, freqs.get(), *seg->opts, ords, &candidates, /*topk=*/0);
+        std::unordered_map<rowid_t, double> out;
+        ASSERT_OK(scorer.run(&out));
+        EXPECT_EQ(1, scorer.docs_scored());
     }
 }
 

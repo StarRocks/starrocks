@@ -113,12 +113,18 @@ private:
     Status reopen_reader(RuntimeState* state);
     void apply_child_split_context(const pipeline::LakeSplitContext& split_context, bool use_prepared_state);
     // BM25 Phase-1: compute tablet-local stats (N/avgdl/idf) over the full version rowsets and store
-    // them in _params.bm25_stats. No-op unless a BM25 search option is present.
+    // them in _params.bm25_stats. No-op unless a BM25 search option is present; on failure it publishes
+    // the Phase-1 counters itself, because no reader (and so no update_counter()) will ever exist.
     Status _init_bm25_stats();
+    Status _fold_bm25_stats();
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
+    // Publishes the BM25 scoring group; no-op unless this scan carries a BM25 search option.
+    void _update_bm25_counter();
+    // Publishes only the Phase-1 subtree, for the failure path where no reader (and so no scoring) exists.
+    void _update_bm25_phase1_counter(const OlapReaderStatistics& stats);
     void refresh_reusable_reader_key();
     const pipeline::LakeSplitContext* reusable_child_context(pipeline::ScanMorsel& morsel) const;
     Status rebuild_scan_conjuncts(RuntimeState* state);
@@ -156,6 +162,9 @@ private:
     lake::VersionedTablet _tablet;
     TabletSchemaCSPtr _tablet_schema;
     TabletReaderParams _params{};
+    // Statistics of the BM25 Phase-1 fold, which runs before _reader exists. Folded into the reader's
+    // statistics once it is created (see merge_bm25_phase1_stats).
+    OlapReaderStatistics _bm25_phase1_stats;
     std::shared_ptr<lake::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;

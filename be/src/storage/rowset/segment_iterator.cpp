@@ -3213,6 +3213,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     if (_bm25_ctx != nullptr) {
         DCHECK(rowid != nullptr);
+        SCOPED_RAW_TIMER(&_opts.stats->bm25_score_column_ns);
         DoubleColumn::MutablePtr score_column = DoubleColumn::create();
         score_column->reserve(rowid->size());
         for (const auto& rid : *rowid) {
@@ -3515,6 +3516,7 @@ Status SegmentIterator::_apply_bm25_scoring() {
         return Status::InternalError(fmt::format("BM25 scoring: column_id {} not present in segment {} schema",
                                                  _opts.bm25_search_option->column_id, _segment->file_name()));
     }
+    SCOPED_RAW_TIMER(&_opts.stats->bm25_scoring_ns);
     // Open (once, cached) this segment's builtin GIN reader for the index column via its own file
     // handle. The reader load is shared with the MATCH path through the ColumnReader OnceFlag.
     ASSIGN_OR_RETURN(auto rfile, _segment->new_segment_read_file(_opts.lake_io_opts));
@@ -3525,23 +3527,30 @@ Status SegmentIterator::_apply_bm25_scoring() {
     index_opts.stats = _opts.stats;
     index_opts.segment_rows = _segment->num_rows();
 
-    InvertedReader* raw = nullptr;
-    RETURN_IF_ERROR(_segment->get_inverted_reader(_bm25_ctx->index_column_id, _opts, index_opts, &raw));
-    if (raw == nullptr) {
-        return Status::InternalError(fmt::format("BM25 scoring: column uid {} has no builtin GIN index in segment {}",
-                                                 _bm25_ctx->index_column_id, _segment->file_name()));
-    }
-    auto* reader = down_cast<BuiltinInvertedReader*>(raw);
-    if (!reader->has_freqs()) {
-        return Status::InternalError(
-                "BM25 scoring requires index_options=DOCS_AND_FREQS but the segment was built with DOCS only");
-    }
-    ASSIGN_OR_RETURN(auto freqs, reader->new_freqs_iterator(index_opts));
-
-    // Resolve the (already tokenized in Phase-1) query terms to this segment's dict ordinals.
-    std::vector<Slice> term_slices(_bm25_ctx->stats.terms.begin(), _bm25_ctx->stats.terms.end());
+    std::unique_ptr<FreqsIterator> freqs;
     std::vector<int64_t> ordinals;
-    RETURN_IF_ERROR(reader->lookup_term_ordinals(index_opts, term_slices, &ordinals));
+    {
+        // Index-open cost: the GIN reader load (shared with MATCH, so usually already warm), the freqs
+        // handle, and the per-segment dictionary lookup of every query term.
+        SCOPED_RAW_TIMER(&_opts.stats->bm25_index_open_ns);
+        InvertedReader* raw = nullptr;
+        RETURN_IF_ERROR(_segment->get_inverted_reader(_bm25_ctx->index_column_id, _opts, index_opts, &raw));
+        if (raw == nullptr) {
+            return Status::InternalError(
+                    fmt::format("BM25 scoring: column uid {} has no builtin GIN index in segment {}",
+                                _bm25_ctx->index_column_id, _segment->file_name()));
+        }
+        auto* reader = down_cast<BuiltinInvertedReader*>(raw);
+        if (!reader->has_freqs()) {
+            return Status::InternalError(
+                    "BM25 scoring requires index_options=DOCS_AND_FREQS but the segment was built with DOCS only");
+        }
+        ASSIGN_OR_RETURN(freqs, reader->new_freqs_iterator(index_opts));
+
+        // Resolve the (already tokenized in Phase-1) query terms to this segment's dict ordinals.
+        std::vector<Slice> term_slices(_bm25_ctx->stats.terms.begin(), _bm25_ctx->stats.terms.end());
+        RETURN_IF_ERROR(reader->lookup_term_ordinals(index_opts, term_slices, &ordinals));
+    }
 
     // _scan_range already excludes deleted rows: for a top-k pushdown _apply_del_predicate folded the delete
     // survivors in before _rewrite_predicates (so WAND ranks live rows only and the LIMIT holds real
@@ -3568,8 +3577,27 @@ Status SegmentIterator::_apply_bm25_scoring() {
         // in the gin-off fallback -- pass 0 so every matched row is scored and the coordinator TopN takes the limit.
         scorer = std::make_unique<ScoreAllScorer>(_bm25_ctx->stats, freqs.get(), index_opts, std::move(ordinals),
                                                   &candidates, /*topk=*/0);
+        ++_opts.stats->bm25_segments_no_pruning;
     }
-    RETURN_IF_ERROR(scorer->run(&_bm25_ctx->id2score_map));
+    ++_opts.stats->bm25_segments_scored;
+    Status run_st;
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bm25_posting_scan_ns);
+        run_st = scorer->run(&_bm25_ctx->id2score_map);
+    }
+    // Record the row counts even when the run failed: BM25SegmentsScored and BM25PostingScan are already
+    // stamped, so a zero beside them would read as "scored no rows" rather than "failed part way".
+    // Against bm25_candidate_rows this is the pruning ratio: WAND leaves the non-competitive candidates
+    // unscored, while the score-all path scores every one of them.
+    const int64_t scored_rows = scorer->docs_scored();
+    _opts.stats->bm25_scored_rows += scored_rows;
+    // _scan_range is the MATCH survivor set only when the GIN filter served the MATCH predicate. With the
+    // filter off _apply_inverted_index skipped the index, so the range still holds rows carrying none of the
+    // query terms -- they were never scoring candidates, and counting them would show a pruning ratio on the
+    // one path that prunes nothing. Gin-off always takes score-all, whose docs_scored is that exact set.
+    _opts.stats->bm25_candidate_rows +=
+            _opts.enable_gin_filter ? static_cast<int64_t>(candidates.cardinality()) : scored_rows;
+    RETURN_IF_ERROR(run_st);
 
     // Top-k pushdown: the scorer kept only this segment's top-k rows by score, so narrow _scan_range to
     // those rows -- the scan reads/emits only the top-k, not every matched row (the coordinator TopN still

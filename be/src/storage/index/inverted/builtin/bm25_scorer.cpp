@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "storage/index/inverted/builtin/block_posting_reader.h"
 #include "storage/index/inverted/builtin/bm25_scoring.h"
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
@@ -37,26 +38,33 @@ ScoreAllScorer::ScoreAllScorer(const BM25Stats& stats, FreqsIterator* freqs, con
 ScoreAllScorer::~ScoreAllScorer() = default;
 
 Status ScoreAllScorer::run(std::unordered_map<rowid_t, double>* id2score) {
-    for (size_t t = 0; t < _term_ords.size(); ++t) {
-        if (_term_ords[t] < 0) {
-            continue; // term absent in this segment -> no contribution
-        }
-        const double idf = _stats.idf[t];
-        std::unique_ptr<BlockPostingIterator> cursor;
-        RETURN_IF_ERROR(_freqs->new_posting_cursor(_read_opts, &cursor));
-        RETURN_IF_ERROR(cursor->seek_to_term(static_cast<uint32_t>(_term_ords[t])));
-        while (cursor->has_next_block()) {
-            RETURN_IF_ERROR(cursor->next_block());
-            const uint32_t* docids = cursor->docids();
-            const uint32_t* tfs = cursor->tfs();
-            const size_t n = cursor->cur_block_size();
-            for (size_t i = 0; i < n; ++i) {
-                const rowid_t d = docids[i];
-                if (_candidates != nullptr && !_candidates->contains(d)) {
-                    continue;
+    const size_t rows_before = id2score->size();
+    {
+        // Rows touched by at least one term. Recorded on the way out of this block, so it is read before
+        // the trim below drops the non-top-k entries, and a read that fails part way through still reports
+        // the rows already scored instead of zero.
+        DeferOp record_docs_scored([&] { _docs_scored = static_cast<int64_t>(id2score->size() - rows_before); });
+        for (size_t t = 0; t < _term_ords.size(); ++t) {
+            if (_term_ords[t] < 0) {
+                continue; // term absent in this segment -> no contribution
+            }
+            const double idf = _stats.idf[t];
+            std::unique_ptr<BlockPostingIterator> cursor;
+            RETURN_IF_ERROR(_freqs->new_posting_cursor(_read_opts, &cursor));
+            RETURN_IF_ERROR(cursor->seek_to_term(static_cast<uint32_t>(_term_ords[t])));
+            while (cursor->has_next_block()) {
+                RETURN_IF_ERROR(cursor->next_block());
+                const uint32_t* docids = cursor->docids();
+                const uint32_t* tfs = cursor->tfs();
+                const size_t n = cursor->cur_block_size();
+                for (size_t i = 0; i < n; ++i) {
+                    const rowid_t d = docids[i];
+                    if (_candidates != nullptr && !_candidates->contains(d)) {
+                        continue;
+                    }
+                    ASSIGN_OR_RETURN(uint32_t dl, _freqs->doc_len(d));
+                    (*id2score)[d] += bm25_term(tfs[i], dl, idf, _stats);
                 }
-                ASSIGN_OR_RETURN(uint32_t dl, _freqs->doc_len(d));
-                (*id2score)[d] += bm25_term(tfs[i], dl, idf, _stats);
             }
         }
     }

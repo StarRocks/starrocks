@@ -626,25 +626,46 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     return Status::OK();
 }
 
+// Phase-1 over the FULL version rowsets (not the morsel's rowid subset): the tablet-local IDF barrier
+// must see every segment. Reader loads are shared via the metacache + ColumnReader OnceFlag. The storage-
+// agnostic resolve/tokenize/fold is shared with the local path via build_tablet_bm25_stats; only the
+// segment set differs (lake rowsets here vs local rowsets in OlapChunkSource).
+Status LakeDataSource::_fold_bm25_stats() {
+    std::vector<SegmentSharedPtr> segments;
+    {
+        // get_segments() materializes each segment (footer read, remote on a metacache miss), which can
+        // dominate Phase-1 on a cold scan, and build_tablet_bm25_stats times only itself. Time the
+        // collection here; the scoped timer ends before that call, so the two never overlap.
+        SCOPED_RAW_TIMER(&_bm25_phase1_stats.bm25_stats_build_ns);
+        for (const auto& rowset : lake::Rowset::get_rowsets(_provider->tablet_manager(), _tablet.metadata())) {
+            auto segs = rowset->get_segments();
+            segments.insert(segments.end(), segs.begin(), segs.end());
+        }
+    }
+
+    ASSIGN_OR_RETURN(_params.bm25_stats,
+                     build_tablet_bm25_stats(*_tablet_schema, *_params.bm25_search_option, segments,
+                                             _params.lake_io_opts, _params.use_page_cache, &_bm25_phase1_stats));
+    return Status::OK();
+}
+
 Status LakeDataSource::_init_bm25_stats() {
+    // Reset: reinit_reader_with_late_runtime_filters re-runs the fold against a fresh reader, and the
+    // statistics below are folded into that reader -- carrying the previous fold over would double-count.
+    _bm25_phase1_stats = OlapReaderStatistics{};
     if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable) {
         return Status::OK();
     }
-    // Phase-1 over the FULL version rowsets (not the morsel's rowid subset): the tablet-local IDF barrier
-    // must see every segment. Reader loads are shared via the metacache + ColumnReader OnceFlag. The storage-
-    // agnostic resolve/tokenize/fold is shared with the local path via build_tablet_bm25_stats; only the
-    // segment set differs (lake rowsets here vs local rowsets in OlapChunkSource).
-    std::vector<SegmentSharedPtr> segments;
-    for (const auto& rowset : lake::Rowset::get_rowsets(_provider->tablet_manager(), _tablet.metadata())) {
-        auto segs = rowset->get_segments();
-        segments.insert(segments.end(), segs.begin(), segs.end());
+    Status st = _fold_bm25_stats();
+    if (!st.ok()) {
+        // Phase-1 spent time before failing (unscoreable column, corrupt index, IO error) and no reader
+        // will ever exist, so close() skips update_counter(). Publish what it spent here, or the failure a
+        // user needs to diagnose carries no BM25 timing at all.
+        OlapReaderStatistics failed_stats;
+        merge_bm25_phase1_stats(_bm25_phase1_stats, &failed_stats);
+        _update_bm25_phase1_counter(failed_stats);
     }
-
-    OlapReaderStatistics phase1_stats;
-    ASSIGN_OR_RETURN(_params.bm25_stats,
-                     build_tablet_bm25_stats(*_tablet_schema, *_params.bm25_search_option, segments,
-                                             _params.lake_io_opts, _params.use_page_cache, &phase1_stats));
-    return Status::OK();
+    return st;
 }
 
 Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_prepared_state) {
@@ -727,6 +748,9 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
     ASSIGN_OR_RETURN(_reader,
                      _tablet.new_reader(std::move(child_schema), need_split, _provider->could_split_physically(),
                                         _morsel->rowsets(), _tablet_schema));
+    // Phase-1 ran before the reader existed, so it wrote into its own statistics object. Fold it in now
+    // that there is a reader, otherwise the fold's cost never reaches the profile.
+    merge_bm25_phase1_stats(_bm25_phase1_stats, _reader->mutable_stats());
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -1560,6 +1584,42 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
 
+void LakeDataSource::_update_bm25_phase1_counter(const OlapReaderStatistics& stats) {
+    if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable || _runtime_profile == nullptr) {
+        return;
+    }
+    // Created here rather than in init_counter so a non-scoring scan does not carry a group of constant
+    // zeros (same as DictDecode / LateMaterialize below). Parents first: add_counter DCHECKs the parent.
+    auto* stats_build = ADD_TIMER(_runtime_profile, "BM25StatsBuild");
+    COUNTER_UPDATE(stats_build, stats.bm25_stats_build_ns);
+    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25StatsIOTime", "BM25StatsBuild"), stats.bm25_stats_io_ns);
+}
+
+void LakeDataSource::_update_bm25_counter() {
+    if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable) {
+        return;
+    }
+    const auto& stats = _reader->stats();
+    _update_bm25_phase1_counter(stats);
+
+    auto* score = ADD_CHILD_TIMER(_runtime_profile, "BM25Score", "SegmentInit");
+    COUNTER_UPDATE(score, stats.bm25_scoring_ns);
+    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25IndexOpen", "BM25Score"), stats.bm25_index_open_ns);
+    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25PostingScan", "BM25Score"), stats.bm25_posting_scan_ns);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25CandidateRows", TUnit::UNIT, "BM25Score"),
+                   stats.bm25_candidate_rows);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25ScoredRows", TUnit::UNIT, "BM25Score"),
+                   stats.bm25_scored_rows);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25SegmentsScored", TUnit::UNIT, "BM25Score"),
+                   stats.bm25_segments_scored);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25SegmentsNoPruning", TUnit::UNIT, "BM25Score"),
+                   stats.bm25_segments_no_pruning);
+
+    // Score-column materialization runs after the SegmentRead timer is stamped, so it hangs off the scan
+    // root like DictDecode rather than under SegmentRead.
+    COUNTER_UPDATE(ADD_TIMER(_runtime_profile, "BM25ScoreColumn"), stats.bm25_score_column_ns);
+}
+
 void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
@@ -1682,6 +1742,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
     COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
     COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
+
+    _update_bm25_counter();
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);

@@ -78,4 +78,9 @@ StatusOr<std::shared_ptr<BM25Stats>> build_tablet_bm25_stats(const TabletSchema&
                                                              const LakeIOOptions& lake_io_opts, bool use_page_cache,
                                                              OlapReaderStatistics* stats);
 
+// Phase-1 runs before the tablet reader exists, so it writes into a throwaway statistics object. Fold that
+// object's sub-metrics into the reader statistics the profile is built from -- otherwise the fold's cost
+// (cold dictionary reads dominate it) stays invisible. Mirrors the lake prepared-seed fold.
+void merge_bm25_phase1_stats(const OlapReaderStatistics& phase1, OlapReaderStatistics* to);
+
 } // namespace starrocks

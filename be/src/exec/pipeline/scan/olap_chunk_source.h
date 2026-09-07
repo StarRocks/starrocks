@@ -59,12 +59,21 @@ private:
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);
+    // BM25 Phase-1: compute tablet-local stats (N/avgdl/idf) over the rowsets this scan reads and store
+    // them in _params.bm25_stats. No-op unless a BM25 search option is present; on failure it publishes
+    // the Phase-1 counters itself, because no reader (and so no close()) will ever exist.
+    Status _init_bm25_stats(const std::vector<RowsetSharedPtr>& rowsets);
+    Status _fold_bm25_stats(const std::vector<RowsetSharedPtr>& rowsets);
     TCounterMinMaxType::type _get_counter_min_max_type(const std::string& metric_name);
     void _init_counter(RuntimeState* state);
     Status _init_global_dicts(TabletReaderParams* params);
     Status _init_glm(TabletReaderParams* params);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, Chunk* chunk);
     void _update_counter();
+    // Publishes the BM25 scoring group; no-op unless this scan carries a BM25 search option.
+    void _update_bm25_counter(const OlapReaderStatistics& stats);
+    // Publishes only the Phase-1 subtree, for the failure path where no reader (and so no scoring) exists.
+    void _update_bm25_phase1_counter(const OlapReaderStatistics& stats);
     void _update_realtime_counter(Chunk* chunk);
     void _decide_chunk_size(bool has_predicate);
     Status _init_column_access_paths(Schema* schema);
@@ -86,6 +95,10 @@ private:
     TabletSharedPtr _tablet;
     TabletSchemaCSPtr _tablet_schema;
     int64_t _version = 0;
+
+    // Phase-1 runs before the reader exists, so it folds into its own statistics object and is merged
+    // into the reader's statistics once it is created (see merge_bm25_phase1_stats).
+    OlapReaderStatistics _bm25_phase1_stats;
 
     RuntimeState* _runtime_state = nullptr;
     const std::vector<SlotDescriptor*>* _slots = nullptr;

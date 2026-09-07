@@ -39,6 +39,10 @@ public:
     virtual ~BM25Scorer() = default;
     // Accumulate per-row BM25 scores into id2score (segment rowid -> score).
     virtual Status run(std::unordered_map<rowid_t, double>* id2score) = 0;
+
+    // Rows whose score run() actually computed. Reported into the scan profile: against the candidate
+    // count it is the pruning ratio, which is the only way to tell whether WAND paid off.
+    virtual int64_t docs_scored() const = 0;
 };
 
 // TAAT (term-at-a-time): for each query term, walk its posting blocks and add its contribution to
@@ -56,6 +60,8 @@ public:
 
     Status run(std::unordered_map<rowid_t, double>* id2score) override;
 
+    int64_t docs_scored() const override { return _docs_scored; }
+
 private:
     const BM25Stats& _stats;
     FreqsIterator* _freqs;
@@ -63,6 +69,9 @@ private:
     std::vector<int64_t> _term_ords;
     const roaring::Roaring* _candidates;
     int64_t _topk; // 0 = keep all matched rows; >0 = keep only the top-k by score (per segment)
+    // Distinct rows that received a term contribution, counted before the top-k trim so it reports the
+    // scoring work done rather than the rows kept.
+    int64_t _docs_scored = 0;
 };
 
 } // namespace starrocks

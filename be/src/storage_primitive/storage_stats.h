@@ -124,6 +124,28 @@ struct OlapReaderStatistics {
     int64_t gin_ngram_dict_filtered = 0;
     int64_t gin_predicate_dict_filtered = 0;
 
+    // ------ BM25 relevance scoring (builtin GIN score()) ------
+    // Phase-1: the tablet-local N/avgdl/IDF fold, run once per scanner before the reader opens. Its IO is
+    // folded in from the fold's otherwise-discarded statistics (see merge_bm25_phase1_stats), so a cold
+    // dictionary read no longer hides outside the profile.
+    int64_t bm25_stats_build_ns = 0;
+    int64_t bm25_stats_io_ns = 0;
+    // Phase-2: per-segment scoring (SegmentIterator::_apply_bm25_scoring).
+    int64_t bm25_scoring_ns = 0;    // whole phase
+    int64_t bm25_index_open_ns = 0; // GIN reader + freqs iterator open, and query-term ordinal resolve
+    // Posting-list traversal: walking the per-term cursors, decoding posting blocks, the per-doc doc_len
+    // point read, and the score arithmetic. The CPU body of a scoring scan.
+    int64_t bm25_posting_scan_ns = 0;
+    int64_t bm25_candidate_rows = 0; // MATCH survivors handed to the scorer
+    int64_t bm25_scored_rows = 0;    // rows fully scored; WAND leaves the rest of the candidates unscored
+    // Scorer runs, and how many scored every candidate because block-max WAND pruning did not apply (FE
+    // pushed no top-k, or the GIN filter is off). Paired: no_pruning/scored is the degradation fraction,
+    // and scored scales the timers above per run. One run per segment, or per split child on a reused scan.
+    int64_t bm25_segments_scored = 0;
+    int64_t bm25_segments_no_pruning = 0;
+    // Phase-3: per-chunk __bm25_score column materialization.
+    int64_t bm25_score_column_ns = 0;
+
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
     int64_t total_columns_data_page_count = 0;
