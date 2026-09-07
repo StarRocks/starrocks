@@ -865,6 +865,20 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     /**
+     * Whether the recorded first-failure map is actually empty, not merely that DONE would have removed
+     * the retried partition's own entry anyway. Reflective for the same reason as ageFirstRewriteFailure
+     * above.
+     */
+    @SuppressWarnings("unchecked")
+    private static boolean firstRewriteFailureMapIsEmpty(LakeOnlineRewriteJobBase job) throws Exception {
+        java.lang.reflect.Field field =
+                LakeOnlineRewriteJobBase.class.getDeclaredField("firstRewriteFailureTimeMs");
+        field.setAccessible(true);
+        Map<Long, Long> failures = (Map<Long, Long>) field.get(job);
+        return failures.isEmpty();
+    }
+
+    /**
      * A VISIBLE TransactionState for a shadow-rewrite txn, so the tightened resume classifier
      * can be driven. The tighter gate only counts a VISIBLE txn as DONE when it is genuinely this job's
      * shadow-rewrite carrier: {@code isShadowRewrite()} with a matching watershed txn id and alter version.
@@ -2408,6 +2422,87 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     /**
+     * An attempt that fails after beginning a transaction but before it commits must have that
+     * transaction aborted before the retry yields the tick. Otherwise classifyRewrite keeps reporting it
+     * IN_FLIGHT on every later tick, and the retry budget in retryPartitionRewrite is never consulted
+     * again - the partition stalls until the transaction's own timeout instead of retrying.
+     */
+    @Test
+    public void testRetryAbortsAnUncommittedRewriteTxnBeforeYielding() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+
+        AtomicLong allocated = new AtomicLong();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            allocated.set(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        List<Long> abortedTxnIds = new ArrayList<>();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.PREPARE);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason)
+                    throws com.starrocks.common.StarRocksException {
+                abortedTxnIds.add(transactionId);
+            }
+        };
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(List.of(allocated.get()), abortedTxnIds,
+                "a PREPARE rewrite txn must be aborted before the retry yields the tick");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                "the job must stay RUNNING so a later tick can retry the partition");
+    }
+
+    /**
+     * The complement: a COMMITTED rewrite txn must NOT be aborted when its partition is retried. It is
+     * the deliberate publication wait - the lake publisher will still carry it to VISIBLE, at which point
+     * classifyRewrite reports DONE. Aborting it would throw away a rewrite that actually succeeded.
+     */
+    @Test
+    public void testRetryLeavesACommittedRewriteTxnAlone() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        AtomicReference<Boolean> abortCalled = new AtomicReference<>(false);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason)
+                    throws com.starrocks.common.StarRocksException {
+                abortCalled.set(true);
+            }
+        };
+
+        job.runRunningJob();
+
+        Assertions.assertFalse(abortCalled.get(),
+                "a COMMITTED rewrite txn must not be aborted - it is the publication wait");
+    }
+
+    /**
      * Each retry of an aborted rewrite must journal a FRESH transaction id - BE forbids reusing an
      * aborted one. Driven with executors that really allocate ids, because peekNextTransactionId() does
      * not advance the counter, so a stub that allocates nothing would journal the same predicted id
@@ -2634,6 +2729,8 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         // A replayed job has the persisted errMsg but an empty transient failure map.
         job.resetTransientState();
+        Assertions.assertTrue(firstRewriteFailureMapIsEmpty(job),
+                "resetTransientState must actually clear the transient failure map");
 
         // The partition's rewrite is now a published shadow-rewrite carrier -> DONE.
         job.setRewriteTxnIdForTest(physicalPartitionId, 424242L);

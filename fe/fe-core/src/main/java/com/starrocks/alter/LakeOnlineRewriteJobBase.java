@@ -1165,6 +1165,12 @@ public abstract class LakeOnlineRewriteJobBase
                     persistStateChange(this, JobState.RUNNING);
                 }
                 if (retryPartitionRewrite(plan.physicalPartitionId, error)) {
+                    if (actualTxnId != DmlStmt.INVALID_TXN_ID) {
+                        // The attempt did begin a transaction; classifyRewrite must see it leave PREPARE
+                        // before the next tick, or it reports IN_FLIGHT forever and the retry budget above
+                        // is never consulted again.
+                        abortUncommittedRewriteTxn(plan.physicalPartitionId, actualTxnId, error);
+                    }
                     // Leave the partition in NEEDS_RUN and yield the tick: runRunningJob returns right
                     // after this call, so the next tick re-classifies this attempt's txn and re-runs just
                     // this partition, with every published partition still skipped as DONE.
@@ -1232,6 +1238,38 @@ public abstract class LakeOnlineRewriteJobBase
                         + "({}s of the {}s budget used): {}",
                 jobId, physicalPartitionId, elapsedMs / 1000, budgetMs / 1000, error);
         return true;
+    }
+
+    /**
+     * Abort a rewrite attempt's transaction before its partition is retried, if the attempt left it
+     * uncommitted. Without this, an attempt that reported ERR after reaching PREPARE would still be seen
+     * by {@link #classifyRewrite} as IN_FLIGHT on every later tick - the retry budget in
+     * {@link #retryPartitionRewrite} would never be consulted again, and the partition would stall until
+     * the transaction's own timeout instead of retrying.
+     *
+     * <p>Unlike {@link #cancelImpl}'s abort loop - which also aborts COMMITTED, since a cancel means the
+     * whole job is being torn down - this deliberately leaves COMMITTED alone: a committed rewrite here is
+     * the deliberate publication wait, and the lake publisher will still carry it to VISIBLE, at which
+     * point {@link #classifyRewrite} reports DONE. Aborting it would throw away a rewrite that actually
+     * succeeded.
+     */
+    private void abortUncommittedRewriteTxn(long physicalPartitionId, long txnId, String reason) {
+        TransactionState txnState =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        if (txnState == null) {
+            return;
+        }
+        TransactionStatus status = txnState.getTransactionStatus();
+        if (status != TransactionStatus.PREPARE && status != TransactionStatus.PREPARED) {
+            return;
+        }
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, reason);
+        } catch (Exception e) {
+            LOG.warn("online rewrite job {}: failed to abort rewrite txn {} for partition {} before "
+                            + "retrying: {}",
+                    jobId, txnId, physicalPartitionId, e.getMessage());
+        }
     }
 
     /**
