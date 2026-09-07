@@ -16,7 +16,7 @@
 
 #include <climits>
 
-#include "common/config_primary_key_fwd.h"
+#include "common/config.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"

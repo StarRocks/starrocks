@@ -20,7 +20,7 @@
 #include "column/chunk.h"
 #include "column/field.h"
 #include "column/schema.h"
-#include "common/config_primary_key_fwd.h"
+#include "common/config.h"
 #include "storage/chunk_iterator.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/olap_common.h"
