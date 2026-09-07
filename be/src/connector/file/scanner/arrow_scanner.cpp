@@ -14,14 +14,23 @@
 
 #include "connector/file/scanner/arrow_scanner.h"
 
+#include <arrow/array.h>
+#include <arrow/buffer.h>
+#include <arrow/io/memory.h>
+#include <arrow/ipc/reader.h>
+#include <arrow/status.h>
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include <utility>
+
 #include "base/simd/simd.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "compute_env/load_path/rejected_record_writer.h"
 #include "exprs/column_ref.h"
@@ -181,20 +190,26 @@ Status ArrowScanner::open_next_reader() {
         ++_counter->num_files_read;
     }
 
-    std::shared_ptr<SequentialFile> file;
     TNetworkAddress address;
     if (!_scan_range.broker_addresses.empty()) {
         address = _scan_range.broker_addresses[0];
     }
-    RETURN_IF_ERROR(create_sequential_file(range_desc, address, _scan_range.params, &file));
+    RETURN_IF_ERROR(create_sequential_file(range_desc, address, _scan_range.params, &_file));
 
-    auto arrow_stream = std::make_shared<StarRocksArrowInputStream>(_state, std::move(file));
-    auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(arrow_stream);
-    if (!reader_res.ok()) {
-        return Status::InternalError("open RecordBatchStreamReader failed, reason: " + reader_res.status().ToString());
+    auto* stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    if (stream_file) {
+        // Delay opening reader until next_batch() for discrete buffers
+        _curr_file_reader = nullptr;
+    } else {
+        auto arrow_stream = std::make_shared<StarRocksArrowInputStream>(_state, _file);
+        auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(arrow_stream);
+        if (!reader_res.ok()) {
+            return Status::InternalError("open RecordBatchStreamReader failed, reason: " +
+                                         reader_res.status().ToString());
+        }
+        _curr_file_reader = std::move(reader_res).MoveValueUnsafe();
     }
 
-    _curr_file_reader = std::move(reader_res).MoveValueUnsafe();
     _conv_ctx.current_file = range_desc.path;
     _conv_ctx.current_batch_first_row_in_file = -1;
     _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
@@ -206,34 +221,142 @@ Status ArrowScanner::open_next_reader() {
 Status ArrowScanner::next_batch() {
     SCOPED_RAW_TIMER(&_counter->read_batch_ns);
     _batch_start_idx = 0;
-    if (_curr_file_reader == nullptr) {
-        auto status = open_next_reader();
-        if (!status.ok()) {
-            if (status.is_end_of_file()) {
-                _scanner_eof = true;
+
+    auto* stream_file = _file ? dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get()) : nullptr;
+
+    while (true) {
+        if (_curr_file_reader == nullptr) {
+            if (_consecutive_errors >= kMaxConsecutiveErrors) {
+                LOG(ERROR) << "Arrow scanner exceeded max consecutive error threshold (" << kMaxConsecutiveErrors
+                           << ")";
+                return Status::InternalError("Arrow scanner exceeded max consecutive error threshold");
             }
-            return status;
+            if (_file == nullptr) {
+                auto status = open_next_reader();
+                if (!status.ok()) {
+                    if (status.is_end_of_file()) {
+                        _scanner_eof = true;
+                    }
+                    return status;
+                }
+                stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+            }
+
+            if (_curr_file_reader == nullptr) {
+                if (stream_file) {
+                    auto res = stream_file->pipe()->read();
+                    if (!res.ok()) {
+                        _parser_buf.reset();
+                        _arrow_stream.reset();
+                        if (res.status().is_end_of_file()) {
+                            _scanner_eof = true;
+                            return Status::EndOfFile("EOF");
+                        }
+                        return res.status();
+                    }
+                    _parser_buf = res.value();
+                    if (_parser_buf == nullptr || _parser_buf->remaining() == 0) {
+                        _consecutive_errors = 0;
+                        continue;
+                    }
+
+                    if (_state != nullptr) {
+                        _state->update_num_bytes_scan_from_source(_parser_buf->remaining());
+                    }
+
+                    if (auto meta = _parser_buf->meta()) {
+                        if (meta->type() != ByteBufferMetaType::NONE) {
+                            auto msg_meta = static_cast<const StreamMessageMeta*>(meta);
+                            _conv_ctx.consumer_partition = msg_meta->partition();
+                            _conv_ctx.consumer_offset = msg_meta->offset();
+                        }
+                    }
+
+                    // Always create a new BufferReader wrapping the new buffer pointer.
+                    // BufferReader is a thin wrapper (no data copy); the real cost is
+                    // RecordBatchStreamReader::Open which is done once per discrete message.
+                    _arrow_buffer_reader = std::make_shared<arrow::io::BufferReader>(arrow::Buffer::Wrap(
+                            reinterpret_cast<const uint8_t*>(_parser_buf->ptr), _parser_buf->remaining()));
+                    _arrow_stream = _arrow_buffer_reader;
+
+                    auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(_arrow_stream);
+                    if (!reader_res.ok()) {
+                        std::string error_msg = "Arrow IPC parse error: " + reader_res.status().ToString();
+                        if (_conv_ctx.consumer_partition != -1) {
+                            error_msg += " at partition=" + std::to_string(_conv_ctx.consumer_partition) +
+                                         " offset=" + std::to_string(_conv_ctx.consumer_offset);
+                        }
+                        _conv_ctx.report_error_message(error_msg, "", -1);
+                        LOG(WARNING) << "Arrow routine load: " << error_msg;
+                        _consecutive_errors++;
+                        _counter->num_rows_filtered++;
+                        _parser_buf.reset();
+                        _arrow_stream.reset();
+                        continue;
+                    }
+                    _curr_file_reader = std::move(reader_res).MoveValueUnsafe();
+                } else {
+                    _scanner_eof = true;
+                    return Status::EndOfFile("EOF");
+                }
+            }
         }
+
+        arrow::Status status = _curr_file_reader->ReadNext(&_batch);
+        if (!status.ok()) {
+            std::string error_msg = "ReadNext batch failed, reason: " + status.ToString();
+            if (_conv_ctx.consumer_partition != -1) {
+                error_msg += " at partition=" + std::to_string(_conv_ctx.consumer_partition) +
+                             " offset=" + std::to_string(_conv_ctx.consumer_offset);
+            }
+            _conv_ctx.report_error_message(error_msg, "", -1);
+            LOG(WARNING) << "Arrow routine load: " << error_msg;
+            _consecutive_errors++;
+            _counter->num_rows_filtered++;
+            _curr_file_reader.reset();
+            _parser_buf.reset();
+            _arrow_stream.reset();
+            if (stream_file) {
+                // Reset conversion plans and mark message boundary so the next
+                // message gets a fresh schema mapping (mirrors the EOF path).
+                for (auto& conv : _conv_funcs) {
+                    conv = std::make_unique<ConvertFuncTree>();
+                }
+                _message_boundary = true;
+                continue;
+            }
+            return Status::InternalError(error_msg);
+        }
+
+        if (_batch == nullptr) {
+            _curr_file_reader.reset();
+            _parser_buf.reset();
+            _arrow_stream.reset();
+            for (auto& conv : _conv_funcs) {
+                conv = std::make_unique<ConvertFuncTree>();
+            }
+            if (stream_file) {
+                _consecutive_errors = 0;
+                _message_boundary = true;
+                continue;
+            }
+            _file.reset();
+            continue;
+        }
+
+        _consecutive_errors = 0;
+        _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
+        _last_file_scan_rows += _batch->num_rows();
+        return Status::OK();
     }
-
-    arrow::Status status = _curr_file_reader->ReadNext(&_batch);
-    if (!status.ok()) {
-        return Status::InternalError("ReadNext batch failed, reason: " + status.ToString());
-    }
-
-    if (_batch == nullptr) {
-        _curr_file_reader.reset();
-        return Status::EndOfFile("reach end of current file");
-    }
-
-    _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
-    _last_file_scan_rows += _batch->num_rows();
-
-    return Status::OK();
 }
 
 Status ArrowScanner::initialize_src_chunk(ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
+    // Record which file this chunk belongs to.  Used by finalize_src_chunk() to
+    // attribute path/partition columns correctly even when get_next() breaks at
+    // a file boundary after next_batch() has already advanced _next_file.
+    _chunk_file_idx = _next_file - 1;
     _pool.clear();
     (*chunk) = std::make_shared<Chunk>();
     _chunk_filter.clear();
@@ -276,6 +399,14 @@ Status ArrowScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
                                                                    slot_desc->col_name()));
             }
         } else {
+            if (_conv_funcs[i]->func == nullptr) {
+                auto& type_desc = slot_desc->type();
+                TypeDescriptor raw_type_desc;
+                bool need_cast = false;
+                RETURN_IF_ERROR(build_arrow_column_convert_plan(array_ptr->type().get(), &type_desc,
+                                                                slot_desc->is_nullable(), &raw_type_desc,
+                                                                _conv_funcs[i].get(), need_cast, _strict_mode));
+            }
             auto st = convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
                                                     _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);
             if (!st.ok()) {
@@ -307,7 +438,7 @@ Status ArrowScanner::finalize_src_chunk(ChunkPtr* chunk) {
             column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
             cast_chunk->append_column(column, slot_desc->id());
         }
-        auto range = _scan_range.ranges.at(_next_file - 1);
+        auto range = _scan_range.ranges.at(_chunk_file_idx);
         if (range.__isset.num_of_columns_from_file) {
             fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
                                    cast_chunk->num_rows());
@@ -339,6 +470,7 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
             }
             if (status.is_end_of_file()) {
                 _curr_file_reader.reset();
+                _file.reset();
                 continue;
             }
             return status;
@@ -350,8 +482,22 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
         if (chunk_is_full()) {
             break;
         }
+        // Snapshot the current file index before fetching the next batch.  If
+        // next_batch() opens a new file (i.e. _next_file advances), break here
+        // so that finalize_src_chunk() can stamp all rows in this chunk with the
+        // correct per-file path/partition values.  Mixing rows from two files in
+        // one chunk would cause finalize_src_chunk() to apply the second file's
+        // columns_from_path to every row, corrupting partition metadata for the
+        // rows that came from the first file.
+        const int file_before = _next_file;
         auto status = next_batch();
         if (status.ok()) {
+            if (_next_file != file_before || _message_boundary) {
+                _message_boundary = false;
+                // A new file or stream message was opened; finalize the current chunk
+                // before processing the new file/message in the next get_next() call.
+                break;
+            }
             continue;
         }
         if (!status.is_end_of_file()) {
@@ -359,6 +505,7 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
         }
 
         _curr_file_reader.reset();
+        _file.reset();
         if (chunk->num_rows() > 0) {
             break;
         }
@@ -374,9 +521,13 @@ Status ArrowScanner::get_schema(std::vector<SlotDescriptor>* schema) {
 }
 
 void ArrowScanner::close() {
-    FileScanner::close();
+    _file.reset();
+    _parser_buf.reset();
+    _arrow_stream.reset();
+    _arrow_buffer_reader.reset();
     _curr_file_reader.reset();
     _pool.clear();
+    FileScanner::close();
 }
 
 bool ArrowScanner::chunk_is_full() {

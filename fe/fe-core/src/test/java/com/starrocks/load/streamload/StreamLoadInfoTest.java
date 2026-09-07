@@ -18,6 +18,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
+import com.starrocks.load.routineload.PulsarRoutineLoadJob;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -141,6 +142,55 @@ public class StreamLoadInfoTest {
         StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
         assertEquals(TEnvelopeType.DEBEZIUM, info.getEnvelope());
     }
+
+    @Test
+    public void testFromRoutineLoadJobWithArrow() throws Exception {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put(CreateRoutineLoadStmt.FORMAT, "arrow");
+
+        StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
+        assertEquals(TFileFormatType.FORMAT_ARROW, info.getFormatType());
+    }
+
+    @Test
+    public void testFromRoutineLoadJobWithPulsarArrow() throws Exception {
+        PulsarRoutineLoadJob job = new PulsarRoutineLoadJob();
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put(CreateRoutineLoadStmt.FORMAT, "arrow");
+
+        StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
+        assertEquals(TFileFormatType.FORMAT_ARROW, info.getFormatType());
+    }
+
+    @Test
+    public void testFromRoutineLoadJobWithAvro() throws Exception {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put(CreateRoutineLoadStmt.FORMAT, "avro");
+
+        StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
+        assertEquals(TFileFormatType.FORMAT_AVRO, info.getFormatType());
+    }
+
+    @Test
+    public void testFromRoutineLoadJobWithJson() throws Exception {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put(CreateRoutineLoadStmt.FORMAT, "json");
+
+        StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
+        assertEquals(TFileFormatType.FORMAT_JSON, info.getFormatType());
+    }
+
+    @Test
+    public void testFromRoutineLoadJobWithCsv() throws Exception {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
+
+        StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
+        assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, info.getFormatType());
+    }
+
 
     private TStreamLoadPutRequest buildTStreamLoadPutRequest() {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
