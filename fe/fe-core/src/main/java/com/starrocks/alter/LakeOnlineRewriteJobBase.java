@@ -126,14 +126,22 @@ public abstract class LakeOnlineRewriteJobBase
     // stable for the job's lifetime. Not serialized; re-resolved after replay on first tick.
     private transient String cachedDbName;
 
+    // Transient: when each physical partition's rewrite INSERT first failed, kept only while its
+    // failures are consecutive (a successful attempt drops the entry). Drives the bounded retry in
+    // runPartitionRewrite. Not serialized: the job's absolute deadline (createTimeMs + timeoutMs) is
+    // already durable, so a replayed job simply starts its retry budget over - which is the right
+    // behavior, since a failover re-runs the partition anyway.
+    private final transient Map<Long, Long> firstRewriteFailureTimeMs = new HashMap<>();
+
     @Override
     protected void resetTransientState() {
-        // Intentionally empty for now: this job family is shared-data only, and a shared-data
-        // leader demotion exits the process (StateChangeExecutor), so an in-place reset is
+        // Only the retry bookkeeping is reset here: this job family is shared-data only, and a
+        // shared-data leader demotion exits the process (StateChangeExecutor), so an in-place reset is
         // unreachable today - a restart reloads the job from image + journal instead. Before
-        // enabling graceful in-place demotion for shared-data mode, audit the transient state
+        // enabling graceful in-place demotion for shared-data mode, audit the remaining transient state
         // here (cachedDbName is self-healing, but the per-partition rewrite bookkeeping in
         // partitionStates and any unlogged state transitions need the OptimizeJobV2-style reset).
+        firstRewriteFailureTimeMs.clear();
     }
 
     /**
@@ -1134,10 +1142,26 @@ public abstract class LakeOnlineRewriteJobBase
             }
 
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}: {}",
-                        jobId, plan.physicalPartitionId, context.getState().getErrorMessage());
-                throw new AlterCancelException(context.getState().getErrorMessage());
+                String error = context.getState().getErrorMessage();
+                if (actualTxnId == DmlStmt.INVALID_TXN_ID) {
+                    // The attempt failed before it begun a transaction, so the id journaled above is
+                    // only peekNextTransactionId()'s prediction and a concurrent load may take it.
+                    // Leaving it journaled would make classifyRewrite report that stranger's txn as
+                    // IN_FLIGHT - stalling this partition past its retry budget - and would make a
+                    // later cancel abort an unrelated load. Drop it: a null id classifies as NEEDS_RUN.
+                    stateOf(plan.physicalPartitionId).rewriteTxnId = null;
+                    persistStateChange(this, JobState.RUNNING);
+                }
+                if (retryPartitionRewrite(plan.physicalPartitionId, error)) {
+                    // Leave the partition in NEEDS_RUN and yield the tick: runRunningJob returns right
+                    // after this call, so the next tick re-classifies this attempt's txn and re-runs just
+                    // this partition, with every published partition still skipped as DONE.
+                    return;
+                }
+                throw new AlterCancelException(error);
             }
+            // The attempt reached the executor without error: end any failure streak for this partition.
+            firstRewriteFailureTimeMs.remove(plan.physicalPartitionId);
         } catch (AlterCancelException e) {
             throw e;
         } catch (Exception e) {
@@ -1146,6 +1170,49 @@ public abstract class LakeOnlineRewriteJobBase
         } finally {
             context.setScanVersionOverride(null);
         }
+    }
+
+    /**
+     * Decide whether a failed rewrite INSERT for one partition should be retried on a later scheduler
+     * tick instead of cancelling the whole job.
+     *
+     * <p>Every failure is retryable, deliberately: one physical cause - a compute node going away
+     * mid-INSERT - reaches this point as several different error codes and messages, sometimes with no
+     * error code at all, so the budget is a time window rather than an error classification. The sibling
+     * jobs make the same choice by counting failures rather than inspecting them (see
+     * {@link LakeTableSchemaChangeJob#runRunningJob}, which cancels only after a task has failed three
+     * times). A genuinely broken rewrite still fails the job, just a budget later, and the job's own
+     * deadline ({@link #isTimeout()}) remains the absolute bound.
+     *
+     * <p>The window is per partition and starts at its first consecutive failure, because one job can
+     * legitimately meet several independent node restarts; a successful attempt clears it.
+     *
+     * <p>Retrying is safe: an aborted attempt publishes nothing into the shadow index. The flip anchors
+     * only the journaled txn id of the attempt that committed, and post-watershed double-writes are
+     * replayed by version rather than by txn, so a re-run cannot double-count.
+     *
+     * @return true when the caller should return and let a later tick retry, false when it should cancel
+     */
+    private boolean retryPartitionRewrite(long physicalPartitionId, String error) {
+        long budgetMs = Config.lake_online_rewrite_partition_retry_timeout_second * 1000L;
+        if (budgetMs <= 0) {
+            LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} and retrying is "
+                    + "disabled: {}", jobId, physicalPartitionId, error);
+            return false;
+        }
+        long nowMs = System.currentTimeMillis();
+        long firstFailureMs = firstRewriteFailureTimeMs.computeIfAbsent(physicalPartitionId, id -> nowMs);
+        long elapsedMs = nowMs - firstFailureMs;
+        if (elapsedMs > budgetMs) {
+            LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} and the {}s retry "
+                            + "budget is spent after {}s, cancelling the job: {}",
+                    jobId, physicalPartitionId, budgetMs / 1000, elapsedMs / 1000, error);
+            return false;
+        }
+        LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}, retrying on a later tick "
+                        + "({}s of the {}s budget used): {}",
+                jobId, physicalPartitionId, elapsedMs / 1000, budgetMs / 1000, error);
+        return true;
     }
 
     /** Mirrors {@code OnlineOptimizeJobV2.buildConnectContext}: an inner ROOT context for the INSERT. */
