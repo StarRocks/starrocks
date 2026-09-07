@@ -291,7 +291,7 @@ IOTaskExecTime: 2s77ms // Total time for scanning data, longer than without bitm
     DictDecode: 329.696ms // Time for decoding dictionary for low cardinality optimization is similar since the output row count is the same.
     BitmapIndexFilter: 419.308ms // Time for filtering data with the bitmap index.
     BitmapIndexFilterRows: 123.433M (123432975) // Number of rows filtered by the bitmap index.
-    ZoneMapIndexFiter: 171.580ms // Time for filtering data with ZoneMap Index.
+    ZoneMapIndexFilter: 171.580ms // Time for filtering data with ZoneMap Index.
 ```
 
 ##### Determine whether to use bitmap index based on StarRocks default configuration
