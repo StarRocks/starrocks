@@ -224,7 +224,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，向 Azure Blob Storage 或 ADLS Gen2 进行分片上传时使用的块（Block）大小。Azure 的两种文件系统共用该参数。每次上传块之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。取值过小会增加请求数量，并可能超出存储服务的块数量限制。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。
 - 引入版本：v4.1.5, v4.2
 
-### starlet_fslib_gs_max_single_part_size
+### starlet_fslib_gcs_max_single_part_size
 
 - 默认值：104857600
 - 类型：Int64
