@@ -85,6 +85,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     private static final String DB_NAME = "db_lake_range_rewrite_test";
     private static Database db;
     private OlapTable table;
+    private OlapTable partitionedTable;
 
     @BeforeAll
     public static void setUp() throws Exception {
@@ -137,19 +138,28 @@ public class LakeRangeRewriteSchemaChangeJobTest {
      * Builds a job whose new sort key reorders the base key to (k2, k1) and wires a stub sampler.
      */
     private LakeRangeRewriteSchemaChangeJob newJob(Sampler sampler) {
+        return newJobFor(table, sampler);
+    }
+
+    /**
+     * Builds a job whose new sort key reorders the base key to (k2, k1) and wires a stub sampler, against
+     * the given table. {@link #newJob} is the common case of this against the shared single-partition
+     * {@link #table}.
+     */
+    private LakeRangeRewriteSchemaChangeJob newJobFor(OlapTable targetTable, Sampler sampler) {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
         LakeRangeRewriteSchemaChangeJob job = new LakeRangeRewriteSchemaChangeJob(
-                jobId, db.getId(), table.getId(), table.getName(), 3600_000L);
+                jobId, db.getId(), targetTable.getId(), targetTable.getName(), 3600_000L);
         // New schema = base schema (column set unchanged for a sort-key reorder).
-        List<Column> baseSchema = table.getSchemaByIndexMetaId(table.getBaseIndexMetaId());
+        List<Column> baseSchema = targetTable.getSchemaByIndexMetaId(targetTable.getBaseIndexMetaId());
         job.setNewSchema(new ArrayList<>(baseSchema));
         job.setNewKeysType(KeysType.DUP_KEYS);
         // Reorder the sort key to (k2, k1): indexes into the schema.
         job.setNewSortKeyIdxes(List.of(1, 0));
         job.setNewSortKeyColumns(List.of(baseSchema.get(1), baseSchema.get(0)));
-        job.setShadowIndex(shadowIndexMetaId, table.getBaseIndexMetaId(),
-                SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getName(), (short) 2);
+        job.setShadowIndex(shadowIndexMetaId, targetTable.getBaseIndexMetaId(),
+                SchemaChangeHandler.SHADOW_NAME_PREFIX + targetTable.getName(), (short) 2);
         job.setSampler(sampler);
         return job;
     }
@@ -790,6 +800,37 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         return job;
     }
 
+    /** Two logical partitions, each with exactly one physical partition, driven to RUNNING. */
+    private LakeRangeRewriteSchemaChangeJob twoPartitionJobInRunning() throws Exception {
+        String sql = "create table t_range_parts (k1 int, k2 int, v1 int)\n"
+                + "partition by range(k1) (partition p1 values less than ('100'),\n"
+                + "                        partition p2 values less than ('200'))\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');";
+        CreateTableStmt createStmt =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createStmt);
+        partitionedTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_range_parts");
+        Assertions.assertEquals(2, partitionedTable.getPhysicalPartitions().size(),
+                "the fixture must have two physical partitions");
+        Assertions.assertTrue(partitionedTable.isRangeDistribution(),
+                "the fixture must be range-distributed, otherwise this job never routes here");
+
+        LakeRangeRewriteSchemaChangeJob job = newJobFor(partitionedTable, stubSampler(diverseSample()));
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        new MockUp<LakeRangeRewriteSchemaChangeJob>() {
+            @Mock
+            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
+                return true;
+            }
+        };
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        return job;
+    }
+
     /** A TransactionState reporting the given status, so the resume classifier can be driven. */
     private static void mockTransactionStatus(TransactionStatus status) {
         new MockUp<GlobalTransactionMgr>() {
@@ -828,26 +869,171 @@ public class LakeRangeRewriteSchemaChangeJobTest {
      * can be driven. The tighter gate only counts a VISIBLE txn as DONE when it is genuinely this job's
      * shadow-rewrite carrier: {@code isShadowRewrite()} with a matching watershed txn id and alter version.
      */
+    private static TransactionState shadowRewriteTransactionState(long watershedTxnId, long alterVersion) {
+        return shadowRewriteTransactionState(watershedTxnId, alterVersion, 0L);
+    }
+
+    private static TransactionState shadowRewriteTransactionState(long watershedTxnId, long alterVersion,
+                                                                    long loadedRows) {
+        TransactionState state = new TransactionState(0L, new ArrayList<>(), 0L, "shadow",
+                null, TransactionState.LoadJobSourceType.SHADOW_REWRITE,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                0L, 60_000L);
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(loadedRows);
+        attachment.setShadowRewriteWatershedTxnId(watershedTxnId);
+        attachment.setShadowRewriteAlterVersion(alterVersion);
+        state.setTxnCommitAttachment(attachment);
+        return state;
+    }
+
     private static void mockShadowRewriteTransaction(long watershedTxnId, long alterVersion) {
         mockShadowRewriteTransaction(watershedTxnId, alterVersion, 0L);
     }
 
     private static void mockShadowRewriteTransaction(long watershedTxnId, long alterVersion, long loadedRows) {
+        TransactionState state = shadowRewriteTransactionState(watershedTxnId, alterVersion, loadedRows);
         new MockUp<GlobalTransactionMgr>() {
             @Mock
             public TransactionState getTransactionState(long dbId, long transactionId) {
-                TransactionState state = new TransactionState(dbId, new ArrayList<>(), transactionId, "shadow",
-                        null, TransactionState.LoadJobSourceType.SHADOW_REWRITE,
-                        new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
-                        0L, 60_000L);
-                state.setTransactionStatus(TransactionStatus.VISIBLE);
-                InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(loadedRows);
-                attachment.setShadowRewriteWatershedTxnId(watershedTxnId);
-                attachment.setShadowRewriteAlterVersion(alterVersion);
-                state.setTxnCommitAttachment(attachment);
                 return state;
             }
         };
+    }
+
+    /**
+     * Report a different TransactionState per txn id, so one partition can be a published
+     * shadow-rewrite carrier while another is aborted. The single-status mockTransactionStatus above
+     * cannot express that.
+     */
+    private static void mockTransactionStatusById(Map<Long, TransactionState> byTxnId) {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return byTxnId.get(transactionId);
+            }
+        };
+    }
+
+    /**
+     * The impact claim of the fix: when one partition's rewrite INSERT fails transiently, a partition
+     * that has already published keeps its rewrite - neither re-run nor discarded. Before the fix the
+     * failure cancelled the job, and cancelImpl -> removeShadowIndexOnCancel dropped the shared shadow
+     * index together with every completed partition's tablets.
+     */
+    @Test
+    public void testAPublishedPartitionSurvivesAnotherPartitionsRetry() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = twoPartitionJobInRunning();
+
+        // Take the scheduler's OWN iteration order, so the published partition is the one it reaches
+        // first and the failing partition is genuinely only reached after a DONE skip.
+        List<Long> inSchedulerOrder = new ArrayList<>(job.getPartitionIdsForTest());
+        Assertions.assertEquals(2, inSchedulerOrder.size());
+        long publishedPartitionId = inSchedulerOrder.get(0);
+        long failingPartitionId = inSchedulerOrder.get(1);
+
+        // Snapshot the published partition's shadow IDENTITY before the retry, so we can prove it is the
+        // same index object with the same tablets afterwards - not merely that some shadow still exists.
+        long shadowIndexMetaId = job.getShadowIndexMetaId();
+        // getLatestIndex resolves a meta id; getIndex is physical-index-id keyed and misses a
+        // resharded index (PhysicalPartition.java:595-601).
+        MaterializedIndex publishedShadowBefore =
+                partitionedTable.getPhysicalPartition(publishedPartitionId).getLatestIndex(shadowIndexMetaId);
+        Assertions.assertNotNull(publishedShadowBefore);
+        List<Long> publishedTabletIdsBefore = publishedShadowBefore.getTablets().stream()
+                .map(Tablet::getId).collect(Collectors.toList());
+
+        // The first partition has already published its rewrite; the second one's INSERT keeps failing.
+        long publishedTxnId = 555001L;
+        job.setRewriteTxnIdForTest(publishedPartitionId, publishedTxnId);
+        mockTransactionStatusById(Map.of(publishedTxnId, shadowRewriteTransactionState(
+                job.getTransactionId().get(), job.getWatershedVersion(publishedPartitionId))));
+
+        List<Long> attempted = new ArrayList<>();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            attempted.add(context.getScanVersionOverride().keySet().iterator().next());
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+        job.runRunningJob();
+
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                "a transient failure on one partition must not cancel the job");
+        Assertions.assertEquals(List.of(failingPartitionId, failingPartitionId), attempted,
+                "both attempts must target the failing partition; the published one must be skipped");
+        Assertions.assertEquals(publishedTxnId, job.getRewriteTxnId(publishedPartitionId).longValue(),
+                "the published partition must keep its rewrite txn id");
+        MaterializedIndex publishedShadowAfter =
+                partitionedTable.getPhysicalPartition(publishedPartitionId).getLatestIndex(shadowIndexMetaId);
+        Assertions.assertSame(publishedShadowBefore, publishedShadowAfter,
+                "the published partition's shadow index must be the same object, not a rebuilt one");
+        Assertions.assertEquals(publishedTabletIdsBefore, publishedShadowAfter.getTablets().stream()
+                        .map(Tablet::getId).collect(Collectors.toList()),
+                "the published partition's shadow tablets must be identical after the retry");
+    }
+
+    /**
+     * The retry diagnostic must belong to the partition that is stalled. A sibling partition reaching
+     * DONE must not clear it, or the operator loses the only visible sign that a rewrite is stuck.
+     *
+     * <p>The stalled partition must be genuinely WAITING on tick 2, not re-running: if it re-ran it
+     * would immediately republish the same message and a wrongly-scoped clear would be invisible. So its
+     * failing attempt allocates a real txn id and that txn is then reported COMMITTED, which
+     * classifyRewrite maps to IN_FLIGHT - the one state in which the partition is visited but not
+     * executed.
+     */
+    @Test
+    public void testASiblingPartitionReachingDoneDoesNotClearTheRetryDiagnostic() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = twoPartitionJobInRunning();
+        List<Long> inSchedulerOrder = new ArrayList<>(job.getPartitionIdsForTest());
+        long publishedPartitionId = inSchedulerOrder.get(0);
+        long failingPartitionId = inSchedulerOrder.get(1);
+
+        long publishedTxnId = 555002L;
+        job.setRewriteTxnIdForTest(publishedPartitionId, publishedTxnId);
+
+        AtomicLong failingTxnId = new AtomicLong();
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            attempts.incrementAndGet();
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            failingTxnId.set(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        // Tick 1: the published partition is skipped as DONE; the failing one runs, fails, and publishes
+        // its diagnostic. Its real txn id is kept (the speculative-id guard only clears an unallocated one).
+        mockTransactionStatusById(Map.of(publishedTxnId, shadowRewriteTransactionState(
+                job.getTransactionId().get(), job.getWatershedVersion(publishedPartitionId))));
+        job.runRunningJob();
+
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        String msgAfterFailure = String.valueOf(infos.get(0).get(10));
+        Assertions.assertTrue(msgAfterFailure.contains(String.valueOf(failingPartitionId)),
+                "the failing partition must publish its own diagnostic, was: " + msgAfterFailure);
+
+        // Tick 2: the published partition is DONE again, and the failing partition's txn is COMMITTED, so
+        // it is visited as IN_FLIGHT and NOT executed. This is the tick on which a globally-scoped clear
+        // would wipe its message with nothing left to restore it.
+        TransactionState committed = new TransactionState();
+        committed.setTransactionStatus(TransactionStatus.COMMITTED);
+        mockTransactionStatusById(Map.of(
+                publishedTxnId, shadowRewriteTransactionState(
+                        job.getTransactionId().get(), job.getWatershedVersion(publishedPartitionId)),
+                failingTxnId.get(), committed));
+        job.runRunningJob();
+
+        Assertions.assertEquals(1, attempts.get(),
+                "the stalled partition must not be re-executed on the waiting tick, or the test cannot "
+                        + "distinguish a surviving diagnostic from a republished one");
+        infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals(msgAfterFailure, String.valueOf(infos.get(0).get(10)),
+                "the stalled partition's diagnostic must survive a sibling partition's DONE");
     }
 
     @Test

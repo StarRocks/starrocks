@@ -260,6 +260,11 @@ public abstract class LakeOnlineRewriteJobBase
         stateOf(physicalPartitionId).rewriteTxnId = txnId;
     }
 
+    @VisibleForTesting
+    public Set<Long> getPartitionIdsForTest() {
+        return partitionStates.keySet();
+    }
+
     // ---- Abstract hooks: the rewrite-flavor specifics ---------------------------------------------
 
     /** Plan one partition's shadow layout and build its shadow MaterializedIndex (runPendingJob stage 2,
