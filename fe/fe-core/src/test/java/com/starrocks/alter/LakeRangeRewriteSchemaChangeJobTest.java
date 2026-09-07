@@ -2462,4 +2462,41 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 "observed progress must clear the retry diagnostic even when the failure map was reset");
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
     }
+
+    /**
+     * The successful-attempt clear in runPartitionRewrite must be exercised on its own, before the
+     * partition ever reaches DONE - otherwise nothing distinguishes it from the DONE-arm clear. A
+     * fail-then-succeed sequence with the assertion taken right after the second (successful) attempt
+     * isolates it: the partition is not yet DONE on that tick, so only the successful-attempt clear can
+     * have cleared the message.
+     */
+    @Test
+    public void testASuccessfulRetryClearsTheDiagnosticBeforeThePartitionIsPublished() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            if (attempts.incrementAndGet() == 1) {
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        });
+
+        // Tick 1: the INSERT fails, so the retry diagnostic is set.
+        job.runRunningJob();
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertNotEquals("", String.valueOf(infos.get(0).get(10)),
+                "the retry must have left a diagnostic to clear");
+
+        // Tick 2: the retried INSERT succeeds. The partition is still NEEDS_RUN (not yet DONE), so the
+        // DONE arm cannot have run this tick - the successful-attempt clear in runPartitionRewrite is
+        // the only thing that could clear the message here.
+        job.runRunningJob();
+        Assertions.assertEquals(2, attempts.get(), "the failed partition must be re-attempted");
+
+        infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "a successful retry must clear the diagnostic before the partition is observed DONE");
+    }
 }
