@@ -232,6 +232,16 @@ Status ParquetReaderWrap::_init_parquet_reader() {
             return Status::EndOfFile("Unexpected nullptr FileMetaData");
         }
 
+        _num_rows = _file_metadata->num_rows();
+        // initial members
+        _total_groups = _file_metadata->num_row_groups();
+        if (_total_groups == 0) {
+            return Status::EndOfFile("Empty Parquet File");
+        }
+        RETURN_IF_ERROR(next_selected_row_group());
+
+        _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows();
+
         {
             // Initialize _map_column, map column name to it's index
             // For nested type, it has multiple column, we need to map field_name to multiple indices
@@ -252,16 +262,6 @@ Status ParquetReaderWrap::_init_parquet_reader() {
             }
         }
 
-        _num_rows = _file_metadata->num_rows();
-        // initial members
-        _total_groups = _file_metadata->num_row_groups();
-        if (_total_groups == 0) {
-            return Status::EndOfFile("Empty Parquet File");
-        }
-        RETURN_IF_ERROR(next_selected_row_group());
-
-        _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows();
-
         return Status::OK();
     } catch (::parquet::ParquetException& e) {
         std::stringstream str_error;
@@ -272,15 +272,10 @@ Status ParquetReaderWrap::_init_parquet_reader() {
 }
 
 Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs) {
-    auto init_status = _init_parquet_reader();
-    if (!init_status.ok() && !(init_status.is_end_of_file() && _file_metadata != nullptr)) return init_status;
+    RETURN_IF_ERROR(_init_parquet_reader());
     try {
-        // Reuse the selected-leaf traversal, including explicit schemas for empty files.
-        if (_current_line_of_group == 0 || init_status.is_end_of_file()) {
-            RETURN_IF_ERROR(column_indices(tuple_slot_descs, init_status.is_end_of_file()));
-        }
-        RETURN_IF_ERROR(init_status);
         if (_current_line_of_group == 0) { // the first read
+            RETURN_IF_ERROR(column_indices(tuple_slot_descs));
             arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
 
             if (!status.ok()) {
@@ -332,17 +327,6 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
         const auto& field = file_schema->group_node()->field(i);
         const auto& name = field->name();
 
-        // Inspect the leaves of this inferred field, using the existing mapping.
-        if (auto it = _map_column_nested.find(name); it != _map_column_nested.end()) {
-            for (int index : it->second) {
-                const auto& logical = file_schema->Column(index)->logical_type();
-                if (logical->is_geometry() || logical->is_geography()) {
-                    return Status::NotSupported("Native geospatial type support is disabled; cannot infer column " +
-                                                name);
-                }
-            }
-        }
-
         TypeDescriptor tp;
         RETURN_IF_ERROR(get_parquet_type(field, &tp));
 
@@ -365,7 +349,7 @@ Status ParquetReaderWrap::size(int64_t* size) {
     return Status::OK();
 }
 
-Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool file_exhausted) {
+Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs) {
     _parquet_column_ids.clear();
     for (int i = 0; i < _num_of_columns_from_file; i++) {
         auto* slot_desc = tuple_slot_descs.at(i);
@@ -377,14 +361,9 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
         auto iter = _map_column_nested.find(col_name);
         if (iter != _map_column_nested.end()) {
             for (auto index : iter->second) {
-                const auto& logical = _file_metadata->schema()->Column(index)->logical_type();
-                if (logical->is_geometry() || logical->is_geography()) {
-                    return Status::NotSupported("Native geospatial type support is disabled; cannot project column " +
-                                                col_name);
-                }
                 _parquet_column_ids.emplace_back(index);
             }
-        } else if (!_invalid_as_null && !file_exhausted) {
+        } else if (!_invalid_as_null) {
             std::stringstream str_error;
             str_error << "Column: " << slot_desc->col_name() << " is not found in file: " << _filename;
             LOG(WARNING) << str_error.str();

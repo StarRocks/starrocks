@@ -37,10 +37,6 @@ static Status get_parquet_variant_type(const ::parquet::schema::NodePtr& node, T
 static Status try_to_infer_struct_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 
 Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
-    if (node->logical_type()->is_geometry() || node->logical_type()->is_geography()) {
-        *type_desc = TypeDescriptor(TYPE_UNKNOWN);
-        return Status::OK();
-    }
     if (node->is_group()) {
         return get_parquet_type_from_group(node, type_desc);
     }

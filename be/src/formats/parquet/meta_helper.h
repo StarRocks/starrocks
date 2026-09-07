@@ -41,7 +41,7 @@ struct ParquetField;
 
 namespace starrocks::parquet {
 
-// Validate one scalar geo leaf; callers reuse their existing field matching.
+// Compare external metadata for one scalar geo field, without changing reader policy.
 Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field);
 
 class MetaHelper {
@@ -83,14 +83,14 @@ public:
                                 std::vector<GroupReaderParam::Column>& read_cols,
                                 std::unordered_set<std::string>& existed_column_names) const override;
 
-protected:
+private:
     bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
 };
 
-class LakeMetaHelper : public ParquetMetaHelper {
+class LakeMetaHelper : public MetaHelper {
 public:
     LakeMetaHelper(const FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_lake_schema)
-            : ParquetMetaHelper(file_metadata, case_sensitive) {
+            : MetaHelper(file_metadata, case_sensitive) {
         _lake_schema = t_lake_schema;
         DCHECK(_lake_schema != nullptr);
         _init_field_mapping();

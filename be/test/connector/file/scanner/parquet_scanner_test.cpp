@@ -43,7 +43,7 @@
 
 namespace starrocks {
 
-TEST(ParquetGeoReaderTest, EmptyFileStillRejectsBinaryGeoProjection) {
+TEST(ParquetGeoReaderTest, EmptyFileKeepsExistingInferenceAndEof) {
     for (const auto& logical : {::parquet::LogicalType::Geography(), ::parquet::LogicalType::Geometry()}) {
         auto shape = ::parquet::schema::PrimitiveNode::Make("shape", ::parquet::Repetition::OPTIONAL, logical,
                                                             ::parquet::Type::BYTE_ARRAY);
@@ -62,22 +62,23 @@ TEST(ParquetGeoReaderTest, EmptyFileStillRejectsBinaryGeoProjection) {
         std::shared_ptr<arrow::io::RandomAccessFile> input = std::make_shared<ParquetChunkFile>(file, 0, &counter);
         ParquetReaderWrap reader(std::move(input), 1, 0, result.ValueOrDie()->size());
         std::vector<SlotDescriptor> inferred;
-        EXPECT_TRUE(reader.get_schema(&inferred).is_not_supported());
-        EXPECT_TRUE(inferred.empty());
+        ASSERT_TRUE(reader.get_schema(&inferred).ok());
+        ASSERT_EQ(1, inferred.size());
+        EXPECT_EQ(TYPE_VARBINARY, inferred[0].type().type);
         SlotDescriptor binary(0, "shape", TypeDescriptor::create_varbinary_type(1024));
-        EXPECT_TRUE(reader.init_parquet_reader({&binary}).is_not_supported());
+        EXPECT_TRUE(reader.init_parquet_reader({&binary}).is_end_of_file());
         SlotDescriptor missing(1, "missing", TypeDescriptor(TYPE_INT));
         ParquetReaderWrap ordinary(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
                                    result.ValueOrDie()->size());
         EXPECT_TRUE(ordinary.init_parquet_reader({&missing}).is_end_of_file());
-        // Missing ordinary columns must neither change EOF nor hide a later geo projection.
+        // Empty-file projections keep the original EOF behavior for every column.
         ParquetReaderWrap mixed(std::make_shared<ParquetChunkFile>(file, 0, &counter), 2, 0,
                                 result.ValueOrDie()->size());
-        EXPECT_TRUE(mixed.init_parquet_reader({&missing, &binary}).is_not_supported());
+        EXPECT_TRUE(mixed.init_parquet_reader({&missing, &binary}).is_end_of_file());
     }
 }
 
-TEST(ParquetGeoReaderTest, SupportedProjectionDoesNotReadUnselectedGeo) {
+TEST(ParquetGeoReaderTest, AnnotatedColumnsKeepExistingReads) {
     for (const auto& logical : {::parquet::LogicalType::Geography(), ::parquet::LogicalType::Geometry()}) {
         auto id = ::parquet::schema::PrimitiveNode::Make("id", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
         auto shape = ::parquet::schema::PrimitiveNode::Make("shape", ::parquet::Repetition::REQUIRED, logical,
@@ -110,12 +111,14 @@ TEST(ParquetGeoReaderTest, SupportedProjectionDoesNotReadUnselectedGeo) {
         ASSERT_EQ(1, batch->num_rows());
         ASSERT_EQ(1, batch->num_columns());
         EXPECT_EQ(42, std::static_pointer_cast<arrow::Int32Array>(batch->column(0))->Value(0));
-        for (auto type : {TypeDescriptor::create_varbinary_type(1024), TypeDescriptor::create_varchar_type(1024)}) {
+        for (auto type : {TypeDescriptor::create_varbinary_type(1024)}) {
             // Each reader owns and closes its Arrow wrapper independently.
             ParquetReaderWrap rejected(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
                                        result.ValueOrDie()->size());
             SlotDescriptor unsupported(1, "shape", type);
-            EXPECT_TRUE(rejected.init_parquet_reader({&unsupported}).is_not_supported());
+            ASSERT_TRUE(rejected.init_parquet_reader({&unsupported}).ok());
+            ASSERT_NE(nullptr, rejected.get_batch());
+            EXPECT_EQ(1, rejected.get_batch()->num_rows());
         }
     }
 }

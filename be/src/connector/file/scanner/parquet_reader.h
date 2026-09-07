@@ -79,7 +79,7 @@ public:
     void set_invalid_as_null(bool invalid_as_null) { _invalid_as_null = invalid_as_null; }
 
 private:
-    Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool file_exhausted);
+    Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
     Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
     Status next_selected_row_group();
     // _init_parquet_reader initializes the underlying parquets reader.

@@ -120,23 +120,12 @@ Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* 
         edge = it->second;
     }
     // Missing geo metadata (including older senders) is not proof of an ordinary
-    // binary type. Compare only declared semantics; reading geo remains disabled.
+    // binary type. Compare declared semantics without changing the reader's type policy.
     if (geo != nullptr && (geo->kind != kind || geo->crs != crs || geo->edge_algorithm != edge)) {
         return Status::InvalidArgument("Iceberg/Parquet geo schema mismatch: " + field.name);
     }
     return Status::OK();
 }
-
-namespace {
-Status check_geo_read(const ParquetField* field, const TIcebergSchemaField* lake_field = nullptr) {
-    if ((field != nullptr && field->is_geo()) || (lake_field != nullptr && lake_field->__isset.geo_metadata)) {
-        if (field != nullptr) RETURN_IF_ERROR(validate_geo_field(*field, lake_field));
-        return Status::NotSupported("Native geospatial type support is disabled; cannot project column " +
-                                    (field != nullptr ? field->name : lake_field->name));
-    }
-    return Status::OK();
-}
-} // namespace
 
 Status ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                                                const std::vector<ColumnAccessPathPtr>* column_access_paths,
@@ -147,14 +136,9 @@ Status ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInf
                 find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
 
         int32_t field_idx = find_field_idx_for_materialized_column(_file_metadata, materialized_column);
-        if (field_idx < 0 && extended_variant_binding) {
-            field_idx = _file_metadata->schema().get_field_idx_by_column_name(
-                    Utils::format_name(extended_variant_binding->access_path->path(), _case_sensitive));
-        }
         if (field_idx < 0) continue;
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
-        RETURN_IF_ERROR(check_geo_read(parquet_field));
         // check is type is invalid
         if (!extended_variant_binding.has_value() &&
             !_is_valid_type(parquet_field, &materialized_column.slot_desc->type())) {
@@ -332,7 +316,7 @@ Status LakeMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>&
                                             const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                             std::vector<GroupReaderParam::Column>& read_cols,
                                             std::unordered_set<std::string>& existed_column_names) const {
-    const bool use_field_ids = _file_metadata->schema().exist_filed_id();
+    // LakeMetaHelper is only used when the parquet file has field ids (see _build_meta_helper).
     for (auto& materialized_column : materialized_columns) {
         auto extended_variant_binding =
                 find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
@@ -344,30 +328,31 @@ Status LakeMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>&
             formatted_name = Utils::format_name(materialized_column.name(), _case_sensitive);
         }
         auto lake_it = _field_name_2_lake_field.find(formatted_name);
-        const auto* lake_field = lake_it == _field_name_2_lake_field.end() ? nullptr : lake_it->second;
-        if (use_field_ids && lake_field == nullptr) continue;
-        int32_t field_idx = use_field_ids ? _file_metadata->schema().get_field_idx_by_field_id(lake_field->field_id)
-                                          : find_field_idx_for_materialized_column(_file_metadata, materialized_column);
-        if (!use_field_ids && field_idx < 0 && extended_variant_binding) {
-            field_idx = _file_metadata->schema().get_field_idx_by_column_name(formatted_name);
+        if (lake_it == _field_name_2_lake_field.end()) {
+            continue;
         }
-        const auto* parquet_field =
-                field_idx < 0 ? nullptr : _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
-        RETURN_IF_ERROR(check_geo_read(parquet_field, lake_field));
-        if (parquet_field == nullptr) continue;
+
+        int32_t field_id = lake_it->second->field_id;
+
+        const int32_t field_idx = _file_metadata->schema().get_field_idx_by_field_id(field_id);
+        if (field_idx < 0) continue;
+
+        const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_id(field_id);
+        // Validate declared source semantics at the existing scalar field match.
+        // This is not a native-type enablement/unsupported-read guard.
+        if (lake_it->second->__isset.geo_metadata && !parquet_field->is_complex_type()) {
+            RETURN_IF_ERROR(validate_geo_field(*parquet_field, lake_it->second));
+        }
         // check is type is invalid
         if (!extended_variant_binding.has_value() &&
-            !(use_field_ids
-                      ? _is_valid_type(parquet_field, lake_field, &materialized_column.slot_desc->type())
-                      : ParquetMetaHelper::_is_valid_type(parquet_field, &materialized_column.slot_desc->type()))) {
+            !_is_valid_type(parquet_field, lake_it->second, &materialized_column.slot_desc->type())) {
             continue;
         }
 
         auto parquet_type = parquet_field->physical_type;
 
-        GroupReaderParam::Column column =
-                _build_column(field_idx, parquet_type, materialized_column.slot_desc, materialized_column.decode_needed,
-                              use_field_ids ? lake_field : nullptr);
+        GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
+                                                        materialized_column.decode_needed, lake_it->second);
         if (extended_variant_binding.has_value()) {
             column.is_extended_variant_virtual = true;
             column.source_variant_column_name = std::string(extended_variant_binding->access_path->path());

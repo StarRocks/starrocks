@@ -288,9 +288,6 @@ Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const Pa
         }
         node.parsed_full_path = std::move(parsed_path).value();
         if (fallback_field != nullptr) {
-            if (fallback_field->is_geo()) {
-                return Status::NotSupported("Geospatial annotation on variant fallback: " + fallback_field->name);
-            }
             if (fallback_field->physical_column_index < 0 ||
                 static_cast<size_t>(fallback_field->physical_column_index) >= num_column_chunks) {
                 return Status::InvalidArgument(strings::Substitute(
@@ -343,9 +340,6 @@ void VariantShreddedReadHints::clear() {
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
-    if (field->is_geo()) {
-        return Status::NotSupported("Native geospatial column reader is disabled: " + field->name);
-    }
     // We will only set a complex type in ParquetField
     if ((field->is_complex_type() || col_type.is_complex_type()) && !field->has_same_complex_type(col_type)) {
         return Status::InternalError(
@@ -414,9 +408,6 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type,
                                                       const TIcebergSchemaField* lake_schema_field) {
-    if (field->is_geo() || (lake_schema_field != nullptr && lake_schema_field->__isset.geo_metadata)) {
-        return Status::NotSupported("Native geospatial column reader is disabled: " + field->name);
-    }
     // We will only set a complex type in ParquetField
     if ((field->is_complex_type() || col_type.is_complex_type()) && !field->has_same_complex_type(col_type)) {
         return Status::InternalError(
@@ -501,9 +492,6 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     VariantNodeFields top_fields = find_variant_node_fields(variant_field);
     if (top_fields.metadata == nullptr || top_fields.value == nullptr) {
         return Status::InvalidArgument("Variant type must have 'metadata' and 'value' fields");
-    }
-    if (top_fields.metadata->is_geo() || top_fields.value->is_geo()) {
-        return Status::NotSupported("Geospatial annotations are not variant binary fields: " + variant_field->name);
     }
 
     const tparquet::ColumnChunk* column_chunks = opts.row_group_meta->columns.data();

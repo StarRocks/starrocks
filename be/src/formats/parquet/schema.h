@@ -123,11 +123,6 @@ struct ParquetField {
     int16_t max_rep_level() const { return level_info.max_rep_level; }
     std::string debug_string() const;
     bool is_complex_type() const;
-    // Annotation lookup only; no recursive traversal or cached geo-column set.
-    bool is_geo() const {
-        return schema_element.__isset.logicalType &&
-               (schema_element.logicalType.__isset.GEOMETRY || schema_element.logicalType.__isset.GEOGRAPHY);
-    }
     bool has_same_complex_type(const TypeDescriptor& type_descriptor) const;
 };
 

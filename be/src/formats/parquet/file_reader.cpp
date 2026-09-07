@@ -89,9 +89,11 @@ Status FileReader::init(FormatScanContext* ctx) {
 }
 
 std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
-    if (_scanner_ctx->lake_schema != nullptr) {
-        // Reuse the lake field mapping for geo validation. Files without IDs keep
-        // the ordinary physical-name/column-ID lookup and reader behavior.
+    if (_scanner_ctx->lake_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
+        // Use LakeMetaHelper only when both an Iceberg/Paimon lake schema is present AND
+        // the parquet file carries field ids.  Without field ids, the lake schema cannot
+        // be matched reliably and we fall back to ParquetMetaHelper which handles
+        // col_unique_id / col_physical_name / name lookup chains correctly.
         return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->options.case_sensitive,
                                                 _scanner_ctx->lake_schema);
     } else {

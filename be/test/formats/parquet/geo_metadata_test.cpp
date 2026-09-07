@@ -20,7 +20,6 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/schema.h"
@@ -46,7 +45,7 @@ Status validate_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake,
     RETURN_IF_ERROR(metadata.init(thrift, case_sensitive));
     std::vector<GroupReaderParam::Column> read_columns;
     std::unordered_set<std::string> names;
-    if (lake != nullptr) {
+    if (lake != nullptr && metadata.schema().exist_filed_id()) {
         return LakeMetaHelper(&metadata, case_sensitive, lake)
                 .prepare_read_columns(columns, paths, read_columns, names);
     }
@@ -164,7 +163,7 @@ std::string geo_file(bool geography, bool dictionary = false, bool annotated = t
             metadata.__set_total_compressed_size(bytes.size() - column_offset + page_bytes.size());
         }
         if (field.name == "shape" && annotated) {
-            // Deliberately misleading bounds must not turn the unsupported geo projection into an empty result.
+            // Deliberately misleading bounds must not hide an Iceberg/Parquet metadata conflict.
             tparquet::Statistics stats;
             stats.__set_min_value("z");
             stats.__set_max_value("z");
@@ -177,7 +176,7 @@ std::string geo_file(bool geography, bool dictionary = false, bool annotated = t
             tparquet::GeospatialStatistics geo_stats;
             geo_stats.__set_bbox(bbox);
             metadata.__set_geospatial_statistics(geo_stats);
-            // Poisoned bloom location: geo guards must run without reading it.
+            // Invalid bloom location: metadata conflict must be reported before reading it.
             metadata.__set_bloom_filter_offset(1000000);
             metadata.__set_bloom_filter_length(128);
         }
@@ -264,7 +263,7 @@ TEST(GeoMetadataTest, WireRoundTripRetainsAlgorithmsAndStatistics) {
         SchemaDescriptor schema;
         ASSERT_TRUE(schema.from_thrift(decoded.schema, true).ok());
         const auto* field = schema.get_stored_column_by_field_idx(0);
-        EXPECT_TRUE(field->is_geo());
+        EXPECT_TRUE(field->schema_element.logicalType.__isset.GEOGRAPHY);
         EXPECT_EQ(algorithm, field->schema_element.logicalType.GEOGRAPHY.algorithm);
         EXPECT_EQ("EPSG:4326", field->schema_element.logicalType.GEOGRAPHY.crs);
     }
@@ -297,33 +296,16 @@ TEST(GeoMetadataTest, AnnotationValidationOnlyForSelectedGeo) {
     ASSERT_TRUE(schema.from_thrift(schema_of(element), true).ok());
     EXPECT_TRUE(validate_scan(schema, nullptr, {}, true).ok());
     SlotDescriptor slot(1, "shape", TypeDescriptor::create_varbinary_type(1024));
-    EXPECT_TRUE(validate_scan(schema, nullptr, {{0, &slot, true}}, true).is_invalid_argument());
-    // A malformed union cannot make a selected geo column readable as STRING.
+    EXPECT_TRUE(validate_scan(schema, nullptr, {{0, &slot, true}}, true).ok());
+    TIcebergSchema lake;
+    lake.__set_fields({lake_geo()});
+    EXPECT_TRUE(validate_scan(schema, &lake, {{0, &slot, true}}, true).is_invalid_argument());
+    // Plain Parquet matching does not introduce a new geo-specific type policy.
     element = geo_element();
     element.logicalType.__set_STRING(tparquet::StringType());
     SchemaDescriptor mixed;
     ASSERT_TRUE(mixed.from_thrift(schema_of(element), true).ok());
-    EXPECT_TRUE(validate_scan(mixed, nullptr, {{0, &slot, true}}, true).is_not_supported());
-}
-
-TEST(GeoMetadataTest, ColumnReaderCannotBypassScanGuard) {
-    ColumnReaderOptions options;
-    auto binary = TypeDescriptor::create_varbinary_type(1024);
-    auto element = geo_element();
-    SchemaDescriptor annotated;
-    ASSERT_TRUE(annotated.from_thrift(schema_of(element), true).ok());
-    EXPECT_TRUE(ColumnReaderFactory::create(options, annotated.get_stored_column_by_field_idx(0), binary)
-                        .status()
-                        .is_not_supported());
-    element.__isset.logicalType = false;
-    SchemaDescriptor unannotated;
-    ASSERT_TRUE(unannotated.from_thrift(schema_of(element), true).ok());
-    auto lake = lake_geo();
-    EXPECT_TRUE(ColumnReaderFactory::create(options, unannotated.get_stored_column_by_field_idx(0), binary, &lake)
-                        .status()
-                        .is_not_supported());
-    // Nested projections are rejected once at FileReader initialization. Direct
-    // factories check leaves during their existing selected-child traversal.
+    EXPECT_TRUE(validate_scan(mixed, nullptr, {{0, &slot, true}}, true).ok());
 }
 
 TEST(GeoMetadataTest, IcebergConflictsAndUnannotatedFallback) {
@@ -350,7 +332,7 @@ TEST(GeoMetadataTest, IcebergConflictsAndUnannotatedFallback) {
     ASSERT_TRUE(unannotated.from_thrift(schema_of(element), true).ok());
     auto lake = lake_geo();
     EXPECT_TRUE(validate_geo_field(*unannotated.get_stored_column_by_field_idx(0), &lake).ok());
-    EXPECT_FALSE(unannotated.get_stored_column_by_field_idx(0)->is_geo());
+    EXPECT_FALSE(unannotated.get_stored_column_by_field_idx(0)->schema_element.__isset.logicalType);
 
     element.__set_type(tparquet::Type::INT32);
     SchemaDescriptor wrong_physical;
@@ -373,45 +355,6 @@ TEST(GeoMetadataTest, GeoValidationDoesNotRecurseIntoContainers) {
     EXPECT_TRUE(validate_geo_field(container, nullptr).ok());
     auto lake = lake_geo();
     EXPECT_TRUE(validate_geo_field(container.children[0], &lake).ok());
-    ColumnReaderOptions options;
-    EXPECT_TRUE(
-            ColumnReaderFactory::create(options, &container.children[0], TypeDescriptor::create_varbinary_type(1024))
-                    .status()
-                    .is_not_supported());
-}
-
-TEST(GeoMetadataTest, VirtualProjectionCannotBypassGeoRootGuard) {
-    auto elements = schema_of(geo_element());
-    SchemaDescriptor schema;
-    ASSERT_TRUE(schema.from_thrift(elements, true).ok());
-    TColumnAccessPath child;
-    child.__set_type(TAccessPathType::FIELD);
-    TColumnAccessPath root;
-    root.__set_type(TAccessPathType::ROOT);
-    root.__set_extended(true);
-    root.__set_children({child});
-    auto path = ColumnAccessPath::create(root, [](const TColumnAccessPath& node) -> StatusOr<std::string> {
-        return node.type == TAccessPathType::ROOT ? std::string("shape") : std::string("value");
-    });
-    ASSERT_TRUE(path.ok());
-    std::vector<ColumnAccessPathPtr> paths;
-    paths.push_back(std::move(path).value());
-    SlotDescriptor slot(8, "shape.value", TypeDescriptor::create_varbinary_type(1024));
-    EXPECT_TRUE(validate_scan(schema, nullptr, {{0, &slot, true}}, true, &paths).is_not_supported());
-
-    // Keep physical-name lookup ahead of the virtual source-name fallback.
-    auto renamed_element = geo_element();
-    renamed_element.__set_name("old_shape");
-    SchemaDescriptor renamed;
-    ASSERT_TRUE(renamed.from_thrift(schema_of(renamed_element), true).ok());
-    TSlotDescriptor thrift_slot;
-    thrift_slot.__set_id(8);
-    thrift_slot.__set_colName("shape.value");
-    thrift_slot.__set_col_physical_name("old_shape");
-    thrift_slot.__set_col_unique_id(-1);
-    thrift_slot.__set_slotType(TypeDescriptor::create_varbinary_type(1024).to_thrift());
-    SlotDescriptor physical_slot(thrift_slot);
-    EXPECT_TRUE(validate_scan(renamed, nullptr, {{0, &physical_slot, true}}, true, &paths).is_not_supported());
 }
 
 TEST(GeoMetadataTest, IcebergMetadataMustBeConsistentEvenWithoutParquetAnnotation) {
@@ -450,7 +393,7 @@ TEST(GeoMetadataTest, EveryGeographyAlgorithmMatchesWithoutEnablingCompute) {
     }
 }
 
-TEST(GeoMetadataTest, MissingAndRenamedGeoColumnsCannotBecomeNulls) {
+TEST(GeoMetadataTest, MissingAndNoIdColumnsKeepExistingMatching) {
     tparquet::SchemaElement id;
     id.__set_name("id");
     id.__set_field_id(2);
@@ -463,7 +406,7 @@ TEST(GeoMetadataTest, MissingAndRenamedGeoColumnsCannotBecomeNulls) {
     TIcebergSchema lake;
     lake.__set_fields({lake_field});
     SlotDescriptor slot(1, "renamed_shape", TypeDescriptor::create_varbinary_type(1024));
-    EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &slot, true}}, true).is_not_supported());
+    EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &slot, true}}, true).ok());
     SlotDescriptor supported(2, "id", TypeDescriptor(TYPE_INT));
     EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &supported, true}}, true).ok());
     auto element = geo_element();
@@ -471,9 +414,9 @@ TEST(GeoMetadataTest, MissingAndRenamedGeoColumnsCannotBecomeNulls) {
     element.__set_name("RENAMED_SHAPE");
     SchemaDescriptor by_name;
     ASSERT_TRUE(by_name.from_thrift(schema_of(element), false).ok());
-    EXPECT_TRUE(validate_scan(by_name, &lake, {{0, &slot, true}}, false).is_not_supported());
+    EXPECT_TRUE(validate_scan(by_name, &lake, {{0, &slot, true}}, false).ok());
     lake.fields[0].geo_metadata.__set_crs("EPSG:4326");
-    EXPECT_TRUE(validate_scan(by_name, &lake, {{0, &slot, true}}, false).is_invalid_argument());
+    EXPECT_TRUE(validate_scan(by_name, &lake, {{0, &slot, true}}, false).ok());
     EXPECT_TRUE(validate_scan(by_name, &lake, {}, false).ok());
 }
 
@@ -496,7 +439,9 @@ TEST(GeoMetadataTest, ProjectionMappingPreservesPhysicalNamesAndIds) {
         element.__isset.field_id = with_ids;
         SchemaDescriptor schema;
         ASSERT_TRUE(schema.from_thrift(schema_of(element), true).ok());
-        EXPECT_TRUE(validate_scan(schema, &lake, {{0, &slot, true}}, true).is_invalid_argument());
+        auto status = validate_scan(schema, &lake, {{0, &slot, true}}, true);
+        EXPECT_EQ(with_ids, status.is_invalid_argument());
+        EXPECT_EQ(!with_ids, status.ok());
     }
 
     // With no field IDs, ordinary columns keep the original physical-name
@@ -507,7 +452,7 @@ TEST(GeoMetadataTest, ProjectionMappingPreservesPhysicalNamesAndIds) {
     FileMetaData metadata;
     ASSERT_TRUE(metadata.init(thrift, true).ok());
     lake.fields.clear();
-    LakeMetaHelper helper(&metadata, true, &lake);
+    ParquetMetaHelper helper(&metadata, true);
     std::vector<GroupReaderParam::Column> columns;
     std::unordered_set<std::string> names;
     ASSERT_TRUE(helper.prepare_read_columns({{0, &slot, true}}, nullptr, columns, names).ok());
@@ -567,7 +512,7 @@ TEST(GeoMetadataTest, StandardLogicalAnnotationFieldNumbers) {
     }
 }
 
-TEST(GeoMetadataTest, ProjectionRejectedBeforePruningOrMissingColumnSubstitution) {
+TEST(GeoMetadataTest, MatchingMetadataDoesNotDisableExistingReads) {
     for (bool with_annotation : {true, false}) {
         auto element = geo_element();
         element.__isset.logicalType = with_annotation;
@@ -577,17 +522,16 @@ TEST(GeoMetadataTest, ProjectionRejectedBeforePruningOrMissingColumnSubstitution
         lake.__set_fields({lake_geo()});
         SlotDescriptor slot(1, "shape", TypeDescriptor::create_varbinary_type(1024));
         std::vector<FormatColumnInfo> columns{{0, &slot, true}};
-        EXPECT_FALSE(validate_scan(schema, &lake, columns, true).ok());
+        EXPECT_TRUE(validate_scan(schema, &lake, columns, true).ok());
         // Unprojected valid geo metadata must not block supported-column scans.
         EXPECT_TRUE(validate_scan(schema, &lake, {}, true).ok());
-        if (with_annotation)
-            EXPECT_FALSE(validate_scan(schema, nullptr, columns, true).ok());
-        else
-            EXPECT_TRUE(validate_scan(schema, nullptr, columns, true).ok());
+        EXPECT_TRUE(validate_scan(schema, nullptr, columns, true).ok());
+        lake.fields[0].geo_metadata.__set_crs("EPSG:4326");
+        EXPECT_EQ(with_annotation, validate_scan(schema, &lake, columns, true).is_invalid_argument());
     }
 }
 
-TEST(GeoMetadataTest, AnnotatedFileReadsSupportedColumnButRejectsGeo) {
+TEST(GeoMetadataTest, MetadataConflictFailsBeforePruning) {
     MemTracker tracker{-1, "geo_metadata_test"};
     CurrentThread::set_mem_tracker_source([] { return true; }, []() -> MemTracker* { return nullptr; });
     DeferOp reset_tracker_source([] { CurrentThread::set_mem_tracker_source(nullptr, nullptr); });
@@ -627,8 +571,12 @@ TEST(GeoMetadataTest, AnnotatedFileReadsSupportedColumnButRejectsGeo) {
         SlotDescriptor shape(1, "shape", TypeDescriptor::create_varbinary_type(1024));
         context.materialized_columns = {{0, &shape, true}};
         context.options.parquet_bloom_filter_enable = true;
-        // An ordinary byte equality would prune against the deliberately wrong
-        // min/max or dictionary. It must never be evaluated for native geo.
+        TIcebergSchema lake;
+        auto source = variant % 2 == 0 ? lake_geo() : lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR");
+        source.geo_metadata.__set_crs("EPSG:4326");
+        lake.__set_fields({source});
+        context.lake_schema = &lake;
+        // A metadata conflict must not be hidden by ordinary byte pruning.
         std::unique_ptr<ColumnPredicate> predicate(
                 new_column_eq_predicate(get_type_info(TYPE_VARCHAR), shape.id(), "not-in-dictionary"));
         PredicateAndNode root;
@@ -636,18 +584,19 @@ TEST(GeoMetadataTest, AnnotatedFileReadsSupportedColumnButRejectsGeo) {
         predicates = PredicateTree::create(std::move(root));
         FileReader unsupported(1024, &file, size);
         status = unsupported.init(&context);
-        EXPECT_TRUE(status.is_not_supported()) << status;
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
         EXPECT_EQ(0, stats.bloom_filter_tried_counter);
         EXPECT_EQ(0, stats.statistics_tried_counter);
     }
 }
-TEST(GeoMetadataTest, UnannotatedWkbRemainsOrdinaryBinary) {
+TEST(GeoMetadataTest, AnnotatedAndUnannotatedWkbKeepExistingBinaryReads) {
     MemTracker tracker{-1, "geo_binary_control"};
     CurrentThread::set_mem_tracker_source([] { return true; }, []() -> MemTracker* { return nullptr; });
     DeferOp reset_tracker_source([] { CurrentThread::set_mem_tracker_source(nullptr, nullptr); });
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
-    for (bool dictionary : {false, true}) {
-        auto bytes = geo_file(true, dictionary, false);
+    for (int variant = 0; variant < 6; ++variant) {
+        const bool geography = variant % 3 != 1;
+        auto bytes = geo_file(geography, variant >= 3, variant % 3 != 2);
         const auto size = bytes.size();
         RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(bytes)), "binary-control.parquet");
         FormatScannerStats stats;
@@ -681,10 +630,14 @@ TEST(GeoMetadataTest, UnannotatedWkbRemainsOrdinaryBinary) {
         expected.append(16, '\0');
         EXPECT_EQ(expected, chunk->get_column_by_index(0)->get(0).get_slice().to_string());
         TIcebergSchema lake;
-        lake.__set_fields({lake_geo()});
+        lake.__set_fields({geography ? lake_geo() : lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR")});
         context.lake_schema = &lake;
-        FileReader disabled_geo(1024, &file, size);
-        EXPECT_TRUE(disabled_geo.init(&context).is_not_supported());
+        FileReader lake_reader(1024, &file, size);
+        ASSERT_TRUE(lake_reader.init(&context).ok());
+        chunk->reset();
+        ASSERT_TRUE(lake_reader.get_next(&chunk).ok());
+        ASSERT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(expected, chunk->get_column_by_index(0)->get(0).get_slice().to_string());
         EXPECT_EQ(0, stats.statistics_tried_counter);
         EXPECT_EQ(0, stats.bloom_filter_tried_counter);
     }
