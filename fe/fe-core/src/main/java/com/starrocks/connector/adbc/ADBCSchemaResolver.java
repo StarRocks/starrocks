@@ -23,10 +23,9 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
-import com.starrocks.type.VarcharType;
 import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -69,7 +68,7 @@ public class ADBCSchemaResolver {
                     ? PrimitiveType.DECIMAL256 : PrimitiveType.DECIMAL128;
             return new DecimalType(storageType, decimalType.getPrecision(), decimalType.getScale());
         } else if (arrowType instanceof ArrowType.Utf8 || arrowType instanceof ArrowType.LargeUtf8) {
-            return new VarcharType(StringType.DEFAULT_STRING_LENGTH);
+            return TypeFactory.createDefaultCatalogString();
         } else if (arrowType instanceof ArrowType.Utf8View) {
             // TODO: add BE arrow converter support for STRING_VIEW, then map to VarcharType here
             LOG.warn("Unsupported Arrow type: Utf8View for column '{}'. Column will be excluded from schema.",
