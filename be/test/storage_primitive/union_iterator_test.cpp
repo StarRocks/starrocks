@@ -19,11 +19,13 @@
 #include <memory>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "types/type_info.h"
 
 namespace starrocks {
@@ -36,7 +38,8 @@ protected:
     // return chunk with single column of type int32_t.
     class IntIterator final : public ChunkIterator {
     public:
-        explicit IntIterator(std::vector<int32_t> numbers) : ChunkIterator(schema()), _numbers(std::move(numbers)) {}
+        explicit IntIterator(std::vector<int32_t> numbers, Status prepare_status = Status::OK())
+                : ChunkIterator(schema()), _prepare_status(std::move(prepare_status)), _numbers(std::move(numbers)) {}
 
         // 10 elements at most every time.
         Status do_get_next(Chunk* chunk) override {
@@ -67,6 +70,13 @@ protected:
 
         void close() override {}
 
+        Status prepare_for_read() override {
+            ++_prepare_count;
+            return _prepare_status;
+        }
+
+        int prepare_count() const { return _prepare_count; }
+
         static Schema schema() {
             FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
             return Schema(std::vector<FieldPtr>{f});
@@ -74,6 +84,8 @@ protected:
 
     private:
         size_t _idx = 0;
+        int _prepare_count = 0;
+        Status _prepare_status;
         std::vector<int32_t> _numbers;
     };
 };
@@ -156,6 +168,57 @@ TEST_F(UnionIteratorTest, union_one) {
     chunk->reset();
     st = iter->get_next(chunk.get());
     ASSERT_TRUE(st.is_end_of_file());
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, bounded_lookahead) {
+    const int32_t old_lookahead = config::segment_iterator_lookahead;
+    DeferOp restore([&] { config::segment_iterator_lookahead = old_lookahead; });
+    config::segment_iterator_lookahead = 2;
+
+    auto sub1 = std::make_shared<IntIterator>(std::vector<int32_t>{1});
+    auto sub2 = std::make_shared<IntIterator>(std::vector<int32_t>{2});
+    auto sub3 = std::make_shared<IntIterator>(std::vector<int32_t>{3});
+    auto sub4 = std::make_shared<IntIterator>(std::vector<int32_t>{4});
+    auto iter = new_union_iterator({sub1, sub2, sub3, sub4});
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, sub1->prepare_count());
+    EXPECT_EQ(1, sub2->prepare_count());
+    EXPECT_EQ(0, sub3->prepare_count());
+    EXPECT_EQ(0, sub4->prepare_count());
+
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, sub1->prepare_count());
+    EXPECT_EQ(1, sub2->prepare_count());
+    EXPECT_EQ(1, sub3->prepare_count());
+    EXPECT_EQ(0, sub4->prepare_count());
+
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, sub3->prepare_count());
+    EXPECT_EQ(1, sub4->prepare_count());
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, lookahead_skips_future_eof_only_when_current) {
+    const int32_t old_lookahead = config::segment_iterator_lookahead;
+    DeferOp restore([&] { config::segment_iterator_lookahead = old_lookahead; });
+    config::segment_iterator_lookahead = 2;
+
+    auto sub1 = std::make_shared<IntIterator>(std::vector<int32_t>{1});
+    auto empty = std::make_shared<IntIterator>(std::vector<int32_t>{}, Status::EndOfFile("empty"));
+    auto sub3 = std::make_shared<IntIterator>(std::vector<int32_t>{3});
+    auto iter = new_union_iterator({sub1, empty, sub3});
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, chunk->num_rows());
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, chunk->num_rows());
 }
 
 } // namespace starrocks

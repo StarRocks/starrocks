@@ -532,6 +532,33 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：是否检查 Rowset 的正确性。开启后，会在 Compaction、Schema Change 后检查生成的 Rowset 的正确性。
 - 引入版本：-
 
+### enable_segment_shared_small_index_stream
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether every column's small index reads in a segment -- its ordinal index and page zone map -- share a single buffered stream, so that the tail index region (see `enable_segment_tail_index_region`) is fetched once for the segment instead of once per column. This is what makes the region pay off for a query that does not use the data cache, such as one run with `skip_local_disk_cache` or against a table with `datacache.enable` set to false: `enable_segment_tail_index_prefetch` helps only by warming the cache, so it has nothing to offer such a query, which still spends one request per column on indexes that are now next to each other. Sharing one stream turns the first column's read into the only remote one and serves the rest from its buffer. Has no effect on segments written without a tail index region, where the indexes are too far apart for one buffer to span. Data pages and the large optional indexes (bloom filter, bitmap, inverted, vector) are unaffected and keep reading through their own column's file.
+- Introduced in: v4.2.0
+
+### enable_segment_tail_index_prefetch
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：打开带有尾部索引区的 segment（参见 `enable_segment_tail_index_region`）时，是否用一次读取把整个索引区取回，使随后各列的索引加载从 Data Cache 命中，而不是各自发起一次请求。没有尾部索引区的 segment 不受影响。此外，以下情况也会跳过预取：本次读取不会填充 Data Cache；索引区大于 `segment_tail_index_prefetch_max_bytes`；以及读取 footer 时已经把整个索引区带了进来——只要索引区起点落在文件最后一个 cache block 内就属于这种情况，窄表通常如此。设为 `false` 可以在不重写数据的情况下回退预取。
+- 引入版本：v4.2.0
+
+### enable_segment_tail_index_region
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Segment 写入时，是否把所有列的 ordinal index 和页级 zone map 连同 short key index 一起，放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的索引写在该列数据页之后。查询在读取任何数据页之前都必须先加载这些索引，把它们聚在一起后一次读取即可全部覆盖。这主要降低存算分离集群的冷查询延迟——否则每一处分散的索引读取都要单独访问一次对象存储。该配置仅影响写入侧。所有会写出 segment footer 的写入路径都会产出该区域，纵向 Compaction 和部分列更新重写也包括在内：纵向写入时，每个写完的列的索引写入器会跨列组保留下来，最后一并落盘，因此靠前列组的索引同样落在尾部。两种布局都能被任意版本的 BE/CN 双向读取，并可在同一张表中共存，因此可以随时开启或关闭，无需重写数据。
+- 引入版本：v4.2.0
+
 ### enable_size_tiered_compaction_strategy
 
 - 默认值：true
@@ -1080,6 +1107,24 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：用于同步的最大线程数。0 表示将线程数设置为 BE CPU 内核数的四倍。
 - 引入版本：v3.3.5
+
+### segment_shared_small_index_stream_max_buffer_bytes
+
+- Default: 4194304
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum buffer size for the shared small index stream enabled by `enable_segment_shared_small_index_stream`. The buffer is normally sized to the segment's tail index region so that one fill covers it; a region larger than this gets a buffer of this size instead, so it is read in a few requests rather than one per column.
+- Introduced in: v4.2.0
+
+### segment_tail_index_prefetch_max_bytes
+
+- 默认值：16777216
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：是
+- 描述：`enable_segment_tail_index_prefetch` 用一次读取取回的 segment 尾部索引区的大小上限。列数非常多的表可能产生远超单条查询所需的索引区，此时整段读取浪费的字节会超过省下的请求数。超过该大小的索引区改为按列读取索引，与原有布局一致。
+- 引入版本：v4.2.0
 
 ### size_tiered_level_multiple
 

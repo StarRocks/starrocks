@@ -496,6 +496,33 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to verify the correctness of generated rowsets. When enabled, the correctness of the generated rowsets will be checked after Compaction and Schema Change.
 - Introduced in: -
 
+### enable_segment_shared_small_index_stream
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether every column's small index reads in a segment -- its ordinal index and page zone map -- share a single buffered stream, so that the tail index region (see `enable_segment_tail_index_region`) is fetched once for the segment instead of once per column. This is what makes the region pay off for a query that does not use the data cache, such as one run with `skip_local_disk_cache` or against a table with `datacache.enable` set to false: `enable_segment_tail_index_prefetch` helps only by warming the cache, so it has nothing to offer such a query, which still spends one request per column on indexes that are now next to each other. Sharing one stream turns the first column's read into the only remote one and serves the rest from its buffer. Has no effect on segments written without a tail index region, where the indexes are too far apart for one buffer to span. Data pages and the large optional indexes (bloom filter, bitmap, inverted, vector) are unaffected and keep reading through their own column's file.
+- Introduced in: v4.2.0
+
+### enable_segment_tail_index_prefetch
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether opening a segment that carries a tail index region (see `enable_segment_tail_index_region`) fetches that whole region in a single read, so that the per-column index loads that follow are served from the data cache instead of each issuing its own request. Segments written without a tail index region are unaffected. The prefetch is also skipped when the read does not populate the data cache, when the region is larger than `segment_tail_index_prefetch_max_bytes`, and when the footer read has already brought the whole region in -- which is the case whenever the region starts inside the file's last cache block, as it does for narrow tables. Set to `false` to roll the prefetch back without rewriting any data.
+- Introduced in: v4.2.0
+
+### enable_segment_tail_index_region
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the segment writer places the ordinal index and the page zone map of every column, together with the short key index, in one contiguous region immediately before the segment footer, instead of writing each column's indexes directly after that column's own data pages. A query must load these indexes before it can read any data page, so gathering them lets a single read cover all of them. This mainly reduces cold-query latency in shared-data clusters, where each scattered index read otherwise costs a separate request to object storage. Only the write side is gated by this config. Every write path that finalizes a segment footer produces the region, vertical compaction and partial-update rewrites included: a vertical writer holds each finished column's index writer across column groups and flushes them together at the end, so an early group's indexes still land at the tail. Both layouts are readable by any BE or CN version in either direction and can coexist in the same table, so this can be turned on or off at any time without rewriting data.
+- Introduced in: v4.2.0
+
 ### enable_size_tiered_compaction_strategy
 
 - Default: true
@@ -1089,6 +1116,24 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The maximum number of threads used for replication. `0` indicates setting the thread number to four times the BE CPU core count.
 - Introduced in: v3.3.5
+
+### segment_shared_small_index_stream_max_buffer_bytes
+
+- Default: 4194304
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum buffer size for the shared small index stream enabled by `enable_segment_shared_small_index_stream`. The buffer is normally sized to the segment's tail index region so that one fill covers it; a region larger than this gets a buffer of this size instead, so it is read in a few requests rather than one per column.
+- Introduced in: v4.2.0
+
+### segment_tail_index_prefetch_max_bytes
+
+- Default: 16777216
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum size of a segment tail index region that `enable_segment_tail_index_prefetch` fetches in a single read. A table with very many columns can produce a region far larger than any one query needs, where reading it whole would cost more in wasted bytes than it saves in requests. Indexes in a region above this size are read per column instead, as they are in the original layout.
+- Introduced in: v4.2.0
 
 ### size_tiered_level_multiple
 
