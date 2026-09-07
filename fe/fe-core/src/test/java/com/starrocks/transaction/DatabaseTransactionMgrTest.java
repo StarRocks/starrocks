@@ -68,6 +68,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
@@ -137,6 +138,7 @@ public class DatabaseTransactionMgrTest {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
+        masterGlobalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
 
         origin_enable_metric_calculator_value = Config.enable_metric_calculator;
@@ -148,6 +150,8 @@ public class DatabaseTransactionMgrTest {
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
 
         lableToTxnId = addTransactionToTransactionMgr();
+        // That helper ends on the follower after replaying; the tests below commit on the leader.
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
     }
 
     @AfterEach

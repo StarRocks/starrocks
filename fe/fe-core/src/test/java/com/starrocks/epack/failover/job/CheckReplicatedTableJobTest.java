@@ -7,6 +7,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.io.DeepCopy;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.epack.failover.ReplicatedObjectMeta.TableMeta;
@@ -49,6 +50,44 @@ public class CheckReplicatedTableJobTest {
                 command.run();
             }
         };
+    }
+
+    @Test
+    public void testVersionEpochConsistency() throws Exception {
+        CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
+                "CREATE FAILOVER GROUP testVersionEpochConsistencyGroup " +
+                        "INCLUDE_TABLES = test.CheckReplicatedTableJobTestTable " +
+                        "MEMBERS = " +
+                        "'az1:SELF'," +
+                        "'az2:192.168.0.1:9090'" +
+                        "SCHEDULE = '1h'");
+
+        FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
+        TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
+        OlapTable localTable = (OlapTable) tableMeta.getTable();
+        Partition localPartition = localTable.getPartitions().iterator().next();
+
+        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, tableMeta.getDatabase(),
+                localTable, tableMeta.getDatabase(), true);
+
+        // Either side at zero predates the field, so its lineage is unknown and must not be compared.
+        Assert.assertTrue(isConsistent(job, localTable, localPartition, 0L, 12L));
+        Assert.assertTrue(isConsistent(job, localTable, localPartition, 12L, 0L));
+        Assert.assertTrue(isConsistent(job, localTable, localPartition, 0L, 0L));
+
+        Assert.assertTrue(isConsistent(job, localTable, localPartition, 12L, 12L));
+        Assert.assertFalse(isConsistent(job, localTable, localPartition, 12L, 13L));
+    }
+
+    private static boolean isConsistent(CheckReplicatedTableJob job, OlapTable localTable, Partition localPartition,
+                                        long localVersionEpoch, long remoteVersionEpoch) {
+        PhysicalPartition local = new PhysicalPartition(1L, localPartition.getId(), new MaterializedIndex(2L));
+        PhysicalPartition remote = new PhysicalPartition(1L, localPartition.getId(), new MaterializedIndex(2L));
+        local.setVersionEpoch(localVersionEpoch);
+        remote.setVersionEpoch(remoteVersionEpoch);
+        return Deencapsulation.invoke(job, "checkPhysicalPartitionConsistency",
+                localTable, localPartition, remote, local);
     }
 
     @Test

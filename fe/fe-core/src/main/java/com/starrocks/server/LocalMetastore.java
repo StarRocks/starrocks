@@ -1768,6 +1768,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long id = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 id, partition.getId(), indexMap.get(olapTable.getBaseIndexMetaId()));
+        // Assigned here rather than in the constructor: the GTID generator may only be called on
+        // the leader, and constructors also run where a partition is rebuilt from stored metadata.
+        physicalPartition.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
         // set ShardGroupId to partition for rollback to old version
         physicalPartition.setShardGroupId(shardGroupId);
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
@@ -2080,6 +2083,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 physicalPartitionId, partitionId, indexMap.get(table.getBaseIndexMetaId()));
+        // Assigned here rather than in the constructor: the GTID generator may only be called on
+        // the leader, and constructors also run where a partition is rebuilt from stored metadata.
+        physicalPartition.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         logicalPartition.addSubPartition(physicalPartition);

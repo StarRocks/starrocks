@@ -454,14 +454,21 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             return false;
         }
 
-        if (localPhysicalPartition.hasStorageData()
-                && localPhysicalPartition.getVersionEpoch() != remotePhysicalPartition.getVersionEpoch()) {
+        // A zero epoch marks a partition older than the field itself, whose lineage is unknown. The
+        // transaction log appliers already read it that way -- they adopt an epoch only when it is greater
+        // than zero -- so comparing a known epoch against an unknown one would reject every such partition
+        // forever: the source's zero can never reach the target, whose epoch comes from the DDL path that
+        // created it, and the mismatch would drive a drop and re-create on every round.
+        long localVersionEpoch = localPhysicalPartition.getVersionEpoch();
+        long remoteVersionEpoch = remotePhysicalPartition.getVersionEpoch();
+        if (localPhysicalPartition.hasStorageData() && localVersionEpoch != 0 && remoteVersionEpoch != 0
+                && localVersionEpoch != remoteVersionEpoch) {
             LOG.warn("Local physical partition {}.{}.{}.{} "
                     + "has different version epoch {}:{} with remote version epoch {}:{}",
                     localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
                     localPhysicalPartition.getId(),
-                    localPhysicalPartition.getVisibleVersion(), localPhysicalPartition.getVersionEpoch(),
-                    remotePhysicalPartition.getVisibleVersion(), remotePhysicalPartition.getVersionEpoch());
+                    localPhysicalPartition.getVisibleVersion(), localVersionEpoch,
+                    remotePhysicalPartition.getVisibleVersion(), remoteVersionEpoch);
             return false;
         }
 
