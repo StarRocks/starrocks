@@ -131,6 +131,7 @@ import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -4539,6 +4540,21 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             olapTable.setIndexes(indexes);
             olapTable.rebuildFullSchema();
+
+            // A schema change does not bump the partition visible version, which is what a global
+            // dict's validity is checked against, so the collected dicts stay "valid" while the new
+            // rowsets this change produces are encoded independently -- a query would then decode
+            // them against a stale dict and fail with "Dict Decode failed". SchemaChangeJobV2#onFinished
+            // invalidates every varchar column's dict for the same reason. Do it here, on the shared
+            // catalog-update path while the table write lock is held, so BOTH the leader (WAL callback)
+            // and a follower (replayFastSchemaEvolutionMetaChange, which calls this method directly and
+            // never enters the leader wrapper) invalidate the dict -- otherwise a follower that replayed
+            // the change keeps serving the stale dict and hits the same decode failure.
+            for (Column column : olapTable.getColumns()) {
+                if (column.getType().isVarchar()) {
+                    IDictManager.getInstance().removeGlobalDict(olapTable, column.getColumnId());
+                }
+            }
 
             // If modified columns are already done, inactive related mv
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable, modifiedColumns);
