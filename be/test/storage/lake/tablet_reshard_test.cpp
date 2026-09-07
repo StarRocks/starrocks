@@ -212,6 +212,38 @@ protected:
         return lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB());
     }
 
+    TabletMetadataPtr cache_reshard_metadata(int64_t key_id, int64_t metadata_id, int64_t version, int64_t gtid,
+                                             const TabletRangePB* range = nullptr) {
+        _tablet_manager->metacache()->update_capacity(1024 * 1024);
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(metadata_id);
+        metadata->set_version(version);
+        metadata->set_gtid(gtid);
+        if (range != nullptr) *metadata->mutable_range() = *range;
+        _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(key_id, version),
+                                                            metadata);
+        return metadata;
+    }
+
+    ReshardingTabletInfoPB make_split_retry_request(const TabletMetadataPtr& source,
+                                                    const std::vector<int64_t>& children, bool external) {
+        CHECK_OK(put_tablet_metadata(source));
+        ReshardingTabletInfoPB request;
+        auto* split = request.mutable_splitting_tablet_info();
+        split->set_old_tablet_id(source->id());
+        for (auto child : children) {
+            prepare_tablet_dirs(child);
+            split->add_new_tablet_ids(child);
+        }
+        if (external) {
+            *split->add_new_tablet_ranges()->mutable_upper_bound() = generate_sort_key(50);
+            split->mutable_new_tablet_ranges(0)->set_upper_bound_included(false);
+            *split->add_new_tablet_ranges()->mutable_lower_bound() = generate_sort_key(50);
+            split->mutable_new_tablet_ranges(1)->set_lower_bound_included(true);
+        }
+        return request;
+    }
+
     void expect_split_fallback_after_flush(const std::shared_ptr<TabletMetadataPB>& m) {
         auto* sync = SyncPoint::GetInstance();
         int flushes = 0;
@@ -17996,6 +18028,262 @@ TEST_F(LakeTabletReshardTest, publish_resharding_tablet_shared_first_skips_per_t
     // The old tablet's own version-1 key was never probed; the shared object was read exactly once.
     EXPECT_EQ(0, count_ending_with(lake::tablet_metadata_filename(old_tablet_id, 1)));
     EXPECT_EQ(1, count_ending_with(lake::tablet_initial_metadata_filename()));
+}
+
+TEST_F(LakeTabletReshardTest, test_split_retry_cache_complete_returns_without_recompute) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 77;
+    auto source = split_source();
+    std::vector<int64_t> children{next_id(), next_id()};
+    auto request = make_split_retry_request(source, children, true);
+    const auto& ranges = request.splitting_tablet_info().new_tablet_ranges();
+
+    std::unordered_map<int64_t, TabletMetadataPtr> expected;
+    expected.emplace(source->id(), cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid));
+    for (size_t i = 0; i < children.size(); ++i) {
+        expected.emplace(children[i], cache_reshard_metadata(children[i], children[i], kVersion, kGtid, &ranges[i]));
+    }
+
+    int flushes = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
+                                              actual, actual_ranges));
+    EXPECT_EQ(0, flushes);
+    ASSERT_EQ(expected.size(), actual.size());
+    for (const auto& [id, metadata] : expected) {
+        EXPECT_EQ(metadata->SerializeAsString(), actual.at(id)->SerializeAsString());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_requires_absent_extra_children) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 78;
+    auto source = split_source();
+    std::vector<int64_t> children{next_id(), next_id(), next_id()};
+    auto request = make_split_retry_request(source, children, false);
+    TabletRangePB identical_range;
+    *identical_range.mutable_lower_bound() = generate_sort_key(0);
+    *identical_range.mutable_upper_bound() = generate_sort_key(100);
+    auto cached_source = cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid, &identical_range);
+    auto cached_child = cache_reshard_metadata(children[0], children[0], kVersion, kGtid, &identical_range);
+    for (size_t i = 1; i < children.size(); ++i) {
+        ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
+                                   _tablet_manager->tablet_metadata_location(children[i], kVersion)));
+    }
+
+    int planner_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [&](void* arg) {
+        ++planner_calls;
+        *static_cast<size_t*>(arg) = 0;
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
+                                              actual, actual_ranges));
+    EXPECT_EQ(0, planner_calls);
+    ASSERT_EQ(2, actual.size());
+    EXPECT_EQ(cached_source->SerializeAsString(), actual.at(source->id())->SerializeAsString());
+    EXPECT_EQ(cached_child->SerializeAsString(), actual.at(children[0])->SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_rejects_mismatched_extra_child) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 79;
+    auto source = split_source();
+    std::vector<int64_t> children{next_id(), next_id()};
+    auto request = make_split_retry_request(source, children, false);
+    cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid);
+    cache_reshard_metadata(children[0], children[0], kVersion, kGtid);
+    cache_reshard_metadata(children[1], children[1], kVersion, kGtid + 1);
+
+    int planner_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [&](void* arg) {
+        ++planner_calls;
+        *static_cast<size_t*>(arg) = 0;
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
+                                              actual, actual_ranges));
+    EXPECT_EQ(1, planner_calls);
+    EXPECT_EQ(2, actual.size());
+    EXPECT_EQ(0, actual.count(children[1]));
+}
+
+TEST_F(LakeTabletReshardTest, test_reshard_retry_cache_rejects_wrong_id_version_or_gtid) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 80;
+    for (int malformed_field = 0; malformed_field < 3; ++malformed_field) {
+        auto source = split_source();
+        std::vector<int64_t> children{next_id(), next_id()};
+        auto request = make_split_retry_request(source, children, true);
+        cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid);
+        cache_reshard_metadata(children[1], children[1], kVersion, kGtid);
+        auto malformed = std::make_shared<TabletMetadataPB>();
+        malformed->set_id(malformed_field == 0 ? next_id() : children[0]);
+        malformed->set_version(malformed_field == 1 ? kVersion + 1 : kVersion);
+        malformed->set_gtid(malformed_field == 2 ? kGtid + 1 : kGtid);
+        _tablet_manager->metacache()->cache_tablet_metadata(
+                _tablet_manager->tablet_metadata_location(children[0], kVersion), malformed);
+
+        int flushes = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        TxnInfoPB txn;
+        txn.set_gtid(kGtid);
+        std::unordered_map<int64_t, TabletMetadataPtr> actual;
+        std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn,
+                                                  false, actual, actual_ranges));
+        EXPECT_EQ(1, flushes) << "malformed field " << malformed_field;
+        ASSERT_EQ(3, actual.size());
+        for (const auto& [id, metadata] : actual) {
+            EXPECT_EQ(id, metadata->id());
+            EXPECT_EQ(kVersion, metadata->version());
+            EXPECT_EQ(kGtid, metadata->gtid());
+        }
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_reshard_retry_cache_skips_nonpositive_gtid) {
+    constexpr int64_t kVersion = 2;
+    for (int64_t gtid : {0, -1}) {
+        auto source = split_source();
+        std::vector<int64_t> children{next_id(), next_id()};
+        auto request = make_split_retry_request(source, children, true);
+        cache_reshard_metadata(source->id(), source->id(), kVersion, gtid);
+        for (auto child : children) cache_reshard_metadata(child, child, kVersion, gtid);
+
+        int flushes = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        TxnInfoPB txn;
+        txn.set_gtid(gtid);
+        std::unordered_map<int64_t, TabletMetadataPtr> actual;
+        std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn,
+                                                  false, actual, actual_ranges));
+        EXPECT_EQ(1, flushes) << "gtid " << gtid;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_merge_retry_cache_complete_returns_without_recompute) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 81;
+    const int64_t source0 = next_id();
+    const int64_t source1 = next_id();
+    const int64_t target = next_id();
+    for (auto id : {source0, source1, target}) prepare_tablet_dirs(id);
+    auto base0 = std::make_shared<TabletMetadataPB>();
+    base0->set_id(source0);
+    base0->set_version(1);
+    auto base1 = std::make_shared<TabletMetadataPB>();
+    base1->set_id(source1);
+    base1->set_version(1);
+    ASSERT_OK(put_merge_sources(base0, base1));
+    ReshardingTabletInfoPB request;
+    auto* merge = request.mutable_merging_tablet_info();
+    merge->add_old_tablet_ids(source0);
+    merge->add_old_tablet_ids(source1);
+    merge->set_new_tablet_id(target);
+    std::unordered_map<int64_t, TabletMetadataPtr> expected;
+    for (auto id : {source0, source1, target}) {
+        expected.emplace(id, cache_reshard_metadata(id, id, kVersion, kGtid));
+    }
+
+    int planner_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { ++planner_calls; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, 1, kVersion, txn, false, actual,
+                                              actual_ranges));
+    EXPECT_EQ(0, planner_calls);
+    ASSERT_EQ(expected.size(), actual.size());
+    for (const auto& [id, metadata] : expected) {
+        EXPECT_EQ(metadata->SerializeAsString(), actual.at(id)->SerializeAsString());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_identical_retry_cache_complete_returns_without_recompute) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 82;
+    const int64_t source = next_id();
+    const int64_t target = next_id();
+    prepare_tablet_dirs(source);
+    prepare_tablet_dirs(target);
+    TabletMetadataPB base;
+    base.set_id(source);
+    base.set_version(1);
+    ASSERT_OK(put_tablet_metadata(base));
+    ReshardingTabletInfoPB request;
+    request.mutable_identical_tablet_info()->set_old_tablet_id(source);
+    request.mutable_identical_tablet_info()->set_new_tablet_id(target);
+    auto cached_source = cache_reshard_metadata(source, source, kVersion, kGtid);
+    auto cached_target = cache_reshard_metadata(target, target, kVersion, kGtid);
+    _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(source, 1));
+
+    int metadata_reads = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void*) { ++metadata_reads; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, 1, kVersion, txn, false, actual,
+                                              actual_ranges));
+    EXPECT_EQ(0, metadata_reads);
+    ASSERT_EQ(2, actual.size());
+    EXPECT_EQ(cached_source->SerializeAsString(), actual.at(source)->SerializeAsString());
+    EXPECT_EQ(cached_target->SerializeAsString(), actual.at(target)->SerializeAsString());
 }
 
 } // namespace starrocks
