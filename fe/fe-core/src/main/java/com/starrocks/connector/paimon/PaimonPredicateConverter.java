@@ -382,9 +382,5 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
             return operator.getName();
         }
-
-        public String visitCastOperator(CastOperator operator, Void context) {
-            return operator.getChild(0).accept(this, context);
-        }
     }
 }
