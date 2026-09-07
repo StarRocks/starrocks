@@ -153,7 +153,10 @@ private:
     // message. Callers have already done the usual bookkeeping (num_rows_filtered++, _append_error_msg).
     // row_already_rejected: the _construct_row failure that preceded this skip already wrote the
     // row to the rejected-record file, so the payload is not written a second time.
-    void _skip_malformed_message(const Status& st, bool row_already_rejected = false);
+    // chunk: when given, every row this message already contributed to it (from
+    // _message_first_row on) is rolled back, so a skipped message is atomic — no row at all, even
+    // when its leading objects were complete (strip_outer_array / json_root with a truncated tail).
+    void _skip_malformed_message(const Status& st, bool row_already_rejected = false, Chunk* chunk = nullptr);
 
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
@@ -176,6 +179,11 @@ private:
 
     std::unique_ptr<JsonParser> _parser;
     bool _empty_parser = true;
+    // skip_on_fatal_parse_error: chunk row count at which the current message started, i.e. the
+    // rollback point when the message turns out to be malformed. Reset to 0 for every new chunk
+    // (rows of a message that spilled into an earlier, already returned chunk are not recoverable;
+    // that only happens for a message larger than a whole chunk).
+    size_t _message_first_row = 0;
 
     // record the chunk column position for previous parsed json object
     std::vector<PreviousParsedItem> _prev_parsed_position;

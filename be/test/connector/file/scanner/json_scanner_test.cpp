@@ -1909,6 +1909,127 @@ TEST_F(JsonScannerTest, skip_on_fatal_parse_error_truncated_document) {
     EXPECT_EQ(1, _counter->num_rows_filtered);
 }
 
+// Same truncated document, read through jsonpaths — the shape most Routine Load jobs use. simdjson
+// ondemand is lazy: find_field() on {"k": 104, "v": "z", "batch": } returns SUCCESS for every field,
+// so without the pre-validation in _read_rows a row (104, "z", NULL) was assembled from the readable
+// prefix and, because the skip keeps the task alive, committed next to the "one filtered row". The
+// message must contribute no row at all.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_truncated_document_with_jsonpaths) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe, {R"({"k": 101, "v": "v101", "batch": "b2"})", R"({"k": 104, "v": "z", "batch": })",
+                                  R"({"k": 105, "v": "v105", "batch": "b2"})"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(64),
+                                      TypeDescriptor::create_varchar_type(16)};
+    auto range = stream_range(load_id);
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.k", "$.v", "$.batch"])";
+    auto scanner = create_json_scanner(types, {range}, {"k", "v", "batch"}, 1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_end_of_file()) << final_status;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("[101, 'v101', 'b2']", rows[0]);
+    EXPECT_EQ("[105, 'v105', 'b2']", rows[1]);
+    EXPECT_EQ(1, _counter->num_rows_filtered);
+}
+
+// strip_outer_array: the leading objects of a truncated array are complete and their rows are
+// built before the broken tail surfaces at advance()/get_current(). A skipped message must be
+// atomic, so those rows are rolled back — nothing from the message, exactly one filtered row.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_truncated_array_tail_is_atomic) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe, {R"([{"key1": 1, "key2": 2}, {"key1": 3, "key2": 4}])",
+                                  R"([{"key1": 5, "key2": 6}, {"key1": 7, "key2": )", R"([{"key1": 9, "key2": 10}])"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    auto range = stream_range(load_id);
+    range.strip_outer_array = true;
+    range.__isset.strip_outer_array = true;
+    auto scanner = create_json_scanner(types, {range}, {"key1", "key2"}, 1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_end_of_file()) << final_status;
+    ASSERT_EQ(3, rows.size());
+    EXPECT_EQ("[1, 2]", rows[0]);
+    EXPECT_EQ("[3, 4]", rows[1]);
+    EXPECT_EQ("[9, 10]", rows[2]);
+    EXPECT_EQ(1, _counter->num_rows_filtered);
+}
+
+// json_root: the pre-validation runs on the object the parser hands out, i.e. the ROOT object, so a
+// structural defect inside it (here a missing comma) is caught before any column is built. Two
+// shapes are NOT detectable and load as they do today, option on or off: a defect outside the root
+// ({"data": {...}, "meta": }), which simdjson never reads, and a missing value inside a nested root
+// ({"data": {"key1": 3, "key2": }}), which simdjson's lazy skipping resolves as a differently shaped
+// but acceptable object instead of an error (count_fields() returns SUCCESS for it).
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_malformed_json_root_object) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe, {R"({"data": {"key1": 1, "key2": 2}, "meta": "x"})",
+                                  R"({"data": {"key1": 3 "key2": 4}, "meta": "y"})",
+                                  R"({"data": {"key1": 5, "key2": 6}, "meta": "z"})"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    auto range = stream_range(load_id);
+    range.__set_json_root("$.data");
+    auto scanner = create_json_scanner(types, {range}, {"key1", "key2"}, 1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_end_of_file()) << final_status;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("[1, 2]", rows[0]);
+    EXPECT_EQ("[5, 6]", rows[1]);
+    EXPECT_EQ(1, _counter->num_rows_filtered);
+}
+
+// json_root + strip_outer_array: the root is an array whose first element is complete (its row is
+// built) and whose second element is truncated. The skip must roll the first row back — the
+// message contributes nothing and counts once — through the expanded-root parser path.
+TEST_F(JsonScannerTest, skip_on_fatal_parse_error_truncated_json_root_array_is_atomic) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+
+    append_kafka_messages(*pipe, {R"({"data": [{"key1": 1, "key2": 2}]})",
+                                  R"({"data": [{"key1": 3, "key2": 4}, {"key1": 5, "key2": }]})",
+                                  R"({"data": [{"key1": 7, "key2": 8}]})"});
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    auto range = stream_range(load_id);
+    range.__set_json_root("$.data");
+    range.strip_outer_array = true;
+    range.__isset.strip_outer_array = true;
+    auto scanner = create_json_scanner(types, {range}, {"key1", "key2"}, 1024 * 1024, {}, kSkipOn);
+    ASSERT_OK(scanner->open());
+
+    Status final_status;
+    auto rows = drain_rows(scanner.get(), &final_status);
+    EXPECT_TRUE(final_status.is_end_of_file()) << final_status;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("[1, 2]", rows[0]);
+    EXPECT_EQ("[7, 8]", rows[1]);
+    EXPECT_EQ(1, _counter->num_rows_filtered);
+}
+
 // A `[...]` message after a `{...}` message must not inherit the previous message's ndjson mode.
 // With json_root set the parser is chosen by _is_ndjson; before _check_ndjson() reset it per
 // message, the array message went to the document-stream parser and was rejected as "array type
