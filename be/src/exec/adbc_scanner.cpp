@@ -231,7 +231,7 @@ Status ADBCScanner::_get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* e
 
     {
         SCOPED_TIMER(_profile.fill_chunk_timer);
-        RETURN_IF_ERROR(_convert_batch_to_chunk(batch, chunk));
+        RETURN_IF_ERROR(_convert_batch_to_chunk(state, batch, chunk));
     }
 
     _rows_read += (*chunk)->num_rows();
@@ -241,7 +241,8 @@ Status ADBCScanner::_get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* e
     return Status::OK();
 }
 
-Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk) {
+Status ADBCScanner::_convert_batch_to_chunk(RuntimeState* state, const std::shared_ptr<arrow::RecordBatch>& batch,
+                                            ChunkPtr* chunk) {
     size_t num_rows = batch->num_rows();
     const auto& slots = _tuple_desc->slots();
     auto result = std::make_shared<Chunk>();
@@ -283,6 +284,9 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
         if (num_rows > 0) {
             ConvertFuncTree converter_tree(converter);
             ArrowConvertContext context;
+            if (state != nullptr) {
+                context.timezone = state->timezone();
+            }
             context.set_current_column(slot->col_name(), slot->type());
             std::string conversion_error;
             context.report_error_message = [&](const std::string& reason, const std::string&, int64_t) {
