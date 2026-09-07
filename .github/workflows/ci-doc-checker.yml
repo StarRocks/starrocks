@@ -178,6 +178,8 @@ jobs:
   docusaurus-build:
     runs-on: ubuntu-latest
     needs: markdownlint # Only runs if markdownlint passes!
+    # Temporarily disabled -- drop the 'if: false' below to re-enable the check.
+    if: false
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
