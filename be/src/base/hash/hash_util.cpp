@@ -80,6 +80,9 @@ static void init_hash_functions() {
         g_crc64_func = crc_hash64_sse42;
     }
 #elif defined(__aarch64__)
+    // ARM64 builds require -march=armv8-a+crc (enforced in be/CMakeLists.txt).
+    // CRC instructions are unconditionally available when this macro is defined.
+    static_assert(__ARM_FEATURE_CRC32, "ARM64 build must enable CRC extensions (-march=armv8-a+crc)");
     g_hash32_func = crc_hash_arm64;
     g_hash64_func = crc_hash64_arm64;
     g_crc32_func = crc_hash_arm64;
