@@ -1517,13 +1517,18 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
         if (std::none_of(emit.begin(), emit.end(), [](bool value) { return value; })) {
             return Status::Corruption("tablet split rowset has no emitted child");
         }
-        const bool zero_row_replay =
-                anchor.num_rows == 0 && anchor.num_dels == 0 && anchor.data_size > 0 && rowset.del_files_size() > 0 &&
-                rowset.segment_metas_size() > 0 &&
-                std::all_of(rowset.segment_metas().begin(), rowset.segment_metas().end(), [](const auto& segment) {
-                    return segment.has_num_rows() && segment.num_rows() == 0 &&
-                           segment.sort_key_min().values_size() == 0 && segment.sort_key_max().values_size() == 0;
-                });
+        bool zero_row_replay = anchor.num_rows == 0 && anchor.num_dels == 0 && anchor.data_size > 0 &&
+                               rowset.del_files_size() > 0 && rowset.segment_metas_size() > 0;
+        if (zero_row_replay) {
+            for (const auto& segment : rowset.segment_metas()) {
+                RETURN_IF_ERROR(budget->consume(1, "projector zero-row replay classification"));
+                if (!segment.has_num_rows() || segment.num_rows() != 0 || segment.sort_key_min().values_size() != 0 ||
+                    segment.sort_key_max().values_size() != 0) {
+                    zero_row_replay = false;
+                    break;
+                }
+            }
+        }
         if (separate_sort || rowset.segment_metas_size() == 0 || zero_row_replay) {
             for (size_t c = 0; c < child_count; ++c) row_weights[c] = byte_weights[c] = emit[c] ? 1 : 0;
             if (zero_row_replay) std::fill(row_weights.begin(), row_weights.end(), 0);

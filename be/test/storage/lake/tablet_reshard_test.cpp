@@ -764,6 +764,7 @@ protected:
         int dcg_writes = 0;
         int delvec_writes = 0;
         int source_flushes = 0;
+        int sstable_opens = 0;
     };
 
     StatusOr<MutableTabletMetadataPtr> merge_with_phase_counts(const std::vector<TabletMetadataPtr>& sources,
@@ -775,12 +776,14 @@ protected:
         sync->SetCallBack("merge_delvecs:writer_invocations",
                           [&](void* arg) { counts->delvec_writes += *static_cast<int*>(arg); });
         sync->SetCallBack("merge_sstables:source_pk_flush", [&](void*) { ++counts->source_flushes; });
+        sync->SetCallBack("PersistentIndexSstable::init:table_open_error", [&](void*) { ++counts->sstable_opens; });
         sync->EnableProcessing();
         DeferOp cleanup_sync_points([&] {
             sync->ClearCallBack("materialize_planned_rowsets:entry");
             sync->ClearCallBack("merge_dcg_meta:after_write_cols");
             sync->ClearCallBack("merge_delvecs:writer_invocations");
             sync->ClearCallBack("merge_sstables:source_pk_flush");
+            sync->ClearCallBack("PersistentIndexSstable::init:table_open_error");
             sync->DisableProcessing();
         });
 
@@ -834,6 +837,7 @@ protected:
         EXPECT_EQ(0, counts->dcg_writes);
         EXPECT_EQ(0, counts->delvec_writes);
         EXPECT_EQ(0, counts->source_flushes);
+        EXPECT_EQ(0, counts->sstable_opens);
         for (size_t i = 0; i < sources.size(); ++i) {
             EXPECT_EQ(source_pbs[i], sources[i]->SerializeAsString());
         }
@@ -12707,6 +12711,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_same_physical_sst_allows_logic
     struct LogicalAttachment {
         const char* name;
         std::function<void(PersistentIndexSstablePB*)> apply;
+        bool reuse_when_ranges_ordered = false;
     };
     const std::vector<LogicalAttachment> attachments = {
             {"deprecated version", [](PersistentIndexSstablePB* sst) { sst->set_version(2); }},
@@ -12723,7 +12728,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_same_physical_sst_allows_logic
              [](PersistentIndexSstablePB* sst) {
                  sst->mutable_fileset_id()->set_hi(2);
                  sst->mutable_fileset_id()->set_lo(2);
-             }},
+             },
+             true},
             {"rssid offset", [](PersistentIndexSstablePB* sst) { sst->set_rssid_offset(1); }},
             {"generation version", [](PersistentIndexSstablePB* sst) { sst->set_generation_version(2); }},
     };
@@ -12739,10 +12745,21 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_same_physical_sst_allows_logic
             if (reverse_sources) std::swap(immutable_sources[0], immutable_sources[1]);
             const int64_t target = next_id();
             prepare_tablet_dirs(target);
+            int classifier_entries = 0;
+            auto* sync = SyncPoint::GetInstance();
+            sync->SetCallBack("merge_sstables:metadata_classifier_entry", [&](void*) { ++classifier_entries; });
+            sync->EnableProcessing();
+            DeferOp clear_classifier_callback([&] {
+                sync->ClearCallBack("merge_sstables:metadata_classifier_entry");
+                sync->DisableProcessing();
+            });
             std::unordered_map<int64_t, TabletMetadataPtr> published;
             ASSERT_OK(publish_resharding_merge(immutable_sources, target, /*base_version=*/1, /*new_version=*/2,
                                                next_id(), published));
             auto merged = published.at(target);
+            EXPECT_EQ(1, classifier_entries);
+            EXPECT_EQ(attachment.reuse_when_ranges_ordered && !reverse_sources ? 1 : 0,
+                      merged->sstable_meta().sstables_size());
             _update_manager->unload_and_remove_primary_index(target);
             expect_lifecycle_oracle(merged, expected_rows, {});
         }
