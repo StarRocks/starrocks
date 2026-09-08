@@ -24,41 +24,62 @@ jobs:
           set -x
           pr_info=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json mergeCommit,labels,title,headRefName)
           labels=`echo $pr_info | jq -r '.labels[].name'`
-          # Anti-loop: skip forward SR->CD sync for reverse-synced PRs. `sync` covers the SR
-          # main PR; `cd-contributed` covers its mergify backport PRs (which do NOT inherit
-          # `sync`; contributed-backport-label.yml adds cd-contributed to them).
-          is_sync=false
-          if [[ "${labels}" =~ sync || "${labels}" =~ cd-contributed ]]; then
-            is_sync=true
-          else
-            # Durable fallback (don't rely solely on the opened-time labeling): a mergify
-            # backport whose SOURCE main PR is cd-contributed must be skipped even if this
-            # backport PR itself is missing the label. Recompute from the source at merge time.
-            title=`echo $pr_info | jq -r '.title'`
-            head=`echo $pr_info | jq -r '.headRefName'`
+          title=`echo $pr_info | jq -r '.title'`
+          head=`echo $pr_info | jq -r '.headRefName'`
+
+          # Anti-loop, PER DOWNSTREAM. StarRocks fans out to two independent downstreams
+          # (CelerData and mirrorship, see ci-tool/scripts/run-repo-sync.sh), so a single
+          # `is_sync` gate on this whole step is wrong: a change contributed UP by one
+          # downstream is brand new to the OTHER one and must still be forwarded there.
+          # Collapsing both into one flag is what silently starved mirrorship of every
+          # cd-contributed change (the step showed `skipped` while the job stayed green).
+          #
+          #   `sync`            -> legacy catch-all: the marker every sync-produced PR
+          #                        carries. Kept on BOTH paths as the old-sync fallback.
+          #   `cd-contributed`  -> came up from CelerData; skip the CD path only.
+          #   `ms-contributed`  -> came up from mirrorship; skip the MS path only.
+          #
+          # Mergify backports do NOT inherit these labels, so recompute from the source
+          # main PR ("(backport #N)" / mergify/bp/.../pr-N) at merge time — same durable
+          # fallback as before, now applied to both markers.
+          skip_cd=false
+          skip_ms=false
+          if [[ "${labels}" =~ sync ]]; then
+            skip_cd=true
+            skip_ms=true
+          fi
+          [[ "${labels}" =~ cd-contributed ]] && skip_cd=true
+          [[ "${labels}" =~ ms-contributed ]] && skip_ms=true
+
+          if [[ "$skip_cd" != "true" || "$skip_ms" != "true" ]]; then
             src=""
             if [[ "$head" =~ ^mergify/bp/.*/pr-([0-9]+)$ ]]; then
               src="${BASH_REMATCH[1]}"
             else
               src=$(echo "$title" | grep -oP '\(backport #\K[0-9]+' | tail -n1 || true)
             fi
-            if [[ -n "$src" ]] && gh pr view "$src" -R ${{ github.repository }} --json labels -q '.labels[].name' | grep -qx 'cd-contributed'; then
-              is_sync=true
+            if [[ -n "$src" ]]; then
+              src_labels=$(gh pr view "$src" -R ${{ github.repository }} --json labels -q '.labels[].name' || true)
+              echo "${src_labels}" | grep -qx 'cd-contributed' && skip_cd=true
+              echo "${src_labels}" | grep -qx 'ms-contributed' && skip_ms=true
             fi
           fi
-          if [[ "$is_sync" == "true" ]]; then
-            echo "is_sync=true" >> $GITHUB_OUTPUT
-          else
-            commit_sha=`echo $pr_info | jq -r '.mergeCommit.oid'`
-            echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
-          fi
+
+          commit_sha=`echo $pr_info | jq -r '.mergeCommit.oid'`
+          echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
+          echo "skip_cd=${skip_cd}" >> $GITHUB_OUTPUT
+          echo "skip_ms=${skip_ms}" >> $GITHUB_OUTPUT
 
       - name: sync
-        if: steps.commit_sha.outputs.is_sync != 'true'
+        # Run unless BOTH downstreams are anti-looped; run-repo-sync.sh gates each
+        # dispatch on its own flag.
+        if: steps.commit_sha.outputs.skip_cd != 'true' || steps.commit_sha.outputs.skip_ms != 'true'
         env:
           PR_ID: ${{ github.event.number }}
           COMMIT_ID: ${{ steps.commit_sha.outputs.commit_sha }}
           BRANCH: ${{ github.base_ref }}
+          SKIP_CD: ${{ steps.commit_sha.outputs.skip_cd }}
+          SKIP_MS: ${{ steps.commit_sha.outputs.skip_ms }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && timeout 60 git pull >/dev/null || echo "git pull timeout, using cached ci-tool"
           ./scripts/run-repo-sync.sh
