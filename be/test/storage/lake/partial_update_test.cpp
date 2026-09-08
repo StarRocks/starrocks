@@ -3129,6 +3129,131 @@ TEST_F(LakeColumnUpsertModeTest, upsert_existing_rows_generates_dcg_only) {
     EXPECT_GT(md->dcg_meta().dcgs_size(), 0);
 }
 
+// A COLUMN_UPSERT_MODE load synthesizes one new-row segment per update segment and upserts each into
+// the primary index in turn, so a key that occurs in more than one of the load's own update segments
+// makes a later iteration return deletes against an earlier iteration's segment. When two later
+// iterations both hit the same earlier segment, that segment's delete vector is written twice inside
+// one publish -- and append_delvec() replaces the entry rather than merging it, so a fresh DelVector
+// drops the first write's marks and those superseded rows go live again, leaving two live rows for one
+// primary key with no error anywhere.
+//
+// The shape below is the minimal one that writes a segment's delete vector twice: twelve brand-new
+// keys in the first update segment, then the even half, then the odd half. Both later segments
+// supersede rows in the first, and neither overlaps the other.
+TEST_F(LakeColumnUpsertModeTest, column_upsert_merges_delvec_across_update_segments) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+    constexpr int kNewKeyBase = 100;
+
+    auto partial_chunk = [this](const std::vector<int>& keys, int multiplier) {
+        std::vector<int> values(keys.size());
+        for (size_t i = 0; i < keys.size(); i++) {
+            values[i] = keys[i] * multiplier;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(values.data(), values.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
+    };
+
+    std::vector<int> all_keys(kChunkSize);
+    std::vector<int> even_keys;
+    std::vector<int> odd_keys;
+    for (int i = 0; i < kChunkSize; i++) {
+        all_keys[i] = kNewKeyBase + i;
+        (i % 2 == 0 ? even_keys : odd_keys).push_back(all_keys[i]);
+    }
+
+    // Seed the table so the column-upsert load runs against real base data.
+    {
+        auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+        auto indexes = std::vector<uint32_t>(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // One column-upsert load, three update segments: all keys, then the even half, then the odd half.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (const auto& [keys, multiplier] :
+             std::vector<std::pair<std::vector<int>, int>>{{all_keys, 5}, {even_keys, 7}, {odd_keys, 9}}) {
+            auto chunk = partial_chunk(keys, multiplier);
+            std::vector<uint32_t> indexes(keys.size());
+            for (size_t i = 0; i < keys.size(); i++) indexes[i] = i;
+            ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            // Close the memtable so each batch becomes its own update segment.
+            ASSERT_OK(delta_writer->flush());
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Every key must be live exactly once, carrying the value of the last segment that wrote it:
+    // the even keys were last written by the second segment, the odd keys by the third. Without the
+    // merge, the first segment's even rows survive as well and those keys have two live rows.
+    std::map<int, std::vector<std::pair<int, int>>> rows_by_key;
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            auto cols = chunk->columns();
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                rows_by_key[cols[0]->get(i).get_int32()].emplace_back(cols[1]->get(i).get_int32(),
+                                                                      cols[2]->get(i).get_int32());
+            }
+            chunk->reset();
+        }
+    }
+
+    for (int key : all_keys) {
+        const auto& rows = rows_by_key[key];
+        ASSERT_EQ(1, rows.size()) << "primary key " << key << " has " << rows.size() << " live rows";
+        const int expected_multiplier = ((key - kNewKeyBase) % 2 == 0) ? 7 : 9;
+        EXPECT_EQ(key * expected_multiplier, rows[0].first) << "key " << key << " kept a superseded value";
+        EXPECT_EQ(10, rows[0].second) << "key " << key << " should carry c2's default";
+    }
+    EXPECT_EQ(2 * kChunkSize, rows_by_key.size());
+    size_t total_rows = 0;
+    for (const auto& [key, rows] : rows_by_key) {
+        total_rows += rows.size();
+    }
+    EXPECT_EQ(2 * kChunkSize, total_rows) << "a superseded row was resurrected";
+}
+
 TEST_F(LakeColumnUpsertModeTest, partial_update_reads_encrypted_dcg_segments) {
     auto chunk_full = generate_data(kChunkSize, 0, false, 3);
     auto chunk_partial = generate_data(kChunkSize, 0, true, 7);
