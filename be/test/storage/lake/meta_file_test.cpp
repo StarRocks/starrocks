@@ -42,6 +42,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_metrics.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 
@@ -194,13 +195,23 @@ protected:
             auto* segment = rowset->add_segment_metas();
             segment->set_filename(fmt::format("atomic_shared_{}.dat", i));
             segment->set_size(100);
+            segment->set_num_rows(10);
+            segment->set_segment_idx(i);
             segment->set_shared(true);
         }
         return metadata;
     }
 
-    Status publish_delvec_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet, int64_t txn_id,
-                                std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
+    Status publish_delvec_merge(const std::vector<std::shared_ptr<TabletMetadataPB>>& sources, int64_t merged_tablet,
+                                int64_t txn_id, std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
+        CHECK_EQ(2, sources.size());
+        auto* split_key = sources[0]->mutable_range()->mutable_upper_bound()->add_values();
+        split_key->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+        split_key->set_value("0");
+        split_key->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        sources[0]->mutable_range()->set_upper_bound_included(false);
+        sources[1]->mutable_range()->mutable_lower_bound()->CopyFrom(sources[0]->range().upper_bound());
+        sources[1]->mutable_range()->set_lower_bound_included(true);
         for (const auto& source : sources) {
             RETURN_IF_ERROR(_tablet_manager->put_tablet_metadata(source));
         }
