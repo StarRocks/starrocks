@@ -33,7 +33,9 @@ import org.apache.avro.Schema;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hudi.common.schema.HoodieSchema;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.TableSchemaResolver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,7 +76,9 @@ public class HiveMetastoreApiConverterTest {
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
         hudiFields.add(new Schema.Field("col3",
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
-        hudiSchema = Schema.createRecord(hudiFields);
+        // Hudi 1.2.0 rebuilds this record through HoodieSchema.createRecord,
+        // which requires a non-null record name.
+        hudiSchema = Schema.createRecord("hudi_table", null, "com.starrocks", false, hudiFields);
     }
 
     @Test
@@ -110,7 +114,8 @@ public class HiveMetastoreApiConverterTest {
 
     @Test
     public void testToHudiProperties(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient,
-                                     @Mocked ConnectorMgr connectorMgr) {
+                                     @Mocked TableSchemaResolver schemaResolver,
+                                     @Mocked ConnectorMgr connectorMgr) throws Exception {
         StorageDescriptor sd = new StorageDescriptor();
         String tableLocation = "hdfs://127.0.0.1/db/table/hudi_table";
         String serLib = "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe";
@@ -139,6 +144,9 @@ public class HiveMetastoreApiConverterTest {
 
                 metaClient.getTableType().name();
                 result = COPY_ON_WRITE;
+
+                schemaResolver.getTableSchema();
+                result = HoodieSchema.fromAvroSchema(hudiSchema);
 
                 table.getSd().getCols();
                 result = unPartKeys;

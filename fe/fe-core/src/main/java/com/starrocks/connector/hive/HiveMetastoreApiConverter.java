@@ -62,7 +62,7 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.OpenCSVSerde;
 import org.apache.hadoop.hive.serde2.io.DateWritableV2;
-import org.apache.hudi.avro.HoodieAvroUtils;
+import org.apache.hudi.common.schema.HoodieSchemaUtils;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
@@ -326,7 +326,7 @@ public class HiveMetastoreApiConverter {
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
         Schema hudiSchema;
         try {
-            hudiSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
+            hudiSchema = HoodieSchemaUtils.addMetadataFields(schemaUtil.getTableSchema()).getAvroSchema();
         } catch (Exception e) {
             throw new StarRocksConnectorException("Cannot get hudi table schema.");
         }

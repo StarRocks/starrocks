@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.connector.partitiontraits;
 
-import com.google.api.client.util.Sets;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.MaterializedView;

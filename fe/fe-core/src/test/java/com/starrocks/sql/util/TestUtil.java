@@ -315,7 +315,7 @@ public class TestUtil {
 
     @Test
     public void testAddSuperSteps() {
-        List<PrettyPrinter> printers = com.google.api.client.util.Lists.newArrayList();
+        List<PrettyPrinter> printers = com.google.common.collect.Lists.newArrayList();
         printers.add(new PrettyPrinter().add("a"));
         printers.add(new PrettyPrinter().add("b"));
         printers.add(new PrettyPrinter().add("c"));

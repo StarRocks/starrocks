@@ -15,9 +15,9 @@
 
 package com.starrocks.scheduler;
 
-import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;

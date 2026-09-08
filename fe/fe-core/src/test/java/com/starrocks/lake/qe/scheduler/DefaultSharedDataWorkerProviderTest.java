@@ -14,11 +14,11 @@
 
 package com.starrocks.lake.qe.scheduler;
 
-import com.google.api.client.util.Lists;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;

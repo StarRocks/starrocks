@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Reference;
 import com.starrocks.common.StarRocksException;

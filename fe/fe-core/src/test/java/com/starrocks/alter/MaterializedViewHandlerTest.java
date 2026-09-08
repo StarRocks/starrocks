@@ -34,8 +34,8 @@
 
 package com.starrocks.alter;
 
-import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;

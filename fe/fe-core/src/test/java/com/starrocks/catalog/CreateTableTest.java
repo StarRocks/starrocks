@@ -34,9 +34,9 @@
 
 package com.starrocks.catalog;
 
-import com.google.api.client.util.Lists;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobException;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.constraint.UniqueConstraint;

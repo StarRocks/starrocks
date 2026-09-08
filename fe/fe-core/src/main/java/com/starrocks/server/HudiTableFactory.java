@@ -25,8 +25,8 @@ import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.schema.HoodieSchemaUtils;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
@@ -114,7 +114,7 @@ public class HudiTableFactory extends ExternalTableFactory {
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
         Schema hudiTableSchema;
         try {
-            hudiTableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
+            hudiTableSchema = HoodieSchemaUtils.addMetadataFields(schemaUtil.getTableSchema()).getAvroSchema();
         } catch (Exception e) {
             throw new DdlException("Cannot get hudi table schema.");
         }

@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.optimizer.operator;
 
-import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;

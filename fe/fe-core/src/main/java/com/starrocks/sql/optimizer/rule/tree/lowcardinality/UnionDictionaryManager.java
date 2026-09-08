@@ -14,11 +14,11 @@
 
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
-import com.google.api.client.util.Maps;
-import com.google.api.client.util.Preconditions;
-import com.google.api.client.util.Sets;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UnionFind;

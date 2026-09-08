@@ -6,13 +6,13 @@
 
     <groupId>com.starrocks</groupId>
     <artifactId>trino-starrocks</artifactId>
-    <version>418</version>
+    <version>419</version>
     <description>Trino - StarRocks Connector</description>
     <packaging>trino-plugin</packaging>
 
     <properties>
         <air.main.basedir>${project.basedir}</air.main.basedir>
-        <dep.airlift.version>230</dep.airlift.version>
+        <dep.airlift.version>231</dep.airlift.version>
         <dep.airlift.units.version>1.8</dep.airlift.units.version>
         <dep.jackson.version>2.18.9</dep.jackson.version>
         <dep.guava.version>32.0.0-jre</dep.guava.version>
@@ -115,7 +115,7 @@
         <dependency>
             <groupId>org.mariadb.jdbc</groupId>
             <artifactId>mariadb-java-client</artifactId>
-            <version>3.3.2</version>
+            <version>3.3.5</version>
         </dependency>
 
         <dependency>

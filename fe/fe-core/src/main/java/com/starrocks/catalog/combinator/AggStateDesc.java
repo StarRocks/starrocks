@@ -14,9 +14,9 @@
 
 package com.starrocks.catalog.combinator;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.AggregateFunction;

@@ -16,7 +16,29 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <starrocks.thirdparty.home>${env.STARROCKS_THIRDPARTY}</starrocks.thirdparty.home>
         <arrow.version>17.0.0</arrow.version>
+        <jackson.version>2.21.5</jackson.version>
+        <netty.version>4.1.137.Final</netty.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Keep Arrow 17 for Java 8, but override its vulnerable transitives. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>

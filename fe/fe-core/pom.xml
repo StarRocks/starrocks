@@ -211,12 +211,6 @@ under the License.
             <artifactId>velocity-engine-core</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>jprotobuf-starrocks</artifactId>
-            <classifier>jar-with-dependencies</classifier>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-precompile-plugin -->
         <dependency>
             <groupId>com.baidu</groupId>
@@ -956,6 +950,12 @@ under the License.
             <artifactId>url-connection-client</artifactId>
         </dependency>
 
+        <!-- Hadoop 3.4's S3A client still links the AWS SDK Apache 4 HTTP implementation. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-storage-blob</artifactId>
@@ -1121,6 +1121,16 @@ under the License.
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>1.8</version>
+                <!-- Resolve the standalone code generator without putting its
+                     shaded dependencies on the FE application/test classpath. -->
+                <dependencies>
+                    <dependency>
+                        <groupId>com.starrocks</groupId>
+                        <artifactId>jprotobuf-starrocks</artifactId>
+                        <version>${jprotobuf-starrocks.version}</version>
+                        <classifier>jar-with-dependencies</classifier>
+                    </dependency>
+                </dependencies>
                 <executions>
                     <execution>
                         <id>generate-sources</id>
