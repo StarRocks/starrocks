@@ -987,6 +987,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：SQL レイヤーによってチェックされるタスクスケジュールの最小許容スケジュール間隔 (秒単位)。タスクが送信されると、TaskAnalyzer はスケジュール期間を秒に変換し、期間が `task_min_schedule_interval_s` より小さい場合、`ERR_INVALID_PARAMETER` で送信を拒否します。これにより、頻繁すぎる実行タスクの作成が防止され、スケジューラーが高頻度タスクから保護されます。スケジュールに明示的な開始時間がない場合、TaskAnalyzer は開始時間を現在のエポック秒に設定します。
 - 導入時期：v3.3.0, v3.4.0, v3.5.0
 
+### `task_runs_dispatch_interval_ms`
+
+- デフォルト：1000
+- タイプ：Int
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：Leader FE が実行中の TaskRun の完了を確認し、待機中の TaskRun を開始する間隔です。`ADMIN SET FRONTEND CONFIG` で変更でき、FE の再起動は不要です。新しい間隔は現在のディスパッチ周期が終わった後に有効になります。値を小さくすると待機中の TaskRun の開始と完了状態の更新が速くなりますが、FE の CPU 使用量が増えます。値を大きくするとオーバーヘッドは減りますが、開始が遅れます。負の値は `1000` として扱います。`0` は `1` として扱います。
+- 導入時期：-
+
 ### `task_runs_timeout_second`
 
 - デフォルト：4 * 3600

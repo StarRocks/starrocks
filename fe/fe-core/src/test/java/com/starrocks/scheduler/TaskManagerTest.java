@@ -1580,6 +1580,30 @@ public class TaskManagerTest {
     }
 
     @Test
+    public void testStartAfterStopPicksUpCurrentDispatchInterval() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        TaskManager mgr = new TaskManager();
+        try {
+            Config.task_runs_dispatch_interval_ms = 1000;
+            mgr.start();
+            mgr.stop(5000L);
+            Config.task_runs_dispatch_interval_ms = 2500;
+            // Scheduler is shut down while this FE is not leader, so this is a no-op.
+            mgr.rescheduleDispatchIfIntervalChanged();
+            mgr.start();
+            Assertions.assertEquals(2500, mgr.scheduledDispatchIntervalMs);
+            java.util.concurrent.ScheduledFuture<?> started = mgr.dispatchFuture;
+            Assertions.assertNotNull(started);
+            Assertions.assertFalse(started.isCancelled());
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertSame(started, mgr.dispatchFuture);
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+            mgr.stop();
+        }
+    }
+
+    @Test
     public void testStopIsNoOpWhenNotStarted() {
         // stop() guards with isStart.compareAndSet(true, false); a TaskManager that never
         // started must not throw when stop is called.
@@ -1615,5 +1639,133 @@ public class TaskManagerTest {
         Assertions.assertTrue(stuckSched.isShutdown(), "scheduler must be shutdown by stop");
         // worker is still running but stop() returned within budget; cleanup
         stuckSched.shutdownNow();
+    }
+
+    @Test
+    public void testDispatchIntervalConfigDefaultAndMutable() throws Exception {
+        java.lang.reflect.Field field = Config.class.getField("task_runs_dispatch_interval_ms");
+        com.starrocks.common.ConfigBase.ConfField confField =
+                field.getAnnotation(com.starrocks.common.ConfigBase.ConfField.class);
+        Assertions.assertNotNull(confField);
+        Assertions.assertTrue(confField.mutable(),
+                "task_runs_dispatch_interval_ms must be mutable for ADMIN SET FRONTEND CONFIG");
+        Assertions.assertEquals(1000, Config.task_runs_dispatch_interval_ms);
+    }
+
+    @Test
+    public void testDispatchIntervalReadsLiveConfigAndClampsNonPositive() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        try {
+            Config.task_runs_dispatch_interval_ms = 750;
+            Assertions.assertEquals(750, TaskManager.getTaskRunsDispatchIntervalMs());
+            Config.task_runs_dispatch_interval_ms = 0;
+            Assertions.assertEquals(1, TaskManager.getTaskRunsDispatchIntervalMs());
+            Config.task_runs_dispatch_interval_ms = -3;
+            Assertions.assertEquals(1000, TaskManager.getTaskRunsDispatchIntervalMs());
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+        }
+    }
+
+    @Test
+    public void testRescheduleDispatchCancelsOldFutureAndStartsNewFixedRate() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        TaskManager mgr = new TaskManager();
+        mgr.dispatchScheduler.shutdownNow();
+        java.util.concurrent.atomic.AtomicInteger scheduleCount = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicLong lastPeriodMs = new java.util.concurrent.atomic.AtomicLong(-1);
+        java.util.concurrent.atomic.AtomicLong lastInitialDelayMs = new java.util.concurrent.atomic.AtomicLong(-1);
+        mgr.dispatchScheduler = new java.util.concurrent.ScheduledThreadPoolExecutor(1) {
+            @Override
+            public java.util.concurrent.ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay,
+                                                                              long period, TimeUnit unit) {
+                scheduleCount.incrementAndGet();
+                lastInitialDelayMs.set(unit.toMillis(initialDelay));
+                lastPeriodMs.set(unit.toMillis(period));
+                return super.scheduleAtFixedRate(() -> {
+                }, 1, 1, TimeUnit.HOURS);
+            }
+        };
+        java.util.concurrent.ScheduledThreadPoolExecutor dummy =
+                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+        java.util.concurrent.ScheduledFuture<?> oldFuture =
+                dummy.scheduleAtFixedRate(() -> {
+                }, 1, 1, TimeUnit.HOURS);
+        mgr.dispatchFuture = oldFuture;
+        mgr.scheduledDispatchIntervalMs = 1000;
+        try {
+            Config.task_runs_dispatch_interval_ms = 1000;
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertEquals(0, scheduleCount.get(), "unchanged interval must keep the existing future");
+            Assertions.assertFalse(oldFuture.isCancelled());
+
+            Config.task_runs_dispatch_interval_ms = 2500;
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertTrue(oldFuture.isCancelled(), "old scheduleAtFixedRate must be cancelled");
+            Assertions.assertEquals(1, scheduleCount.get());
+            Assertions.assertEquals(2500L, lastPeriodMs.get());
+            Assertions.assertEquals(2500L, lastInitialDelayMs.get());
+            Assertions.assertEquals(2500, mgr.scheduledDispatchIntervalMs);
+            Assertions.assertNotSame(oldFuture, mgr.dispatchFuture);
+
+            java.util.concurrent.ScheduledFuture<?> longerFuture = mgr.dispatchFuture;
+            Config.task_runs_dispatch_interval_ms = 500;
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertTrue(longerFuture.isCancelled(),
+                    "decreasing the interval must cancel the longer-period future");
+            Assertions.assertEquals(2, scheduleCount.get());
+            Assertions.assertEquals(500L, lastPeriodMs.get());
+            Assertions.assertEquals(500L, lastInitialDelayMs.get(),
+                    "the next run waits the new interval; a decrease does not wake the current period");
+            Assertions.assertEquals(500, mgr.scheduledDispatchIntervalMs);
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+            mgr.dispatchScheduler.shutdownNow();
+            dummy.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testRescheduleDispatchDoesNotStartSecondFutureBeforeHandleIsPublished() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        TaskManager mgr = new TaskManager();
+        mgr.dispatchScheduler.shutdownNow();
+        java.util.concurrent.atomic.AtomicInteger scheduleCount = new java.util.concurrent.atomic.AtomicInteger();
+        mgr.dispatchScheduler = new java.util.concurrent.ScheduledThreadPoolExecutor(1) {
+            @Override
+            public java.util.concurrent.ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay,
+                                                                              long period, TimeUnit unit) {
+                scheduleCount.incrementAndGet();
+                return super.scheduleAtFixedRate(() -> {
+                }, 1, 1, TimeUnit.HOURS);
+            }
+        };
+        mgr.dispatchFuture = null;
+        mgr.scheduledDispatchIntervalMs = 1000;
+        try {
+            Config.task_runs_dispatch_interval_ms = 2500;
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertEquals(0, scheduleCount.get(),
+                    "must not start a second scheduleAtFixedRate before the first future is published");
+            Assertions.assertNull(mgr.dispatchFuture);
+            Assertions.assertEquals(1000, mgr.scheduledDispatchIntervalMs);
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+            mgr.dispatchScheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testRescheduleDispatchIsNoOpAfterShutdown() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        TaskManager mgr = new TaskManager();
+        mgr.scheduledDispatchIntervalMs = 1000;
+        try {
+            Config.task_runs_dispatch_interval_ms = 2000;
+            mgr.dispatchScheduler.shutdownNow();
+            Assertions.assertDoesNotThrow(mgr::rescheduleDispatchIfIntervalChanged);
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+        }
     }
 }

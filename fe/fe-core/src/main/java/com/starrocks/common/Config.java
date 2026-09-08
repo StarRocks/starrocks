@@ -662,6 +662,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
     public static int task_min_schedule_interval_s = 10;
 
+    @ConfField(mutable = true, comment = "Interval of TaskManager TaskRun dispatch scheduler in milliseconds")
+    public static int task_runs_dispatch_interval_ms = 1000;
+
     @ConfField(mutable = true, comment = "Interval of TableKeeper daemon")
     public static int table_keeper_interval_second = 30;
 

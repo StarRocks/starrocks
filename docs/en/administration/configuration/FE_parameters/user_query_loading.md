@@ -1006,6 +1006,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Minimum allowed schedule interval (in seconds) for task schedules checked by the SQL layer. When a task is submitted, TaskAnalyzer converts the schedule period to seconds and rejects the submission with `ERR_INVALID_PARAMETER` if the period is smaller than `task_min_schedule_interval_s`. This prevents creating tasks that run too frequently and protects the scheduler from high-frequency tasks. If a schedule has no explicit start time, TaskAnalyzer sets the start time to the current epoch seconds.
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
+### `task_runs_dispatch_interval_ms`
+
+- Default: 1000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Interval at which the Leader FE checks whether running TaskRuns have finished and starts pending TaskRuns. You can change this item with `ADMIN SET FRONTEND CONFIG` without restarting the FE. The new interval takes effect after the current dispatch cycle finishes. A smaller value starts pending TaskRuns sooner and updates completion status faster, at higher FE CPU cost; a larger value reduces overhead but delays starting pending TaskRuns. Negative values are treated as `1000`. `0` is treated as `1`.
+- Introduced in: -
+
 ### `task_runs_timeout_second`
 
 - Default: 4 * 3600

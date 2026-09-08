@@ -109,6 +109,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 | task_check_interval_second   | 3600              | 無効な Task を削除する時間間隔です。単位: 秒。    |
 | task_runs_ttl_second         | 86400             | TaskRun が有効である期間です。単位: 秒。有効期間を超えた TaskRun は自動的に削除されます。さらに、`FAILED` および `SUCCESS` 状態の TaskRun も自動的に削除されます。`TaskRun` は定期タスクの個々の実行を示します。  |
 | task_runs_concurrency        | 4                 | 並行して実行できる TaskRun の最大数です。  |
+| task_runs_dispatch_interval_ms | 1000          | Leader FE が実行中の TaskRun を確認し、pending の TaskRun をディスパッチする間隔です。単位: ミリ秒。FE を再起動せずに変更できます。新しい間隔は現在のディスパッチ周期が終わった後に有効になります。 |
 | task_runs_queue_length       | 500               | 実行待ちの TaskRun の最大数です。デフォルト値を超えると、受信タスクは一時停止されます。 |
 | task_runs_max_history_number | 10000             | 保持する TaskRun レコードの最大数です。 |
 | task_min_schedule_interval_s | 10                | Task 実行の最小間隔です。単位: 秒。 |
