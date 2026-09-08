@@ -525,6 +525,15 @@ This topic introduces the following types of FE configurations:
 - Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
 - Introduced in: v3.2.0
 
+### `lake_local_first_write_max_nodes`
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of compute nodes that may write **one tablet** in parallel once local-first tablet write (`enable_local_first_tablet_write`) is on. Every node in that list opens its own delta writer for the tablet and produces its own segments, so on a very wide warehouse an otherwise ordinary load would be cut into that many small segments. Nodes beyond this bound still run their own sink instance; their rows simply travel over the network to a node inside the list, which is the behaviour that existed before this feature. The bound therefore costs locality but never correctness. Set it to `0` or less for no bound (every alive compute node).
+- Introduced in: v4.2
+
 ### `lake_publish_version_max_threads`
 
 - Default: 512

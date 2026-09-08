@@ -342,10 +342,14 @@ public class OlapTableSink extends DataSink {
         if (context == null || !context.getSessionVariable().isEnableLocalFirstTabletWrite()) {
             return NO_SHARD_WRITE;
         }
-        // Every alive compute node. A sink instance can only keep its rows on its own machine if that
-        // machine is in the tablet's node list, so any node left out would silently push its share
-        // back over the network; createLocation clamps this to the number of alive nodes.
-        return Integer.MAX_VALUE;
+        // Every alive compute node, bounded by lake_local_first_write_max_nodes. A sink instance can only
+        // keep its rows on its own machine if that machine is in the tablet's node list, so each node left
+        // out silently pushes its share back over the network -- which is exactly the behaviour before this
+        // feature, so the bound costs locality but never correctness. The bound exists because every node in
+        // the list writes its own segments: on a very wide warehouse an otherwise ordinary load would be cut
+        // into that many small segments. createLocation clamps the result to the number of alive nodes.
+        int bound = Config.lake_local_first_write_max_nodes;
+        return bound > 0 ? bound : Integer.MAX_VALUE;
     }
 
     // Mirror of DeltaWriterImpl::init_write_schema: BE counts the sink's slots, drops a trailing `__op`,

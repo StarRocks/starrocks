@@ -41,6 +41,19 @@ public class OlapTableSinkShardWriteTest {
     }
 
     @Test
+    public void testBoundedBelowAliveNodes() {
+        // lake_local_first_write_max_nodes reaches here as the bound. Every node in the list writes its
+        // own segments, so a wide warehouse would otherwise cut one load into that many small segments.
+        // The nodes left out still run their sink instance -- their rows just travel, as they did before
+        // the feature existed -- so the bound may cost locality but must never drop or duplicate a node.
+        List<Long> nodeIds = OlapTableSink.buildShardWriteNodeIds(12L, NODES, 2, 100L);
+        Assertions.assertEquals(2, nodeIds.size());
+        Assertions.assertEquals(2, nodeIds.stream().distinct().count());
+        Assertions.assertEquals(12L, nodeIds.get(0));
+        Assertions.assertTrue(NODES.containsAll(nodeIds));
+    }
+
+    @Test
     public void testClampedToAliveNodes() {
         // "every alive node" reaches createLocation as Integer.MAX_VALUE; the list must clamp rather
         // than repeat a node, which would make one node write the tablet twice.
