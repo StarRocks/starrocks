@@ -2910,6 +2910,76 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     /**
+     * The sibling test above starts from a job with no diagnostic, so it can only show that this branch
+     * publishes none. This one gives the partition a diagnostic FIRST and then drives it into the same
+     * branch, which is the case an operator actually hits: a partition that was retrying stops retrying
+     * because its rewrite committed, and the "retrying" message must not outlive that decision for the
+     * length of the publication wait.
+     */
+    @Test
+    public void testARetryTurningIntoAPublicationWaitRetractsItsDiagnostic() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        List<String> loggedMsgs = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+                loggedMsgs.add(alterJob.errMsg);
+            }
+        };
+
+        AtomicLong committedTxnId = new AtomicLong(-1);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                if (transactionId != committedTxnId.get()) {
+                    return null;
+                }
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+        };
+
+        // Attempt 1 begins no transaction, so it is retryable and publishes the diagnostic. Attempt 2
+        // errors as well, but its transaction reached COMMITTED, so the partition is waiting to publish
+        // rather than retrying - and the message attempt 1 left behind has to be retracted.
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            if (attempts.incrementAndGet() == 2) {
+                long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionIDGenerator().getNextTransactionId();
+                committedTxnId.set(txnId);
+                insertStmt.setTxnId(txnId);
+            }
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+        List<List<Comparable>> afterRetry = new ArrayList<>();
+        job.getInfo(afterRetry);
+        String msgAfterRetry = String.valueOf(afterRetry.get(0).get(10));
+        Assertions.assertTrue(msgAfterRetry.contains("retrying")
+                        && msgAfterRetry.contains(String.valueOf(physicalPartitionId)),
+                "attempt 1 must leave THIS partition's retry diagnostic for attempt 2 to retract, saw: "
+                        + msgAfterRetry);
+
+        loggedMsgs.clear();
+        job.runRunningJob();
+
+        Assertions.assertEquals(2, attempts.get(), "the retryable failure must be re-attempted");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        List<List<Comparable>> afterWait = new ArrayList<>();
+        job.getInfo(afterWait);
+        Assertions.assertEquals("", String.valueOf(afterWait.get(0).get(10)),
+                "a partition waiting to publish must not still advertise a retry in Msg");
+        Assertions.assertTrue(loggedMsgs.stream().anyMatch(""::equals),
+                "the retraction must be journaled too, or a failover restores the stale retry message, "
+                        + "saw: " + loggedMsgs);
+    }
+
+    /**
      * The retry diagnostic must be cleared once the partition's rewrite is observed published - and that
      * must not depend on the transient failure map, which is empty after a leader failover replays the
      * job. Simulated here by clearing the map (as replay leaves it) before the partition reaches DONE.

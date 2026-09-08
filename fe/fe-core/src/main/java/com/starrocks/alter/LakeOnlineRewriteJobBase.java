@@ -1172,7 +1172,13 @@ public abstract class LakeOnlineRewriteJobBase
                     // Not retryable: the rewrite committed and is waiting to publish, or its transaction
                     // could not be aborted. Either way the next tick sees IN_FLIGHT and will not retry, so
                     // do not claim a retry, and do not let the wait count against this partition's budget.
+                    // Retract a diagnostic an EARLIER failure published, too: not doing so would keep
+                    // telling SHOW ALTER TABLE COLUMN that this partition is retrying for the whole
+                    // publication or transaction-timeout wait, which is what this branch just decided is
+                    // not happening. One journal write at most, because the IN_FLIGHT arm above does not
+                    // re-enter runPartitionRewrite, so this branch is reached once per episode.
                     consecutiveRewriteFailures.remove(plan.physicalPartitionId);
+                    clearRetryDiagnostic(plan.physicalPartitionId);
                     LOG.warn("online rewrite job {}: rewrite INSERT reported an error for partition {}, but "
                                     + "its transaction is not in a retryable state; waiting instead: {}",
                             jobId, plan.physicalPartitionId, error);
