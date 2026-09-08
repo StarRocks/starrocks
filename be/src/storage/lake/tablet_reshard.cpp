@@ -94,12 +94,13 @@ static StatusOr<TabletMetadataPtr> get_old_tablet_base_metadata(TabletManager* t
 }
 
 TabletMetadataPtr lookup_exact_cached_metadata(TabletManager* tablet_manager, int64_t tablet_id, int64_t version,
-                                                int64_t gtid) {
+                                               int64_t gtid) {
     if (gtid <= 0) return nullptr;
     auto metadata = tablet_manager->metacache()->lookup_tablet_metadata(
             tablet_manager->tablet_metadata_location(tablet_id, version));
     if (metadata != nullptr && metadata->id() == tablet_id && metadata->version() == version &&
-        metadata->gtid() == gtid) return metadata;
+        metadata->gtid() == gtid)
+        return metadata;
     return nullptr;
 }
 
@@ -127,8 +128,9 @@ Status handle_splitting_tablet(TabletManager* tablet_manager, const SplittingTab
                     cached_metadatas.at(splitting_tablet.new_tablet_ids(0))->range().SerializeAsString()) {
             complete = true;
             for (int i = 1; i < splitting_tablet.new_tablet_ids_size(); ++i) {
-                complete &= tablet_manager->metacache()->lookup_tablet_metadata(tablet_manager->tablet_metadata_location(
-                                    splitting_tablet.new_tablet_ids(i), new_version)) == nullptr;
+                complete &=
+                        tablet_manager->metacache()->lookup_tablet_metadata(tablet_manager->tablet_metadata_location(
+                                splitting_tablet.new_tablet_ids(i), new_version)) == nullptr;
             }
         }
         if (complete) {
@@ -216,7 +218,8 @@ Status handle_merging_tablet(TabletManager* tablet_manager, const MergingTabletI
         if (target == nullptr) goto CONTINUE_HANDLE_MERGING_TABLET;
         cached_metadatas.emplace(merging_tablet.new_tablet_id(), std::move(target));
         new_metadatas.swap(cached_metadatas);
-        tablet_ranges.emplace(merging_tablet.new_tablet_id(), new_metadatas.at(merging_tablet.new_tablet_id())->range());
+        tablet_ranges.emplace(merging_tablet.new_tablet_id(),
+                              new_metadatas.at(merging_tablet.new_tablet_id())->range());
         return Status::OK();
     }
 
