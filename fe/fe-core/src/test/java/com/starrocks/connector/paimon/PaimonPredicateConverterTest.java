@@ -455,4 +455,21 @@ public class PaimonPredicateConverterTest {
         Predicate convert2 = CONVERTER.convert(op52);
         Assertions.assertTrue(convert2 == null);
     }
+
+    @Test
+    public void testLikePrefixPushdownRejectsWildcardsAndEscapes() {
+        // 'a_c%' also matches abc1 and axc2, so pushing startsWith("a_c") prunes the data files whose
+        // statistics only hold those two and the rows in them go missing
+        Assertions.assertNull(CONVERTER.convert(new LikePredicateOperator(
+                        LikePredicateOperator.LikeType.LIKE, F1, ConstantOperator.createVarchar("a_c%"))),
+                "A single-character wildcard has no prefix form");
+
+        // '\' escapes the character behind it, so the prefix as written is not what the pattern matches
+        Assertions.assertNull(CONVERTER.convert(new LikePredicateOperator(
+                        LikePredicateOperator.LikeType.LIKE, F1, ConstantOperator.createVarchar("a\\_c%"))),
+                "An escaped underscore is a literal underscore, not the two characters as written");
+        Assertions.assertNull(CONVERTER.convert(new LikePredicateOperator(
+                        LikePredicateOperator.LikeType.LIKE, F1, ConstantOperator.createVarchar("abc\\%"))),
+                "An escaped trailing percent sign is a literal, not a wildcard");
+    }
 }

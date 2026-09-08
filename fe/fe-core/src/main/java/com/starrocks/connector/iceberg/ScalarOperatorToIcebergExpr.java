@@ -336,7 +336,12 @@ public class ScalarOperatorToIcebergExpr {
                     if (literal == null) {
                         return null;
                     }
-                    if (literal.indexOf("%") == literal.length() - 1) {
+                    // startsWith compares the prefix against the file bounds as a plain string, so a pattern
+                    // still holding SQL wildcards prunes data files that do hold matching rows: '_' matches
+                    // any single character, and '\' escapes the character behind it, including a trailing
+                    // '%' that is then not a wildcard at all. FlussPredicateConverter rejects the same two.
+                    if (literal.indexOf("%") == literal.length() - 1
+                            && literal.indexOf('_') < 0 && literal.indexOf('\\') < 0) {
                         return startsWith(columnName, literal.substring(0, literal.length() - 1));
                     }
                 }

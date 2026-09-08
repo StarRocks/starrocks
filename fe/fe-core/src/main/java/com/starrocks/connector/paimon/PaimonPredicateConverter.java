@@ -220,7 +220,12 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
                     return null;
                 }
                 String literal = ((BinaryString) objectLiteral).toString();
-                if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1 && literal.charAt(0) != '%') {
+                // startsWith compares the prefix against the file statistics as a plain string, so a pattern
+                // still holding SQL wildcards prunes data files that do hold matching rows: '_' matches any
+                // single character, and '\' escapes the character behind it, including a trailing '%' that is
+                // then not a wildcard at all. FlussPredicateConverter rejects the same two.
+                if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1 && literal.charAt(0) != '%'
+                        && literal.indexOf('_') < 0 && literal.indexOf('\\') < 0) {
                     return builder.startsWith(idx, BinaryString.fromString(literal.substring(0, literal.length() - 1)));
                 }
             }

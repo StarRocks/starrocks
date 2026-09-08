@@ -1,0 +1,81 @@
+-- name: test_iceberg_like_predicate_pushdown
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}", "enable_iceberg_metadata_cache"="false");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_like_pushdown_${uuid0}/iceberg_db/${uuid0}"
+);
+-- result:
+-- !result
+function: retry_execute_sql("create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (id int, s string)", False, 5, 1000)
+-- result:
+{'status': True, 'result': '', 'msg': b''}
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (1, 'abc1');
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (2, 'axc2');
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (3, 'a_c3');
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (4, 'zzz4');
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (5, 'star%');
+-- result:
+-- !result
+refresh external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0};
+-- result:
+-- !result
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where s like 'a_c%' order by id;
+-- result:
+1	abc1
+2	axc2
+3	a_c3
+-- !result
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where concat(s, '') like 'a_c%' order by id;
+-- result:
+1	abc1
+2	axc2
+3	a_c3
+-- !result
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where s like 'a\\_c%' order by id;
+-- result:
+3	a_c3
+-- !result
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where concat(s, '') like 'a\\_c%' order by id;
+-- result:
+3	a_c3
+-- !result
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where s like 'star\\%' order by id;
+-- result:
+5	star%
+-- !result
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where concat(s, '') like 'star\\%' order by id;
+-- result:
+5	star%
+-- !result
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where s like 'ab%' order by id;
+-- result:
+1	abc1
+-- !result
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where concat(s, '') like 'ab%' order by id;
+-- result:
+1	abc1
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_like_pushdown_${uuid0}/iceberg_db/${uuid0} > /dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
