@@ -286,10 +286,11 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
                                    .fill_metadata_cache = reuse_via_shared_cache,
                                    .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
-        // Only a rowset that actually holds pins its set for the task; one that cannot (segment-range
-        // mode) had its holding downgraded inside segments() and stays on the evictable shared cache,
-        // so it must not be charged against the read-buffer budget below.
-        const bool rowset_holds = _hold_input_segments && rowset->can_hold_segments();
+        // Ask the rowset what it actually pins rather than re-measuring the vector: a rowset that
+        // could not hold (segment-range / partial compaction) or that has given holding up reports
+        // zero, and one whose held set is still pinned by the get_segments_checked() memo after a
+        // fallback keeps reporting it -- which is exactly what the read buffers must be sized around.
+        held_segments_bytes += rowset->held_segments_bytes();
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
             // experimental_lake_ignore_lost_segment). This chunk-size estimate is position-agnostic, so
@@ -298,9 +299,6 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
                 LOG(WARNING) << "horizontal compaction chunk-size estimation skips a null (lost) segment, tablet: "
                              << _tablet.id() << ", rowset: " << rowset->id();
                 continue;
-            }
-            if (rowset_holds) {
-                held_segments_bytes += static_cast<int64_t>(segment->mem_usage());
             }
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 auto uid = _tablet_schema->column(i).unique_id();

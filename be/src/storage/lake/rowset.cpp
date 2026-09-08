@@ -36,7 +36,6 @@
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/metacache.h"
 #include "storage/lake/segment_metadata_filter.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -314,7 +313,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     // can_hold_segments() rules out the modes whose segment vector is not a full metadata-ordered
     // set, and segments() only holds a set it could put in metadata order.
     if (options.lake_io_opts.hold_segments) {
-        if (can_hold_segments()) {
+        if (can_hold_segments() && !hold_disabled()) {
             ASSIGN_OR_RETURN(auto held, segments(options.lake_io_opts));
             if (held.size() == static_cast<size_t>(num_segments())) {
                 return do_read(schema, options, ReadContext{.prepared_segments = &held});
@@ -880,32 +879,40 @@ void Rowset::release_held_segments() {
     int64_t released_bytes = 0;
     {
         std::lock_guard<std::mutex> l(_held_segments_mutex);
+        // Sticky, and set even when there is nothing to release: the Rowset is shared by every
+        // range-split subtask, so this is what stops a sibling from re-electing itself and pinning
+        // the set again right after this task decided it does not fit.
+        _hold_disabled = true;
         released.swap(_held_segments);
         released_delvecs.swap(_held_delvecs);
-        released_bytes = _held_segments_bytes;
-        _held_segments_bytes = 0;
         // Deliberately NOT clearing the get_segments_checked() memo: TabletReader::
         // init_compaction_column_paths keeps raw ColumnReader pointers into those segments while the
         // shared_ptr vector it read them from is already gone, so the memo is what keeps them alive
         // -- and a range-split sibling subtask may be in exactly that window when this runs. In the
         // normal order the memo is empty here anyway: the chunk-size phase (which calls this) runs
         // before the reader is opened.
-    }
-    // Hand them to the shared metadata cache on the way out rather than dropping them: the task is
-    // switching to cache-backed reuse, and its next read would otherwise re-read and re-parse every
-    // footer this task just parsed -- leaving the fallback worse than the pre-hold behaviour it
-    // restores. Under the LRU they are evictable again, which is the whole point of giving up the
-    // hold. cache_segment_if_absent keeps whatever is already cached under the same key.
-    // Outside the lock: the metacache takes its own, and dropping the last reference to a wide
-    // input set is not cheap while segments() waits on this (non-recursive) mutex.
-    if (auto* metacache = _tablet_mgr != nullptr ? _tablet_mgr->metacache() : nullptr; metacache != nullptr) {
-        for (const auto& seg : released) {
-            if (seg != nullptr) {
-                (void)metacache->cache_segment_if_absent(seg->file_info().cache_key(), seg);
-            }
+        //
+        // But when the memo DOES hold the same set (flat-JSON tables open the reader in pass 0, and
+        // enable_compaction_flat_json is on by default) this releases nothing, so the charge must
+        // stay: zeroing it here would report a gauge of 0 for memory pinned until the Rowset dies,
+        // and would let every later pass size its read chunks from the full budget. ~Rowset() settles
+        // it instead.
+        if (_segments.empty()) {
+            released_bytes = _held_segments_bytes;
+            _held_segments_bytes = 0;
         }
     }
-    StorageMetrics::instance()->lake_compaction_held_segment_bytes.increment(-released_bytes);
+    // Dropped, not donated to the shared metadata cache. Handing the whole input set over in one
+    // burst is worse than the pre-hold behaviour this restores: on the shape that makes a task fall
+    // back (an input set large against the budget, typically alongside a small
+    // lake_metadata_cache_limit) it evicts every co-resident tablet's entries and then self-evicts,
+    // so the read pass re-parses the footers anyway. The read pass now runs with
+    // fill_metadata_cache = true and repopulates the cache one segment at a time as it loads them,
+    // which is exactly what happened before hold_segments existed.
+    released.clear();
+    if (released_bytes != 0) {
+        StorageMetrics::instance()->lake_compaction_held_segment_bytes.increment(-released_bytes);
+    }
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
@@ -921,18 +928,34 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     // do whenever hold_segments is set -- would leave those reads with neither a held set nor a
     // cache, reloading and reparsing every segment on every column-group pass. Keep the pre-hold
     // behavior for them.
-    if (effective_opts.hold_segments && !can_hold_segments()) {
+    if (effective_opts.hold_segments && (!can_hold_segments() || hold_disabled())) {
         effective_opts.hold_segments = false;
         effective_opts.fill_metadata_cache = true;
     }
+    // Cleared by the guard below on every exit, unwind included; see the election.
+    bool elected_loader = false;
+    DeferOp end_election([&]() {
+        if (!elected_loader) {
+            return;
+        }
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        _held_segments_loading = false;
+        _held_segments_cv.notify_all();
+    });
     if (effective_opts.hold_segments) {
         // Single-flight election: range-split parallel compaction shares this Rowset across
         // concurrent subtasks, and the load below runs outside the lock to keep remote IO off it.
         // Without election, subtasks that miss together each load and parse the complete input set
         // -- full remote IO plus a private copy per loser, with cache filling off -- so peak memory
         // and CPU scale with the subtask count. One caller loads; the rest wait on the condition
-        // variable. Every non-publishing exit below clears the flag before notifying, so a waiter
-        // takes over and retry-after-failure survives.
+        // variable.
+        //
+        // The election is released by `end_election`, not by hand at each exit: load_segments() can
+        // throw (the allocator hook returns nullptr on a mem-tracker overrun, so operator new throws
+        // std::bad_alloc -- hence TRY_CATCH_BAD_ALLOC across the codebase), and neither the
+        // compaction task nor the scheduler catches it. A hand-written clear would be skipped by the
+        // unwind, leaving the flag set with nobody to notify, and every sibling subtask blocked on
+        // the condition variable for good.
         std::unique_lock<std::mutex> lk(_held_segments_mutex);
         while (true) {
             if (!_held_segments.empty()) {
@@ -940,6 +963,7 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
             }
             if (!_held_segments_loading) {
                 _held_segments_loading = true;
+                elected_loader = true;
                 break;
             }
             _held_segments_cv.wait(lk);
@@ -958,15 +982,7 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     // segments with that tracker installed, so its consumption would drift up for good. The task
     // tracker balances instead: ~MemTracker hands its residual back to its ancestors
     // (release_without_root), and the eventual free removes the same bytes from the root.
-    auto load_status = load_segments(&loaded, seg_options, nullptr);
-    if (!load_status.ok()) {
-        if (effective_opts.hold_segments) {
-            std::lock_guard<std::mutex> l(_held_segments_mutex);
-            _held_segments_loading = false;
-            _held_segments_cv.notify_all();
-        }
-        return load_status;
-    }
+    RETURN_IF_ERROR(load_segments(&loaded, seg_options, nullptr));
     std::vector<SegmentPtr> segments;
     segments.reserve(loaded.size());
     for (auto& ls : loaded) {
@@ -989,9 +1005,6 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
         if (pos < 0 || static_cast<size_t>(pos) >= ordered.size()) {
             LOG(WARNING) << "loaded segments are not a full metadata-ordered set, not holding them. tablet: "
                          << _tablet_id << ", rowset: " << metadata().id();
-            std::lock_guard<std::mutex> l(_held_segments_mutex);
-            _held_segments_loading = false;
-            _held_segments_cv.notify_all();
             return segments;
         }
         ordered[pos] = segments[i];
@@ -1009,8 +1022,6 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     std::lock_guard<std::mutex> l(_held_segments_mutex);
     _held_segments = std::move(ordered);
     _held_segments_bytes = held_bytes;
-    _held_segments_loading = false;
-    _held_segments_cv.notify_all();
     // Pinned by a running task and invisible to the metadata cache's LRU, so it needs its own gauge
     // for an operator to see this memory class at all. Inside the critical section on purpose: it is
     // one atomic add, and publishing and returning must stay indivisible -- a range-split sibling

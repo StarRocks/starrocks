@@ -20,6 +20,7 @@
 #include <set>
 #include <tuple>
 
+#include "base/utility/defer_op.h"
 #include "common/statusor.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
@@ -52,6 +53,7 @@ public:
                        const std::function<Status(DelVectorPtr*)>& load) {
         const auto key = std::make_tuple(tsid.tablet_id, tsid.segment_id, version);
         std::unique_lock<std::mutex> lk(_mutex);
+        bool claimed = false;
         while (true) {
             auto it = _delvecs.find(key);
             if (it != _delvecs.end()) {
@@ -59,21 +61,30 @@ public:
                 return Status::OK();
             }
             if (_loading.insert(key).second) {
+                claimed = true;
                 break;
             }
             _cv.wait(lk);
         }
         lk.unlock();
+        // Released on every exit, unwind included: |load| reads a remote file and deserializes a
+        // roaring bitmap, so it can throw std::bad_alloc when the mem-tracker hook makes the
+        // allocator return nullptr, and nothing on the compaction path catches that. Clearing the
+        // in-flight mark by hand would be skipped by the unwind, and every later caller asking for
+        // the same (segment, version) would wait on the condition variable for good.
+        DeferOp unclaim([&]() {
+            if (!claimed) {
+                return;
+            }
+            std::lock_guard<std::mutex> l(_mutex);
+            _loading.erase(key);
+            _cv.notify_all();
+        });
         DelVectorPtr loaded;
-        auto st = load(&loaded);
-        lk.lock();
-        _loading.erase(key);
-        if (st.ok()) {
+        RETURN_IF_ERROR(load(&loaded));
+        {
+            std::lock_guard<std::mutex> l(_mutex);
             _delvecs.emplace(key, loaded);
-        }
-        _cv.notify_all();
-        if (!st.ok()) {
-            return st;
         }
         *pdelvec = std::move(loaded);
         return Status::OK();

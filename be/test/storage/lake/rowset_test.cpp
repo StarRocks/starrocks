@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <new>
 #include <optional>
 #include <thread>
 #include <unordered_set>
@@ -362,6 +363,42 @@ TEST_F(LakeRowsetTest, test_held_segment_bytes_metric_balances) {
         EXPECT_GT(gauge->value(), before);
     }
     EXPECT_EQ(before, gauge->value());
+}
+
+// The single-flight election must survive an exception unwinding out of the load: the allocator
+// hook returns nullptr on a mem-tracker overrun, so operator new throws std::bad_alloc, and nothing
+// on the compaction path catches it. A hand-written flag clear would be skipped by the unwind,
+// leaving the election claimed with nobody to notify and every sibling subtask blocked forever.
+// Here the throw is injected at the load sync point; without the guard the second call below would
+// hang instead of loading.
+TEST_F(LakeRowsetTest, test_hold_segments_election_released_on_exception) {
+    create_rowsets_for_testing();
+    _tablet_mgr->metacache()->prune();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    bool should_throw = true;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::segments::load_for_hold", [&](void*) {
+        if (should_throw) {
+            throw std::bad_alloc();
+        }
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::segments::load_for_hold");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    EXPECT_THROW((void)rowset->segments(lake_io_opts), std::bad_alloc);
+    // The election was given back, so the next caller can take it rather than waiting on a flag no
+    // one will ever clear.
+    EXPECT_FALSE(rowset->_held_segments_loading);
+
+    should_throw = false;
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(lake_io_opts));
+    EXPECT_EQ(3, segments.size());
 }
 
 // Range-split parallel compaction shares one Rowset across concurrent subtasks; the held-segment
@@ -718,10 +755,6 @@ TEST_F(LakeRowsetTest, test_chunk_size_falls_back_when_held_segments_do_not_fit)
     task._hold_input_segments = false;
     ASSIGN_OR_ABORT(auto chunk_no_hold, task.calculate_chunk_size_for_column_group({0}));
 
-    // Empty the cache the non-holding leg just filled, so the handoff assertion below can only be
-    // satisfied by the fallback itself.
-    _tablet_mgr->metacache()->prune();
-
     task._hold_input_segments = true;
     ASSIGN_OR_ABORT(auto chunk_hold, task.calculate_chunk_size_for_column_group({0}));
 
@@ -730,11 +763,21 @@ TEST_F(LakeRowsetTest, test_chunk_size_falls_back_when_held_segments_do_not_fit)
     EXPECT_FALSE(task._hold_input_segments);
     EXPECT_TRUE(rs->_held_segments.empty());
     EXPECT_TRUE(rs->_held_delvecs == nullptr);
-    // The released set was handed to the shared cache rather than dropped: the read pass must not
-    // have to re-parse the footers this task just parsed.
-    for (const auto& seg_meta : _tablet_metadata->rowsets(0).segment_metas()) {
-        EXPECT_TRUE(_tablet_mgr->metacache()->lookup_segment(
-                            _tablet_mgr->segment_location(_tablet_metadata->id(), seg_meta.filename())) != nullptr);
+    EXPECT_EQ(0, rs->held_segments_bytes());
+
+    // The decision is sticky and lives on the shared Rowset, not on the task: a range-split sibling
+    // whose own flag is still set must not re-elect itself and pin the set again. It gets a plain
+    // cache-backed load instead.
+    _tablet_mgr->metacache()->prune();
+    LakeIOOptions sibling_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    ASSIGN_OR_ABORT(auto sibling_segments, rs->segments(sibling_opts));
+    EXPECT_EQ(3, sibling_segments.size());
+    EXPECT_TRUE(rs->_held_segments.empty());
+    EXPECT_EQ(0, rs->held_segments_bytes());
+    // ... and the downgrade turned the metadata cache back on for it, so the reuse mechanism the
+    // fallback restores is actually in place.
+    for (const auto& seg : sibling_segments) {
+        EXPECT_TRUE(_tablet_mgr->metacache()->lookup_segment(seg->file_name()) != nullptr);
     }
 }
 

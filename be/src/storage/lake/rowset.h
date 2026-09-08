@@ -252,6 +252,26 @@ public:
     // segments() keep their own references, so this is safe while a read is in flight.
     void release_held_segments();
 
+    // Whether holding has been given up for this rowset. Set by release_held_segments() and never
+    // cleared: the decision is taken per task but the Rowset is SHARED by every range-split subtask,
+    // so without it a sibling whose own _hold_input_segments is still set would re-elect itself,
+    // re-parse the whole input set and re-pin the memory the fallback just shed -- and would run with
+    // holding on while the one that fell back runs with cache filling on, breaking the "exactly one
+    // reuse mechanism" invariant both compaction tasks rely on.
+    // Bytes this rowset currently pins through the held set, as measured when it was published.
+    // Stays non-zero after release_held_segments() when the get_segments_checked() memo still holds
+    // the same segments, because they are then still resident -- which is what the chunk sizing must
+    // be charged for.
+    int64_t held_segments_bytes() const {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        return _held_segments_bytes;
+    }
+
+    bool hold_disabled() const {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        return _hold_disabled;
+    }
+
     // Get segment range [start, end), only valid when is_segment_range_mode() returns true
     [[nodiscard]] int32_t segment_range_start() const { return _segment_range_start; }
     [[nodiscard]] int32_t segment_range_end() const { return _segment_range_end; }
@@ -361,6 +381,9 @@ private:
     // notifying so a waiter takes over and retry semantics survive.
     bool _held_segments_loading = false;
     std::condition_variable _held_segments_cv;
+    // Sticky: once a task gives up holding for this rowset, no caller may start holding it again.
+    // See hold_disabled().
+    bool _hold_disabled = false;
     // Delvec store shared by every pass's delvec loader, same lifetime and guard rules as
     // _held_segments; created lazily on the primary-key compaction read path.
     // mutable: lazily created inside const init_segment_read_options.
