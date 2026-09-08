@@ -1634,7 +1634,9 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
             }
             return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
         }
-        auto delete_weights = row_weights;
+        tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
+        tablet_reshard_helper::allocate_proportionally(anchor.data_size, byte_weights, &bytes);
+        auto delete_weights = std::move(row_weights);
         if (anchor.num_dels > 0 && std::none_of(delete_weights.begin(), delete_weights.end(), positive)) {
             // Row counts are estimates but deletes are exact. Integer geometry can assign every
             // physical row to clipped sink ranges while this rowset is emitted only to later
@@ -1642,8 +1644,6 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
             // the delete anchor is allocated to a child that will drop the rowset below.
             for (size_t c = 0; c < child_count; ++c) delete_weights[c] = emit[c] ? 1 : 0;
         }
-        tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
-        tablet_reshard_helper::allocate_proportionally(anchor.data_size, byte_weights, &bytes);
         tablet_reshard_helper::allocate_proportionally(anchor.num_dels, delete_weights, &dels);
         for (size_t c = 0; c < child_count; ++c) {
             if (emit[c]) (*split_ranges)[c].rowset_stats[rowset.id()] = {rows[c], bytes[c], dels[c]};
