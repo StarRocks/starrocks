@@ -138,6 +138,10 @@ public class PlannerMetaLocker implements AutoCloseable {
         return true;
     }
 
+    public boolean isEmpty() {
+        return tables.isEmpty();
+    }
+
     public void lock() {
         Locker locker = new Locker(queryId);
         List<Map.Entry<Long, Set<Long>>> lockedEntries = new ArrayList<>(tables.size());
