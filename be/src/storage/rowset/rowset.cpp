@@ -37,6 +37,15 @@
 #include <memory>
 #include <set>
 
+<<<<<<< HEAD
+=======
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
+>>>>>>> 076cce2 ([BugFix] Refresh rowset metadata cache charges after lazy loading (#77893))
 #include "fmt/format.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -240,6 +249,20 @@ void Rowset::warmup_lrucache() {
         MetadataCache::instance()->refresh_rowset(this);
     }
 #endif
+}
+
+void Rowset::_update_metadata_cache_charge(size_t charge) {
+    if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+#ifdef BE_TEST
+        TEST_SYNC_POINT_CALLBACK("Rowset::_update_metadata_cache_charge", &charge);
+        // Most unit tests do not create the global metadata cache. Tests that
+        // install one exercise the same charge update as production.
+        if (MetadataCache::instance() == nullptr) {
+            return;
+        }
+#endif
+        MetadataCache::instance()->update_rowset_charge(this, charge);
+    }
 }
 
 // this function is only used for partial update so far
@@ -700,6 +723,7 @@ void Rowset::do_close() {
 }
 
 size_t Rowset::segment_memory_usage() {
+    TEST_SYNC_POINT("Rowset::segment_memory_usage");
     size_t total = 0;
     for (const auto& segment : _segments) {
         total += segment->mem_usage();
