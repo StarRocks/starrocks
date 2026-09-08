@@ -1139,6 +1139,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Lake（共有データ）主キーテーブルの tablet 行数統計で正確な行数を使うかどうか。`true` の場合、各 rowset の delete vector をオブジェクトストレージから取得して削除行を差し引くため精度は上がりますが、`get_tablet_stats` RPC のオーバーヘッドが増える可能性があります。`false` の場合は rowset メタデータの近似 `num_dels` を使ってリモート I/O を回避しますが、未 compaction の削除行をわずかに過大計上する可能性があります。
 - 導入バージョン: -
 
+### lake_enable_segment_tail_index_region
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: segment の書き込み時に、各列の ordinal index を segment footer の直前の 1 つの連続領域に配置するかどうか（従来は各列の ordinal index をその列のデータページの直後に書き込みます）。ページ単位の zone map と short key index は影響を受けず、既存の位置を維持します。本設定は書き込み側のみを制御し、共有データクラスタでのみ有効です。共有ナッシングの BE は設定に関わらず従来のレイアウトで書き込みます。垂直 Compaction もこの領域を生成しますが、部分列更新の書き換えは生成しません。既存 segment の接頭部をコピーし残りの値列だけを追加するため、それらの segment は従来のレイアウトを維持します。どちらのレイアウトも任意のバージョンの BE / CN が双方向に読み取れ、同一テーブル内に混在できるため、データを書き換えずにいつでも有効化・無効化できます。
+- 導入バージョン: v4.2.0
+
 ### lake_tablet_stat_slow_log_ms
 
 - デフォルト: 300000

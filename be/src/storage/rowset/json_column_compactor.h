@@ -60,6 +60,9 @@ public:
     Status write_ordinal_index() override { return _json_writer->write_ordinal_index(); }
     Status write_zone_map() override { return _json_writer->write_zone_map(); }
     Status write_bitmap_index() override { return _json_writer->write_bitmap_index(); }
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _json_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _json_writer->write_bloom_filter_index(); }
     ordinal_t get_next_rowid() const override { return _json_writer->get_next_rowid(); }
     uint64_t total_mem_footprint() const override { return _json_writer->total_mem_footprint(); }

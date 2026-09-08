@@ -1309,6 +1309,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to use accurate row counts for lake primary-key tablets. When enabled, StarRocks reads each rowset's delete vector from object storage and subtracts deleted rows, producing more accurate stats but potentially increasing `get_tablet_stats` RPC overhead. When disabled, StarRocks uses the approximate `num_dels` value in rowset metadata to avoid remote I/O, which may slightly overcount rows that were deleted but not yet compacted.
 - Introduced in: -
 
+### lake_enable_segment_tail_index_region
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the segment writer places the ordinal index of every column in one contiguous region immediately before the segment footer, instead of writing each column's ordinal index directly after that column's own data pages. Page zone maps and the short key index are not affected and keep their existing positions. Only the write side is gated by this config, and only in shared-data clusters: a shared-nothing BE writes the original layout whatever this is set to. Vertical compaction produces the region as well; partial-update rewrites do not, because they copy an existing segment's prefix and append only the remaining value columns, so those segments keep the original layout. Both layouts are readable by any BE or CN version in either direction and can coexist in the same table, so this can be turned on or off at any time without rewriting data.
+- Introduced in: v4.2.0
+
 ### lake_tablet_stat_slow_log_ms
 
 - Default: 300000

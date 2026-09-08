@@ -1291,6 +1291,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：是否为存算分离（Lake）主键表 tablet 使用精确行数统计。开启后会读取每个 rowset 在对象存储中的 delete vector 来扣减删除行，统计更准确，但会显著增加 `get_tablet_stats` RPC 的开销；关闭后使用 rowset 元数据中的近似 `num_dels`，可避免远端 I/O，但对“已删除但尚未 compaction”的行可能略有高估。
 - 引入版本：-
 
+### lake_enable_segment_tail_index_region
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Segment 写入时，是否把所有列的 ordinal index 放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的 ordinal index 写在该列数据页之后。页级 zone map 和 short key index 不受影响，位置保持不变。该配置仅影响写入侧，且仅在存算分离集群中生效：存算一体的 BE 无论该配置为何都写入原有布局。纵向 Compaction 同样会产生该索引区；部分列更新重写不会，因为它复制已有 segment 的前缀、只追加剩余的值列，这类 segment 保持原有布局。两种布局都能被任意版本的 BE/CN 双向读取，并可在同一张表中共存，因此可以随时开启或关闭，无需重写数据。
+- 引入版本：v4.2.0
+
 ### lake_tablet_stat_slow_log_ms
 
 - 默认值：300000
