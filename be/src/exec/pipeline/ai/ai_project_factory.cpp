@@ -66,11 +66,11 @@ void close_context_noexcept(ExprContext* context, RuntimeState* state) noexcept 
 
 AIProjectProjectionSpec::AIProjectProjectionSpec(RuntimeState* state, std::vector<AIProjectOutputSpec> outputs,
                                                  std::vector<AIProjectCommonSpec> common_outputs,
-                                                 std::string default_model)
+                                                 AIProjectModelConfigs model_configs)
         : _state(state),
           _outputs(std::move(outputs)),
           _common_outputs(std::move(common_outputs)),
-          _default_model(std::move(default_model)) {}
+          _model_configs(std::move(model_configs)) {}
 
 AIProjectProjectionSpec::~AIProjectProjectionSpec() {
     close();
@@ -80,7 +80,7 @@ AIProjectProjectionSpec::AIProjectProjectionSpec(AIProjectProjectionSpec&& other
         : _state(other._state),
           _outputs(std::move(other._outputs)),
           _common_outputs(std::move(other._common_outputs)),
-          _default_model(std::move(other._default_model)),
+          _model_configs(std::move(other._model_configs)),
           _closed(other._closed) {
     other._state = nullptr;
     other._outputs.clear();
@@ -96,7 +96,7 @@ AIProjectProjectionSpec& AIProjectProjectionSpec::operator=(AIProjectProjectionS
     _state = other._state;
     _outputs = std::move(other._outputs);
     _common_outputs = std::move(other._common_outputs);
-    _default_model = std::move(other._default_model);
+    _model_configs = std::move(other._model_configs);
     _closed = other._closed;
     other._state = nullptr;
     other._outputs.clear();
@@ -138,7 +138,7 @@ void AIProjectProjectionSpec::close(RuntimeState* state) noexcept {
 }
 
 StatusOr<AIProjectOperatorFactories> AIProjectFactory::create(PipelineBuilderContext* context, int32_t plan_node_id,
-                                                              size_t upstream_dop, std::string endpoint,
+                                                              size_t upstream_dop,
                                                               AIProjectProjectionSpec projection_spec) {
     if (context == nullptr || upstream_dop == 0 ||
         upstream_dop > static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
@@ -165,8 +165,9 @@ StatusOr<AIProjectOperatorFactories> AIProjectFactory::create(PipelineBuilderCon
                          AIChunkBuffer::memory_limit_for_query(query_mem_tracker->limit()));
         ASSIGN_OR_RETURN(auto input_buffer, AIChunkBuffer::create(static_cast<int64_t>(buffer_capacity),
                                                                   static_cast<int64_t>(buffer_memory_limit)));
+        ASSIGN_OR_RETURN(auto submitter,
+                         AIProjectDispatcherSubmitter::create(state, projection_spec.model_configs(), config));
         ASSIGN_OR_RETURN(auto projection, AIProjectExpressionProjection::create(std::move(projection_spec)));
-        ASSIGN_OR_RETURN(auto submitter, AIProjectDispatcherSubmitter::create(state, std::move(endpoint), config));
         ASSIGN_OR_RETURN(auto processor, AIProjectProcessor::create(std::move(input_buffer), std::move(projection),
                                                                     std::move(submitter), config));
 

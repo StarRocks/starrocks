@@ -92,6 +92,11 @@ public abstract class RangerAccessResourceBuilder implements ObjectTypeConverter
         return this;
     }
 
+    public RangerAccessResourceBuilder setAIModel(String modelName) {
+        rangerAccessResource.setValue(convertToRangerType(ObjectType.AI_MODEL), modelName);
+        return this;
+    }
+
     public RangerAccessResourceBuilder setPipe(String pipe) {
         rangerAccessResource.setValue(convertToRangerType(ObjectType.PIPE), pipe);
         return this;

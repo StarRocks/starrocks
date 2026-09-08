@@ -576,6 +576,7 @@ TEST(AIExecutorTest, AllFragmentSnapshotFieldsHaveTypedMutationPaths) {
     ASSERT_TRUE(executor->update_max_retries_on_throttle(6).ok());
     ASSERT_TRUE(executor->update_on_error("fail").ok());
     ASSERT_TRUE(executor->update_rate_limit_qps_chat(7).ok());
+    ASSERT_TRUE(executor->update_rate_limit_qps_embedding(9).ok());
     ASSERT_TRUE(executor->update_max_inflight(8).ok());
 
     AIRuntimeConfig snapshot = executor->config_snapshot();
@@ -587,7 +588,20 @@ TEST(AIExecutorTest, AllFragmentSnapshotFieldsHaveTypedMutationPaths) {
     EXPECT_EQ(6, snapshot.max_retries_on_throttle);
     EXPECT_EQ("fail", snapshot.on_error);
     EXPECT_EQ(7, snapshot.rate_limit_qps_chat);
+    EXPECT_EQ(9, snapshot.rate_limit_qps_embedding);
     EXPECT_EQ(8, snapshot.max_inflight);
+}
+
+TEST(AIExecutorTest, EmbeddingLimitRejectsInvalidUpdatesAndShutdown) {
+    auto executor = create_executor();
+    ASSERT_NE(nullptr, executor);
+    ASSERT_TRUE(executor->update_rate_limit_qps_embedding(17).ok());
+    for (int invalid : {0, -1}) {
+        EXPECT_TRUE(executor->update_rate_limit_qps_embedding(invalid).is_invalid_argument());
+        EXPECT_EQ(17, executor->config_snapshot().rate_limit_qps_embedding);
+    }
+    executor->shutdown();
+    EXPECT_TRUE(executor->update_rate_limit_qps_embedding(8).is_shutdown());
 }
 
 } // namespace

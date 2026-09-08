@@ -18,6 +18,8 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include <cmath>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -137,20 +139,38 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
 
     rapidjson::StringBuffer buffer;
     RequestWriter writer(buffer);
-    if (!writer.StartObject() || !writer.Key("model") || !writer.String(request.model.data(), request.model.size()) ||
-        !writer.Key("messages") || !writer.StartArray() || !writer.StartObject() || !writer.Key("role") ||
-        !writer.String("system") || !writer.Key("content") ||
-        !writer.String(kSystemPrompt.data(), kSystemPrompt.size()) || !writer.EndObject() || !writer.StartObject() ||
-        !writer.Key("role") || !writer.String("user") || !writer.Key("content") ||
-        !writer.String(request.prompt.data(), request.prompt.size()) || !writer.EndObject() || !writer.EndArray() ||
-        !writer.Key("stream") || !writer.Bool(false)) {
+    if (!writer.StartObject() || !writer.Key("model") || !writer.String(request.model.data(), request.model.size())) {
+        return invalid_request();
+    }
+    switch (request.capability) {
+    case AICapability::CHAT:
+        if (!writer.Key("messages") || !writer.StartArray() || !writer.StartObject() || !writer.Key("role") ||
+            !writer.String("system") || !writer.Key("content") ||
+            !writer.String(kSystemPrompt.data(), kSystemPrompt.size()) || !writer.EndObject() ||
+            !writer.StartObject() || !writer.Key("role") || !writer.String("user") || !writer.Key("content") ||
+            !writer.String(request.prompt.data(), request.prompt.size()) || !writer.EndObject() || !writer.EndArray() ||
+            !writer.Key("stream") || !writer.Bool(false)) {
+            return invalid_request();
+        }
+        break;
+    case AICapability::TEXT_EMBEDDING:
+        if (!writer.Key("input") || !writer.String(request.prompt.data(), request.prompt.size()) ||
+            !writer.Key("encoding_format") || !writer.String("float")) {
+            return invalid_request();
+        }
+        break;
+    default:
         return invalid_request();
     }
 
     if (request.options != nullptr) {
         for (const auto& option : request.options->members()) {
-            if (option.key == "model" || option.key == "messages" || option.key == "stream" ||
-                !writer.Key(option.key.data(), option.key.size()) ||
+            const bool reserved = option.key == "model" ||
+                                  (request.capability == AICapability::CHAT &&
+                                   (option.key == "messages" || option.key == "stream")) ||
+                                  (request.capability == AICapability::TEXT_EMBEDDING &&
+                                   (option.key == "input" || option.key == "encoding_format"));
+            if (reserved || !writer.Key(option.key.data(), option.key.size()) ||
                 !writer.RawValue(option.serialized_json.data(), option.serialized_json.size(),
                                  json_type(option.kind))) {
                 return invalid_request();
@@ -172,7 +192,7 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
     return result;
 }
 
-AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view body) const {
+AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view body, AICapability capability) const {
     if (body.find('\0') != std::string_view::npos) {
         return AIProviderMalformed{};
     }
@@ -192,6 +212,34 @@ AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view 
         return AIProviderStructuredError{.code = classify_error(document)};
     }
 
+    if (capability == AICapability::TEXT_EMBEDDING) {
+        const auto data = document.FindMember("data");
+        if (data == document.MemberEnd() || !data->value.IsArray() || data->value.Size() != 1 ||
+            !data->value[0].IsObject()) {
+            return AIProviderMalformed{};
+        }
+        const auto& item = data->value[0];
+        const auto index = item.FindMember("index");
+        const auto embedding = item.FindMember("embedding");
+        if (index == item.MemberEnd() || !index->value.IsUint() || index->value.GetUint() != 0 ||
+            embedding == item.MemberEnd() || !embedding->value.IsArray() || embedding->value.Empty()) {
+            return AIProviderMalformed{};
+        }
+        std::vector<float> values;
+        values.reserve(embedding->value.Size());
+        for (const auto& element : embedding->value.GetArray()) {
+            if (!element.IsNumber()) return AIProviderMalformed{};
+            const double value = element.GetDouble();
+            if (!std::isfinite(value) || value < std::numeric_limits<float>::lowest() ||
+                value > std::numeric_limits<float>::max()) {
+                return AIProviderMalformed{};
+            }
+            values.emplace_back(static_cast<float>(value));
+        }
+        return AIProviderSuccess{.value = std::move(values)};
+    }
+    if (capability != AICapability::CHAT) return AIProviderMalformed{};
+
     const auto choices = document.FindMember("choices");
     if (choices == document.MemberEnd() || !choices->value.IsArray() || choices->value.Empty() ||
         !choices->value[0].IsObject()) {
@@ -205,7 +253,7 @@ AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view 
     if (content == message->value.MemberEnd() || !content->value.IsString()) {
         return AIProviderMalformed{};
     }
-    return AIProviderSuccess{.content = std::string(content->value.GetString(), content->value.GetStringLength())};
+    return AIProviderSuccess{.value = std::string(content->value.GetString(), content->value.GetStringLength())};
 }
 
 } // namespace starrocks

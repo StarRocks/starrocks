@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -73,18 +74,22 @@ public class DeletePlanner {
     private static final Logger LOG = LogManager.getLogger(DeletePlanner.class);
 
     public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session) {
+        return plan(deleteStatement, session, AIModelBindings.EMPTY);
+    }
+
+    public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session, AIModelBindings aiModelBindings) {
         if (deleteStatement.shouldHandledByDeleteHandler()) {
             // executor will use DeleteHandler to handle delete statement
             // so just return empty plan here
             return null;
         }
-        return planDelete(deleteStatement, session);
+        return planDelete(deleteStatement, session, aiModelBindings);
     }
 
     /**
      * Main method to plan delete operations for different table types
      */
-    private ExecPlan planDelete(DeleteStmt deleteStatement, ConnectContext session) {
+    private ExecPlan planDelete(DeleteStmt deleteStatement, ConnectContext session, AIModelBindings aiModelBindings) {
         com.starrocks.catalog.Table table = deleteStatement.getTable();
         // Transform logical plan
         QueryRelation query = deleteStatement.getQueryStatement().getQueryRelation();
@@ -125,7 +130,8 @@ public class DeletePlanner {
                 session,
                 requiredProperty,
                 colNames,
-                table
+                table,
+                aiModelBindings
         );
     }
 
@@ -166,7 +172,7 @@ public class DeletePlanner {
             ConnectContext session,
             PhysicalPropertySet requiredProperty,
             List<String> colNames,
-            com.starrocks.catalog.Table table) {
+                                      com.starrocks.catalog.Table table, AIModelBindings aiModelBindings) {
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
@@ -187,7 +193,7 @@ public class DeletePlanner {
                     new ColumnRefSet(logicalPlan.getOutputColumn()));
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
                     logicalPlan.getOutputColumn(), columnRefFactory,
-                    colNames, TResultSinkType.MYSQL_PROTOCAL, false);
+                    colNames, TResultSinkType.MYSQL_PROTOCAL, false, false, aiModelBindings);
 
             // Create sink based on table type
             if (table instanceof IcebergTable) {

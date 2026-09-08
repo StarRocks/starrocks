@@ -37,7 +37,6 @@ public:
 
 private:
     pipeline::AIProjectProjectionSpec _projection_spec;
-    std::string _endpoint;
 };
 
 } // namespace starrocks

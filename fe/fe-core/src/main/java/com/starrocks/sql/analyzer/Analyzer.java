@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
+import com.starrocks.sql.ast.AlterAIModelStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
+import com.starrocks.sql.ast.CreateAIModelStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
@@ -85,7 +87,9 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescAIModelStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
+import com.starrocks.sql.ast.DropAIModelStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -129,6 +133,7 @@ import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.ShowAIModelsStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -1083,6 +1088,36 @@ public class Analyzer {
 
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
             FileAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateAIModelStatement(CreateAIModelStmt statement, ConnectContext context) {
+            AIModelAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterAIModelStatement(AlterAIModelStmt statement, ConnectContext context) {
+            AIModelAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropAIModelStatement(DropAIModelStmt statement, ConnectContext context) {
+            AIModelAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAIModelsStatement(ShowAIModelsStmt statement, ConnectContext context) {
+            AIModelAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDescAIModelStatement(DescAIModelStmt statement, ConnectContext context) {
+            AIModelAnalyzer.analyze(statement, context);
             return null;
         }
 

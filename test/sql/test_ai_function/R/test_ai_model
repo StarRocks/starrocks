@@ -1,0 +1,71 @@
+-- name: test_ai_model
+-- Metadata and EXPLAIN only: no remote model calls or BE credentials are needed.
+
+CREATE AI MODEL ai_chat_${uuid0} COMMENT 'integration model'
+PROPERTIES ('capability' = 'CHAT', 'provider' = 'openai_compatible',
+'endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'chat-model', 'credential_ref' = 'TEST_MODEL');
+-- result:
+-- !result
+
+CREATE AI MODEL IF NOT EXISTS ai_chat_${uuid0}
+PROPERTIES ('capability' = 'CHAT', 'provider' = 'openai_compatible',
+'endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'must-not-replace', 'credential_ref' = 'TEST_MODEL');
+-- result:
+-- !result
+
+SHOW AI MODELS LIKE 'ai_chat_${uuid0}';
+-- result:
+[REGEX]^ai_chat_[0-9a-f]{32}$
+-- !result
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+ALTER AI MODEL ai_chat_${uuid0} SET ('model' = 'chat-v2');
+-- result:
+-- !result
+
+ALTER AI MODEL ai_chat_${uuid0} COMMENT = 'updated';
+-- result:
+-- !result
+
+DESC AI MODEL ai_chat_${uuid0};
+-- result:
+[REGEX]^[0-9]+\tai_chat_[0-9a-f]{32}\t3\tCHAT\topenai_compatible\thttps://models\.example\.test/v1/chat/completions\tchat-v2\tTEST_MODEL\tupdated$
+-- !result
+
+CREATE ROLE ai_model_role_${uuid0};
+-- result:
+-- !result
+
+GRANT USAGE ON AI MODEL ai_chat_${uuid0} TO ROLE ai_model_role_${uuid0};
+-- result:
+-- !result
+
+REVOKE USAGE ON AI MODEL ai_chat_${uuid0} FROM ROLE ai_model_role_${uuid0};
+-- result:
+-- !result
+
+DROP ROLE ai_model_role_${uuid0};
+-- result:
+-- !result
+
+DROP AI MODEL ai_chat_${uuid0};
+-- result:
+-- !result
+
+DROP AI MODEL IF EXISTS ai_chat_${uuid0};
+-- result:
+-- !result
+
+SHOW AI MODELS LIKE 'ai_chat_${uuid0}';
+-- result:
+-- !result
+CLEANUP {
+    DROP AI MODEL IF EXISTS ai_chat_${uuid0};
+    DROP ROLE IF EXISTS ai_model_role_${uuid0};
+} END CLEANUP

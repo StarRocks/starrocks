@@ -64,6 +64,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.CREATE_RESOURCE_GROUP,
                 PrivilegeType.CREATE_GLOBAL_FUNCTION,
                 PrivilegeType.CREATE_STORAGE_VOLUME,
+                PrivilegeType.CREATE_AI_MODEL,
                 PrivilegeType.CREATE_WAREHOUSE,
                 PrivilegeType.SECURITY));
 
@@ -113,6 +114,11 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.DROP,
                 PrivilegeType.ALTER,
                 PrivilegeType.USAGE));
+
+        typeToActionList.put(ObjectType.AI_MODEL, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
 
         typeToActionList.put(ObjectType.WAREHOUSE, Lists.newArrayList(
                 PrivilegeType.USAGE,
@@ -187,6 +193,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             return ResourceGroupPEntryObject.generate(objectTokens);
         } else if (ObjectType.STORAGE_VOLUME.equals(objectType)) {
             return StorageVolumePEntryObject.generate(objectTokens);
+        } else if (ObjectType.AI_MODEL.equals(objectType)) {
+            return AIModelPEntryObject.generate(objectTokens);
         } else if (ObjectType.PIPE.equals(objectType)) {
             return PipePEntryObject.generate(objectTokens);
         } else if (ObjectType.WAREHOUSE.equals(objectType)) {

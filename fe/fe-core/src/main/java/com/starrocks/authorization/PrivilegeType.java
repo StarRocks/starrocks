@@ -76,6 +76,7 @@ public class PrivilegeType {
     public static final PrivilegeType CREATE_EXTERNAL_CATALOG = new PrivilegeType(26, "CREATE EXTERNAL CATALOG");
     public static final PrivilegeType CREATE_STORAGE_VOLUME = new PrivilegeType(27, "CREATE STORAGE VOLUME");
     public static final PrivilegeType CREATE_PIPE = new PrivilegeType(28, "CREATE PIPE");
+    public static final PrivilegeType CREATE_AI_MODEL = new PrivilegeType(29, "CREATE AI MODEL");
 
     /**
      * NOTICE: PrivilegeType cannot use a value exceeding 20000, please follow the above sequence number
@@ -112,6 +113,7 @@ public class PrivilegeType {
             CREATE_EXTERNAL_CATALOG,
             CREATE_STORAGE_VOLUME,
             CREATE_PIPE,
+            CREATE_AI_MODEL,
             CREATE_WAREHOUSE,
             SECURITY
     ).build();

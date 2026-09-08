@@ -594,6 +594,37 @@ public class PrivilegeStmtAnalyzerV2Test {
     }
 
     @Test
+    public void testGrantCreateAIModelOnSystem() {
+        GrantPrivilegeStmt statement = (GrantPrivilegeStmt) Assertions.assertDoesNotThrow(
+                () -> UtFrameUtils.parseStmtWithNewParser("grant create ai model on system to test_user", ctx));
+        Assertions.assertEquals("SYSTEM", statement.getObjectType().name());
+        Assertions.assertEquals(List.of("CREATE AI MODEL"),
+                statement.getPrivilegeTypes().stream().map(privilege -> privilege.name()).toList());
+    }
+
+    @Test
+    public void testGrantAllAIModels() {
+        GrantPrivilegeStmt statement = (GrantPrivilegeStmt) Assertions.assertDoesNotThrow(
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "grant usage, alter, drop on all ai models to test_user with grant option", ctx));
+        Assertions.assertEquals("AI MODEL", statement.getObjectType().name());
+        Assertions.assertEquals(3, statement.getPrivilegeTypes().size());
+        Assertions.assertEquals(1, statement.getObjectList().size());
+        Assertions.assertTrue(statement.getObjectList().get(0).isFuzzyMatching());
+        Assertions.assertTrue(statement.isWithGrantOption());
+    }
+
+    @Test
+    public void testAIModelGrantRejectsDatabaseScopeAndUnsupportedActions() {
+        for (String sql : List.of("grant usage on ai model db1.model1 to test_user",
+                "grant usage on all ai models in all databases to test_user",
+                "grant select on all ai models to test_user",
+                "grant create ai model on all ai models to test_user")) {
+            Assertions.assertThrows(Exception.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx), sql);
+        }
+    }
+
+    @Test
     public void testResourceException() throws Exception {
         try {
             UtFrameUtils.parseStmtWithNewParser(

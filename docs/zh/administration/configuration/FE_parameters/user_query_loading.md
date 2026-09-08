@@ -89,7 +89,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 调用使用的完整 HTTPS POST URL。URL 必须包含主机，且不能包含用户信息、片段或控制字符。未显式指定端口时使用 HTTPS 默认端口；显式指定的端口必须在 1 至 65535 范围内。该值为空时，必须先配置 endpoint，SYSTEM `ai_complete` 才能通过分析。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。API key 不属于 FE 配置项；每个 BE 在本地读取 `AI_FUNCTION_MODEL_API_KEY`，FE 不会通过查询计划下发该密钥。所有执行 AI 查询的 BE 都必须将 `AI_FUNCTION_MODEL_ENDPOINT` 设置为与此处完全相同的 URL，以便 BE 将本地凭证绑定到管理员批准的 endpoint。因此，修改 FE endpoint 后，还必须更新该环境变量并重启相关 BE，之后才能在这些 BE 上运行新的 AI 查询。
+- 描述: SYSTEM `ai_complete` 调用使用的完整 HTTPS POST URL。URL 必须包含主机，且不能包含用户信息、查询串、片段或控制字符。未显式指定端口时使用 HTTPS 默认端口；显式指定的端口必须在 1 至 65535 范围内。该值为空时，必须先配置 endpoint，SYSTEM `ai_complete` 才能通过分析。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。API key 不属于 FE 配置项；每个 BE 在本地读取 `AI_FUNCTION_MODEL_API_KEY`，FE 不会通过查询计划下发该密钥。所有执行 AI 查询的 BE 都必须将 `AI_FUNCTION_MODEL_ENDPOINT` 设置为与此处完全相同的 URL，以便 BE 将本地凭证绑定到管理员批准的 endpoint。因此，修改 FE endpoint 后，还必须更新该环境变量并重启相关 BE，之后才能在这些 BE 上运行新的 AI 查询。
 - 引入版本: -
 
 ### `ai_default_chat_model`
@@ -109,6 +109,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 有效值: `openai_compatible`
 - 是否可变: Yes
 - 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible`；空值或任何额外字符（包括控制字符）都会导致分析失败。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 引入版本: -
+
+### `ai_default_embedding_endpoint`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 调用使用的完整 HTTPS POST URL，独立于聊天端点，必须单独配置。必须含主机，不得含用户信息、查询串、片段或控制字符；显式端口须在 1 至 65535 范围内。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。每个执行查询的 BE 必须将 `AI_FUNCTION_EMBEDDING_ENDPOINT` 绑定到完全相同的 URL，并在本地配置 `AI_FUNCTION_EMBEDDING_API_KEY`。修改任一 BE 环境变量后需重启该 BE。凭证不是 FE 配置，不会随计划下发。参见 [ai_embed](../../../sql-reference/sql-functions/scalar-functions/ai_embed.md)。
+- 引入版本: -
+
+### `ai_default_embedding_model`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 未显式指定模型时使用的默认模型。此类调用要求该值非空白，且不能含 C0 控制字符或 DEL。如果所有向量调用均显式指定模型，则可为空。不会回退到聊天默认模型。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
+- 引入版本: -
+
+### `ai_default_embedding_provider`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 有效值: `openai_compatible`
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为 `openai_compatible`。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
 - 引入版本: -
 
 ### `brpc_send_plan_fragment_timeout_ms`

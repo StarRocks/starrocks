@@ -23,8 +23,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
-import com.starrocks.thrift.TAIEndpointConfig;
-import com.starrocks.thrift.TAIModelConfiguration;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TAIProjectNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -42,16 +41,23 @@ import java.util.Set;
 
 /** FE plan boundary for AI expression evaluation. */
 public final class AIProjectNode extends ProjectNode {
-    private final SystemChatConfig systemChatConfig;
+    private final Map<String, AIModelConfigs.ModelConfig> modelConfigs;
 
     public AIProjectNode(PlanNodeId id, TupleDescriptor tupleDescriptor, PlanNode child,
                          Map<SlotId, Expr> slotMap, Map<SlotId, Expr> commonSlotMap,
                          SystemChatConfig systemChatConfig) {
-        this(id, tupleDescriptor, child, copyExpressionMaps(slotMap, commonSlotMap), systemChatConfig);
+        this(id, tupleDescriptor, child, slotMap, commonSlotMap,
+                Map.of(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID, AIModelConfigs.fromSystemChat(systemChatConfig)));
+    }
+
+    public AIProjectNode(PlanNodeId id, TupleDescriptor tupleDescriptor, PlanNode child,
+                         Map<SlotId, Expr> slotMap, Map<SlotId, Expr> commonSlotMap,
+                         Map<String, AIModelConfigs.ModelConfig> modelConfigs) {
+        this(id, tupleDescriptor, child, copyExpressionMaps(slotMap, commonSlotMap), modelConfigs);
     }
 
     private AIProjectNode(PlanNodeId id, TupleDescriptor tupleDescriptor, PlanNode child,
-                          ExpressionMaps expressionMaps, SystemChatConfig systemChatConfig) {
+                          ExpressionMaps expressionMaps, Map<String, AIModelConfigs.ModelConfig> modelConfigs) {
         super(id, tupleDescriptor, child, expressionMaps.slotMap(), expressionMaps.commonSlotMap());
         planNodeName = "AIProject";
 
@@ -75,22 +81,48 @@ public final class AIProjectNode extends ProjectNode {
                     "AIProject output expressions must contain exactly one AI call");
         });
         Preconditions.checkState(!aiCalls.isEmpty(), "AIProject must contain at least one AI call");
-        Preconditions.checkState(aiCalls.stream().allMatch(call ->
-                        AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(call.getAiModelConfigId())),
-                "AIProject AI calls must use the SYSTEM model configuration");
         Preconditions.checkState(getCommonSlotMap().values().stream()
                         .noneMatch(AIProjectNode::isNonReusableExpression),
                 "AIProject common expressions must be deterministic and non-AI");
         Preconditions.checkState(getCommonSlotMap().values().stream()
                         .noneMatch(expression -> referencesAnySlot(expression, aiOutputSlots)),
                 "AIProject common expressions must not depend on AI outputs");
-        boolean requiresDefaultModel = aiCalls.stream().anyMatch(AIProjectNode::requiresDefaultModel);
-        SystemChatConfig checkedSystemChatConfig = Preconditions.checkNotNull(systemChatConfig,
-                "AIProject requires a SYSTEM model configuration");
-        AIModelConfigs.validateSystemChat(checkedSystemChatConfig, requiresDefaultModel
-                ? AIModelConfigs.DefaultModelRequirement.REQUIRED
-                : AIModelConfigs.DefaultModelRequirement.OPTIONAL);
-        this.systemChatConfig = checkedSystemChatConfig;
+        this.modelConfigs = Map.copyOf(modelConfigs);
+        Set<String> usedConfigIds = new HashSet<>();
+        for (FunctionCallExpr call : aiCalls) {
+            String configId = call.getAiModelConfigId();
+            Preconditions.checkState(configId != null && this.modelConfigs.containsKey(configId),
+                    "AIProject requires a model configuration for each AI call");
+            AIModelConfigs.ModelConfig config = this.modelConfigs.get(configId);
+            Preconditions.checkState(config.source() == call.getFn().getAiModelSource(),
+                    "AIProject model source does not match the AI function");
+            if (config.source() == TAIModelSource.AI_MODEL) {
+                Preconditions.checkState(config.modelId() > 0 && config.credentialRef() != null,
+                        "AIProject requires a bound model identity and credential reference");
+                Preconditions.checkState(!AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(configId)
+                                && !AIModelConfigs.SYSTEM_TEXT_EMBEDDING_CONFIG_ID.equals(configId),
+                        "Named AI models must not use SYSTEM configuration IDs");
+            } else {
+                Preconditions.checkState(AIModelConfigs.configId(call.getFn(), call.getChildren()).equals(configId),
+                        "AIProject AI call has an invalid SYSTEM configuration ID");
+            }
+            usedConfigIds.add(configId);
+            boolean embedding = AIModelConfigs.isTextEmbedding(call.getFn());
+            Preconditions.checkState((embedding ? "TEXT_EMBEDDING" : "CHAT").equals(config.capability()),
+                    "AIProject model capability does not match the AI function");
+            if (call.getFn().getAiModelSource() == TAIModelSource.SYSTEM) {
+                AIModelConfigs.DefaultModelRequirement requirement = AIModelConfigs.hasExplicitModel(call.getFn())
+                        ? AIModelConfigs.DefaultModelRequirement.OPTIONAL : AIModelConfigs.DefaultModelRequirement.REQUIRED;
+                if (embedding) {
+                    AIModelConfigs.validateSystemEmbedding(config, requirement);
+                } else {
+                    AIModelConfigs.validateSystemChat(
+                            new SystemChatConfig(config.endpoint(), config.model(), config.provider()), requirement);
+                }
+            }
+        }
+        Preconditions.checkState(usedConfigIds.equals(this.modelConfigs.keySet()),
+                "AIProject must contain only used model configurations");
     }
 
     @Override
@@ -102,8 +134,8 @@ public final class AIProjectNode extends ProjectNode {
         aiProject.setCommon_slot_map(new HashMap<>());
         getCommonSlotMap().forEach((slot, expression) ->
                 aiProject.putToCommon_slot_map(slot.asInt(), ExprToThrift.treeToThrift(expression)));
-        aiProject.setAi_model_configs(Map.of(
-                AIModelConfigs.SYSTEM_CHAT_CONFIG_ID, toThrift(systemChatConfig)));
+        aiProject.setAi_model_configs(new HashMap<>());
+        modelConfigs.forEach((id, config) -> aiProject.putToAi_model_configs(id, config.toThrift()));
         message.setNode_type(TPlanNodeType.AI_PROJECT_NODE);
         message.setAi_project_node(aiProject);
     }
@@ -171,23 +203,6 @@ public final class AIProjectNode extends ProjectNode {
             }
         }
         return expression.getChildren().stream().anyMatch(AIProjectNode::isNonReusableExpression);
-    }
-
-    private static boolean requiresDefaultModel(FunctionCallExpr call) {
-        Function function = call.getFn();
-        int semanticArity = function.getNumArgs();
-        boolean hasOptions = semanticArity > 1 && function.getArgs()[semanticArity - 1].isMapType();
-        return semanticArity - (hasOptions ? 1 : 0) == 1;
-    }
-
-    private static TAIModelConfiguration toThrift(SystemChatConfig config) {
-        TAIEndpointConfig chat = new TAIEndpointConfig();
-        chat.setEndpoint(config.endpoint());
-        chat.setModel(config.model());
-        chat.setProvider(config.provider());
-        TAIModelConfiguration configuration = new TAIModelConfiguration();
-        configuration.setChat(chat);
-        return configuration;
     }
 
     private record ExpressionMaps(Map<SlotId, Expr> slotMap, Map<SlotId, Expr> commonSlotMap) {

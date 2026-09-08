@@ -43,6 +43,7 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.AnalysisException;
@@ -52,6 +53,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.http.rest.RestBaseAction;
@@ -61,6 +63,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.SetDefaultRoleExecutor;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -71,6 +74,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -78,7 +82,9 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -95,6 +101,8 @@ import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -102,6 +110,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -1015,6 +1024,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         // column level insert branch
         try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
             authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.getInstance()).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
                     Mockito.any())).thenCallRealMethod();
@@ -1051,6 +1062,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         // column level update branch
         try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
             authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.getInstance()).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
                     Mockito.any())).thenCallRealMethod();
@@ -1288,6 +1301,227 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 "grant select on db1.tbl1 to test with grant option",
                 "revoke select on db1.tbl1 from test",
                 "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation");
+    }
+
+    @Test
+    public void testAIModelPublicAuthorizerRequiresUsage() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        String createSql = "create ai model ai_public_authorizer properties "
+                + "('capability'='CHAT', 'provider'='openai_compatible', "
+                + "'endpoint'='https://models.example.test/v1/chat/completions', "
+                + "'model'='chat-model', 'credential_ref'='TEST_MODEL')";
+        StatementBase create = Assertions.assertDoesNotThrow(() -> UtFrameUtils.parseStmtWithNewParser(createSql, ctx));
+        DDLStmtExecutor.execute(create, ctx);
+        try {
+            verifyGrantRevoke("select ai_custom_query('ai_public_authorizer', 'p')",
+                    "grant usage on ai model ai_public_authorizer to test",
+                    "revoke usage on ai model ai_public_authorizer from test", "USAGE privilege(s) on AI MODEL");
+            grantRevokeSqlAsRoot("grant usage on ai model ai_public_authorizer to role test_role");
+            grantRevokeSqlAsRoot("grant test_role to test");
+            try {
+                verifySuccess("select ai_custom_query('ai_public_authorizer', 'p')", ctx);
+            } finally {
+                grantRevokeSqlAsRoot("revoke test_role from test");
+                grantRevokeSqlAsRoot("revoke usage on ai model ai_public_authorizer from role test_role");
+            }
+            verify("select ai_custom_query('ai_public_authorizer', 'p')", "USAGE privilege(s) on AI MODEL", ctx);
+        } finally {
+            ctxToRoot();
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop ai model ai_public_authorizer", ctx), ctx);
+        }
+    }
+
+    @Test
+    public void testAIModelGrantDoesNotSurviveSameNameRecreation() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        String createSql = "create ai model ai_privilege_recreated properties "
+                + "('capability'='CHAT', 'provider'='openai_compatible', "
+                + "'endpoint'='https://models.example.test/v1/chat/completions', "
+                + "'model'='chat-model', 'credential_ref'='TEST_MODEL')";
+        StatementBase create = Assertions.assertDoesNotThrow(() -> UtFrameUtils.parseStmtWithNewParser(createSql, ctx));
+        DDLStmtExecutor.execute(create, ctx);
+        try {
+            grantRevokeSqlAsRoot("grant usage on ai model ai_privilege_recreated to test");
+            verifySuccess("select ai_custom_query('ai_privilege_recreated', 'p')", ctx);
+            Assertions.assertTrue(starRocksAssert.show("show grants for test").stream()
+                    .anyMatch(row -> row.get(2).contains("ON AI MODEL `ai_privilege_recreated`")));
+            TGetGrantsToRolesOrUserRequest grantsRequest = new TGetGrantsToRolesOrUserRequest();
+            grantsRequest.setType(TGrantsToType.USER);
+            Assertions.assertTrue(GrantsTo.getGrantsTo(grantsRequest).getGrants_to().stream()
+                    .anyMatch(item -> "ai_privilege_recreated".equals(item.getObject_name())
+                            && "AI MODEL".equals(item.getObject_type())));
+
+            ctxToRoot();
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop ai model ai_privilege_recreated", ctx), ctx);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
+            verify("select ai_custom_query('ai_privilege_recreated', 'p')", "USAGE privilege(s) on AI MODEL", ctx);
+            Assertions.assertTrue(starRocksAssert.show("show grants for test").stream()
+                    .noneMatch(row -> row.get(2).contains("ai_privilege_recreated")));
+            TGetGrantsToRolesOrUserResponse afterRecreate = GrantsTo.getGrantsTo(grantsRequest);
+            Assertions.assertTrue(afterRecreate.getGrants_toSize() == 0 || afterRecreate.getGrants_to().stream()
+                    .noneMatch(item -> "ai_privilege_recreated".equals(item.getObject_name())));
+        } finally {
+            ctxToRoot();
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop ai model ai_privilege_recreated", ctx), ctx);
+            ctx.getGlobalStateMgr().getAuthorizationMgr().removeInvalidObject();
+        }
+    }
+
+    @Test
+    public void testAIModelPreparedExecutionRechecksRevokedUsage() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        boolean oldEnablePrepare = ctx.getSessionVariable().isEnablePrepareStmt();
+        String preparedName = "ai_privilege_prepared";
+        ctxToRoot();
+        ctx.getSessionVariable().setEnablePrepareStmt(true);
+        ctx.setThreadLocalInfo();
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "create ai model ai_prepared_auth properties "
+                            + "('capability'='CHAT', 'provider'='openai_compatible', "
+                            + "'endpoint'='https://models.example.test/v1/chat/completions', "
+                            + "'model'='chat-model', 'credential_ref'='TEST_MODEL')", ctx), ctx);
+            starRocksAssert.withTable("create table db1.ai_prepared_auth_tbl (k bigint, v varchar(32)) "
+                    + "primary key(k) distributed by hash(k) buckets 1 properties('replication_num'='1')");
+            grantRevokeSqlAsRoot("grant select on table db1.ai_prepared_auth_tbl to test");
+            grantRevokeSqlAsRoot("grant usage on ai model ai_prepared_auth to test");
+            PrepareStmt prepared = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "prepare " + preparedName + " from select ai_custom_query('ai_prepared_auth', ?) "
+                            + "from db1.ai_prepared_auth_tbl where k = ?", ctx);
+            PrepareStmtContext preparedContext = new PrepareStmtContext(prepared, ctx, null);
+            ctx.putPreparedStmt(preparedName, preparedContext);
+            List<Expr> parameters = List.of(new StringLiteral("prompt"), new IntLiteral(1));
+            ExecuteStmt execute = new ExecuteStmt(preparedName, parameters);
+            ctxToTestUser();
+            ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+            Analyzer.analyze(execute, ctx);
+            StatementBase assigned = prepared.assignValues(parameters);
+            Assertions.assertTrue(((QueryStatement) assigned).isPointQuery());
+            ExecPlan first = PrepareStmtPlanner.plan(execute, assigned, ctx);
+            Assertions.assertEquals("ai_prepared_auth",
+                    first.getAIModelBindings().getRequiredModel("ai_prepared_auth").getName());
+            Assertions.assertFalse(preparedContext.isCached());
+
+            grantRevokeSqlAsRoot("revoke usage on ai model ai_prepared_auth from test");
+            ctxToTestUser();
+            ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+            Analyzer.analyze(execute, ctx);
+            ErrorReportException denied = Assertions.assertThrows(ErrorReportException.class,
+                    () -> PrepareStmtPlanner.plan(execute, prepared.assignValues(parameters), ctx));
+            Assertions.assertTrue(denied.getMessage().contains("USAGE privilege(s) on AI MODEL"), denied.getMessage());
+            Assertions.assertFalse(preparedContext.isCached());
+        } finally {
+            ctx.removePreparedStmt(preparedName);
+            ctx.getSessionVariable().setEnablePrepareStmt(oldEnablePrepare);
+            ctxToRoot();
+            // Dropped tables remain valid privilege objects while in the recycle bin.
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "ai_prepared_auth_tbl") != null) {
+                DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                        "revoke select on table db1.ai_prepared_auth_tbl from test", ctx), ctx);
+            }
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "drop table if exists db1.ai_prepared_auth_tbl", ctx), ctx);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop ai model if exists ai_prepared_auth", ctx), ctx);
+            GlobalStateMgr.getCurrentState().getAuthorizationMgr().removeInvalidObject();
+        }
+    }
+
+    @Test
+    public void testAIModelDirectDDLAuthorizationAndShowVisibility() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSql = "create ai model ai_ddl_privileges properties "
+                + "('capability'='CHAT', 'provider'='openai_compatible', "
+                + "'endpoint'='https://models.example.test/v1/chat/completions', "
+                + "'model'='chat-model', 'credential_ref'='TEST_MODEL')";
+        verifyGrantRevoke(createSql, "grant create ai model on system to test",
+                "revoke create ai model on system from test", "CREATE AI MODEL privilege(s)");
+        ctxToRoot();
+        StatementBase create = UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        StatementBase alter = UtFrameUtils.parseStmtWithNewParser(
+                "alter ai model ai_ddl_privileges set ('model'='updated-model')", ctx);
+        StatementBase drop = UtFrameUtils.parseStmtWithNewParser("drop ai model ai_ddl_privileges", ctx);
+        ShowStmt show = (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show ai models like 'ai_ddl_privileges'", ctx);
+        ShowStmt desc = (ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc ai model ai_ddl_privileges", ctx);
+        ctxToTestUser();
+        Exception createDenied = Assertions.assertThrows(Exception.class, () -> DDLStmtExecutor.execute(create, ctx));
+        Assertions.assertTrue(createDenied.getMessage().contains("CREATE AI MODEL"), createDenied.getMessage());
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getAIModelMgr().getByName("ai_ddl_privileges"));
+        ctxToRoot();
+        DDLStmtExecutor.execute(create, ctx);
+        try {
+            ctxToTestUser();
+            Exception alterDenied = Assertions.assertThrows(Exception.class, () -> DDLStmtExecutor.execute(alter, ctx));
+            Assertions.assertTrue(alterDenied.getMessage().contains("ALTER"), alterDenied.getMessage());
+            Exception dropDenied = Assertions.assertThrows(Exception.class, () -> DDLStmtExecutor.execute(drop, ctx));
+            Assertions.assertTrue(dropDenied.getMessage().contains("DROP"), dropDenied.getMessage());
+            Assertions.assertEquals(0, ShowExecutor.execute(show, ctx).getResultRows().size());
+            Assertions.assertThrows(Exception.class, () -> ShowExecutor.execute(desc, ctx));
+
+            grantRevokeSqlAsRoot("grant alter on ai model ai_ddl_privileges to test");
+            ctxToTestUser();
+            DDLStmtExecutor.execute(alter, ctx);
+            Assertions.assertEquals("updated-model", GlobalStateMgr.getCurrentState().getAIModelMgr()
+                    .getByName("ai_ddl_privileges").getRemoteModel());
+            Assertions.assertEquals(1, ShowExecutor.execute(show, ctx).getResultRows().size());
+            Assertions.assertFalse(ShowExecutor.execute(desc, ctx).getResultRows().isEmpty());
+            verify("select ai_custom_query('ai_ddl_privileges', 'p')", "USAGE privilege(s) on AI MODEL", ctx);
+            grantRevokeSqlAsRoot("revoke alter on ai model ai_ddl_privileges from test");
+            grantRevokeSqlAsRoot("grant drop on ai model ai_ddl_privileges to test");
+            ctxToTestUser();
+            DDLStmtExecutor.execute(drop, ctx);
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getAIModelMgr().getByName("ai_ddl_privileges"));
+        } finally {
+            ctxToRoot();
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop ai model if exists ai_ddl_privileges", ctx), ctx);
+            GlobalStateMgr.getCurrentState().getAuthorizationMgr().removeInvalidObject();
+        }
+    }
+
+    @Test
+    public void testAIModelUsageAcrossQueryShapesAndViews() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create ai model ai_privilege_model properties "
+                + "('capability'='CHAT', 'provider'='openai_compatible', "
+                + "'endpoint'='https://models.example.test/v1/chat/completions', "
+                + "'model'='chat-model', 'credential_ref'='TEST_MODEL')", ctx), ctx);
+        try {
+            for (String sql : List.of("select ai_custom_query('ai_privilege_model', 'p')",
+                    "select concat((select ai_custom_query('ai_privilege_model', 'p')), '!')",
+                    "select * from (values (ai_custom_query('ai_privilege_model', 'p'))) v(x)",
+                    "select 'p' as p union all select 'q' order by ai_custom_query('ai_privilege_model', p)")) {
+                verifyGrantRevoke(sql, "grant usage on ai model ai_privilege_model to test",
+                        "revoke usage on ai model ai_privilege_model from test", "USAGE privilege(s) on AI MODEL");
+            }
+            ctxToRoot();
+            starRocksAssert.withView("create view db1.ai_model_usage_view as "
+                    + "select ai_custom_query('ai_privilege_model', 'p') as answer");
+            starRocksAssert.withView("create view db1.ai_model_nested_view as select * from db1.ai_model_usage_view");
+            starRocksAssert.withView("create view db1.ai_model_security_view as "
+                    + "select ai_custom_query('ai_privilege_model', 'p') as answer");
+            ((View) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("db1", "ai_model_security_view")).setSecurity(true);
+            for (String view : List.of("ai_model_usage_view", "ai_model_nested_view", "ai_model_security_view")) {
+                grantRevokeSqlAsRoot("grant select on view db1." + view + " to test");
+                try {
+                    verifyGrantRevoke("select * from db1." + view,
+                            "grant usage on ai model ai_privilege_model to test",
+                            "revoke usage on ai model ai_privilege_model from test", "USAGE privilege(s) on AI MODEL");
+                } finally {
+                    grantRevokeSqlAsRoot("revoke select on view db1." + view + " from test");
+                }
+            }
+        } finally {
+            ctxToRoot();
+            for (String view : List.of("ai_model_nested_view", "ai_model_security_view", "ai_model_usage_view")) {
+                DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop view if exists db1." + view, ctx), ctx);
+            }
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop ai model ai_privilege_model", ctx), ctx);
+        }
     }
 
     @Test
@@ -3904,6 +4138,9 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                     .thenCallRealMethod();
             authorizerMockedStatic
                     .when(() -> Authorizer.check(Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
+            authorizerMockedStatic
+                    .when(() -> Authorizer.check(Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
 
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(),

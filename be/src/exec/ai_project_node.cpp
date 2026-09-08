@@ -41,6 +41,7 @@ namespace starrocks {
 namespace {
 
 constexpr std::string_view kSystemChatConfigId = "__system_chat__";
+constexpr std::string_view kSystemEmbeddingConfigId = "__system_text_embedding__";
 constexpr std::string_view kOpenAICompatibleProvider = "openai_compatible";
 constexpr std::string_view kInvalidAIProjectPlan = "Invalid AI project plan";
 
@@ -54,6 +55,12 @@ bool contains_control_character(std::string_view value) {
 
 bool is_non_blank(std::string_view value) {
     return std::any_of(value.begin(), value.end(), [](unsigned char c) { return std::isspace(c) == 0; });
+}
+
+bool is_valid_credential_ref(std::string_view ref) {
+    return !ref.empty() && ref.size() <= 64 && std::all_of(ref.begin(), ref.end(), [](unsigned char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+    });
 }
 
 size_t count_ai_expressions(const Expr* expr) {
@@ -71,10 +78,6 @@ bool references_any_slot(const Expr* expr, const std::unordered_set<SlotId>& slo
     bool found = false;
     expr->for_each_slot_id([&](SlotId slot_id) { found = found || slots.contains(slot_id); });
     return found;
-}
-
-bool requires_default_model(AIFunctionSignature signature) {
-    return signature == AIFunctionSignature::PROMPT || signature == AIFunctionSignature::PROMPT_OPTIONS;
 }
 
 Status create_ai_project_expr(ObjectPool* pool, const TExpr& thrift_expr, RuntimeState* state, ExprContext** expr_ctx) {
@@ -107,7 +110,7 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     const TAIProjectNode& thrift_project = tnode.ai_project_node;
     if (!thrift_project.__isset.slot_map || !thrift_project.__isset.ai_model_configs ||
-        thrift_project.slot_map.empty() || thrift_project.ai_model_configs.size() != 1) {
+        thrift_project.slot_map.empty() || thrift_project.ai_model_configs.empty()) {
         return invalid_ai_project_plan();
     }
 
@@ -119,26 +122,54 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
-    const auto config_it = thrift_project.ai_model_configs.find(std::string(kSystemChatConfigId));
-    if (config_it == thrift_project.ai_model_configs.end()) {
-        return invalid_ai_project_plan();
-    }
-    const TAIModelConfiguration& model_config = config_it->second;
-    if (!model_config.__isset.chat || !model_config.chat.__isset.endpoint || !model_config.chat.__isset.model ||
-        !model_config.chat.__isset.provider || !is_non_blank(model_config.chat.endpoint) ||
-        contains_control_character(model_config.chat.endpoint) ||
-        model_config.chat.provider != kOpenAICompatibleProvider ||
-        contains_control_character(model_config.chat.model)) {
-        return invalid_ai_project_plan();
+    pipeline::AIProjectModelConfigs configs;
+    std::unordered_set<int64_t> model_ids;
+    for (const auto& [id, model_config] : thrift_project.ai_model_configs) {
+        if (!is_non_blank(id) || contains_control_character(id) ||
+            model_config.__isset.chat == model_config.__isset.text_embedding) {
+            return invalid_ai_project_plan();
+        }
+        const auto capability = model_config.__isset.chat ? AICapability::CHAT : AICapability::TEXT_EMBEDDING;
+        const TAIEndpointConfig& endpoint = model_config.__isset.chat ? model_config.chat : model_config.text_embedding;
+        if (!endpoint.__isset.endpoint || !endpoint.__isset.model || !endpoint.__isset.provider ||
+            !is_non_blank(endpoint.endpoint) || contains_control_character(endpoint.endpoint) ||
+            endpoint.provider != kOpenAICompatibleProvider || contains_control_character(endpoint.model)) {
+            return invalid_ai_project_plan();
+        }
+        const auto source = model_config.__isset.source ? model_config.source : TAIModelSource::SYSTEM;
+        if (source == TAIModelSource::SYSTEM) {
+            // Preserve the legacy SYSTEM wire shape, never infer an object route from its key.
+            if (model_config.__isset.model_id || endpoint.__isset.credential_ref ||
+                id != (capability == AICapability::CHAT ? kSystemChatConfigId : kSystemEmbeddingConfigId)) {
+                return invalid_ai_project_plan();
+            }
+        } else if (source == TAIModelSource::AI_MODEL) {
+            if (!model_config.__isset.model_id || model_config.model_id <= 0 ||
+                !model_ids.emplace(model_config.model_id).second || id == kSystemChatConfigId ||
+                id == kSystemEmbeddingConfigId || !is_non_blank(endpoint.model) || !endpoint.__isset.credential_ref ||
+                !is_valid_credential_ref(endpoint.credential_ref)) {
+                return invalid_ai_project_plan();
+            }
+        } else {
+            // RESOURCE is a reserved, unsupported pre-release protocol value.
+            return invalid_ai_project_plan();
+        }
+        configs.emplace(id, pipeline::AIProjectModelConfig{
+                                    .endpoint = endpoint.endpoint,
+                                    .model = endpoint.model,
+                                    .credential_ref = endpoint.credential_ref,
+                                    .capability = capability,
+                                    .source = source,
+                                    .model_id = source == TAIModelSource::AI_MODEL ? model_config.model_id : 0,
+                            });
     }
 
-    _endpoint = model_config.chat.endpoint;
-    pipeline::AIProjectProjectionSpec projection_spec(state, {}, {}, model_config.chat.model);
+    pipeline::AIProjectProjectionSpec projection_spec(state, {}, {}, std::move(configs));
 
     std::unordered_set<SlotId> output_slots;
     std::unordered_set<SlotId> ai_output_slots;
+    std::unordered_set<std::string> used_configs;
     bool has_ai_output = false;
-    bool needs_default_model = false;
 
     for (const auto& [slot_id, thrift_expr] : thrift_project.slot_map) {
         const auto slot = record_slots.find(slot_id);
@@ -166,17 +197,22 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
 
         auto* ai_expr = dynamic_cast<AIFunctionCallExpr*>(root);
-        if (ai_expr == nullptr || count_ai_expressions(root) != 1 ||
-            ai_expr->model_config_id() != kSystemChatConfigId) {
+        if (ai_expr == nullptr || count_ai_expressions(root) != 1 || ai_expr->type() != slot_desc->type()) {
+            return invalid_ai_project_plan();
+        }
+        const auto route = projection_spec.model_configs().find(ai_expr->model_config_id());
+        if (route == projection_spec.model_configs().end() || route->second.capability != ai_expr->capability() ||
+            route->second.source != ai_expr->model_source() ||
+            (ai_expr->requires_default_model() && !is_non_blank(route->second.model))) {
             return invalid_ai_project_plan();
         }
         output.kind = pipeline::AIProjectOutputKind::AI;
         ai_output_slots.emplace(slot_id);
         has_ai_output = true;
-        needs_default_model = needs_default_model || requires_default_model(ai_expr->signature());
+        used_configs.emplace(ai_expr->model_config_id());
     }
 
-    if (!has_ai_output || (needs_default_model && !is_non_blank(projection_spec.default_model()))) {
+    if (!has_ai_output || used_configs.size() != projection_spec.model_configs().size()) {
         return invalid_ai_project_plan();
     }
     for (const pipeline::AIProjectOutputSpec& output : projection_spec.outputs()) {
@@ -243,7 +279,7 @@ StatusOr<pipeline::OpFactories> AIProjectNode::decompose_to_pipeline(pipeline::P
     const size_t upstream_dop = upstream_source->degree_of_parallelism();
 
     ASSIGN_OR_RETURN(auto ai_factories,
-                     AIProjectFactory::create(context, id(), upstream_dop, _endpoint, std::move(_projection_spec)));
+                     AIProjectFactory::create(context, id(), upstream_dop, std::move(_projection_spec)));
     auto sink = std::move(ai_factories.sink);
     auto source = std::move(ai_factories.source);
 

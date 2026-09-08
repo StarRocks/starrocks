@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.AlterAIModelStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
@@ -139,6 +140,7 @@ import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CompactionClause;
+import com.starrocks.sql.ast.CreateAIModelStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
@@ -175,9 +177,11 @@ import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DelSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescAIModelStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.DropAIModelStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropBranchClause;
@@ -331,6 +335,7 @@ import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
+import com.starrocks.sql.ast.ShowAIModelsStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -4883,6 +4888,42 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
         return new ExecuteScriptStmt(targetType, nodeIds, script, createPos(context));
+    }
+
+    // ---------------------------------------- AI Model Statement ----------------------------------------------------
+    @Override
+    public ParseNode visitCreateAIModelStatement(StarRocksParser.CreateAIModelStatementContext context) {
+        String name = ((Identifier) visit(context.identifierOrString())).getValue();
+        String comment = context.comment() == null ? null
+                : ((StringLiteral) visit(context.comment().string())).getStringValue();
+        return new CreateAIModelStmt(context.IF() != null, name, getCaseSensitiveProperties(context.properties()),
+                comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterAIModelStatement(StarRocksParser.AlterAIModelStatementContext context) {
+        String name = ((Identifier) visit(context.identifierOrString())).getValue();
+        String comment = context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
+        return new AlterAIModelStmt(context.IF() != null, name, getCaseSensitivePropertyList(context.propertyList()),
+                comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropAIModelStatement(StarRocksParser.DropAIModelStatementContext context) {
+        String name = ((Identifier) visit(context.identifierOrString())).getValue();
+        return new DropAIModelStmt(context.IF() != null, name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowAIModelsStatement(StarRocksParser.ShowAIModelsStatementContext context) {
+        String pattern = context.pattern == null ? null : ((StringLiteral) visit(context.pattern)).getStringValue();
+        return new ShowAIModelsStmt(pattern, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDescAIModelStatement(StarRocksParser.DescAIModelStatementContext context) {
+        String name = ((Identifier) visit(context.identifierOrString())).getValue();
+        return new DescAIModelStmt(name, createPos(context));
     }
 
     // ---------------------------------------- Storage Volume Statement ----------------------------------------------

@@ -19,6 +19,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.authorization.ranger.RangerAccessController;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -39,6 +40,21 @@ import static java.util.Locale.ENGLISH;
 public class RangerStarRocksAccessController extends RangerAccessController {
     public RangerStarRocksAccessController() {
         super("starrocks", null);
+    }
+
+    @Override
+    public void checkAIModelAction(ConnectContext context, AIModel model, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        if (model == null || model.getId() <= 0) {
+            throw new AccessDeniedException();
+        }
+        hasPermission(RangerStarRocksResource.builder().setAIModel(model.getName()).build(),
+                context.getCurrentUserIdentity(), context.getGroups(), privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnAIModel(ConnectContext context, AIModel model) throws AccessDeniedException {
+        checkAIModelAction(context, model, PrivilegeType.ANY);
     }
 
     @Override

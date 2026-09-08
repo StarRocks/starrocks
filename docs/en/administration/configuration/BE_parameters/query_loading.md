@@ -130,6 +130,16 @@ This topic introduces the following types of BE configurations:
 - Description: Per-BE request admission rate for each chat/text bucket, keyed by endpoint, credential, and capability. Lower it to comply with provider quotas or reduce outbound load; increase it only when the provider and BE have sufficient capacity. Runtime updates take effect live, wake queued admissions, and require no BE restart.
 - Introduced in: -
 
+### ai_function_rate_limit_qps_embedding
+
+- Default: 128
+- Type: Int (32-bit)
+- Unit: Requests per second
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. Applies to SYSTEM and AI MODEL-selected embedding calls, including retries. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
+- Introduced in: -
+
 ### ai_function_max_inflight
 
 - Default: 512

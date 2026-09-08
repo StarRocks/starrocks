@@ -14,6 +14,7 @@
 
 package com.starrocks.authorization;
 
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -27,6 +28,15 @@ import java.util.List;
 import java.util.Map;
 
 public interface AccessController {
+    default void checkAIModelAction(ConnectContext context, AIModel model, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAnyActionOnAIModel(ConnectContext context, AIModel model) throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
     default void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
             throws AccessDeniedException {
         throw new AccessDeniedException();

@@ -41,6 +41,7 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AIModelBinder;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -138,9 +140,11 @@ public class StatementPlanner {
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
 
+            AIModelBindings aiModelBindings = AIModelBinder.bind(stmt, session.getGlobalStateMgr().getAIModelMgr());
+
             // Authorization check
             if (!session.isBypassAuthorizerCheck()) {
-                Authorizer.check(stmt, session);
+                Authorizer.check(stmt, session, aiModelBindings);
             }
             if (stmt instanceof QueryStatement) {
                 OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
@@ -154,11 +158,12 @@ public class StatementPlanner {
                 needWholePhaseLock = isLockFree(areTablesCopySafe, session) ? false : true;
                 ExecPlan plan;
                 if (needWholePhaseLock) {
-                    plan = createQueryPlan(queryStmt, session, resultSinkType);
+                    plan = createQueryPlan(queryStmt, session, resultSinkType, aiModelBindings);
                 } else {
                     long planStartTime = OptimisticVersion.generate();
                     unLock(plannerMetaLocker);
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker, planStartTime);
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker,
+                            planStartTime, aiModelBindings);
                 }
                 if (spmPlanner.getBaseline() != null) {
                     plan.setUseBaseline(spmPlanner.getBaseline().getId());
@@ -167,15 +172,15 @@ public class StatementPlanner {
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.SELECT);
                 return plan;
             } else if (stmt instanceof InsertStmt) {
-                ExecPlan plan = planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session);
+                ExecPlan plan = planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session, aiModelBindings);
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
                 return plan;
             } else if (stmt instanceof UpdateStmt) {
-                return new UpdatePlanner().plan((UpdateStmt) stmt, session);
+                return new UpdatePlanner().plan((UpdateStmt) stmt, session, aiModelBindings);
             } else if (stmt instanceof DeleteStmt) {
-                return new DeletePlanner().plan((DeleteStmt) stmt, session);
+                return new DeletePlanner().plan((DeleteStmt) stmt, session, aiModelBindings);
             } else if (stmt instanceof MergeIntoStmt) {
-                return new MergeIntoPlanner().plan((MergeIntoStmt) stmt, session);
+                return new MergeIntoPlanner().plan((MergeIntoStmt) stmt, session, aiModelBindings);
             }
         } catch (OutOfMemoryError e) {
             LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());
@@ -319,9 +324,14 @@ public class StatementPlanner {
     public static ExecPlan planInsertStmt(PlannerMetaLocker plannerMetaLocker,
                                           InsertStmt insertStmt,
                                           ConnectContext connectContext) {
+        return planInsertStmt(plannerMetaLocker, insertStmt, connectContext, AIModelBindings.EMPTY);
+    }
+
+    private static ExecPlan planInsertStmt(PlannerMetaLocker plannerMetaLocker, InsertStmt insertStmt,
+                                            ConnectContext connectContext, AIModelBindings aiModelBindings) {
         // if use optimistic lock, we will unlock it in InsertPlanner#buildExecPlanWithRetrye
         boolean useOptimisticLock = isLockFreeInsertStmt(insertStmt, connectContext);
-        return new InsertPlanner(plannerMetaLocker, useOptimisticLock).plan(insertStmt, connectContext);
+        return new InsertPlanner(plannerMetaLocker, useOptimisticLock).plan(insertStmt, connectContext, aiModelBindings);
     }
 
     private static boolean isLockFreeInsertStmt(InsertStmt insertStmt,
@@ -340,7 +350,7 @@ public class StatementPlanner {
 
     private static ExecPlan createQueryPlan(StatementBase stmt,
                                             ConnectContext session,
-                                            TResultSinkType resultSinkType) {
+                                            TResultSinkType resultSinkType, AIModelBindings aiModelBindings) {
         QueryStatement queryStmt = (QueryStatement) stmt;
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
@@ -382,7 +392,7 @@ public class StatementPlanner {
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                     resultSinkType,
-                    !session.getSessionVariable().isSingleNodeExecPlan(), isShortCircuit);
+                    !session.getSessionVariable().isSingleNodeExecPlan(), isShortCircuit, aiModelBindings);
             execPlan.setLogicalPlan(logicalPlan);
             execPlan.setColumnRefFactory(columnRefFactory);
             return execPlan;
@@ -394,6 +404,13 @@ public class StatementPlanner {
                                                     TResultSinkType resultSinkType,
                                                     PlannerMetaLocker plannerMetaLocker,
                                                     long planStartTime) {
+        return createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker, planStartTime,
+                AIModelBindings.EMPTY);
+    }
+
+    private static ExecPlan createQueryPlanWithReTry(QueryStatement queryStmt, ConnectContext session,
+                                                     TResultSinkType resultSinkType, PlannerMetaLocker plannerMetaLocker,
+                                                     long planStartTime, AIModelBindings aiModelBindings) {
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
 
@@ -411,6 +428,7 @@ public class StatementPlanner {
             if (!isSchemaValid) {
                 planStartTime = OptimisticVersion.generate();
                 reAnalyzeStmt(queryStmt, session, plannerMetaLocker);
+                AIModelBinder.validateBindings(queryStmt, aiModelBindings);
                 colNames = queryStmt.getQueryRelation().getColumnOutputNames();
                 isSchemaValid = true;
             }
@@ -457,7 +475,7 @@ public class StatementPlanner {
                     ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                             optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                             resultSinkType,
-                            !session.getSessionVariable().isSingleNodeExecPlan(), isShortCircuit);
+                            !session.getSessionVariable().isSingleNodeExecPlan(), isShortCircuit, aiModelBindings);
                     isSchemaValid = checkOlapTableSchemaValid(olapTables, planStartTime);
                     if (isSchemaValid) {
                         plan.setLogicalPlan(logicalPlan);

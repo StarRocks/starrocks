@@ -131,6 +131,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: endpoint、credential、capability ごとに分けられた chat/text bucket に対する、BE 単位のリクエスト admission rate です。Provider のクォータに合わせる、または送信負荷を抑える場合は値を小さくし、Provider と BE の両方に十分な容量がある場合にのみ増やします。実行時の変更は即時反映され、待機中の admission を起動します。BE の再起動は不要です。
 - 導入バージョン: -
 
+### ai_function_rate_limit_qps_embedding
+
+- デフォルト: 128
+- タイプ: Int（32 ビット）
+- 単位: リクエスト/秒
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: 各 BE でエンドポイント、認証情報、capability ごとに分けるテキスト埋め込み HTTP attempt bucket の admission rate です。SYSTEM と AI MODEL 指定の埋め込み呼び出しに適用され、リトライも含みます。`ai_function_rate_limit_qps_chat` とは独立していますが、プロセス全体の `ai_function_max_inflight` 制限も適用されます。プロバイダーのクォータや送信負荷に合わせて値を下げ、プロバイダーと BE の両方に容量がある場合のみ上げてください。実行時の変更は即時反映され、BE の再起動は不要です。
+- 導入バージョン: -
+
 ### ai_function_max_inflight
 
 - デフォルト: 512

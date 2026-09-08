@@ -87,6 +87,101 @@ TEST(OpenAICompatibleProviderTest, BuildsExactCanonicalRequestAndOnlyApprovedHea
             result->body);
 }
 
+TEST(OpenAICompatibleProviderTest, BuildsSingleEmbeddingInputWithTypedOptions) {
+    OpenAICompatibleProvider provider;
+    auto options = make_json_options({
+            {.key = "dimensions", .serialized_json = "3", .kind = AIProviderOptionKind::NUMBER},
+            {.key = "metadata", .serialized_json = R"({"enabled":true})", .kind = AIProviderOptionKind::OBJECT},
+    });
+    auto result = provider.build_request(AIChatRequest{
+            .endpoint = "https://provider.example/v1/embeddings",
+            .model = "embedding-model",
+            .api_key = "key",
+            .prompt = "hello\nworld",
+            .options = &options,
+            .capability = AICapability::TEXT_EMBEDDING,
+    });
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ("https://provider.example/v1/embeddings", result->url);
+    EXPECT_EQ(
+            R"({"model":"embedding-model","input":"hello\nworld","encoding_format":"float","dimensions":3,"metadata":{"enabled":true}})",
+            result->body);
+    ASSERT_EQ(3, result->headers.size());
+    EXPECT_EQ("Bearer key", result->headers.back().value);
+}
+
+TEST(OpenAICompatibleProviderTest, RejectsEmbeddingReservedOptions) {
+    OpenAICompatibleProvider provider;
+    for (const std::string_view key : {"model", "input", "encoding_format"}) {
+        auto options = make_json_options({{.key = std::string(key),
+                                           .serialized_json = R"("secret-override")",
+                                           .kind = AIProviderOptionKind::STRING}});
+        auto result = provider.build_request(AIChatRequest{
+                .endpoint = "https://provider.example/v1/embeddings",
+                .model = "model",
+                .api_key = "key",
+                .prompt = "input",
+                .options = &options,
+                .capability = AICapability::TEXT_EMBEDDING,
+        });
+        expect_status_redacted(result.status(), {"secret-override"});
+    }
+}
+
+TEST(OpenAICompatibleProviderTest, ParsesExactlyOneFiniteFloatEmbedding) {
+    OpenAICompatibleProvider provider;
+    auto result = provider.parse_response(R"({"data":[{"index":0,"embedding":[0,0.25,-2,3e-5]}]})",
+                                          AICapability::TEXT_EMBEDDING);
+    ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
+    const auto& value = std::get<AIProviderSuccess>(result).value;
+    ASSERT_TRUE(std::holds_alternative<std::vector<float>>(value));
+    EXPECT_EQ((std::vector<float>{0.0f, 0.25f, -2.0f, 3e-5f}), std::get<std::vector<float>>(value));
+}
+
+TEST(OpenAICompatibleProviderTest, RejectsMalformedEmbeddingCardinalityIndexesAndElements) {
+    OpenAICompatibleProvider provider;
+    const std::vector<std::string_view> malformed = {
+            R"({})",
+            R"({"data":{}})",
+            R"({"data":[]})",
+            R"({"data":[null]})",
+            R"({"data":[{"index":0,"embedding":[1]},{"index":1,"embedding":[2]}]})",
+            R"({"data":[{"embedding":[1]}]})",
+            R"({"data":[{"index":1,"embedding":[1]}]})",
+            R"({"data":[{"index":-1,"embedding":[1]}]})",
+            R"({"data":[{"index":"0","embedding":[1]}]})",
+            R"({"data":[{"index":0.5,"embedding":[1]}]})",
+            R"({"data":[{"index":0}]})",
+            R"({"data":[{"index":0,"embedding":[]}]})",
+            R"({"data":[{"index":0,"embedding":"base64"}]})",
+            R"({"data":[{"index":0,"embedding":[null]}]})",
+            R"({"data":[{"index":0,"embedding":[true]}]})",
+            R"({"data":[{"index":0,"embedding":["1"]}]})",
+            R"({"data":[{"index":0,"embedding":[{}]}]})",
+            R"({"data":[{"index":0,"embedding":[[]]}]})",
+            R"({"data":[{"index":0,"embedding":[3.5e38]}]})",
+            R"({"data":[{"index":0,"embedding":[-3.5e38]}]})",
+            R"({"data":[{"index":0,"embedding":[1e400]}]})",
+            R"({"data":[{"index":0,"embedding":[NaN]}]})",
+            R"({"data":[{"index":0,"embedding":[Infinity]}]})",
+            R"({"choices":[{"message":{"content":"not-an-embedding"}}]})",
+    };
+    for (const auto body : malformed) {
+        EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(
+                provider.parse_response(body, AICapability::TEXT_EMBEDDING)))
+                << body;
+    }
+}
+
+TEST(OpenAICompatibleProviderTest, EmbeddingErrorsRetainSanitizedClassificationAndPrecedence) {
+    OpenAICompatibleProvider provider;
+    auto result = provider.parse_response(
+            R"({"data":[{"index":0,"embedding":[1]}],"error":{"code":"rate_limit_exceeded","message":"secret"}})",
+            AICapability::TEXT_EMBEDDING);
+    ASSERT_TRUE(std::holds_alternative<AIProviderStructuredError>(result));
+    EXPECT_EQ(AIProviderErrorCode::RATE_LIMIT_EXCEEDED, std::get<AIProviderStructuredError>(result).code);
+}
+
 TEST(OpenAICompatibleProviderTest, MergesPreparedOptionsOnlyAtTheTopLevel) {
     OpenAICompatibleProvider provider;
     auto options = make_json_options({
@@ -253,15 +348,15 @@ TEST(OpenAICompatibleProviderTest, ParsesTheFirstChoiceAndPreservesEmptyOrNulCon
     auto first = provider.parse_response(
             R"({"choices":[{"message":{"content":"first"}},{"message":{"content":"second"}}]})");
     ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(first));
-    EXPECT_EQ("first", std::get<AIProviderSuccess>(first).content);
+    EXPECT_EQ("first", std::get<std::string>(std::get<AIProviderSuccess>(first).value));
 
     auto empty = provider.parse_response(R"({"choices":[{"message":{"content":""}}]})");
     ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(empty));
-    EXPECT_TRUE(std::get<AIProviderSuccess>(empty).content.empty());
+    EXPECT_TRUE(std::get<std::string>(std::get<AIProviderSuccess>(empty).value).empty());
 
     auto with_nul = provider.parse_response(R"({"choices":[{"message":{"content":"a\u0000b"}}]})");
     ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(with_nul));
-    EXPECT_EQ(std::string("a\0b", 3), std::get<AIProviderSuccess>(with_nul).content);
+    EXPECT_EQ(std::string("a\0b", 3), std::get<std::string>(std::get<AIProviderSuccess>(with_nul).value));
 }
 
 TEST(OpenAICompatibleProviderTest, MalformedSuccessShapesReturnOnlyTheMalformedKind) {

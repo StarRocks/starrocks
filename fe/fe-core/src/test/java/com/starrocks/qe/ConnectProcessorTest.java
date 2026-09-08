@@ -87,6 +87,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -1460,6 +1462,65 @@ public class ConnectProcessorTest extends DDLTestBase {
             Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage("Unknown table 'x'.", plain));
         } finally {
             Config.enable_audit_sql = original;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ALTER AI MODEL m SET ('api_key'='do-not-expose')",
+            "ALTER AI MODEL m SET (' api_key '='do-not-expose')",
+            "ALTER AI MODEL m SET ('\\api_key'='do-not-expose')",
+            "ALTER AI MODEL m SET ('\\tapi_key\\n'='do-not-expose')",
+            "ALTER AI MODEL m SET (' endpoint '='https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('end\\point'='https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET (\" end\\point \"=\"https://models.example.test/v1?token=do-not-expose\")",
+            "ALTER AI MODEL m SET ('endpoint'='https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint'='https:\\/\\/user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint'='https://user:part''do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint' /* note */ = 'https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint'='https://models.example.test/v1?token=do-not-expose')",
+            "ALTER AI MODEL m SET ('endpoint'='https://models.example.test/v1#do-not-expose')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_chat_endpoint'='https://models.example.test/v1?token=do-not-expose')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_embedding_endpoint'='https://user:do-not-expose@models.example.test/v1')"
+    })
+    public void testAuditRedactsRejectedEndpointProperties(String sql) throws Exception {
+        boolean originalAuditSql = Config.enable_audit_sql;
+        boolean originalDesensitize = Config.enable_sql_desensitize_in_log;
+        try {
+            Config.enable_audit_sql = true;
+            Config.enable_sql_desensitize_in_log = false;
+            StatementBase statement = com.starrocks.sql.parser.SqlParser.parseSingleStatement(sql, 0);
+            Method formatStmt = ConnectProcessor.class.getDeclaredMethod("formatStmt", String.class, StatementBase.class);
+            formatStmt.setAccessible(true);
+            ConnectProcessor processor = new ConnectProcessor(myContext);
+            String formatted = (String) formatStmt.invoke(processor, sql, statement);
+            Assertions.assertFalse(formatted.contains("do-not-expose"));
+            Assertions.assertFalse(((String) formatStmt.invoke(processor, sql, null)).contains("do-not-expose"));
+            Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage(
+                    "Unexpected input 'do-not-expose'", sql));
+        } finally {
+            Config.enable_audit_sql = originalAuditSql;
+            Config.enable_sql_desensitize_in_log = originalDesensitize;
+        }
+    }
+
+    @Test
+    public void testAuditPreservesSafeEndpointProperty() throws Exception {
+        boolean originalAuditSql = Config.enable_audit_sql;
+        boolean originalDesensitize = Config.enable_sql_desensitize_in_log;
+        try {
+            Config.enable_audit_sql = true;
+            Config.enable_sql_desensitize_in_log = false;
+            String sql = "ALTER AI MODEL m SET ('endpoint'='https://models.example.test/v1')";
+            StatementBase statement = com.starrocks.sql.parser.SqlParser.parseSingleStatement(sql, 0);
+            Method formatStmt = ConnectProcessor.class.getDeclaredMethod("formatStmt", String.class, StatementBase.class);
+            formatStmt.setAccessible(true);
+            Assertions.assertEquals(sql, formatStmt.invoke(new ConnectProcessor(myContext), sql, statement));
+            Assertions.assertEquals("AI model does not exist", ConnectProcessor.auditedErrorMessage(
+                    "AI model does not exist", sql));
+        } finally {
+            Config.enable_audit_sql = originalAuditSql;
+            Config.enable_sql_desensitize_in_log = originalDesensitize;
         }
     }
 

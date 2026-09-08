@@ -1,0 +1,40 @@
+-- name: test_ai_model
+-- Metadata and EXPLAIN only: no remote model calls or BE credentials are needed.
+
+CREATE AI MODEL ai_chat_${uuid0} COMMENT 'integration model'
+PROPERTIES ('capability' = 'CHAT', 'provider' = 'openai_compatible',
+'endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'chat-model', 'credential_ref' = 'TEST_MODEL');
+
+CREATE AI MODEL IF NOT EXISTS ai_chat_${uuid0}
+PROPERTIES ('capability' = 'CHAT', 'provider' = 'openai_compatible',
+'endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'must-not-replace', 'credential_ref' = 'TEST_MODEL');
+
+SHOW AI MODELS LIKE 'ai_chat_${uuid0}';
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+
+ALTER AI MODEL ai_chat_${uuid0} SET ('model' = 'chat-v2');
+
+ALTER AI MODEL ai_chat_${uuid0} COMMENT = 'updated';
+
+DESC AI MODEL ai_chat_${uuid0};
+
+CREATE ROLE ai_model_role_${uuid0};
+
+GRANT USAGE ON AI MODEL ai_chat_${uuid0} TO ROLE ai_model_role_${uuid0};
+
+REVOKE USAGE ON AI MODEL ai_chat_${uuid0} FROM ROLE ai_model_role_${uuid0};
+
+DROP ROLE ai_model_role_${uuid0};
+
+DROP AI MODEL ai_chat_${uuid0};
+
+DROP AI MODEL IF EXISTS ai_chat_${uuid0};
+
+SHOW AI MODELS LIKE 'ai_chat_${uuid0}';
+CLEANUP {
+    DROP AI MODEL IF EXISTS ai_chat_${uuid0};
+    DROP ROLE IF EXISTS ai_model_role_${uuid0};
+} END CLEANUP
