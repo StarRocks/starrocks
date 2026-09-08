@@ -26,6 +26,7 @@ import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -371,10 +372,18 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         if (context.getExecutionId() == null) {
             context.setExecutionId(loadId);
         }
-        // Also propagate compute resource so the txn carries the same resource context.
-        if (context.getCurrentComputeResource() == null) {
-            context.setCurrentComputeResource(computeResource);
+        // Bind the context to the task's warehouse and compute resource before the transaction is
+        // created: TransactionStmtExecutor.beginStmt stores context.getCurrentComputeResource() in
+        // the TransactionState, and createPartition, updateImmutablePartition and publish derive
+        // tablet locations and nodes from it. In shared-data mode getCurrentComputeResource() never
+        // returns null: it acquires a resource from the context's warehouse (the default one for
+        // this private context) and re-acquires whenever the resource's warehouse differs from the
+        // context's, so a null check left the transaction on the default warehouse while the load's
+        // coordinator runs on the task's warehouse.
+        if (RunMode.isSharedDataMode()) {
+            context.setCurrentWarehouseId(computeResource.getWarehouseId());
         }
+        context.setCurrentComputeResource(computeResource);
 
         TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO),
                 TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, label);
@@ -847,9 +856,19 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 if (!checkLoadAllowed(resp)) {
                     return null;
                 }
-                task = taskMaps.putIfAbsent(table.getName(), newTask);
+                task = taskMaps.get(table.getName());
                 if (task == null) {
+                    // Register the transaction with DatabaseTransactionMgr and add this table to it
+                    // before the sub-task exists, as the INSERT path of an explicit transaction does
+                    // before it executes. The BE looks the transaction up there while it writes
+                    // (createPartition for automatic partitioning, updateImmutablePartition for
+                    // automatic bucketing); a transaction that only reaches DatabaseTransactionMgr at
+                    // commit fails those lookups with "txn %d not exist". It also lets a failed
+                    // sub-task abort the shared transaction (StreamLoadTask.cancelTask). If this
+                    // throws, nothing is added to taskMaps and executeLoadTask aborts the transaction.
+                    TransactionStmtExecutor.activateTable(dbId, table.getId(), context);
                     task = newTask;
+                    taskMaps.put(table.getName(), task);
                     boolean isFirstSubTask = taskMaps.size() == 1;
                     LOG.info("Add stream load task {}", task.getShowInfo());
                     task.tryBegin(0, 1, txnId);

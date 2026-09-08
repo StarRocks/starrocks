@@ -1,0 +1,86 @@
+-- name: test_multi_txn_auto_create_partition @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `transaction_simple` (
+  `company_id` LARGEINT NOT NULL,
+  `txn_date` DATE NOT NULL,
+  `val` STRING NULL
+) ENGINE=OLAP
+PRIMARY KEY (`company_id`, `txn_date`)
+PARTITION BY date_trunc('month', `txn_date`)
+DISTRIBUTED BY HASH(`company_id`) BUCKETS 6;
+-- result:
+-- !result
+CREATE TABLE `site_access` (
+  `event_day` DATE NOT NULL,
+  `site_id` INT NOT NULL,
+  `pv` BIGINT NULL
+) ENGINE=OLAP
+DUPLICATE KEY (`event_day`, `site_id`)
+PARTITION BY date_trunc('day', `event_day`)
+DISTRIBUTED BY HASH(`site_id`) BUCKETS 3;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+[UC]shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:transaction_simple" -H "format:json" -H "strip_outer_array:true" -H "transaction_type:multi" -d '[{"company_id": 12345, "txn_date": "2026-10-05", "val": "val1"}, {"company_id": 12346, "txn_date": "2026-11-20", "val": "val2"}]' -XPUT ${url}/api/transaction/load
+-- result:
+0
+-- !result
+[UC]shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:site_access" -H "column_separator:," -H "transaction_type:multi" -d '2026-10-05,1,100' -XPUT ${url}/api/transaction/load
+-- result:
+0
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+select * from transaction_simple order by company_id;
+-- result:
+12345	2026-10-05	val1
+12346	2026-11-20	val2
+-- !result
+select * from site_access order by event_day, site_id;
+-- result:
+2026-10-05	1	100
+-- !result
+select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'transaction_simple' order by PARTITION_NAME;
+-- result:
+p202610
+p202611
+-- !result
+select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'site_access' order by PARTITION_NAME;
+-- result:
+p20261005
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:existing_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+[UC]shell: curl -s --location-trusted -u root: -H "label:existing_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:transaction_simple" -H "format:json" -H "strip_outer_array:true" -H "transaction_type:multi" -d '[{"company_id": 12347, "txn_date": "2026-10-06", "val": "val3"}]' -XPUT ${url}/api/transaction/load
+-- result:
+0
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:existing_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+select * from transaction_simple order by company_id;
+-- result:
+12345	2026-10-05	val1
+12346	2026-11-20	val2
+12347	2026-10-06	val3
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

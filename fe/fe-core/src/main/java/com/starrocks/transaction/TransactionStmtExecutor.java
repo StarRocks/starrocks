@@ -252,6 +252,25 @@ public class TransactionStmtExecutor {
         LOG.info("load database {} table {} item {} txn {}", dbId, tableId, item, context.getTxnId());
     }
 
+    /**
+     * Register the explicit transaction with the database transaction manager and add {@code tableId} to it.
+     * This is the registration the INSERT path above performs before it executes, and a load must perform it
+     * before its coordinator starts as well: while the data is being written, the BE looks the transaction up
+     * through DatabaseTransactionMgr (createPartition for automatic partitioning, updateImmutablePartition for
+     * automatic bucketing), and an abort of the load has to find it there too. A transaction that only lives in
+     * the explicit transaction map until commit fails those lookups with "txn %d not exist". The registration is
+     * idempotent, so the commit-time {@link #loadData(long, long, ExplicitTxnState.ExplicitTxnStateItem,
+     * ConnectContext)} may repeat it.
+     */
+    public static TransactionState activateTable(long dbId, long tableId, ConnectContext context)
+            throws StarRocksException {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                context.getTxnId(), dbId);
+        globalTransactionMgr.activateExplicitTransactionTable(context.getTxnId(), dbId, tableId);
+        return transactionState;
+    }
+
     public static void commitStmt(ConnectContext context, CommitStmt stmt) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
@@ -390,6 +409,11 @@ public class TransactionStmtExecutor {
 
         if (explicitTxnState.getTransactionStateItems().isEmpty()) {
             TransactionState transactionState = explicitTxnState.getTransactionState();
+            // A load registers the transaction with DatabaseTransactionMgr before it runs (see
+            // activateTable), so the transaction may be registered although no load produced an
+            // item (every load failed or was cancelled). Abort it there as well; otherwise it stays
+            // PREPARE until the transaction timeout and keeps its tables against schema changes.
+            abortRegisteredTransaction(transactionState, "rollback transaction by user");
             globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
             context.setTxnId(0);
             context.getState().setOk(0, 0, buildMessage(transactionState.getLabel(),
@@ -445,6 +469,24 @@ public class TransactionStmtExecutor {
             //clean global explicit transaction state
             globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
             context.setTxnId(0);
+        }
+    }
+
+    /**
+     * Abort the transaction in the database transaction manager it was registered with, if any. A transaction
+     * that already reached a final state (aborted by a failed load or by the timeout checker) is left alone.
+     */
+    private static void abortRegisteredTransaction(TransactionState transactionState, String reason) {
+        if (transactionState.getDbId() == 0 || !transactionState.isRunning()) {
+            return;
+        }
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    transactionState.getDbId(), transactionState.getTransactionId(), reason);
+        } catch (TransactionNotFoundException e) {
+            LOG.debug("txn {} already reached a final state before rollback", transactionState.getTransactionId());
+        } catch (StarRocksException e) {
+            LOG.warn("errors when abort txn {} without items", transactionState.getTransactionId(), e);
         }
     }
 

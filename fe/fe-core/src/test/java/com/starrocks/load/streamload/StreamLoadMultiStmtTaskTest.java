@@ -24,6 +24,7 @@ import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.ExplicitTxnState;
@@ -31,6 +32,8 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 import mockit.Invocation;
@@ -108,6 +111,43 @@ public class StreamLoadMultiStmtTaskTest {
         multiTask.beginTxn(resp);
         Assertions.assertTrue(resp.stateOK());
         Assertions.assertEquals(987654321L, multiTask.getTxnId());
+    }
+
+    @Test
+    public void testBeginTxnBindsContextToTaskWarehouseInSharedDataMode() throws Exception {
+        ComputeResource resource = WarehouseComputeResource.of(4242L);
+        StreamLoadMultiStmtTask task = new StreamLoadMultiStmtTask(2L, db, "label_wh", "u", "127.0.0.1",
+                1000L, System.currentTimeMillis(), resource);
+        List<Long> boundWarehouseIds = new ArrayList<>();
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new MockUp<com.starrocks.qe.ConnectContext>() {
+            @Mock
+            public void setCurrentWarehouseId(long warehouseId) {
+                boundWarehouseIds.add(warehouseId);
+            }
+        };
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                // The transaction takes its compute resource from the context: it must be the
+                // task's, not one acquired from the context's default warehouse.
+                Assertions.assertSame(resource, ctx.getCurrentComputeResourceNoAcquire());
+                ctx.setTxnId(42L);
+            }
+        };
+        TransactionResult resp = new TransactionResult();
+        task.beginTxn(resp);
+        Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals(42L, task.getTxnId());
+        Assertions.assertEquals(List.of(4242L), boundWarehouseIds);
     }
 
     @Test

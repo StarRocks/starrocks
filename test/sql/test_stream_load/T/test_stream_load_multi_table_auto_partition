@@ -1,0 +1,54 @@
+-- name: test_multi_txn_auto_create_partition @sequential
+-- A multi-table transaction stream load into expression-partitioned tables whose rows fall into
+-- partitions that do not exist yet. The BE asks the FE to create them while the transaction is
+-- still open, so the FE has to find the transaction before it is committed.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `transaction_simple` (
+  `company_id` LARGEINT NOT NULL,
+  `txn_date` DATE NOT NULL,
+  `val` STRING NULL
+) ENGINE=OLAP
+PRIMARY KEY (`company_id`, `txn_date`)
+PARTITION BY date_trunc('month', `txn_date`)
+DISTRIBUTED BY HASH(`company_id`) BUCKETS 6;
+
+CREATE TABLE `site_access` (
+  `event_day` DATE NOT NULL,
+  `site_id` INT NOT NULL,
+  `pv` BIGINT NULL
+) ENGINE=OLAP
+DUPLICATE KEY (`event_day`, `site_id`)
+PARTITION BY date_trunc('day', `event_day`)
+DISTRIBUTED BY HASH(`site_id`) BUCKETS 3;
+
+-- 1. Begin transaction
+shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+-- 2. Load JSON rows that need two new monthly partitions
+[UC]shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:transaction_simple" -H "format:json" -H "strip_outer_array:true" -H "transaction_type:multi" -d '[{"company_id": 12345, "txn_date": "2026-10-05", "val": "val1"}, {"company_id": 12346, "txn_date": "2026-11-20", "val": "val2"}]' -XPUT ${url}/api/transaction/load
+
+-- 3. A second table in the same transaction needs a new daily partition
+[UC]shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:site_access" -H "column_separator:," -H "transaction_type:multi" -d '2026-10-05,1,100' -XPUT ${url}/api/transaction/load
+
+-- 4. Commit (used to fail with "automatic create partition failed. error: txn N not exist")
+shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 5. Rows are visible in the partitions created during the load
+select * from transaction_simple order by company_id;
+select * from site_access order by event_day, site_id;
+select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'transaction_simple' order by PARTITION_NAME;
+select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'site_access' order by PARTITION_NAME;
+
+-- 6. A later transaction that loads into an existing partition still works
+shell: curl -s --location-trusted -u root: -H "label:existing_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+[UC]shell: curl -s --location-trusted -u root: -H "label:existing_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:transaction_simple" -H "format:json" -H "strip_outer_array:true" -H "transaction_type:multi" -d '[{"company_id": 12347, "txn_date": "2026-10-06", "val": "val3"}]' -XPUT ${url}/api/transaction/load
+
+shell: curl -s --location-trusted -u root: -H "label:existing_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+select * from transaction_simple order by company_id;
+
+drop database db_${uuid0};
