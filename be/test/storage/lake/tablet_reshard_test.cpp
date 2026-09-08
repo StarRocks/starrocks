@@ -394,6 +394,7 @@ protected:
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(fmt::format("segment-{}-{}.dat", metadata->id(), rowset_id));
             sm->set_size(128);
+            sm->set_num_rows(1);
         }
         auto* del_file = rowset->add_del_files();
         del_file->set_name("del.dat");
@@ -415,6 +416,7 @@ protected:
                 auto* sm = rowset->add_segment_metas();
                 sm->set_filename(fmt::format("segment_{}.dat", rowset_id));
                 sm->set_size(128);
+                sm->set_num_rows(1);
             }
             rowset->set_num_rows(1);
             rowset->set_data_size(128);
@@ -440,7 +442,8 @@ protected:
         return rowset;
     }
 
-    std::vector<TabletMetadataPtr> merge_fixture_sources(const std::vector<TabletMetadataPtr>& sources) {
+    std::vector<TabletMetadataPtr> merge_fixture_sources(const std::vector<TabletMetadataPtr>& sources,
+                                                         bool normalize_missing_segment_num_rows = true) {
         const bool assign_ranges =
                 std::all_of(sources.begin(), sources.end(), [](const auto& source) { return !source->has_range(); });
         std::vector<int64_t> ids;
@@ -449,6 +452,16 @@ protected:
         std::vector<TabletMetadataPtr> result;
         for (const auto& source : sources) {
             auto copy = std::make_shared<TabletMetadataPB>(*source);
+            if (normalize_missing_segment_num_rows) {
+                for (auto& rowset : *copy->mutable_rowsets()) {
+                    for (auto& segment : *rowset.mutable_segment_metas()) {
+                        // Existing synthetic fixtures predate MERGE's strict segment-count
+                        // contract. Keep their old default-zero behavior; malformed-input
+                        // tests opt out of this fixture-only normalization.
+                        if (!segment.has_num_rows()) segment.set_num_rows(0);
+                    }
+                }
+            }
             if (assign_ranges) {
                 if (copy->has_schema() && copy->schema().column_size() == 0) {
                     auto* column = copy->mutable_schema()->add_column();
@@ -492,8 +505,11 @@ protected:
     Status publish_resharding_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet,
                                     int64_t base_version, int64_t new_version, int64_t txn_id,
                                     std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
-                                    const std::function<void()>& before_merge = {}) {
-        for (const auto& source : merge_fixture_sources(sources)) RETURN_IF_ERROR(put_tablet_metadata(source));
+                                    const std::function<void()>& before_merge = {},
+                                    bool normalize_missing_segment_num_rows = true) {
+        for (const auto& source : merge_fixture_sources(sources, normalize_missing_segment_num_rows)) {
+            RETURN_IF_ERROR(put_tablet_metadata(source));
+        }
         if (before_merge) before_merge();
         ReshardingTabletInfoPB resharding_tablet;
         auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -560,7 +576,8 @@ protected:
     }
 
     StatusOr<TabletMetadataPtr> publish_allocator_merge(
-            const std::vector<std::shared_ptr<TabletMetadataPB>>& mutable_sources) {
+            const std::vector<std::shared_ptr<TabletMetadataPB>>& mutable_sources,
+            bool normalize_missing_segment_num_rows = true) {
         if (mutable_sources.empty()) return Status::InvalidArgument("allocator merge fixture has no source");
         const int64_t target_id = next_id();
         prepare_tablet_dirs(target_id);
@@ -572,7 +589,8 @@ protected:
         }
         std::unordered_map<int64_t, TabletMetadataPtr> published;
         RETURN_IF_ERROR(publish_resharding_merge(sources, target_id, /*base_version=*/1, /*new_version=*/2,
-                                                 /*txn_id=*/next_id(), published));
+                                                 /*txn_id=*/next_id(), published, {},
+                                                 normalize_missing_segment_num_rows));
         auto target = published.find(target_id);
         if (target == published.end()) return Status::InternalError("allocator merge target was not published");
         return target->second;
@@ -770,7 +788,8 @@ protected:
 
     StatusOr<MutableTabletMetadataPtr> merge_with_phase_counts(const std::vector<TabletMetadataPtr>& sources,
                                                                int64_t target_tablet_id, int64_t target_version,
-                                                               MergePhaseCounts* counts) {
+                                                               MergePhaseCounts* counts,
+                                                               bool normalize_missing_segment_num_rows = true) {
         auto* sync = SyncPoint::GetInstance();
         sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { ++counts->materialize; });
         sync->SetCallBack("merge_dcg_meta:after_write_cols", [&](void*) { ++counts->dcg_writes; });
@@ -790,7 +809,7 @@ protected:
 
         ReshardingTabletInfoPB resharding;
         auto* merging = resharding.mutable_merging_tablet_info();
-        for (const auto& source : merge_fixture_sources(sources)) {
+        for (const auto& source : merge_fixture_sources(sources, normalize_missing_segment_num_rows)) {
             RETURN_IF_ERROR(_tablet_manager->put_tablet_metadata(source));
             merging->add_old_tablet_ids(source->id());
         }
@@ -807,11 +826,12 @@ protected:
     }
 
     Status expect_physical_preflight_rejection(const std::vector<TabletMetadataPtr>& sources, int64_t target_tablet_id,
-                                               int64_t target_version, MergePhaseCounts* counts) {
+                                               int64_t target_version, MergePhaseCounts* counts,
+                                               bool normalize_missing_segment_num_rows = true) {
         std::vector<std::string> source_pbs;
         std::map<int64_t, std::set<std::string>> segment_inventories;
         std::map<int64_t, std::set<std::string>> metadata_inventories;
-        for (const auto& source : merge_fixture_sources(sources)) {
+        for (const auto& source : merge_fixture_sources(sources, normalize_missing_segment_num_rows)) {
             CHECK_OK(_tablet_manager->put_tablet_metadata(source));
         }
         for (const auto& source : sources) {
@@ -831,7 +851,8 @@ protected:
         set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::ENABLE);
         DeferOp restore_delvec_failpoint(
                 [&] { set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::DISABLE); });
-        auto merged = merge_with_phase_counts(sources, target_tablet_id, target_version, counts);
+        auto merged = merge_with_phase_counts(sources, target_tablet_id, target_version, counts,
+                                              normalize_missing_segment_num_rows);
 
         EXPECT_TRUE(merged.status().is_corruption()) << merged.status();
         EXPECT_EQ(0, counts->materialize);
@@ -1670,6 +1691,7 @@ protected:
                 auto* segment_meta = rowset->add_segment_metas();
                 segment_meta->set_filename(fmt::format("compacted_{}.dat", i));
                 segment_meta->set_size(100);
+                segment_meta->set_num_rows(upper - lower);
                 set_key_range(rowset->mutable_range(), lower, upper);
                 (*meta->mutable_rowset_to_schema())[2] = kSchemaId;
             } else {
@@ -1690,6 +1712,7 @@ protected:
                 auto* segment_meta = rowset->add_segment_metas();
                 segment_meta->set_filename(shared_segment_name);
                 segment_meta->set_size(base_segment_size);
+                segment_meta->set_num_rows(kNumRows);
                 segment_meta->set_shared(true);
                 stamp_physical_identity_uid(rowset, shared_segment_name); // same uid across siblings => dedup
                 set_key_range(rowset->mutable_range(), lower, upper);
@@ -4436,6 +4459,32 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_empty_ordinary_rowsets
 
         MergePhaseCounts counts;
         expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_invalid_segment_num_rows_rejected_before_io) {
+    struct Mutation {
+        const char* name;
+        std::function<void(SegmentMetadataPB*)> apply;
+    };
+    const std::vector<Mutation> mutations = {
+            {"missing", [](SegmentMetadataPB* segment) { segment->clear_num_rows(); }},
+            {"negative", [](SegmentMetadataPB* segment) { segment->set_num_rows(-1); }},
+    };
+
+    for (const auto& mutation : mutations) {
+        for (const bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("mutation={} reverse_sources={}", mutation.name, reverse_sources));
+            auto source_a = make_preflight_sidecar_source(next_id(), fmt::format("invalid_{}_a.dat", next_id()));
+            auto source_b = make_preflight_sidecar_source(next_id(), fmt::format("invalid_{}_b.dat", next_id()));
+            mutation.apply(source_a->mutable_rowsets(0)->mutable_segment_metas(0));
+            std::vector<TabletMetadataPtr> sources = {source_a, source_b};
+            if (reverse_sources) std::reverse(sources.begin(), sources.end());
+
+            MergePhaseCounts counts;
+            expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts,
+                                                /*normalize_missing_segment_num_rows=*/false);
+        }
     }
 }
 
@@ -9598,6 +9647,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_min) 
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         return meta;
@@ -12690,7 +12740,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_invalid_physical_segme
                  left->set_size(128);
                  right->set_bundle_file_offset(-1);
              }},
-            {"negative size", true, "size",
+            {"negative size", true, "negative statistics",
              [](SegmentMetadataPB* left, SegmentMetadataPB* right) {
                  left->set_size(-1);
                  right->set_size(-1);
@@ -14368,6 +14418,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_sstable_merge_accepts_sig
     rowset->set_num_rows(1);
     rowset->set_data_size(1);
     rowset->add_segment_metas()->set_filename("skip_source_segment.dat");
+    rowset->mutable_segment_metas(0)->set_num_rows(1);
     rowset->mutable_segment_metas(0)->set_segment_idx(0);
     lake::tablet_reshard_helper::set_rowset_uid(rowset);
     auto* sst = source->mutable_sstable_meta()->add_sstables();
@@ -14548,6 +14599,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_packs_upper_half_live_rowset_w
     rowset->set_num_rows(1);
     rowset->set_data_size(1);
     rowset->add_segment_metas()->set_filename("last_live_segment.dat");
+    rowset->mutable_segment_metas(0)->set_num_rows(1);
     const std::string source_before = source->SerializeAsString();
     ASSERT_OK(put_tablet_metadata(source));
 
@@ -15775,7 +15827,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_segment_declaration_co
             break;
         }
         }
-        auto result = publish_allocator_merge({selected_source, duplicate_source});
+        auto result = publish_allocator_merge({selected_source, duplicate_source},
+                                               /*normalize_missing_segment_num_rows=*/false);
         EXPECT_TRUE(result.status().is_corruption()) << result.status();
     }
 }
@@ -17455,6 +17508,7 @@ inline std::shared_ptr<TabletMetadataPB> make_compacted_child(int64_t tablet_id,
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(compacted_seg_name);
         sm->set_size(100);
+        sm->set_num_rows(10);
     }
     // Not shared: this is the local compaction output.
     set_int_range(rowset->mutable_range(), tablet_lower, tablet_upper);
@@ -17506,6 +17560,7 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_shared_child_with_real_segment(
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(segment_size);
+        sm->set_num_rows(tablet_upper - tablet_lower);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across shared siblings => dedup
@@ -17533,6 +17588,7 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(compacted_seg_name);
         sm->set_size(100);
+        sm->set_num_rows(tablet_upper - tablet_lower);
     }
     set_int_range(rowset->mutable_range(), tablet_lower, tablet_upper);
     return meta;

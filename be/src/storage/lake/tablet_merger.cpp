@@ -709,6 +709,12 @@ Status validate_canonical_rowset(const RowsetMetadataPB& rowset, const TabletMet
     }
     for (int i = 0; i < rowset.segment_metas_size(); ++i) {
         const auto& segment = rowset.segment_metas(i);
+        if (!segment.has_num_rows()) {
+            return Status::Corruption("tablet merge source segment has no explicit row count");
+        }
+        if (segment.num_rows() < 0 || segment.size() < 0) {
+            return Status::Corruption("tablet merge source segment has negative statistics");
+        }
         if (!segment.has_segment_idx()) {
             return Status::Corruption("tablet merge source segment has no explicit segment_idx");
         }
