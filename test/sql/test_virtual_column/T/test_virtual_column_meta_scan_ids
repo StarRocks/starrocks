@@ -1,0 +1,86 @@
+-- name: test_virtual_column_meta_scan_ids
+-- A metadata scan answers min/max of a virtual column out of the segment meta collector instead of
+-- reading the segment, and the collector is handed the segment identity by the meta reader. In
+-- shared-data that identity was only filled in for primary key tablets, so on every other key type
+-- min/max of _tablet_id_ and _rss_id_ silently came back as 0 while an ordinary scan of the same
+-- column returned the real id. Every assertion below compares the metadata scan against the ordinary
+-- scan of the same table, so no tablet id or rowset id is hardcoded.
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_dup (k int not null, v int)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_dup values (1,10),(2,20),(3,30);
+
+create table t_pk (k int not null, v int)
+primary key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_pk values (1,10),(2,20),(3,30);
+
+create table t_agg (k int not null, v int sum)
+aggregate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_agg values (1,10),(2,20),(3,30);
+
+create table t_uniq (k int not null, v int)
+unique key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_uniq values (1,10),(2,20),(3,30);
+
+create table t_alter (k int not null, v int)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_alter values (1,10),(2,20),(3,30);
+alter table t_alter add column w int default "7";
+function: wait_alter_table_finish()
+
+-- Guard the rest of the file: these queries are only interesting while they plan to a MetaScan. A
+-- table that has been through ADD COLUMN loses the automatic rewrite, which is why every non
+-- DUPLICATE table below asks for the metadata scan explicitly.
+function: assert_query_contains("explain select min(_tablet_id_) from t_dup;", "MetaScan")
+function: assert_query_contains("explain select min(_tablet_id_) from t_agg [_META_];", "MetaScan")
+function: assert_query_contains("explain select min(_tablet_id_) from t_uniq [_META_];", "MetaScan")
+function: assert_query_contains("explain select min(_tablet_id_) from t_alter [_META_];", "MetaScan")
+function: assert_query_contains("explain select min(_tablet_id_) from t_pk [_META_];", "MetaScan")
+
+-- DUPLICATE: one bucket and one insert means exactly one tablet and one rowset, so min and max of
+-- the identity columns are the single value an ordinary scan reports.
+select min(_tablet_id_) > 0 from t_dup;
+select min(_tablet_id_) = max(_tablet_id_) from t_dup;
+select count(distinct _tablet_id_) from t_dup;
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_dup) a, (select min(_tablet_id_) as tid from t_dup) b;
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_dup) a, (select max(_tablet_id_) as tid from t_dup) b;
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_dup) a, (select min(_rss_id_) as rid from t_dup) b;
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_dup) a, (select max(_rss_id_) as rid from t_dup) b;
+
+-- AGGREGATE, UNIQUE and a DUPLICATE table that went through ADD COLUMN are all non primary key
+-- tablets and were wrong in exactly the same way.
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_agg) a, (select min(_tablet_id_) as tid from t_agg [_META_]) b;
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_agg) a, (select min(_rss_id_) as rid from t_agg [_META_]) b;
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_uniq) a, (select min(_tablet_id_) as tid from t_uniq [_META_]) b;
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_uniq) a, (select min(_rss_id_) as rid from t_uniq [_META_]) b;
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_alter) a, (select min(_tablet_id_) as tid from t_alter [_META_]) b;
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_alter) a, (select min(_rss_id_) as rid from t_alter [_META_]) b;
+
+-- Control: a primary key tablet already carried its identity and must keep answering the same.
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_pk) a, (select min(_tablet_id_) as tid from t_pk [_META_]) b;
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_pk) a, (select min(_rss_id_) as rid from t_pk [_META_]) b;
+
+-- Control: everything else a metadata scan answers is untouched. _row_id_ and _segment_id_ come
+-- from the segment itself rather than from the identity fields, and the aggregates over real
+-- columns never went near them.
+select min(_row_id_), max(_row_id_) from t_dup;
+select min(_segment_id_), max(_segment_id_) from t_dup;
+select count(*) from t_dup [_META_];
+select count(*), min(v), max(v), min(k), max(k) from t_dup;
+select k, v from t_dup order by k;
+select count(*), min(v), max(v), min(w), max(w) from t_alter;
+select count(*), min(v), max(v) from t_pk;
+
+drop database db_${uuid0};

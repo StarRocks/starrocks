@@ -1,0 +1,172 @@
+-- name: test_virtual_column_meta_scan_ids
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_dup (k int not null, v int)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_dup values (1,10),(2,20),(3,30);
+-- result:
+-- !result
+create table t_pk (k int not null, v int)
+primary key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_pk values (1,10),(2,20),(3,30);
+-- result:
+-- !result
+create table t_agg (k int not null, v int sum)
+aggregate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_agg values (1,10),(2,20),(3,30);
+-- result:
+-- !result
+create table t_uniq (k int not null, v int)
+unique key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_uniq values (1,10),(2,20),(3,30);
+-- result:
+-- !result
+create table t_alter (k int not null, v int)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_alter values (1,10),(2,20),(3,30);
+-- result:
+-- !result
+alter table t_alter add column w int default "7";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_query_contains("explain select min(_tablet_id_) from t_dup;", "MetaScan")
+-- result:
+None
+-- !result
+function: assert_query_contains("explain select min(_tablet_id_) from t_agg [_META_];", "MetaScan")
+-- result:
+None
+-- !result
+function: assert_query_contains("explain select min(_tablet_id_) from t_uniq [_META_];", "MetaScan")
+-- result:
+None
+-- !result
+function: assert_query_contains("explain select min(_tablet_id_) from t_alter [_META_];", "MetaScan")
+-- result:
+None
+-- !result
+function: assert_query_contains("explain select min(_tablet_id_) from t_pk [_META_];", "MetaScan")
+-- result:
+None
+-- !result
+select min(_tablet_id_) > 0 from t_dup;
+-- result:
+1
+-- !result
+select min(_tablet_id_) = max(_tablet_id_) from t_dup;
+-- result:
+1
+-- !result
+select count(distinct _tablet_id_) from t_dup;
+-- result:
+1
+-- !result
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_dup) a, (select min(_tablet_id_) as tid from t_dup) b;
+-- result:
+1
+-- !result
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_dup) a, (select max(_tablet_id_) as tid from t_dup) b;
+-- result:
+1
+-- !result
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_dup) a, (select min(_rss_id_) as rid from t_dup) b;
+-- result:
+1
+-- !result
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_dup) a, (select max(_rss_id_) as rid from t_dup) b;
+-- result:
+1
+-- !result
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_agg) a, (select min(_tablet_id_) as tid from t_agg [_META_]) b;
+-- result:
+1
+-- !result
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_agg) a, (select min(_rss_id_) as rid from t_agg [_META_]) b;
+-- result:
+1
+-- !result
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_uniq) a, (select min(_tablet_id_) as tid from t_uniq [_META_]) b;
+-- result:
+1
+-- !result
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_uniq) a, (select min(_rss_id_) as rid from t_uniq [_META_]) b;
+-- result:
+1
+-- !result
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_alter) a, (select min(_tablet_id_) as tid from t_alter [_META_]) b;
+-- result:
+1
+-- !result
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_alter) a, (select min(_rss_id_) as rid from t_alter [_META_]) b;
+-- result:
+1
+-- !result
+select a.tid = b.tid from (select distinct _tablet_id_ as tid from t_pk) a, (select min(_tablet_id_) as tid from t_pk [_META_]) b;
+-- result:
+1
+-- !result
+select a.rid = b.rid from (select distinct _rss_id_ as rid from t_pk) a, (select min(_rss_id_) as rid from t_pk [_META_]) b;
+-- result:
+1
+-- !result
+select min(_row_id_), max(_row_id_) from t_dup;
+-- result:
+0	2
+-- !result
+select min(_segment_id_), max(_segment_id_) from t_dup;
+-- result:
+0	0
+-- !result
+select count(*) from t_dup [_META_];
+-- result:
+3
+-- !result
+select count(*), min(v), max(v), min(k), max(k) from t_dup;
+-- result:
+3	10	30	1	3
+-- !result
+select k, v from t_dup order by k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+select count(*), min(v), max(v), min(w), max(w) from t_alter;
+-- result:
+3	10	30	7	7
+-- !result
+select count(*), min(v), max(v) from t_pk;
+-- result:
+3	10	30
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

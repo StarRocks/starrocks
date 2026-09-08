@@ -182,13 +182,27 @@ Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::v
         for (int seg_id = 0; seg_id < rowset_segs.size(); ++seg_id) {
             SegmentMetaCollectOptions options;
             options.is_primary_keys = tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS;
+            // Segment identity has to be filled in for every key type, not only PRIMARY_KEYS. A metadata
+            // scan answers min/max of the virtual columns _tablet_id_ and _rss_id_ straight out of these
+            // fields, so leaving them at their default 0 on a DUPLICATE/UNIQUE/AGGREGATE tablet makes those
+            // aggregates silently return 0 instead of the real ids. Only the delta column group loader
+            // below is primary-key-only in shared-data for now; the identity fields are unrelated to it,
+            // and the shared-nothing OlapMetaReader already sets all four unconditionally.
+            options.tablet_id = tablet.metadata()->id();
+            options.version = tablet.version();
+            // seg_id is only the position in the segment vector. The persisted segment index,
+            // SegmentMetadataPB.segment_idx, stops being positional as soon as a rowset keeps a subset of
+            // its original segments -- tablet splitting drops the segments a new tablet does not own and
+            // leaves the survivors with their original indexes. Segment::id() is that persisted index, and
+            // an ordinary scan reports _rss_id_ as rowset id + Segment::id()
+            // (SegmentIterator::_init_virtual_column_iterator), so both fields have to be derived through
+            // it or a metadata scan would answer min/max(_rss_id_) with a value no ordinary scan of the
+            // same segment ever returns.
+            options.segment_id = lake::get_segment_idx(rowset->metadata(), seg_id);
+            options.rss_id = lake::get_rssid(rowset->metadata(), seg_id);
             // In shared-data arch, only primary key table support delta column group for now.
             if (options.is_primary_keys) {
-                options.tablet_id = tablet.metadata()->id();
-                options.version = tablet.version();
-                options.segment_id = lake::get_segment_idx(rowset->metadata(), seg_id);
                 options.pk_rowsetid = rowset->id();
-                options.rss_id = rowset->metadata().id() + seg_id;
                 options.dcg_loader = std::make_shared<lake::LakeDeltaColumnGroupLoader>(tablet.metadata());
             }
             options_list->emplace_back(std::move(options));

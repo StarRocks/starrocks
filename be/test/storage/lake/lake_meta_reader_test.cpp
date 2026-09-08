@@ -165,6 +165,81 @@ TEST_F(LakeMetaReaderTest, test_get_segments_with_dup_keys_table) {
     ASSERT_EQ(2, segments.size());
     // Verify options for non-primary key table
     ASSERT_EQ(2, options_list.size()) << "Expected 2 options for non-PK table";
+
+    // A non-PK tablet gets no delta column group loader in shared-data, but it still has to carry
+    // the segment identity: SegmentMetaCollecter hands options.tablet_id and options.rss_id to the
+    // virtual columns _tablet_id_ and _rss_id_, so leaving them at 0 makes a metadata scan answer
+    // min/max of those columns with 0 instead of the real ids.
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const int64_t rowset_id = metadata->rowsets(0).id();
+    ASSERT_GT(rowset_id, 0);
+    for (int i = 0; i < options_list.size(); i++) {
+        auto& options = options_list[i];
+        EXPECT_FALSE(options.is_primary_keys) << "Expected is_primary_keys to be false for a DUP table";
+        EXPECT_EQ(nullptr, options.dcg_loader) << "Delta column group stays primary-key-only in shared-data";
+        EXPECT_EQ(tablet_id, options.tablet_id) << "Expected tablet_id to be set for a non-PK table";
+        EXPECT_EQ(2, options.version) << "Expected version to be set for a non-PK table";
+        EXPECT_EQ(i, options.segment_id) << "Expected segment_id to be " << i;
+        // segment_idx is contiguous here, so the persisted index and the vector position agree. The
+        // expectation is still phrased as the rowset id plus the segment own id, because that is what
+        // an ordinary scan reports; test_get_segments_with_sparse_segment_idx covers the case where the
+        // two disagree.
+        ASSERT_NE(nullptr, segments[i]) << "at position " << i;
+        EXPECT_EQ(static_cast<uint64_t>(i), segments[i]->id()) << "Expected a contiguous segment_idx here";
+        EXPECT_EQ(rowset_id + static_cast<int64_t>(segments[i]->id()), options.rss_id)
+                << "Expected rss_id to be the rowset id plus the id of the segment itself";
+    }
+}
+
+// Test _get_segments derives rss_id from the persisted segment index, not the vector position.
+// SegmentMetadataPB.segment_idx is non-positional once a rowset keeps only a subset of its original
+// segments (tablet splitting, partial compaction), and Segment::id() is that persisted index. An
+// ordinary scan reports _rss_id_ as rowset_id + Segment::id()
+// (SegmentIterator::_init_virtual_column_iterator), so a metadata scan that added the vector
+// position instead would answer min/max(_rss_id_) with a different value for the very same segment.
+TEST_F(LakeMetaReaderTest, test_get_segments_with_sparse_segment_idx) {
+    ASSIGN_OR_ABORT(auto tablet_id, create_tablet_with_data(DUP_KEYS, 1, 3));
+
+    // Republish the same three segments with sparse, non-positional segment_idx values, the way
+    // tablet splitting leaves them. The real filenames are kept so the segments still load.
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+    auto metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+    ASSERT_EQ(1, metadata->rowsets_size());
+    auto* rowset_meta = metadata->mutable_rowsets(0);
+    ASSERT_EQ(3, rowset_meta->segment_metas_size());
+    const std::vector<uint32_t> kSegmentIdx{1, 4, 5};
+    for (int i = 0; i < rowset_meta->segment_metas_size(); i++) {
+        rowset_meta->mutable_segment_metas(i)->set_segment_idx(kSegmentIdx[i]);
+    }
+    metadata->set_version(3);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    // Segments are cached by file path and keep the segment id they were first loaded with, so drop
+    // the cache to make sure the reader observes the rewritten indexes.
+    _tablet_mgr->prune_metacache();
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 3));
+
+    LakeMetaReader reader;
+    std::vector<SegmentSharedPtr> segments;
+    std::vector<SegmentMetaCollectOptions> options_list;
+
+    ASSERT_OK(reader.TEST_get_segments(tablet, &segments, &options_list));
+
+    ASSERT_EQ(3, segments.size());
+    ASSERT_EQ(3, options_list.size());
+
+    const int64_t rowset_id = rowset_meta->id();
+    ASSERT_GT(rowset_id, 0);
+    for (int i = 0; i < options_list.size(); i++) {
+        ASSERT_NE(nullptr, segments[i]) << "at position " << i;
+        // Segment::id() is the persisted segment_idx and is what an ordinary scan adds to the
+        // rowset id; the metadata scan has to land on the same value.
+        EXPECT_EQ(kSegmentIdx[i], segments[i]->id()) << "at position " << i;
+        EXPECT_EQ(kSegmentIdx[i], options_list[i].segment_id) << "at position " << i;
+        EXPECT_EQ(rowset_id + static_cast<int64_t>(segments[i]->id()), options_list[i].rss_id)
+                << "rss_id must follow the persisted segment_idx, not the vector position " << i;
+    }
 }
 
 // Test _get_segments with multiple rowsets
