@@ -66,3 +66,48 @@ alter table t1_page compact;
 select count(k1) > 0 from t1_page sample('seed'='1', 'method'='by_page', 'percent'='0.5');
 select count(k1) > 0 from t1_page sample('seed'='1', 'method'='by_page', 'percent'='0.01');
 select count(k1) > 0 from t1_page sample('seed'='1', 'method'='by_page', 'percent'='1.5');
+
+-- name: test_table_sample_by_page_column_without_reader
+create database db_${uuid0};
+use db_${uuid0};
+-- Page sampling asks the column iterator for its raw ColumnReader and rejects the query when there is
+-- none. An iterator that reads no column off disk owns none, and the base
+-- ColumnIterator::get_column_reader() used to answer that case with CHECK(false) << "unreachable" --
+-- SIGABRT on the whole BE -- instead of the nullptr its only caller already handles.
+create table tj (k int not null, j json)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1", "flat_json.enable" = "true");
+insert into tj select s1, parse_json(concat('{"a":', s1, ',"b":"s"}')) from table(generate_series(1, 2000)) s(s1);
+insert into tj select s1, parse_json(concat('{"a":', s1, ',"b":"s"}')) from table(generate_series(1, 2000)) s(s1);
+select flat_json_meta(j) from tj[_META_];
+-- a flat JSON column is reassembled out of its sub-columns, so its iterator owns no reader
+select count(j) from tj sample('seed'='1', 'method'='by_page');
+create table t (k int not null, c1 int, s char(10))
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t select s1, s1, 'abc' from table(generate_series(1, 2000)) s(s1);
+insert into t select s1, s1, 'abc' from table(generate_series(1, 2000)) s(s1);
+alter table t add column w int default "7";
+function: wait_alter_table_finish()
+-- a column that ADD COLUMN never wrote into the older segments is served by DefaultValueColumnIterator
+select count(w) from t sample('seed'='1', 'method'='by_page');
+-- a CHAR widened past the length the older segments hold reads through CastColumnIterator, a decorator
+-- that deliberately does not forward the accessor. Whether the widening rewrites those segments depends
+-- on the table type, so only require here that the statement does not take the BE down.
+alter table t modify column s char(30);
+function: wait_alter_table_finish()
+[UC] select count(s) from t sample('seed'='1', 'method'='by_page');
+-- Controls. How many rows a sample returns is random, so assert only that it is non-empty: page
+-- sampling always keeps at least one page.
+select count(k) > 0 from tj sample('seed'='1', 'method'='by_page');
+select count(cast(j->'$.a' as bigint)) > 0 from tj sample('seed'='1', 'method'='by_page');
+select count(c1) > 0 from t sample('seed'='1', 'method'='by_page');
+-- by_block never asks for a reader, so it samples all of these columns
+select count(j) > 0 from tj sample('seed'='1', 'method'='by_block');
+select count(w) > 0 from t sample('seed'='1', 'method'='by_block');
+-- the BE is still up: an unsampled scan returns every row
+select count(*) from tj;
+select count(*) from t;
+drop database db_${uuid0};

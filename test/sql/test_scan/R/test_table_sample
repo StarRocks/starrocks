@@ -123,3 +123,93 @@ select count(k1) > 0 from t1_page sample('seed'='1', 'method'='by_page', 'percen
 -- result:
 1
 -- !result
+
+-- name: test_table_sample_by_page_column_without_reader
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table tj (k int not null, j json)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1", "flat_json.enable" = "true");
+-- result:
+-- !result
+insert into tj select s1, parse_json(concat('{"a":', s1, ',"b":"s"}')) from table(generate_series(1, 2000)) s(s1);
+-- result:
+-- !result
+insert into tj select s1, parse_json(concat('{"a":', s1, ',"b":"s"}')) from table(generate_series(1, 2000)) s(s1);
+-- result:
+-- !result
+select flat_json_meta(j) from tj[_META_];
+-- result:
+["nulls(TINYINT), a(BIGINT), b(VARCHAR)"]
+-- !result
+select count(j) from tj sample('seed'='1', 'method'='by_page');
+-- result:
+[REGEX].*Not support page sample: no column_reader.*
+-- !result
+create table t (k int not null, c1 int, s char(10))
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t select s1, s1, 'abc' from table(generate_series(1, 2000)) s(s1);
+-- result:
+-- !result
+insert into t select s1, s1, 'abc' from table(generate_series(1, 2000)) s(s1);
+-- result:
+-- !result
+alter table t add column w int default "7";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(w) from t sample('seed'='1', 'method'='by_page');
+-- result:
+[REGEX].*Not support page sample: no column_reader.*
+-- !result
+alter table t modify column s char(30);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+[UC] select count(s) from t sample('seed'='1', 'method'='by_page');
+select count(k) > 0 from tj sample('seed'='1', 'method'='by_page');
+-- result:
+1
+-- !result
+select count(cast(j->'$.a' as bigint)) > 0 from tj sample('seed'='1', 'method'='by_page');
+-- result:
+1
+-- !result
+select count(c1) > 0 from t sample('seed'='1', 'method'='by_page');
+-- result:
+1
+-- !result
+select count(j) > 0 from tj sample('seed'='1', 'method'='by_block');
+-- result:
+1
+-- !result
+select count(w) > 0 from t sample('seed'='1', 'method'='by_block');
+-- result:
+1
+-- !result
+select count(*) from tj;
+-- result:
+4000
+-- !result
+select count(*) from t;
+-- result:
+4000
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

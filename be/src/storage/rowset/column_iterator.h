@@ -284,11 +284,19 @@ public:
 
     virtual Status null_count(size_t* count) { return Status::OK(); };
 
-    // RAW interface, should be used carefully
-    virtual ColumnReader* get_column_reader() {
-        CHECK(false) << "unreachable";
-        return nullptr;
-    }
+    // RAW interface, should be used carefully.
+    //
+    // Returns nullptr when this iterator reads no column off disk, which is a normal state and not a
+    // programming error: DefaultValueColumnIterator standing in for a column an ADD COLUMN never wrote
+    // into an older segment, the flat JSON iterators that reassemble a JSON column out of sub-columns,
+    // and everything behind a ColumnIteratorDecorator -- CastColumnIterator, the dict-code iterators,
+    // the JSON extract iterator -- which deliberately does not forward this raw accessor.
+    //
+    // Every caller already reads nullptr as "there is no reader here": SegmentIterator::_sample_by_page()
+    // turns it into an InvalidArgument ("Not support page sample") and ScalarColumnIterator::
+    // get_io_range_vec() into an InvalidArgument as well. Aborting here instead would take the whole BE
+    // down for a query the caller is prepared to reject.
+    virtual ColumnReader* get_column_reader() { return nullptr; }
 
     // Return the name of this column iterator for debugging and logging purposes
     virtual std::string name() const { return "ColumnIterator"; }

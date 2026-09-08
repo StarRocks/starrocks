@@ -19,7 +19,10 @@
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "storage/rowset/cast_column_iterator.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/series_column_iterator.h"
+#include "storage/types.h"
 
 namespace starrocks {
 
@@ -73,6 +76,29 @@ TEST(ColumnIteratorDecoratorTest, test) {
     ASSERT_EQ(2, column.size());
     ASSERT_EQ(1, column.get(0).get_int32());
     ASSERT_EQ(2, column.get(1).get_int32());
+}
+
+// SegmentIterator::_sample_by_page() asks the column iterator for its raw ColumnReader and rejects the
+// query when the answer is null, so an iterator that reads no column off disk must answer nullptr rather
+// than abort the BE. ColumnIteratorDecorator deliberately does not forward get_column_reader(), so every
+// decorator -- CastColumnIterator among them -- lands on the base implementation, and so does
+// DefaultValueColumnIterator, which stands in for a column an ADD COLUMN never wrote into an older
+// segment. Both are reachable from SAMPLE(method=by_page) over such a column.
+TEST(ColumnIteratorDecoratorTest, test_get_column_reader_is_null_when_there_is_no_reader) {
+    auto series_iter = SeriesColumnIterator<int32_t>{0, 100};
+    EXPECT_EQ(nullptr, series_iter.get_column_reader());
+
+    auto wrapper = ColumnIteratorDecorator{&series_iter, kDontTakeOwnership};
+    EXPECT_EQ(nullptr, wrapper.get_column_reader());
+
+    auto source_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto target_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    auto cast_iter = CastColumnIterator{std::make_unique<SeriesColumnIterator<int32_t>>(0, 100), source_type,
+                                        target_type, false};
+    EXPECT_EQ(nullptr, cast_iter.get_column_reader());
+
+    auto default_value_iter = DefaultValueColumnIterator{true, "7", true, get_type_info(TYPE_INT), 0, 100};
+    EXPECT_EQ(nullptr, default_value_iter.get_column_reader());
 }
 
 } // namespace starrocks
