@@ -23,6 +23,7 @@ import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -106,6 +107,10 @@ public interface IcebergCatalog extends MemoryTrackable {
     }
 
     IcebergCatalogType getIcebergCatalogType();
+
+    default IcebergRESTCatalog.Security getSecurityType() {
+        return IcebergRESTCatalog.Security.NONE;
+    }
 
     List<String> listAllDatabases(ConnectContext context);
 

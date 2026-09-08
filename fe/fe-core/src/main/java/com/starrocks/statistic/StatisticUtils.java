@@ -21,6 +21,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.JWTTokenProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -99,10 +101,63 @@ public class StatisticUtils {
             .add("information_schema").build();
 
     public static ConnectContext buildConnectContext() {
-        return buildConnectContext(TResultSinkType.MYSQL_PROTOCAL);
+        return buildConnectContext(TResultSinkType.MYSQL_PROTOCAL, ConnectContext.get());
     }
 
-    public static ConnectContext buildConnectContext(TResultSinkType connectType) {
+    /**
+     * Builds a stats ConnectContext and populates its auth token from, in order: the caller's
+     * ConnectContext.get() (user-triggered ANALYZE), then the bot token provider when
+     * {@code use_bot_for_background_tasks} is enabled (background/scheduled collection).
+     */
+    public static ConnectContext buildConnectContextWithAuth() {
+        ConnectContext context;
+        if (ConnectContext.get() != null && ConnectContext.get().getAuthToken() != null) {
+            context = buildConnectContext(ConnectContext.get());
+        } else if (Config.use_bot_for_background_tasks) {
+            context = buildConnectContext();
+            JWTTokenProvider tokenProvider = GlobalStateMgr.getCurrentState().getTokenProvider();
+            if (tokenProvider != null) {
+                try {
+                    context.setAuthToken(tokenProvider.getToken());
+                } catch (AuthenticationException e) {
+                    LOG.warn("Failed to get token from JWTTokenProvider", e);
+                }
+            }
+        } else {
+            context = buildConnectContext();
+        }
+        return context;
+    }
+
+    /**
+     * Builds a plain ConnectContext for background tasks and populates it with the
+     * bot service token when {@code use_bot_for_background_tasks} is enabled.
+     * Unlike {@link #buildConnectContextWithAuth()}, this method does NOT call
+     * {@code ConnectContext.buildInner()} and requires no warehouse, making it safe
+     * for use in Iceberg connector background operations (refresh, partition load, etc.).
+     * Callers that require authentication (e.g. JWT REST catalogs) should check
+     * {@code ctx.getAuthToken() == null} and skip the operation if no token is available.
+     */
+    public static ConnectContext buildBotContext() {
+        ConnectContext ctx = new ConnectContext();
+        if (Config.use_bot_for_background_tasks) {
+            JWTTokenProvider tokenProvider = GlobalStateMgr.getCurrentState().getTokenProvider();
+            if (tokenProvider != null) {
+                try {
+                    ctx.setAuthToken(tokenProvider.getToken());
+                } catch (AuthenticationException e) {
+                    LOG.warn("Failed to get bot token for background task", e);
+                }
+            }
+        }
+        return ctx;
+    }
+
+    public static ConnectContext buildConnectContext(ConnectContext userConnectContext) {
+        return buildConnectContext(TResultSinkType.MYSQL_PROTOCAL, userConnectContext);
+    }
+
+    public static ConnectContext buildConnectContext(TResultSinkType connectType, ConnectContext userConnectContext) {
         ConnectContext context;
         switch (connectType) {
             case MYSQL_PROTOCAL:
@@ -157,6 +212,10 @@ public class StatisticUtils {
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setStartTime();
+
+        if (userConnectContext != null && userConnectContext.getAuthToken() != null) {
+            context.setAuthToken(userConnectContext.getAuthToken());
+        }
 
         return context;
     }
