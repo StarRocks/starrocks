@@ -1196,8 +1196,8 @@ public class StarMgrMetaSyncerTest {
                 MaterializedIndex.IndexState.NORMAL, sharedGroupId);
         newIndex.addTablet(new LakeTablet(222L), null, false);
 
-        PhysicalPartition oldPhysical = new PhysicalPartition(oldPhysicalId, parentId, oldIndex);
-        PhysicalPartition newPhysical = new PhysicalPartition(newPhysicalId, parentId, newIndex);
+        PhysicalPartition oldPhysical = new PhysicalPartition(oldPhysicalId, "p", parentId, oldIndex);
+        PhysicalPartition newPhysical = new PhysicalPartition(newPhysicalId, "p", parentId, newIndex);
         final boolean[] protectByIndex = {false};
         Set<Long> deletedShards = new HashSet<>();
         List<Partition> metastorePartitions = new ArrayList<>();
