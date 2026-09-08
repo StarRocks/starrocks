@@ -16,7 +16,7 @@
 
 #include <fmt/format.h>
 
-#include "common/config_primary_key_fwd.h"
+#include "common/config.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"

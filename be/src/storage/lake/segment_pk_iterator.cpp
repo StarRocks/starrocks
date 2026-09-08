@@ -14,7 +14,7 @@
 
 #include "storage/lake/segment_pk_iterator.h"
 
-#include "common/config_primary_key_fwd.h"
+#include "common/config.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
