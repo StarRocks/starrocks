@@ -34,8 +34,14 @@ jobs:
           # Collapsing both into one flag is what silently starved mirrorship of every
           # cd-contributed change (the step showed `skipped` while the job stayed green).
           #
-          #   `sync`            -> legacy catch-all: the marker every sync-produced PR
-          #                        carries. Kept on BOTH paths as the old-sync fallback.
+          #   `sync` / `cd-sync` -> legacy CelerData reverse-sync markers. On StarRocks a
+          #                        `sync`-labelled PR is cd-origin: every one of them comes
+          #                        from the old cd->sr executor (`<branch>-cd-sync-pr-*`
+          #                        heads), and mirrorship->sr has never run. So this is a CD
+          #                        provenance marker and gates the CD path ONLY -- gating MS
+          #                        on it would repeat the very bug this commit fixes.
+          #                        (`sync` on the mirrorship side means something else: it
+          #                        marks every PR the FORWARD sr->ms sync opens there.)
           #   `cd-contributed`  -> came up from CelerData; skip the CD path only.
           #   `ms-contributed`  -> came up from mirrorship; skip the MS path only.
           #
@@ -46,11 +52,10 @@ jobs:
           skip_ms=false
           if [[ "${labels}" =~ sync ]]; then
             skip_cd=true
-            skip_ms=true
           fi
           # Exact whole-line match, like the mergify fallback below and
           # contributed-backport-label.yml. The `sync` test above stays a substring match on
-          # purpose: it is the legacy catch-all and must keep catching `cd-sync` too.
+          # purpose: it must keep catching the `cd-sync` label as well.
           echo "${labels}" | grep -qx 'cd-contributed' && skip_cd=true
           echo "${labels}" | grep -qx 'ms-contributed' && skip_ms=true
 
