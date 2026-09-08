@@ -289,8 +289,22 @@ public class TransactionStmtExecutor {
 
         if (explicitTxnState.getTransactionStateItems().isEmpty()) {
             TransactionState transactionState = explicitTxnState.getTransactionState();
-            globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
-            context.setTxnId(0);
+            // The INSERT path registers the transaction with DatabaseTransactionMgr before it
+            // executes, so a transaction whose statements all failed is registered without any
+            // item. Abort it there; otherwise it stays PREPARE until the transaction timeout,
+            // holding a running-transaction slot, its label and its tables against schema changes.
+            String abortError = null;
+            try {
+                abortError = abortRegisteredTransaction(transactionState,
+                        "no data loaded in the explicit transaction before commit");
+            } finally {
+                globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+                context.setTxnId(0);
+            }
+            if (abortError != null) {
+                context.getState().setError(abortError);
+                return;
+            }
             context.getState().setOk(0, 0, buildMessage(transactionState.getLabel(),
                     TransactionStatus.VISIBLE, transactionState.getTransactionId(), -1));
             return;
@@ -413,12 +427,17 @@ public class TransactionStmtExecutor {
             // activateTable), so the transaction may be registered although no load produced an
             // item (every load failed or was cancelled). Abort it there as well; otherwise it stays
             // PREPARE until the transaction timeout and keeps its tables against schema changes.
-            String abortError = abortRegisteredTransaction(transactionState, "rollback transaction by user");
-            globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
-            context.setTxnId(0);
+            String abortError = null;
+            try {
+                abortError = abortRegisteredTransaction(transactionState, "rollback transaction by user");
+            } finally {
+                // Same contract as the branch below: the explicit state is gone whatever the abort
+                // did, a failure is reported to the user, and the transaction timeout checker bounds
+                // the remainder.
+                globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+                context.setTxnId(0);
+            }
             if (abortError != null) {
-                // Same contract as the branch below: the explicit state is gone, the failure is
-                // reported to the user, and the transaction timeout checker bounds the remainder.
                 context.getState().setError(abortError);
                 return;
             }
