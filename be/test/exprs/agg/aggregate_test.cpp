@@ -1265,6 +1265,97 @@ TEST_F(AggregateTest, test_percentile_cont_2) {
     ASSERT_EQ(3, result_column->get_data()[0]);
 }
 
+// Builds one merge-phase (grid) row out of `values` and merges it into `state`, exactly like a
+// partial aggregate arriving from a local aggregation. `values` may be empty, which is what a
+// local aggregation instance that saw no input row produces.
+static void merge_date_percentile_partial(const AggregateFunction* func, FunctionContext* fn_ctx,
+                                          ManagedAggrState* into, const std::vector<DateValue>& values, double rate) {
+    auto partial = ManagedAggrState::create(fn_ctx, func);
+    auto data_column = DateColumn::create();
+    for (auto v : values) {
+        data_column->append(v);
+    }
+    auto rate_column = ColumnHelper::create_const_column<TYPE_DOUBLE>(rate, 1);
+    std::vector<const Column*> raw_columns = {data_column.get(), rate_column.get()};
+    if (!values.empty()) {
+        func->update_batch_single_state(fn_ctx, data_column->size(), raw_columns.data(), partial->state());
+    }
+    MutableColumnPtr serde_column = BinaryColumn::create();
+    func->serialize_to_column(fn_ctx, partial->state(), serde_column.get());
+    func->merge(fn_ctx, serde_column.get(), into->state(), 0);
+}
+
+// The merge phase of percentile_cont builds a loser tree over the partial states. Neither the end
+// of a partial nor the tree's virtual leaf may be detected by value: for DATE, min_value() and
+// max_value() are the ordinary dates '0000-01-01' and '9999-12-31', and an empty partial consists
+// of nothing but those two sentinels. Before the fix each of the cases below made ls[0] hold the
+// virtual leaf k, and the merge loop then read grid[k]/mp[k], one past the end of both vectors.
+TEST_F(AggregateTest, test_percentile_cont_date_merge_sentinel_values) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DATE, TYPE_DATE, false);
+    const DateValue kMax = DateValue::MAX_DATE_VALUE; // '9999-12-31', == RunTimeTypeLimits<TYPE_DATE>::max_value()
+    const DateValue kMin = DateValue::MIN_DATE_VALUE; // '0000-01-01', == RunTimeTypeLimits<TYPE_DATE>::min_value()
+
+    // reverse == true (rate > 0.5): every partial's largest element equals the max sentinel.
+    {
+        auto state = ManagedAggrState::create(ctx, func);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 11), kMax}, 0.6);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {DateValue::create(2020, 1, 2), DateValue::create(2020, 1, 12), kMax}, 0.6);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {DateValue::create(2020, 1, 3), DateValue::create(2020, 1, 13), kMax}, 0.6);
+        auto result = DateColumn::create();
+        func->finalize_to_column(local_ctx.get(), state->state(), result.get());
+        // sorted: 01-01 01-02 01-03 01-11 01-12 01-13 max max max, u = 8 * 0.6 = 4.8
+        ASSERT_EQ(DateValue::create(2020, 1, 12), result->get_data()[0]);
+    }
+    // reverse == false (rate <= 0.5): every partial's smallest element equals the min sentinel.
+    {
+        auto state = ManagedAggrState::create(ctx, func);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {kMin, DateValue::create(2020, 1, 2), DateValue::create(2020, 1, 11)}, 0.4);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {kMin, DateValue::create(2020, 1, 3), DateValue::create(2020, 1, 12)}, 0.4);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {kMin, DateValue::create(2020, 1, 4), DateValue::create(2020, 1, 13)}, 0.4);
+        auto result = DateColumn::create();
+        func->finalize_to_column(local_ctx.get(), state->state(), result.get());
+        // sorted: min min min 01-02 01-03 01-04 01-11 01-12 01-13, u = 8 * 0.4 = 3.2
+        ASSERT_EQ(DateValue::create(2020, 1, 2), result->get_data()[0]);
+    }
+}
+
+// A local aggregation instance that received no input row still emits one partial state, so the
+// merge phase can see a grid row with an empty payload next to non-empty ones.
+TEST_F(AggregateTest, test_percentile_cont_date_merge_empty_partial) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DATE, TYPE_DATE, false);
+
+    // The empty partial is merged first: an empty state carries rate 0, and merge() adopts the rate
+    // of whichever partial it saw last.
+    for (double rate : {0.4, 0.9}) {
+        auto state = ManagedAggrState::create(ctx, func);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(), {}, rate);
+        merge_date_percentile_partial(
+                func, local_ctx.get(), state.get(),
+                {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 2), DateValue::create(2020, 1, 3)}, rate);
+        merge_date_percentile_partial(
+                func, local_ctx.get(), state.get(),
+                {DateValue::create(2020, 1, 4), DateValue::create(2020, 1, 5), DateValue::create(2020, 1, 6)}, rate);
+        auto result = DateColumn::create();
+        func->finalize_to_column(local_ctx.get(), state->state(), result.get());
+        // sorted: 01-01 .. 01-06; rate 0.4 -> u = 2.0, rate 0.9 -> u = 4.5
+        ASSERT_EQ(rate == 0.4 ? DateValue::create(2020, 1, 3) : DateValue::create(2020, 1, 5), result->get_data()[0]);
+    }
+}
+
 TEST_F(AggregateTest, test_percentile_disc) {
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
                                              TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
