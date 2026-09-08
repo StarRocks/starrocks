@@ -24,6 +24,7 @@
 #include "base/statusor.h"
 #include "platform/llm/ai_http_client.h"
 #include "platform/llm/ai_provider_options.h"
+#include "platform/llm/ai_rate_limiter.h"
 
 namespace starrocks {
 
@@ -33,6 +34,7 @@ struct AIChatRequest {
     std::string_view api_key;
     std::string_view prompt;
     const AIProviderOptions* options = nullptr;
+    AICapability capability = AICapability::CHAT;
 };
 
 struct AIProviderHttpRequest {
@@ -68,8 +70,10 @@ struct AIProviderUsage {
     std::optional<int64_t> total_tokens;
 };
 
+using AIProviderValue = std::variant<std::string, std::vector<float>>;
+
 struct AIProviderSuccess {
-    std::string content;
+    AIProviderValue value;
     AIProviderUsage usage;
 };
 
@@ -89,7 +93,8 @@ public:
     virtual ~AIProvider() = default;
 
     virtual StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const = 0;
-    virtual AIProviderParseResult parse_response(std::string_view body) const = 0;
+    virtual AIProviderParseResult parse_response(std::string_view body,
+                                                 AICapability capability = AICapability::CHAT) const = 0;
 };
 
 } // namespace starrocks

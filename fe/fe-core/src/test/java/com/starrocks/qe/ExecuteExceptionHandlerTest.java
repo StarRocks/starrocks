@@ -19,20 +19,30 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.AIProviderMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TAIModelConfiguration;
+import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStatusCode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
 import java.util.OptionalLong;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -133,6 +143,140 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         Assertions.assertEquals(OptionalLong.of(144849L), ExecuteExceptionHandler.findScanVersion(execPlan, 10002L));
         Assertions.assertEquals(OptionalLong.empty(), ExecuteExceptionHandler.findScanVersion(execPlan, -1L));
         Assertions.assertEquals(OptionalLong.empty(), ExecuteExceptionHandler.findScanVersion(null, 10002L));
+    }
+
+    @Test
+    public void testRpcRetryRefreshesProviderConfigurationAfterAlter() throws Exception {
+        AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        String name = "rpc_retry_provider";
+        manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
+        try {
+            String sql = "select ai_custom_query('" + name + "', ai_custom_query('" + name + "', k1)) from t7";
+            StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+            ExecPlan original = getExecPlan(sql);
+            assertProviderConfiguration(original, "original");
+            ExecuteExceptionHandler.RetryContext retry =
+                    new ExecuteExceptionHandler.RetryContext(0, original, connectContext, statement);
+
+            manager.alterProvider(name, providerProperties("altered"), false);
+            ExecuteExceptionHandler.handle(new RpcException("mock provider retry"), retry);
+
+            Assertions.assertNotSame(original, retry.getExecPlan());
+            ExecPlan altered = retry.getExecPlan();
+            assertProviderConfiguration(altered, "altered");
+            assertProviderConfiguration(original, "original");
+            assertProviderConfiguration(getExecPlan(sql), "altered");
+
+            manager.alterProvider(name, Map.of("protocol", "anthropic"), false);
+            retry.setRetryTime(1);
+            RpcException failure = new RpcException("mock protocol retry");
+            Assertions.assertSame(failure, Assertions.assertThrows(RpcException.class,
+                    () -> ExecuteExceptionHandler.handle(failure, retry)));
+            Assertions.assertSame(altered, retry.getExecPlan());
+            assertProviderConfiguration(altered, "altered");
+            assertProviderConfiguration(original, "original");
+            SemanticException error = Assertions.assertThrows(SemanticException.class, () -> getExecPlan(sql));
+            Assertions.assertEquals("AI functions require an OPENAI provider protocol, not ANTHROPIC", error.getDetailMsg());
+        } finally {
+            manager.dropProvider(name, true);
+        }
+    }
+
+    @Test
+    public void testSchemaRetryRefreshesProviderConfigurationAfterRecreationAndFailsAfterDrop() throws Exception {
+        AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        String name = "schema_retry_provider";
+        String originalId = manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
+        try {
+            String sql = "select ai_custom_query('" + name + "', k1) from t7";
+            StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+            ExecPlan original = getExecPlan(sql);
+            assertProviderConfiguration(original, "original");
+            ExecuteExceptionHandler.RetryContext retry =
+                    new ExecuteExceptionHandler.RetryContext(0, original, connectContext, statement);
+
+            manager.dropProvider(name, false);
+            String recreatedId = manager.createProvider(name, AIProviderType.CHAT, providerProperties("recreated"), "");
+            Assertions.assertNotEquals(originalId, recreatedId);
+            ExecuteExceptionHandler.handle(new StarRocksException("invalid field name"), retry);
+
+            Assertions.assertNotSame(original, retry.getExecPlan());
+            ExecPlan recreated = retry.getExecPlan();
+            assertProviderConfiguration(recreated, "recreated");
+            assertProviderConfiguration(original, "original");
+            assertProviderConfiguration(getExecPlan(sql), "recreated");
+
+            manager.dropProvider(name, false);
+            retry.setRetryTime(1);
+            StarRocksException failure = new StarRocksException("invalid field name");
+            Assertions.assertSame(failure, Assertions.assertThrows(StarRocksException.class,
+                    () -> ExecuteExceptionHandler.handle(failure, retry)));
+            Assertions.assertSame(recreated, retry.getExecPlan());
+            assertProviderConfiguration(recreated, "recreated");
+            assertProviderConfiguration(original, "original");
+            SemanticException error = Assertions.assertThrows(SemanticException.class, () -> getExecPlan(sql));
+            Assertions.assertEquals("AI provider '" + name + "' does not exist", error.getDetailMsg());
+        } finally {
+            manager.dropProvider(name, true);
+        }
+    }
+
+    @Test
+    public void testLakeMetaRetryRefreshesProviderConfigurationAfterAlterAndFailsAfterDrop() throws Exception {
+        AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        String name = "lake_meta_retry_provider";
+        manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
+        try {
+            String sql = "select ai_custom_query('" + name + "', k1) from t7";
+            StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+            ExecPlan original = getExecPlan(sql);
+            ExecuteExceptionHandler.RetryContext retry =
+                    new ExecuteExceptionHandler.RetryContext(0, original, connectContext, statement);
+
+            manager.alterProvider(name, providerProperties("altered"), false);
+            ExecuteExceptionHandler.handle(new LakeMetaVersionNotFoundException("mock lake metadata retry"), retry);
+
+            ExecPlan altered = retry.getExecPlan();
+            Assertions.assertNotSame(original, altered);
+            assertProviderConfiguration(altered, "altered");
+            assertProviderConfiguration(original, "original");
+
+            manager.dropProvider(name, false);
+            retry.setRetryTime(1);
+            LakeMetaVersionNotFoundException failure = new LakeMetaVersionNotFoundException("mock lake metadata retry");
+            Assertions.assertSame(failure, Assertions.assertThrows(LakeMetaVersionNotFoundException.class,
+                    () -> ExecuteExceptionHandler.handle(failure, retry)));
+            Assertions.assertSame(altered, retry.getExecPlan());
+            assertProviderConfiguration(altered, "altered");
+            assertProviderConfiguration(original, "original");
+        } finally {
+            manager.dropProvider(name, true);
+        }
+    }
+
+    private static Map<String, String> providerProperties(String version) {
+        return Map.of("endpoint", "https://" + version + ".example.test/v1/chat/completions",
+                "model", version + "-model", "api_key", version + "-test-key", "timeout_ms", "1200");
+    }
+
+    private static void assertProviderConfiguration(ExecPlan plan, String version) {
+        List<Map<String, TAIModelConfiguration>> configurations = plan.getFragments().stream()
+                .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
+                .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
+                .map(node -> node.getAi_project_node().getAi_model_configs())
+                .toList();
+        Assertions.assertFalse(configurations.isEmpty());
+        configurations.forEach(configs -> {
+            Assertions.assertEquals(Set.of("provider:0"), configs.keySet());
+            TAIModelConfiguration configuration = configs.get("provider:0");
+            Assertions.assertEquals(TAIModelSource.PROVIDER, configuration.getSource());
+            Assertions.assertEquals(version + "-model", configuration.getChat().getModel());
+            Assertions.assertEquals(version + "-test-key", configuration.getChat().getApi_key());
+            Assertions.assertEquals("https://" + version + ".example.test/v1/chat/completions",
+                    configuration.getChat().getEndpoint());
+            Assertions.assertEquals("openai_compatible", configuration.getChat().getProvider());
+            Assertions.assertEquals(1200, configuration.getChat().getTimeout_ms());
+        });
     }
 
     @Test
