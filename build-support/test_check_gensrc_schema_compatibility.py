@@ -390,21 +390,20 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
                 self.assertEqual(["unsupported_syntax"],
                                  [issue.rule for issue in module.check_repo(repo, mode="full", base="HEAD")])
 
-    def test_parquet_required_field_waivers_are_narrow(self) -> None:
+    def test_parquet_required_field_waivers_are_retired(self) -> None:
+        # The BoundingBox X/Y addition waivers were single-PR exceptions. Now that the
+        # comparison base carries the fields they can never match again, so keeping them
+        # would trip the stale-waiver check and leave a standing exception nobody reviewed.
         module = _load_module()
         waivers = module.load_waivers(MODULE_PATH.parent / "schema_compatibility_waivers.json")
         parquet_waivers = [w for w in waivers if w.path == "gensrc/thrift/parquet.thrift"]
-        self.assertEqual(4, len(parquet_waivers))
+        self.assertEqual([], parquet_waivers)
         for number, name in enumerate(("xmin", "xmax", "ymin", "ymax"), 1):
-            issue = module.Violation(path="gensrc/thrift/parquet.thrift", container="BoundingBox",
-                                     field_number=number, field_name=name, rule="new_field_must_be_optional",
-                                     detail="", remediation="")
-            self.assertIsNotNone(module._match_waiver(issue, parquet_waivers))
-            for rule in ("field_deleted", "field_type_changed", "field_renumbered"):
+            for rule in ("new_field_must_be_optional", "field_deleted", "field_type_changed", "field_renumbered"):
                 issue = module.Violation(path="gensrc/thrift/parquet.thrift", container="BoundingBox",
                                          field_number=number, field_name=name, rule=rule,
                                          detail="", remediation="")
-                self.assertIsNone(module._match_waiver(issue, parquet_waivers))
+                self.assertIsNone(module._match_waiver(issue, waivers))
 
     def test_changed_mode_rejects_unsupported_thrift_union_change(self) -> None:
         module = _load_module()

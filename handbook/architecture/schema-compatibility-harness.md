@@ -35,7 +35,8 @@ the pre-existing union body. This is not general Thrift union support: other uni
 edits still fail closed, and parsed structs are checked independently even when
 an unsupported construct changes.
 
-The four upstream-required `BoundingBox` X/Y fields have field-specific
-`new_field_must_be_optional` waivers. These do not waive deletion, renumbering, or
-type changes. Remove these addition waivers once the comparison base contains the
-fields, as required by the stale-waiver check.
+The four upstream-required `BoundingBox` X/Y fields were introduced under
+field-specific `new_field_must_be_optional` waivers. Those addition waivers have
+been retired now that the comparison base contains the fields; keeping them would
+fail the stale-waiver check. The fields keep their upstream `required` cardinality,
+and the existing-field deletion, renumbering, and type checks stay active on them.
