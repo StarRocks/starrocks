@@ -577,13 +577,15 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * Shared sizing implementation. {@code targetSize} is the caller-selected target tablet size;
-     * every other bound still comes from the {@code tablet_reshard_*} configs.
+     * Shared sizing implementation against a caller-supplied target-size snapshot. Callers that
+     * branch on the mutable target config must capture it once and pass the same value here so one
+     * sizing decision cannot mix config generations. Every other bound still comes from the
+     * {@code tablet_reshard_*} configs.
      *
      * @param targetSize target tablet size in bytes the byte-volume estimate is divided by.
      *                   Must be {@code > 0}.
      */
-    private static int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
+    public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
         Objects.requireNonNull(estimates, "estimates");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
