@@ -3,24 +3,17 @@
 #include <algorithm>
 #include <memory>
 #include <stdexcept>
-<<<<<<< HEAD
-
-#include "column/column_helper.h"
-#include "column/type_traits.h"
-=======
 #include <string>
 #include <vector>
 
-#include "base/string/slice.h"
-#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "column/runtime_type_traits.h"
->>>>>>> 267fba9 ([BugFix] Mark filter-excluded FLBA dictionary rows NULL (#78685))
+#include "column/type_traits.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/utils.h"
+#include "runtime/mem_pool.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
@@ -45,6 +38,40 @@ public:
         return Status::OK();
     }
 };
+
+template <>
+class FakeDictDecoder<TYPE_VARCHAR> final : public Decoder {
+public:
+    Status set_data(const Slice& data) override { throw std::runtime_error("not supported function set_data"); }
+    Status skip(size_t values_to_skip) override { throw std::runtime_error("not supported skip"); }
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst,
+                      const FilterData* filter = nullptr) override {
+        throw std::runtime_error("not supported skip");
+    }
+    Status next_batch(size_t count, uint8_t* dst) override {
+        auto* spec_dst = reinterpret_cast<Slice*>(dst);
+        for (size_t i = 0; i < count; ++i) {
+            auto data = std::to_string(i);
+            Slice slice = Slice(_pool.allocate(data.size()), data.size());
+            memcpy(slice.data, data.data(), data.size());
+            spec_dst[i] = slice;
+        }
+        return Status::OK();
+    }
+
+private:
+    MemPool _pool;
+};
+
+static Slice unquote(Slice slice) {
+    if ((slice.starts_with("\"") && slice.ends_with("\"")) || (slice.starts_with("'") && slice.ends_with("'"))) {
+        slice.remove_prefix(1);
+        slice.remove_suffix(1);
+    }
+    return slice;
+}
+
+#define EXPECTED_UNQUOTE(lhs, rhs) EXPECT_EQ(unquote(lhs), rhs)
 
 TEST(DictEncodingReadTest, BasicTest) {
     constexpr LogicalType PT = LogicalType::TYPE_INT;
@@ -153,23 +180,9 @@ TEST(DictEncodingReadTest, BasicTest) {
         EXPECT_EQ(dst->size(), chunk_size);
     }
 }
-<<<<<<< HEAD
-=======
-
-TEST(DictEncodingReadTest, BasicTest) {
-    constexpr LogicalType TARGET_TYPE = LogicalType::TYPE_INT;
-    constexpr LogicalType DICT_TYPE = LogicalType::TYPE_INT;
-    dict_encoding_test<DICT_TYPE, TARGET_TYPE>();
-}
-
-TEST(DictEncodingReadTest, BinaryPageTest) {
-    constexpr LogicalType TARGET_TYPE = LogicalType::TYPE_VARCHAR;
-    constexpr LogicalType DICT_TYPE = LogicalType::TYPE_INT;
-    dict_encoding_test<DICT_TYPE, TARGET_TYPE>();
-}
 
 // Build a ready-to-read DictDecoder<Slice> backed by an int-keyed dictionary, mirroring the setup
-// in dict_encoding_test().
+// in BasicTest.
 static void setup_slice_dict_decoder(DictDecoder<Slice>* decoder, FakeDictDecoder<TYPE_VARCHAR>* inner_decoder,
                                      faststring* backing) {
     faststring fs;
@@ -182,67 +195,6 @@ static void setup_slice_dict_decoder(DictDecoder<Slice>* decoder, FakeDictDecode
     memcpy(backing->data() + 1, fs.data(), fs.length());
     ASSERT_OK(decoder->set_data(Slice(backing->data(), backing->length())));
     ASSERT_OK(decoder->set_dict(10, 10, inner_decoder));
-}
-
-// DictDecoder<Slice> must reject a non-binary destination column instead of blindly down-casting it
-// to BinaryColumn. This guards the path that could otherwise let a temporary Int32 dict-code column
-// reach a string slot. Exercises both the filtered _next_batch_value() path and the
-// next_value_batch_with_nulls() path.
-TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
-    constexpr size_t count = 100;
-
-    // 1. _next_batch_value() with a filter: a binary destination succeeds.
-    {
-        DictDecoder<Slice> decoder;
-        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
-        faststring backing;
-        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
-
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
-        auto filter = std::make_unique<uint8_t[]>(count);
-        memset(filter.get(), 0x01, count);
-        filter[0] = 0;
-        ASSERT_OK(decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get()));
-        EXPECT_EQ(dst.get()->size(), count);
-    }
-
-    // 2. _next_batch_value() with a filter: a non-binary destination is rejected.
-    {
-        DictDecoder<Slice> decoder;
-        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
-        faststring backing;
-        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
-
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
-        auto filter = std::make_unique<uint8_t[]>(count);
-        memset(filter.get(), 0x01, count);
-        auto st = decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get());
-        ASSERT_FALSE(st.ok());
-    }
-
-    // 3. next_value_batch_with_nulls(): a non-binary destination is rejected.
-    {
-        DictDecoder<Slice> decoder;
-        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
-        faststring backing;
-        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
-
-        NullInfos infos;
-        infos.reset_with_capacity(count);
-        infos.num_nulls = 0;
-        for (size_t i = 0; i < count; ++i) {
-            infos.nulls_data()[i] = i % 2;
-            infos.num_nulls += infos.nulls_data()[i];
-        }
-        // num_ranges > 2 routes to next_value_batch_with_nulls() rather than the row-by-row fallback.
-        infos.num_ranges = count / 2;
-
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
-        auto filter = std::make_unique<uint8_t[]>(count);
-        memset(filter.get(), 0x01, count);
-        auto st = decoder.next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), filter.get());
-        ASSERT_FALSE(st.ok());
-    }
 }
 
 // A row that a pushed-down filter excludes is never written, so it contributes no bytes to the
@@ -258,7 +210,7 @@ TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
     // so every dictionary value is exactly one byte wide.
     constexpr size_t kValueLen = 1;
 
-    // 1. _next_batch_value(): no NULLs of its own, only filter-excluded rows.
+    // 1. next_batch() with a filter and no NULLs: only filter-excluded rows.
     {
         DictDecoder<Slice> decoder;
         FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
@@ -286,19 +238,21 @@ TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
         EXPECTED_UNQUOTE(dst->debug_item(4), "1");
 
         // The invariant itself: only the surviving rows occupy bytes.
-        auto* binary = down_cast<BinaryColumn*>(nullable->data_column_raw_ptr());
+        auto* binary = down_cast<BinaryColumn*>(nullable->mutable_data_column());
         EXPECT_EQ((count - excluded.size()) * kValueLen, binary->get_bytes().size());
         EXPECT_EQ(binary->get_bytes().size(), binary->get_offset().back());
     }
 
-    // 2. next_value_batch_with_nulls(): real NULLs and filter-excluded rows together.
+    // 2. next_batch_with_nulls(): real NULLs and filter-excluded rows together. It walks runs of
+    // equal NULL-ness and hands each non-NULL run to next_batch(), so the filtered path above runs
+    // once per run and its NULL bookkeeping has to be relative to the rows already appended.
     {
         DictDecoder<Slice> decoder;
         FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
         faststring backing;
         setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
-        // next_batch_with_nulls() has no BE_TEST bypass, so drop the threshold to force the
-        // filtered path regardless of how small the test dictionary is.
+        // next_batch_with_nulls() drops the filter unless the dictionary outgrows the threshold,
+        // and it has no BE_TEST bypass, so force the filtered path for this small dictionary.
         decoder._dict_size_threshold = 0;
 
         NullInfos infos;
@@ -308,7 +262,6 @@ TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
             infos.nulls_data()[i] = (i % 10 == 0);
             infos.num_nulls += infos.nulls_data()[i];
         }
-        // num_ranges > 1 routes to next_value_batch_with_nulls() rather than the row-by-row fallback.
         infos.num_ranges = count / 2;
 
         auto filter = std::make_unique<uint8_t[]>(count);
@@ -331,11 +284,10 @@ TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
             EXPECT_EQ(infos.nulls_data()[i] != 0 || is_excluded, nullable->is_null(i)) << "row " << i;
         }
 
-        auto* binary = down_cast<BinaryColumn*>(nullable->data_column_raw_ptr());
+        auto* binary = down_cast<BinaryColumn*>(nullable->mutable_data_column());
         const size_t surviving = count - infos.num_nulls - excluded.size();
         EXPECT_EQ(surviving * kValueLen, binary->get_bytes().size());
         EXPECT_EQ(binary->get_bytes().size(), binary->get_offset().back());
     }
 }
->>>>>>> 267fba9 ([BugFix] Mark filter-excluded FLBA dictionary rows NULL (#78685))
 } // namespace starrocks::parquet
