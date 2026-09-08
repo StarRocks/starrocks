@@ -562,6 +562,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     public boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
+        Set<Long> snapshotProtectedShardGroups = new HashSet<>();
         List<PhysicalPartition> physicalPartitions = new ArrayList<>();
         Locker locker = new Locker();
         // Intensive path: IS on DB + READ on this table. We only need table-scoped
@@ -604,10 +605,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long groupId = materializedIndex.getShardGroupId();
-                    Set<Long> starmgrShardIdsSet = null;
-                    if (redundantGroupToShards.get(groupId) != null) {
-                        starmgrShardIdsSet = redundantGroupToShards.get(groupId);
-                    } else {
+                    Set<Long> starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                    if (starmgrShardIdsSet == null) {
                         List<Long> starmgrShardIds;
                         try {
                             starmgrShardIds = starOSAgent.listShard(groupId);
@@ -627,17 +626,16 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         starmgrShardIdsSet.remove(tablet.getId());
                     }
 
-                    if (GlobalStateMgr.getCurrentState()
-                                      .getClusterSnapshotMgr().isMaterializedIndexInClusterSnapshotInfo(
-                                            db.getId(), table.getId(), physicalPartition.getParentId(),
-                                                physicalPartition.getId(), materializedIndex.getId())) {
-                        continue;
-                    }
-
-                    if (GlobalStateMgr.getCurrentState()
-                                      .getClusterSnapshotMgr().isShardGroupIdInClusterSnapshotInfo(
-                                            db.getId(), table.getId(), physicalPartition.getParentId(),
-                                                physicalPartition.getId(), materializedIndex.getShardGroupId())) {
+                    boolean indexInSnapshot = GlobalStateMgr.getCurrentState()
+                            .getClusterSnapshotMgr().isMaterializedIndexInClusterSnapshotInfo(
+                                    db.getId(), table.getId(), physicalPartition.getParentId(),
+                                    physicalPartition.getId(), materializedIndex.getId());
+                    boolean shardGroupInSnapshot = GlobalStateMgr.getCurrentState()
+                            .getClusterSnapshotMgr().isShardGroupIdInClusterSnapshotInfo(
+                                    db.getId(), table.getId(), physicalPartition.getParentId(),
+                                    physicalPartition.getId(), groupId);
+                    if (indexInSnapshot || shardGroupInSnapshot) {
+                        snapshotProtectedShardGroups.add(groupId);
                         continue;
                     }
                     // collect shard in starmgr but not in fe
@@ -649,6 +647,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
         }
+
+        redundantGroupToShards.keySet().removeAll(snapshotProtectedShardGroups);
 
         // try to delete data, if fail, still delete redundant shard meta in starmgr
         Set<Long> shardToDelete = new HashSet<>();
