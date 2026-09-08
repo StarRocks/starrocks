@@ -67,7 +67,7 @@ Status FileReader::init(FormatScanContext* ctx) {
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> existed_column_names;
     _meta_helper = _build_meta_helper();
-    RETURN_IF_ERROR(_prepare_read_columns(existed_column_names));
+    _prepare_read_columns(existed_column_names);
     RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(existed_column_names));
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
@@ -236,13 +236,11 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     return filter;
 }
 
-Status FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
-    RETURN_IF_ERROR(_meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns,
-                                                       &_scanner_ctx->column_access_paths,
-                                                       _group_reader_param.read_cols, existed_column_names));
+void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, &_scanner_ctx->column_access_paths,
+                                       _group_reader_param.read_cols, existed_column_names);
     _no_materialized_column_scan =
             (_group_reader_param.read_cols.empty() && _scanner_ctx->reserved_field_slots.empty());
-    return Status::OK();
 }
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {

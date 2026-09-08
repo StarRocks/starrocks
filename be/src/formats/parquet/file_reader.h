@@ -80,7 +80,7 @@ private:
 
     std::shared_ptr<MetaHelper> _build_meta_helper();
 
-    Status _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
+    void _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
 
     Status _init_group_readers();
 

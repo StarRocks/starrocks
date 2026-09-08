@@ -22,7 +22,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "common/statusor.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -42,19 +41,16 @@ struct ParquetField;
 
 namespace starrocks::parquet {
 
-// Compare external metadata for one scalar geo field, without changing reader policy.
-Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field);
-
 class MetaHelper {
 public:
     MetaHelper(const FileMetaData* file_metadata, bool case_sensitive)
             : _file_metadata(file_metadata), _case_sensitive(case_sensitive) {}
     virtual ~MetaHelper() = default;
 
-    virtual Status prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
-                                        const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                                        std::vector<GroupReaderParam::Column>& read_cols,
-                                        std::unordered_set<std::string>& existed_column_names) const = 0;
+    virtual void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
+                                      const std::vector<ColumnAccessPathPtr>* column_access_paths,
+                                      std::vector<GroupReaderParam::Column>& read_cols,
+                                      std::unordered_set<std::string>& existed_column_names) const = 0;
 
 protected:
     GroupReaderParam::Column _build_column(int32_t idx_in_parquet, const tparquet::Type::type& type_in_parquet,
@@ -79,10 +75,10 @@ public:
             : MetaHelper(file_metadata, case_sensitive) {}
     ~ParquetMetaHelper() override = default;
 
-    Status prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
-                                const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                                std::vector<GroupReaderParam::Column>& read_cols,
-                                std::unordered_set<std::string>& existed_column_names) const override;
+    void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
+                              const std::vector<ColumnAccessPathPtr>* column_access_paths,
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
 
 private:
     bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
@@ -99,17 +95,17 @@ public:
 
     ~LakeMetaHelper() override = default;
 
-    Status prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
-                                const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                                std::vector<GroupReaderParam::Column>& read_cols,
-                                std::unordered_set<std::string>& existed_column_names) const override;
+    void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
+                              const std::vector<ColumnAccessPathPtr>* column_access_paths,
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
 
 private:
     friend class LakeMetaHelperTest;
 
     void _init_field_mapping();
-    StatusOr<bool> _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
-                                  const TypeDescriptor* type_descriptor) const;
+    bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
+                        const TypeDescriptor* type_descriptor) const;
     const TIcebergSchema* _lake_schema = nullptr;
     // field name has already been formatted
     std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_lake_field;

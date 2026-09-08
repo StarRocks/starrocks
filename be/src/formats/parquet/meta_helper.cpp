@@ -72,54 +72,10 @@ std::optional<ExtendedVariantVirtualBinding> find_extended_variant_virtual_bindi
 
 } // namespace
 
-Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field) {
-    const auto& element = field.schema_element;
-    const auto& logical = element.logicalType;
-    const bool geography = element.__isset.logicalType && logical.__isset.GEOGRAPHY;
-    const bool geometry = element.__isset.logicalType && logical.__isset.GEOMETRY;
-    const auto* geo = lake_field != nullptr && lake_field->__isset.geo_metadata ? &lake_field->geo_metadata : nullptr;
-    if (!geography && !geometry && geo == nullptr) return Status::OK();
-
-    // Geo values are scalar BYTE_ARRAY leaves; containers are handled by the
-    // existing selected-child reader traversal, not by a second schema walk.
-    if (field.is_complex_type() || !element.__isset.type || element.type != tparquet::Type::BYTE_ARRAY ||
-        element.__isset.converted_type || (geography && geometry)) {
-        return Status::InvalidArgument("Invalid Parquet geo annotation: " + field.name);
-    }
-    // Source geo metadata is supplied by FE; only validate the file-side contract here.
-    if (geo != nullptr && !geography && !geometry && element.__isset.logicalType) {
-        return Status::InvalidArgument("Iceberg geo field has a non-geo Parquet annotation: " + field.name);
-    }
-    // Unannotated WKB may inherit semantics from the Iceberg schema.
-    if (!geography && !geometry) return Status::OK();
-
-    const auto kind = geography ? TIcebergGeoKind::GEOGRAPHY : TIcebergGeoKind::GEOMETRY;
-    const std::string_view crs =
-            geography ? (logical.GEOGRAPHY.__isset.crs ? std::string_view(logical.GEOGRAPHY.crs) : "OGC:CRS84")
-                      : (logical.GEOMETRY.__isset.crs ? std::string_view(logical.GEOMETRY.crs) : "OGC:CRS84");
-    if (crs.empty()) return Status::InvalidArgument("Empty CRS in Parquet geo annotation: " + field.name);
-    std::string_view edge = "PLANAR";
-    if (geography) {
-        const auto algorithm = logical.GEOGRAPHY.__isset.algorithm ? logical.GEOGRAPHY.algorithm
-                                                                   : tparquet::EdgeInterpolationAlgorithm::SPHERICAL;
-        const auto it = tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.find(algorithm);
-        if (it == tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.end()) {
-            return Status::NotSupported("Unknown Parquet geo edge algorithm: " + field.name);
-        }
-        edge = it->second;
-    }
-    // Missing geo metadata (including older senders) is not proof of an ordinary
-    // binary type. Compare declared semantics without changing the reader's type policy.
-    if (geo != nullptr && (geo->kind != kind || geo->crs != crs || geo->edge_algorithm != edge)) {
-        return Status::InvalidArgument("Iceberg/Parquet geo schema mismatch: " + field.name);
-    }
-    return Status::OK();
-}
-
-Status ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
-                                               const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                                               std::vector<GroupReaderParam::Column>& read_cols,
-                                               std::unordered_set<std::string>& existed_column_names) const {
+void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
+                                             const std::vector<ColumnAccessPathPtr>* column_access_paths,
+                                             std::vector<GroupReaderParam::Column>& read_cols,
+                                             std::unordered_set<std::string>& existed_column_names) const {
     for (auto& materialized_column : materialized_columns) {
         auto extended_variant_binding =
                 find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
@@ -145,7 +101,6 @@ Status ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInf
         read_cols.emplace_back(column);
         existed_column_names.emplace(Utils::format_name(materialized_column.name(), _case_sensitive));
     }
-    return Status::OK();
 }
 
 bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const {
@@ -233,14 +188,10 @@ void LakeMetaHelper::_init_field_mapping() {
     }
 }
 
-StatusOr<bool> LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field,
-                                              const TIcebergSchemaField* field_schema,
-                                              const TypeDescriptor* type_descriptor) const {
-    // Check source/file agreement in the existing selected-field traversal, before
-    // an incompatible field can be treated as missing. FE owns source validation.
-    if (field_schema->__isset.geo_metadata) {
-        RETURN_IF_ERROR(validate_geo_field(*parquet_field, field_schema));
-    }
+bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
+                                    const TypeDescriptor* type_descriptor) const {
+    // only check for complex type now
+    // if complex type has none valid subfield, we will treat this struct type as invalid type.
     if (!parquet_field->is_complex_type()) {
         return true;
     }
@@ -260,11 +211,11 @@ StatusOr<bool> LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field,
             return false;
         }
         for (size_t idx = 0; idx < required_children; idx++) {
-            // MAP readers do not materialize an UNKNOWN (pruned) key or value.
-            if (parquet_field->type == ColumnType::MAP && type_descriptor->children[idx].is_unknown_type()) continue;
-            ASSIGN_OR_RETURN(bool valid, _is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
-                                                        &type_descriptor->children[idx]));
-            has_valid_child |= valid;
+            if (_is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
+                               &type_descriptor->children[idx])) {
+                has_valid_child = true;
+                break;
+            }
         }
     } else if (parquet_field->type == ColumnType::STRUCT) {
         if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
@@ -295,18 +246,20 @@ StatusOr<bool> LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field,
                 continue;
             }
 
-            ASSIGN_OR_RETURN(bool valid, _is_valid_type(&child_parquet_field, it->second, it_td->second));
-            has_valid_child |= valid;
+            if (_is_valid_type(&child_parquet_field, it->second, it_td->second)) {
+                has_valid_child = true;
+                break;
+            }
         }
     }
 
     return has_valid_child;
 }
 
-Status LakeMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
-                                            const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                                            std::vector<GroupReaderParam::Column>& read_cols,
-                                            std::unordered_set<std::string>& existed_column_names) const {
+void LakeMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
+                                          const std::vector<ColumnAccessPathPtr>* column_access_paths,
+                                          std::vector<GroupReaderParam::Column>& read_cols,
+                                          std::unordered_set<std::string>& existed_column_names) const {
     // LakeMetaHelper is only used when the parquet file has field ids (see _build_meta_helper).
     for (auto& materialized_column : materialized_columns) {
         auto extended_variant_binding =
@@ -329,10 +282,10 @@ Status LakeMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>&
         if (field_idx < 0) continue;
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_id(field_id);
-        if (!extended_variant_binding.has_value()) {
-            ASSIGN_OR_RETURN(bool valid,
-                             _is_valid_type(parquet_field, lake_it->second, &materialized_column.slot_desc->type()));
-            if (!valid) continue;
+        // check is type is invalid
+        if (!extended_variant_binding.has_value() &&
+            !_is_valid_type(parquet_field, lake_it->second, &materialized_column.slot_desc->type())) {
+            continue;
         }
 
         auto parquet_type = parquet_field->physical_type;
@@ -347,7 +300,6 @@ Status LakeMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>&
         read_cols.emplace_back(column);
         existed_column_names.emplace(Utils::format_name(materialized_column.name(), _case_sensitive));
     }
-    return Status::OK();
 }
 
 } // namespace starrocks::parquet

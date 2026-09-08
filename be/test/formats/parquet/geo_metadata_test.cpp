@@ -20,6 +20,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/schema.h"
@@ -41,10 +42,26 @@ Status validate_scan(const std::vector<tparquet::SchemaElement>& elements, const
     std::vector<GroupReaderParam::Column> read_columns;
     std::unordered_set<std::string> names;
     if (lake != nullptr && metadata.schema().exist_filed_id()) {
-        return LakeMetaHelper(&metadata, case_sensitive, lake)
-                .prepare_read_columns(columns, paths, read_columns, names);
+        LakeMetaHelper(&metadata, case_sensitive, lake).prepare_read_columns(columns, paths, read_columns, names);
+    } else {
+        ParquetMetaHelper(&metadata, case_sensitive).prepare_read_columns(columns, paths, read_columns, names);
     }
-    return ParquetMetaHelper(&metadata, case_sensitive).prepare_read_columns(columns, paths, read_columns, names);
+    // Only construct readers: no data pages are needed for metadata validation.
+    tparquet::RowGroup row_group;
+    row_group.columns.resize(elements.size());
+    ColumnReaderOptions options{};
+    options.case_sensitive = case_sensitive;
+    options.file_meta_data = &metadata;
+    options.row_group_meta = &row_group;
+    for (const auto& column : read_columns) {
+        const auto* field = metadata.schema().get_stored_column_by_field_idx(column.idx_in_parquet);
+        auto reader = column.t_lake_schema_field != nullptr
+                              ? ColumnReaderFactory::create(options, field, column.slot_desc->type(),
+                                                            column.t_lake_schema_field)
+                              : ColumnReaderFactory::create(options, field, column.slot_desc->type());
+        RETURN_IF_ERROR(reader.status());
+    }
+    return Status::OK();
 }
 
 Status validate_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake,
@@ -234,7 +251,7 @@ TEST(GeoMetadataTest, WideOrdinarySchemaReadsOnlySelectedColumn) {
     for (int file = 0; file < 100; ++file) {
         std::vector<GroupReaderParam::Column> read_columns;
         std::unordered_set<std::string> names;
-        ASSERT_TRUE(helper.prepare_read_columns({{0, &slot, true}}, nullptr, read_columns, names).ok());
+        helper.prepare_read_columns({{0, &slot, true}}, nullptr, read_columns, names);
         ASSERT_EQ(1, read_columns.size());
         EXPECT_EQ(1024, read_columns[0].idx_in_parquet);
         EXPECT_EQ(std::unordered_set<std::string>{"column_1024"}, names);
@@ -434,7 +451,7 @@ TEST(GeoMetadataTest, MissingAndNoIdColumnsKeepExistingMatching) {
     EXPECT_TRUE(validate_scan(by_name, &lake, {}, false).ok());
 }
 
-TEST(GeoMetadataTest, NestedGeoUsesSelectedFieldTraversal) {
+TEST(GeoMetadataTest, NestedGeoIsValidatedDuringReaderCreation) {
     // Binary slots exercise the metadata contract without enabling native GEO in FE.
     const auto binary = TypeDescriptor::create_varbinary_type(1024);
     for (bool geography : {true, false}) {
@@ -533,7 +550,12 @@ TEST(GeoMetadataTest, NestedGeoUsesSelectedFieldTraversal) {
             auto child = id;
             child.__set_field_id(7);
             complex_elements.push_back(child);
-            EXPECT_TRUE(validate_scan(complex_elements, &lake, {{0, &slot, true}}, true).is_invalid_argument());
+            auto mismatch = validate_scan(complex_elements, &lake, {{0, &slot, true}}, true);
+            EXPECT_TRUE(mismatch.is_internal_error()) << mismatch;
+            nested_source.children[1].__isset.geo_metadata = false;
+            EXPECT_EQ(mismatch.to_string(),
+                      validate_scan(complex_elements, &lake, {{0, &slot, true}}, true).to_string());
+            nested_source.children[1].__isset.geo_metadata = true;
             EXPECT_TRUE(validate_scan(complex_elements, &lake, {{0, &projected_id, true}}, true).ok());
 
             // A genuinely absent nested field remains eligible for schema-evolution defaults.
@@ -544,7 +566,7 @@ TEST(GeoMetadataTest, NestedGeoUsesSelectedFieldTraversal) {
     }
 }
 
-TEST(GeoMetadataTest, GeoSourceCannotBeDiscardedAsMissingWhenFileContainsGroup) {
+TEST(GeoMetadataTest, GeoGroupMismatchKeepsMissingColumnBehavior) {
     auto group = geo_element();
     group.__isset.type = false;
     group.__isset.logicalType = false;
@@ -557,9 +579,12 @@ TEST(GeoMetadataTest, GeoSourceCannotBeDiscardedAsMissingWhenFileContainsGroup) 
     TIcebergSchema lake;
     lake.__set_fields({lake_geo()});
     SlotDescriptor slot(1, "shape", TypeDescriptor::create_varbinary_type(1024));
-    EXPECT_TRUE(validate_scan(elements, &lake, {{0, &slot, true}}, true).is_invalid_argument());
+    EXPECT_TRUE(validate_scan(elements, &lake, {{0, &slot, true}}, true).ok());
+    lake.fields[0].__isset.geo_metadata = false;
+    EXPECT_TRUE(validate_scan(elements, &lake, {{0, &slot, true}}, true).ok());
+    lake.fields[0].__isset.geo_metadata = true;
 
-    // Exercise FileReader's error path even when there are no row-group readers.
+    // No GEO-specific error is introduced for a skipped top-level group.
     tparquet::FileMetaData metadata;
     metadata.__set_version(1);
     metadata.__set_schema(elements);
@@ -578,10 +603,40 @@ TEST(GeoMetadataTest, GeoSourceCannotBeDiscardedAsMissingWhenFileContainsGroup) 
     context.materialized_columns = {{0, &slot, true}};
     FileReader reader(1024, &file, size);
     auto status = reader.init(&context);
-    EXPECT_TRUE(status.is_invalid_argument()) << status;
-    EXPECT_TRUE(context.not_existed_slots.empty());
+    EXPECT_TRUE(status.ok()) << status;
+    ASSERT_EQ(1, context.not_existed_slots.size());
+    EXPECT_EQ(slot.id(), context.not_existed_slots[0]->id());
     EXPECT_EQ(0, stats.statistics_tried_counter);
     EXPECT_EQ(0, stats.bloom_filter_tried_counter);
+}
+
+TEST(GeoMetadataTest, EmptyFileDoesNotCreateGeoReader) {
+    // A mismatched CRS is checked when a reader is created, not when an empty footer is parsed.
+    TIcebergSchema lake;
+    auto source = lake_geo();
+    source.geo_metadata.__set_crs("EPSG:4326");
+    lake.__set_fields({source});
+    SlotDescriptor slot(1, "shape", TypeDescriptor::create_varbinary_type(1024));
+    tparquet::FileMetaData metadata;
+    metadata.__set_version(1);
+    metadata.__set_schema(schema_of(geo_element()));
+    metadata.__set_num_rows(0);
+    metadata.__set_row_groups({});
+    auto footer = compact_bytes(metadata);
+    std::string bytes = "PAR1" + footer;
+    put_fixed32_le(&bytes, footer.size());
+    bytes += "PAR1";
+    const auto size = bytes.size();
+    RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(bytes)), "empty-geo.parquet");
+    FormatScannerStats stats;
+    FormatScanContext context;
+    context.stats = &stats;
+    context.lake_schema = &lake;
+    context.materialized_columns = {{0, &slot, true}};
+    FileReader reader(1024, &file, size);
+    EXPECT_TRUE(reader.init(&context).ok());
+    EXPECT_TRUE(context.not_existed_slots.empty());
+    EXPECT_EQ(0, stats.total_row_groups);
 }
 
 TEST(GeoMetadataTest, ProjectionMappingPreservesPhysicalNamesAndIds) {
@@ -619,7 +674,7 @@ TEST(GeoMetadataTest, ProjectionMappingPreservesPhysicalNamesAndIds) {
     ParquetMetaHelper helper(&metadata, true);
     std::vector<GroupReaderParam::Column> columns;
     std::unordered_set<std::string> names;
-    ASSERT_TRUE(helper.prepare_read_columns({{0, &slot, true}}, nullptr, columns, names).ok());
+    helper.prepare_read_columns({{0, &slot, true}}, nullptr, columns, names);
     ASSERT_EQ(1, columns.size());
     EXPECT_EQ(0, columns[0].idx_in_parquet);
     EXPECT_EQ(nullptr, columns[0].t_lake_schema_field);
