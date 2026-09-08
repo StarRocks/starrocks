@@ -27,8 +27,18 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
+>>>>>>> aa550e8 ([BugFix] Build Paimon decimal predicate literals with the column precision and scale (#78760))
 import org.apache.paimon.data.BinaryString;
-import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.data.Decimal;
+import org.apache.paimon.data.GenericArray;
+import org.apache.paimon.data.GenericRow;
+import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.predicate.And;
 import org.apache.paimon.predicate.CompoundPredicate;
 import org.apache.paimon.predicate.Equal;
@@ -55,6 +65,7 @@ import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarCharType;
+import org.apache.paimon.utils.InstantiationUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -301,6 +312,7 @@ public class PaimonPredicateConverterTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPaimonCastPredicate() {
         // double to int
         ConstantOperator doubleValue = ConstantOperator.createDouble(11.11);
@@ -400,6 +412,46 @@ public class PaimonPredicateConverterTest {
         CastOperator cast99 = new CastOperator(Type.DEFAULT_DECIMAL128, F7);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast99, d));
         Assertions.assertNull(result);
+=======
+    public void testCastOnColumnIsNotPushedDown() {
+        // a cast on the column can change the comparison (rounding, narrowing, string formats), so the
+        // predicate stays with StarRocks, same as the BE converter which only accepts bare slots
+        Object[][] cases = {
+                {IntegerType.INT, F0, ConstantOperator.createDouble(11.11)},
+                {com.starrocks.type.DateType.DATE, F1, ConstantOperator.createVarchar("2025-01-01")},
+                {com.starrocks.type.FloatType.DOUBLE, F2, ConstantOperator.createFloat(11.11)},
+                {StringType.STRING, F3, ConstantOperator.createDate(LocalDate.parse("2025-01-01").atTime(0, 0))},
+                {IntegerType.INT, F1, ConstantOperator.createBoolean(true)},
+                {IntegerType.INT, F0, ConstantOperator.createBoolean(false)},
+                {VarcharType.VARCHAR, F1, ConstantOperator.createDatetime(LocalDate.parse("2025-01-01").atTime(0, 0))},
+                {com.starrocks.type.BooleanType.BOOLEAN, F4, ConstantOperator.createTinyInt((byte) 0)},
+                {com.starrocks.type.DateType.DATETIME, F5, ConstantOperator.createVarchar("2025-01-01 00:00:00")},
+                {IntegerType.BIGINT, F6, ConstantOperator.createInt(200)},
+                {IntegerType.BIGINT, F8, ConstantOperator.createInt(200)},
+                {IntegerType.BIGINT, F9, ConstantOperator.createInt(10)},
+                {com.starrocks.type.DecimalType.DEFAULT_DECIMAL128, F7, ConstantOperator.createDouble(14.11)},
+        };
+        for (Object[] c : cases) {
+            CastOperator cast = new CastOperator((com.starrocks.type.Type) c[0], (ColumnRefOperator) c[1]);
+            Predicate result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast, (ConstantOperator) c[2]));
+            Assertions.assertNull(result, "cast to " + c[0] + " on " + ((ColumnRefOperator) c[1]).getName());
+        }
+        Assertions.assertNull(CONVERTER.convert(new IsNullPredicateOperator(false, new CastOperator(IntegerType.BIGINT, F0))));
+        Assertions.assertNull(CONVERTER.convert(new InPredicateOperator(false, new CastOperator(IntegerType.BIGINT, F0),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(2))));
+
+        // CAST(d AS DECIMAL(15,1)) = 1.2 on DECIMAL(15,2): stored 1.16 matches the SQL predicate after
+        // rounding but not a pushed-down d = 1.20, so it must not be pushed; the bare column still is
+        RowType rowType = new RowType(List.of(new DataField(0, "d", new DecimalType(15, 2))));
+        PaimonPredicateConverter converter = new PaimonPredicateConverter(rowType);
+        ColumnRefOperator d = new ColumnRefOperator(0,
+                new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 2), "d", true, false);
+        ConstantOperator lit = ConstantOperator.createDecimal(new BigDecimal("1.2"),
+                new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 1));
+        CastOperator rounding = new CastOperator(new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 1), d);
+        Assertions.assertNull(converter.convert(new BinaryPredicateOperator(BinaryType.EQ, rounding, lit)));
+        assertDecimalLeaf(converter.convert(new BinaryPredicateOperator(BinaryType.EQ, d, lit)), Equal.class, "1.20", 15, 2);
+>>>>>>> aa550e8 ([BugFix] Build Paimon decimal predicate literals with the column precision and scale (#78760))
     }
 
     @Test
@@ -449,5 +501,92 @@ public class PaimonPredicateConverterTest {
         ScalarOperator op52 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, op22.clone());
         Predicate convert2 = CONVERTER.convert(op52);
         Assertions.assertTrue(convert2 == null);
+    }
+
+    private static Predicate convertDecimalPredicate(PrimitiveType srType, int precision, int scale,
+                                                     BinaryType op, ConstantOperator literal) {
+        RowType rowType = new RowType(List.of(new DataField(0, "d", new DecimalType(precision, scale))));
+        ColumnRefOperator col = new ColumnRefOperator(0,
+                new com.starrocks.type.DecimalType(srType, precision, scale), "d", true, false);
+        return new PaimonPredicateConverter(rowType).convert(new BinaryPredicateOperator(op, col, literal));
+    }
+
+    private static void assertDecimalLeaf(Predicate result, Class<?> function, String expected, int precision,
+                                          int scale) {
+        Assertions.assertNotNull(result, "decimal predicate must be pushed down");
+        Assertions.assertTrue(result instanceof LeafPredicate);
+        LeafPredicate leaf = (LeafPredicate) result;
+        Assertions.assertTrue(function.isInstance(leaf.function()));
+        Decimal literal = (Decimal) leaf.literals().get(0);
+        Assertions.assertEquals(precision, literal.precision());
+        Assertions.assertEquals(scale, literal.scale());
+        Assertions.assertEquals(new BigDecimal(expected), literal.toBigDecimal());
+    }
+
+    @Test
+    public void testDecimalColumnPredicateUsesColumnPrecisionAndScale() {
+        Predicate d64 = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
+                ConstantOperator.createDecimal(new BigDecimal("5.00"),
+                        new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 2)));
+        assertDecimalLeaf(d64, LessThan.class, "5.00", 15, 2);
+
+        Predicate d32 = convertDecimalPredicate(PrimitiveType.DECIMAL32, 9, 2, BinaryType.EQ,
+                ConstantOperator.createDecimal(new BigDecimal("123.45"),
+                        new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL32, 9, 2)));
+        assertDecimalLeaf(d32, Equal.class, "123.45", 9, 2);
+
+        Predicate d128 = convertDecimalPredicate(PrimitiveType.DECIMAL128, 38, 9, BinaryType.GE,
+                ConstantOperator.createDecimal(new BigDecimal("12345678901234567890.123456789"),
+                        com.starrocks.type.DecimalType.DEFAULT_DECIMAL128));
+        assertDecimalLeaf(d128, GreaterOrEqual.class, "12345678901234567890.123456789", 38, 9);
+    }
+
+    @Test
+    public void testDecimalColumnWithIntegerLiteral() {
+        Predicate result = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
+                ConstantOperator.createInt(5));
+        assertDecimalLeaf(result, LessThan.class, "5.00", 15, 2);
+    }
+
+    @Test
+    public void testDecimalLiteralSurvivesPredicateSerialization() throws Exception {
+        // the JNI reader gets the predicate through this serialization; a wrong scale used to become 5e14 here
+        Predicate pushed = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.GT,
+                ConstantOperator.createDecimal(new BigDecimal("0.05"),
+                        new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 2)));
+        assertDecimalLeaf(pushed, GreaterThan.class, "0.05", 15, 2);
+        Predicate roundTrip = InstantiationUtil.deserializeObject(InstantiationUtil.serializeObject(pushed),
+                getClass().getClassLoader());
+        assertDecimalLeaf(roundTrip, GreaterThan.class, "0.05", 15, 2);
+        InternalRow minValues = GenericRow.of(Decimal.fromBigDecimal(new BigDecimal("0.00"), 15, 2));
+        InternalRow maxValues = GenericRow.of(Decimal.fromBigDecimal(new BigDecimal("0.10"), 15, 2));
+        Assertions.assertTrue(roundTrip.test(100, minValues, maxValues, new GenericArray(new Long[] {0L})));
+
+        Predicate trailingZeros = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
+                ConstantOperator.createDecimal(new BigDecimal("5.000"),
+                        new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 3)));
+        assertDecimalLeaf(trailingZeros, LessThan.class, "5.00", 15, 2);
+    }
+
+    @Test
+    public void testDecimalLiteralExceedingColumnPrecisionIsNotPushedDown() {
+        // 21 digits do not fit DECIMAL(15,2); Decimal.fromBigDecimal returns null instead of truncating
+        Predicate result = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.GT,
+                ConstantOperator.createDecimal(new BigDecimal("100000000000000000000"),
+                        com.starrocks.type.DecimalType.DEFAULT_DECIMAL128));
+        Assertions.assertNull(result);
+        // 13 integer digits is the most DECIMAL(15,2) holds
+        Predicate fits = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.GT,
+                ConstantOperator.createDecimal(new BigDecimal("9999999999999.99"),
+                        new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 2)));
+        assertDecimalLeaf(fits, GreaterThan.class, "9999999999999.99", 15, 2);
+    }
+
+    @Test
+    public void testDecimalLiteralWiderScaleThanColumnIsNotPushedDown() {
+        Predicate result = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
+                ConstantOperator.createDecimal(new BigDecimal("5.005"),
+                        new com.starrocks.type.DecimalType(PrimitiveType.DECIMAL64, 15, 3)));
+        Assertions.assertNull(result);
     }
 }
