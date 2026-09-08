@@ -48,12 +48,7 @@ static bool has_enable_heap_profile() {
     // report false.
     bool value = false;
     size_t size = sizeof(value);
-<<<<<<< HEAD:be/src/common/prof/heap_prof.cpp
-    je_mallctl("prof.active", &value, &size, nullptr, 0);
-    return value;
-=======
     return je_mallctl("prof.active", &value, &size, nullptr, 0) == 0 && value;
->>>>>>> 691f2aa ([BugFix] Read prof.active into a bool in has_enable_heap_profile (#78820)):be/src/runtime/prof/heap_prof.cpp
 }
 
 bool dump_snapshot(const std::string& filename) {
