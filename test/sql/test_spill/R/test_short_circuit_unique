@@ -8,10 +8,13 @@ PROPERTIES('replication_num' = '1');
 insert into unique_tbl values(1,'hi'),(2,'hello');
 -- result:
 -- !result
-set global enable_short_circuit = true;
+set enable_short_circuit = true;
 -- result:
 -- !result
 select * from unique_tbl where a=1;
 -- result:
 1	hi
+-- !result
+set enable_short_circuit = false;
+-- result:
 -- !result
