@@ -3354,7 +3354,7 @@ public class StmtExecutor {
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
         // The runner replans against the temporary partitions and never sees the plan built for this
         // statement, so the size the optimizer estimated has to be read here and handed down.
-        manager.executeJob(context, this, job, PreSplitEstimates.fromExecPlan(execPlan));
+        manager.executeJob(context, this, job, PreSplitEstimates.fromExecPlan(execPlan), execPlan.getAIProviderBindings());
     }
 
     /**

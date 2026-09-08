@@ -34,6 +34,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.AIProviderBindings;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,7 +75,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
     }
 
     public void executeJob(ConnectContext context, StmtExecutor stmtExecutor, InsertOverwriteJob job,
-                           Estimates outputEstimates) throws Exception {
+                           Estimates outputEstimates, AIProviderBindings aiProviderBindings) throws Exception {
         boolean registered = registerOverwriteJob(job);
         if (!registered) {
             LOG.warn("register insert overwrite job:{} failed", job.getJobId());
@@ -82,7 +83,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         }
         try {
             InsertOverwriteJobRunner jobRunner =
-                    new InsertOverwriteJobRunner(job, context, stmtExecutor, outputEstimates);
+                    new InsertOverwriteJobRunner(job, context, stmtExecutor, outputEstimates, aiProviderBindings);
             jobRunner.run();
         } finally {
             deregisterOverwriteJob(job.getJobId());

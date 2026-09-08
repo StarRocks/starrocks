@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PivotRelation;
@@ -24,6 +26,8 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /** Detects AI functions from resolved function metadata rather than unresolved SQL names. */
@@ -33,6 +37,12 @@ public final class ResolvedAIFunctionDetector {
 
     public static boolean contains(ParseNode node) {
         return findFirst(node).isPresent();
+    }
+
+    static List<FunctionCallExpr> findAll(ParseNode node) {
+        Visitor visitor = new Visitor(true);
+        visitor.visit(node);
+        return List.copyOf(visitor.aiFunctions);
     }
 
     static Optional<FunctionCallExpr> findFirst(ParseNode node) {
@@ -52,13 +62,27 @@ public final class ResolvedAIFunctionDetector {
     private static class Visitor extends AstTraverser<Void, Void> {
         private final boolean descendIntoSubqueries;
         private FunctionCallExpr firstAIFunction;
+        private final List<FunctionCallExpr> aiFunctions = new ArrayList<>();
 
         private Visitor(boolean descendIntoSubqueries) {
             this.descendIntoSubqueries = descendIntoSubqueries;
         }
 
         @Override
+        public Void visitCreateViewStatement(CreateViewStmt node, Void context) {
+            return visit(node.getQueryStatement(), context);
+        }
+
+        @Override
+        public Void visitAlterViewClause(AlterViewClause node, Void context) {
+            return visit(node.getQueryStatement(), context);
+        }
+
+        @Override
         public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+            if (expr.getFn() != null && expr.getFn().isAi()) {
+                aiFunctions.add(expr);
+            }
             if (firstAIFunction == null && expr.getFn() != null && expr.getFn().isAi()) {
                 firstAIFunction = expr;
             }

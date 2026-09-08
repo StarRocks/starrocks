@@ -19,8 +19,31 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 public class AuditEncryptionCheckerTest {
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "CREATE AI PROVIDER p TYPE chat PROPERTIES ('endpoint'='https://models.example.test/chat', "
+                    + "'model'='chat', 'api_key'='audit-test-secret')",
+            "ALTER AI PROVIDER p SET ('api_key'='audit-test-secret')",
+            "CREATE AI PROVIDER p TYPE embedding PROPERTIES ('endpoint'='https://user:secret@models.example.test/embed', "
+                    + "'model'='embedding')",
+            "ALTER AI PROVIDER p SET ('endpoint'='https://models.example.test/chat?api_key=audit-test-secret')"
+    })
+    public void testProviderDdlNeedsEncryptionBeforeSemanticValidation(String sql) {
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
+    }
+
+    @Test
+    public void testProviderFunctionDoesNotContainCredentials() {
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT ai_custom_query('p', 'prompt')", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertFalse(AuditEncryptionChecker.needEncrypt(stmt));
+    }
 
     @Test
     public void testNeedEncryptInsertSelectFromFiles() {

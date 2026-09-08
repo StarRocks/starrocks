@@ -157,6 +157,10 @@ A NULL prompt does not submit a provider request:
 SELECT ai_complete(CAST(NULL AS VARCHAR)) AS answer;
 ```
 
+## Related functions
+
+See [AI text functions](ai_functions.md) for task-specific chat helpers, [ai_embed](ai_embed.md) for text embeddings, and [AI provider functions](ai_custom_functions.md) for calls through a registered provider. The four existing `ai_complete` forms and their SYSTEM chat routing are unchanged. Setting a default AI provider does not reroute `ai_complete`; its explicit `model` argument still selects a remote model name.
+
 ## Keywords
 
 AI_COMPLETE, AI, LLM

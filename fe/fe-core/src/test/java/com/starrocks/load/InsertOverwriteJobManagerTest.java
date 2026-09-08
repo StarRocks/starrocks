@@ -26,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.common.AIProviderBindings;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -85,7 +86,7 @@ public class InsertOverwriteJobManagerTest {
         insertOverwriteJobManager.deregisterOverwriteJob(1100L);
         Assertions.assertEquals(0, insertOverwriteJobManager.getJobNum());
 
-        insertOverwriteJobManager.executeJob(context, stmtExecutor, insertOverwriteJob, Estimates.ZERO);
+        insertOverwriteJobManager.executeJob(context, stmtExecutor, insertOverwriteJob, Estimates.ZERO, AIProviderBindings.EMPTY);
 
         insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob);
         Assertions.assertEquals(1, insertOverwriteJobManager.getJobNum());

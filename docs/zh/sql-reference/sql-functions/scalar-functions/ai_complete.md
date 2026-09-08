@@ -124,6 +124,10 @@ NULL 提示词不会提交提供商请求：
 SELECT ai_complete(CAST(NULL AS VARCHAR)) AS answer;
 ```
 
+## 相关函数
+
+任务型聊天辅助函数参见 [AI 文本函数](ai_functions.md)，文本向量参见 [ai_embed](ai_embed.md)，通过已注册 provider 调用服务参见 [AI provider 函数](ai_custom_functions.md)。已有 `ai_complete` 的四种形式及其 SYSTEM 聊天路由保持不变。设置默认 AI provider 不改变 `ai_complete` 的路由；显式 `model` 参数仍选择远端模型名。
+
 ## 关键字
 
 AI_COMPLETE, AI, LLM

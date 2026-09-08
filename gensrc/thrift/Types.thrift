@@ -377,7 +377,9 @@ enum TFunctionBinaryType {
 }
 
 enum TAIModelSource {
-  SYSTEM
+  SYSTEM = 0,
+  // Values 1 and 2 are reserved for discarded pre-release protocols.
+  PROVIDER = 3
 }
 
 // Represents a fully qualified function name.

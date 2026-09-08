@@ -43,6 +43,8 @@
 #include "base/time/monotime.h"
 #include "common/config_thrift_server_fwd.h"
 #include "common/util/thrift_server.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
 
 // TCompactProtocol requires some #defines to work right.  They also define UNLIKLEY
@@ -56,6 +58,54 @@
 #include <thrift/protocol/TCompactProtocol.h>
 
 namespace starrocks {
+
+namespace {
+
+void redact_plan_credentials(TPlanNode& node) {
+    if (!node.__isset.ai_project_node) {
+        return;
+    }
+    for (auto& [id, config] : node.ai_project_node.ai_model_configs) {
+        if (config.__isset.chat && config.chat.__isset.api_key) {
+            config.chat.__set_api_key("******");
+        }
+        if (config.__isset.text_embedding && config.text_embedding.__isset.api_key) {
+            config.text_embedding.__set_api_key("******");
+        }
+    }
+}
+
+void redact_plan_credentials(TPlanFragment& fragment) {
+    for (auto& node : fragment.plan.nodes) {
+        redact_plan_credentials(node);
+    }
+}
+
+} // namespace
+
+std::string thrift_plan_debug_string(const TPlanNode& node) {
+    auto copy = node;
+    redact_plan_credentials(copy);
+    return apache::thrift::ThriftDebugString(copy);
+}
+
+std::string thrift_plan_debug_string(const TPlanFragment& fragment) {
+    auto copy = fragment;
+    redact_plan_credentials(copy);
+    return apache::thrift::ThriftDebugString(copy);
+}
+
+std::string thrift_plan_debug_string(const TExecPlanFragmentParams& request) {
+    auto copy = request;
+    redact_plan_credentials(copy.fragment);
+    return apache::thrift::ThriftDebugString(copy);
+}
+
+std::string thrift_plan_debug_string(const TQueryPlanInfo& info) {
+    auto copy = info;
+    redact_plan_credentials(copy.plan_fragment);
+    return apache::thrift::ThriftDebugString(copy);
+}
 
 std::shared_ptr<apache::thrift::TConfiguration> create_thrift_configuration() {
     return std::make_shared<apache::thrift::TConfiguration>(

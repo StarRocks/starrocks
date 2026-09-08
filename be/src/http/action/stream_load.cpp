@@ -60,6 +60,7 @@
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_client_cache.h"
+#include "common/util/thrift_util.h"
 #include "compute_env/load/http_load_params.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_context.h"
@@ -681,7 +682,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << ctx->brief();
         return plan_status;
     }
-    VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
+    VLOG(3) << "params is " << thrift_plan_debug_string(ctx->put_result.params);
     // if we not use streaming, we must download total content before we begin
     // to process this load
     if (!ctx->use_streaming) {

@@ -36,6 +36,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
@@ -47,6 +48,7 @@
 #include "platform/llm/ai_task_dispatcher.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
+#include "types/json_value.h"
 
 namespace starrocks::pipeline {
 namespace {
@@ -128,6 +130,8 @@ public:
 
         AIProjectPreparedOutput output;
         output.slot_id = kAIOutputSlot;
+        output.result_type = result_type;
+        output.result_kind = result_kind;
         const auto& prompts = down_cast<const BinaryColumn&>(*input->get_column_by_slot_id(kPromptSlot));
         output.input.rows.reserve(input->num_rows());
         for (size_t row = 0; row < input->num_rows(); ++row) {
@@ -143,6 +147,8 @@ public:
     }
 
     std::optional<size_t> throw_on_prepare_call;
+    TypeDescriptor result_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    AIFunctionResultKind result_kind = AIFunctionResultKind::STRING;
     PrepareException prepare_exception = PrepareException::NONE;
     std::optional<size_t> output_chunk_rows;
     bool output_chunk_contains_ai_slot = false;
@@ -287,6 +293,12 @@ public:
 
     void succeed(std::string_view prompt) { complete(prompt, success_result("result-" + suffix(prompt))); }
 
+    void succeed_value(std::string_view prompt, AIProviderValue value) {
+        auto result = AITaskSuccess::create(std::move(value), {});
+        ASSERT_TRUE(result.ok()) << result.status();
+        complete(prompt, std::move(result).value());
+    }
+
     void succeed_with_memory_tracking(std::string_view prompt, const std::shared_ptr<ResultMemoryState>& memory_state) {
         ResultMemoryContext memory(memory_state);
         auto result = AITaskSuccess::create("result-" + suffix(prompt), memory.context());
@@ -294,8 +306,9 @@ public:
         complete(prompt, std::move(result).value());
     }
 
-    void fail_row(std::string_view prompt) {
-        complete(prompt, AISanitizedRowFailure{.failure_class = AISanitizedFailureClass::PROVIDER_RESPONSE});
+    void fail_row(std::string_view prompt,
+                  AISanitizedFailureClass failure_class = AISanitizedFailureClass::PROVIDER_RESPONSE) {
+        complete(prompt, AISanitizedRowFailure{.failure_class = failure_class});
     }
 
     void cancel_lifecycle(std::string_view prompt) {
@@ -486,6 +499,98 @@ std::string ai_value(const ChunkPtr& chunk, size_t row) {
     return data.get_slice(row).to_string();
 }
 
+TEST(AIProjectProcessorTest, MaterializesEmbeddingWithNullableElementsAndSqlNullRows) {
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<RecordingProjection>();
+    projection->result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT));
+    projection->result_kind = AIFunctionResultKind::EMBEDDING;
+    projection->row_actions = {AIFunctionRowAction::DISPATCH, AIFunctionRowAction::SQL_NULL};
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto processor = make_processor(buffer, projection, submitter);
+    ASSERT_NE(nullptr, processor);
+    put_and_finish(buffer, make_input_chunk(0, 2));
+    RuntimeState state;
+    ASSERT_OK(processor->try_process(&state, 0));
+    submitter->succeed_value("prompt-0", std::vector<float>{0.25f, -0.5f});
+    auto result = processor->pull_chunk(&state, 0);
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_NE(nullptr, result.value());
+    const auto& nullable = ai_column(result.value());
+    EXPECT_FALSE(nullable.is_null(0));
+    EXPECT_TRUE(nullable.is_null(1));
+    const auto& array = down_cast<const ArrayColumn&>(*nullable.data_column());
+    ASSERT_TRUE(array.elements_column()->is_nullable());
+    EXPECT_EQ(2, array.offsets().get_data()[1]);
+    EXPECT_EQ(2, array.offsets().get_data()[2]);
+    auto appended = nullable.clone_empty();
+    appended->append(nullable, 0, 2);
+    EXPECT_EQ(2, appended->size());
+}
+
+TEST(AIProjectProcessorTest, TypedResponseValidationRespectsOnErrorOnTheSourceDriver) {
+    for (const std::string on_error : {"ignore", "fail"}) {
+        SCOPED_TRACE(on_error);
+        auto buffer = make_input_buffer();
+        auto projection = std::make_shared<RecordingProjection>();
+        projection->result_type = TypeDescriptor(TYPE_BOOLEAN);
+        projection->result_kind = AIFunctionResultKind::BOOLEAN;
+        auto submitter = std::make_shared<ManualTaskSubmitter>();
+        auto processor = make_processor(buffer, projection, submitter, on_error);
+        ASSERT_NE(nullptr, processor);
+        put_and_finish(buffer, make_input_chunk(0, 2));
+        RuntimeState state;
+        ASSERT_OK(processor->try_process(&state, 0));
+        submitter->succeed_value("prompt-1", std::string("not a boolean"));
+        submitter->succeed_value("prompt-0", std::string("true"));
+        EXPECT_TRUE(processor->status(0).ok()) << "Callbacks must not parse SQL values";
+        auto result = processor->pull_chunk(&state, 0);
+        if (on_error == "ignore") {
+            ASSERT_TRUE(result.ok()) << result.status();
+            const auto& nullable = ai_column(result.value());
+            EXPECT_FALSE(nullable.is_null(0));
+            EXPECT_TRUE(nullable.is_null(1));
+            EXPECT_EQ(1, down_cast<const BooleanColumn&>(*nullable.data_column()).get_data()[0]);
+        } else {
+            ASSERT_FALSE(result.ok());
+            EXPECT_EQ(std::string::npos, result.status().to_string().find("not a boolean"));
+            EXPECT_FALSE(processor->status(0).ok());
+        }
+    }
+}
+
+TEST(AIProjectProcessorTest, TypedMaterializationCapacityFailureIsTerminalInBothErrorModes) {
+    for (const std::string on_error : {"ignore", "fail"}) {
+        SCOPED_TRACE(on_error);
+        auto buffer = make_input_buffer();
+        auto projection = std::make_shared<RecordingProjection>();
+        projection->result_type = TypeDescriptor(TYPE_JSON);
+        projection->result_kind = AIFunctionResultKind::JSON;
+        auto submitter = std::make_shared<ManualTaskSubmitter>();
+        auto processor = make_processor(buffer, projection, submitter, on_error);
+        ASSERT_NE(nullptr, processor);
+        put_and_finish(buffer, make_input_chunk(0, 1));
+
+        RuntimeState state;
+        ASSERT_OK(processor->try_process(&state, 0));
+        std::string oversized_json = "{\"payload\":\"";
+        oversized_json.append(kJSONLengthLimit, 'x');
+        oversized_json.append("\"}");
+        submitter->succeed_value("prompt-0", std::move(oversized_json));
+        ASSERT_OK(processor->status(0));
+        ASSERT_FALSE(processor->pending_finish(0));
+
+        auto result = processor->pull_chunk(&state, 0);
+        ASSERT_FALSE(result.ok());
+        EXPECT_TRUE(result.status().is_capacity_limit_exceeded()) << result.status();
+        EXPECT_TRUE(processor->status(0).is_capacity_limit_exceeded()) << processor->status(0);
+        EXPECT_EQ(std::string::npos, result.status().to_string().find("payload"));
+        auto repeated = processor->pull_chunk(&state, 0);
+        ASSERT_FALSE(repeated.ok());
+        EXPECT_TRUE(repeated.status().is_capacity_limit_exceeded()) << repeated.status();
+        EXPECT_OK(processor->set_source_finished(0));
+    }
+}
+
 TEST(AIProjectProcessorTest, Splits65RowsIntoStable64And1SlicesAndPublishesInRowOrder) {
     auto buffer = make_input_buffer();
     auto projection = std::make_shared<RecordingProjection>();
@@ -605,6 +710,77 @@ TEST(AIProjectProcessorTest, IgnoreTurnsOnlySanitizedRowFailureIntoNull) {
     EXPECT_TRUE(ai_column(output.value()).is_null(1));
     EXPECT_EQ("result-2", ai_value(output.value(), 2));
     EXPECT_TRUE(processor->status(0).ok());
+}
+
+TEST(AIProjectProcessorTest, LocalResourceRowFailurePreservesIgnoreAndFailCompatibility) {
+    for (const std::string on_error : {"ignore", "fail"}) {
+        SCOPED_TRACE(on_error);
+        auto buffer = make_input_buffer();
+        auto projection = std::make_shared<RecordingProjection>();
+        auto submitter = std::make_shared<ManualTaskSubmitter>();
+        auto processor = make_processor(buffer, projection, submitter, on_error);
+        ASSERT_NE(nullptr, processor);
+        put_and_finish(buffer, make_input_chunk(0, 3));
+
+        RuntimeState state;
+        ASSERT_OK(processor->try_process(&state, 0));
+        submitter->succeed("prompt-2");
+        submitter->succeed("prompt-0");
+        submitter->fail_row("prompt-1", AISanitizedFailureClass::LOCAL_RESOURCE);
+        ASSERT_FALSE(processor->pending_finish(0));
+
+        auto output = processor->pull_chunk(&state, 0);
+        if (on_error == "ignore") {
+            ASSERT_TRUE(output.ok()) << output.status();
+            ASSERT_NE(nullptr, output.value());
+            ASSERT_EQ(3, output.value()->num_rows());
+            EXPECT_EQ("result-0", ai_value(output.value(), 0));
+            EXPECT_TRUE(ai_column(output.value()).is_null(1));
+            EXPECT_EQ("result-2", ai_value(output.value(), 2));
+            EXPECT_OK(processor->status(0));
+        } else {
+            EXPECT_FALSE(output.ok());
+            EXPECT_FALSE(processor->status(0).ok());
+        }
+        EXPECT_OK(processor->set_source_finished(0));
+    }
+}
+
+TEST(AIProjectProcessorTest, LocalResourceSubmitFailurePreservesIgnoreAndFailCompatibility) {
+    const std::vector<Status> failures = {
+            Status::MemoryLimitExceeded(std::string(kSecretExceptionSentinel)),
+            Status::ResourceBusy(std::string(kSecretExceptionSentinel)),
+    };
+    for (const auto& failure : failures) {
+        SCOPED_TRACE(failure.code());
+        for (const std::string on_error : {"ignore", "fail"}) {
+            SCOPED_TRACE(on_error);
+            auto buffer = make_input_buffer();
+            auto projection = std::make_shared<RecordingProjection>();
+            auto submitter = std::make_shared<ManualTaskSubmitter>();
+            submitter->submit_error = failure;
+            auto processor = make_processor(buffer, projection, submitter, on_error);
+            ASSERT_NE(nullptr, processor);
+            put_and_finish(buffer, make_input_chunk(0, 1));
+
+            RuntimeState state;
+            ASSERT_OK(processor->try_process(&state, 0));
+            ASSERT_FALSE(processor->pending_finish(0));
+            auto output = processor->pull_chunk(&state, 0);
+            if (on_error == "ignore") {
+                ASSERT_TRUE(output.ok()) << output.status();
+                ASSERT_NE(nullptr, output.value());
+                ASSERT_EQ(1, output.value()->num_rows());
+                EXPECT_TRUE(ai_column(output.value()).is_null(0));
+                EXPECT_OK(processor->status(0));
+            } else {
+                ASSERT_FALSE(output.ok());
+                EXPECT_FALSE(processor->status(0).ok());
+                EXPECT_EQ(std::string::npos, output.status().to_string().find(kSecretExceptionSentinel));
+            }
+            EXPECT_OK(processor->set_source_finished(0));
+        }
+    }
 }
 
 TEST(AIProjectProcessorTest, CompletionPublicationExceptionCannotStrandOutstandingBarrier) {

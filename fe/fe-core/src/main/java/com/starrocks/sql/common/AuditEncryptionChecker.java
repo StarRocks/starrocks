@@ -43,6 +43,8 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt;
+import com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
@@ -136,6 +138,17 @@ public class AuditEncryptionChecker implements AstVisitorExtendInterface<Boolean
             return true;
         }
         return false;
+    }
+
+    @Override
+    public Boolean visitCreateAIProviderStatement(CreateAIProviderStmt statement, Void context) {
+        // Also redact rejected inline credentials and unsafe URLs before semantic analysis succeeds.
+        return true;
+    }
+
+    @Override
+    public Boolean visitAlterAIProviderStatement(AlterAIProviderStmt statement, Void context) {
+        return true;
     }
 
     @Override
