@@ -74,6 +74,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -111,11 +112,21 @@ public class TaskManager implements MemoryTrackable {
     // The dispatchTaskScheduler is responsible for periodically checking whether the running TaskRun is completed
     // and updating the status. It is also responsible for placing pending TaskRun in the running TaskRun queue.
     // This operation need to consider concurrency.
+    // The period is Config.task_runs_dispatch_interval_ms. After each cycle, compare the live
+    // config with the interval this future was created with; a change cancels the future and
+    // starts a new scheduleAtFixedRate. The next run waits the new interval (same as
+    // LeaderDaemon.setInterval: a decrease takes effect after the current period).
+    // Do not reschedule until dispatchFuture is published: scheduleAtFixedRate(delay=0) can
+    // run the first cycle before the assignment returns, and a replacement then would leave
+    // two periodic tasks with only one handle.
     // This scheduler can use notify/wait to optimize later.
     //
     // Not final: same rebuild-on-restart contract as periodScheduler.
     // Package-private for same reasons as periodScheduler above.
     volatile ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
+    // Package-private so tests can inspect cancel/reschedule without reflection.
+    volatile ScheduledFuture<?> dispatchFuture;
+    volatile int scheduledDispatchIntervalMs;
     // Use to concurrency control
     private final QueryableReentrantLock taskLock;
 
@@ -139,29 +150,77 @@ public class TaskManager implements MemoryTrackable {
             if (periodScheduler.isShutdown()) {
                 periodScheduler = Executors.newScheduledThreadPool(1);
             }
-            if (dispatchScheduler.isShutdown()) {
-                dispatchScheduler = Executors.newScheduledThreadPool(1);
-            }
             taskRunManager.getTaskRunExecutor().rebuildIfShutdown();
             clearUnfinishedTaskRun();
             registerPeriodicalTask();
-            dispatchScheduler.scheduleAtFixedRate(() -> {
-                if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                    return;
-                }
-                if (!taskRunManager.tryTaskRunLock()) {
-                    LOG.warn("TaskRun scheduler cannot acquire the lock");
-                    return;
-                }
-                try {
-                    taskRunManager.checkRunningTaskRun();
-                    taskRunManager.scheduledPendingTaskRun();
-                } catch (Exception ex) {
-                    LOG.warn("failed to dispatch task.", ex);
-                } finally {
-                    taskRunManager.taskRunUnlock();
-                }
-            }, 0, 1, TimeUnit.SECONDS);
+            startDispatchScheduler();
+        }
+    }
+
+    private void startDispatchScheduler() {
+        if (dispatchScheduler.isShutdown()) {
+            dispatchScheduler = Executors.newScheduledThreadPool(1);
+        }
+        int intervalMs = getTaskRunsDispatchIntervalMs();
+        scheduledDispatchIntervalMs = intervalMs;
+        dispatchFuture = dispatchScheduler.scheduleAtFixedRate(
+                this::dispatchPendingAndRunningTaskRuns, 0, intervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void dispatchPendingAndRunningTaskRuns() {
+        try {
+            if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                return;
+            }
+            if (!taskRunManager.tryTaskRunLock()) {
+                LOG.warn("TaskRun scheduler cannot acquire the lock");
+                return;
+            }
+            try {
+                taskRunManager.checkRunningTaskRun();
+                taskRunManager.scheduledPendingTaskRun();
+            } catch (Exception ex) {
+                LOG.warn("failed to dispatch task.", ex);
+            } finally {
+                taskRunManager.taskRunUnlock();
+            }
+        } finally {
+            rescheduleDispatchIfIntervalChanged();
+        }
+    }
+
+    @VisibleForTesting
+    static int getTaskRunsDispatchIntervalMs() {
+        int intervalMs = Config.task_runs_dispatch_interval_ms;
+        if (intervalMs < 0) {
+            return 1000;
+        }
+        return Math.max(1, intervalMs);
+    }
+
+    @VisibleForTesting
+    void rescheduleDispatchIfIntervalChanged() {
+        int intervalMs = getTaskRunsDispatchIntervalMs();
+        if (intervalMs == scheduledDispatchIntervalMs) {
+            return;
+        }
+        ScheduledFuture<?> old = dispatchFuture;
+        if (old == null) {
+            // First cycle can run before startDispatchScheduler() stores the future.
+            // Scheduling a replacement here would orphan that in-flight fixed-rate task.
+            return;
+        }
+        ScheduledExecutorService scheduler = dispatchScheduler;
+        if (scheduler.isShutdown()) {
+            return;
+        }
+        old.cancel(false);
+        scheduledDispatchIntervalMs = intervalMs;
+        try {
+            dispatchFuture = scheduler.scheduleAtFixedRate(
+                    this::dispatchPendingAndRunningTaskRuns, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException e) {
+            LOG.debug("skip rescheduling TaskRun dispatch, scheduler is shutdown");
         }
     }
 
@@ -207,6 +266,10 @@ public class TaskManager implements MemoryTrackable {
         }
         periodFutureMap.clear();
         periodScheduler.shutdownNow();
+        if (dispatchFuture != null) {
+            dispatchFuture.cancel(false);
+            dispatchFuture = null;
+        }
         dispatchScheduler.shutdownNow();
         // Stop the task-run pool like every other leader-session pool: shutdownNow interrupts in-flight
         // MV-refresh / INSERT task runs (their transactions abort) so a previous term's run cannot race
