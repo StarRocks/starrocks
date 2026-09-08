@@ -18,6 +18,7 @@
 
 #include <starlet.h>
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -152,6 +153,8 @@ private:
 extern std::shared_ptr<StarOSWorker> g_worker;
 extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
 void apply_starlet_upload_threshold_configs();
+std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client);
+
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
 void shutdown_staros_worker();
 void update_staros_starcache();
