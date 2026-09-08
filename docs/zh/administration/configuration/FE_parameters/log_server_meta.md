@@ -92,6 +92,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当为 true 时，生成的 Log4j2 配置会将 ".gz" 后缀附加到轮转的审计日志文件名 (fe.audit.log.*) 中，以便 Log4j2 在轮转时生成压缩的 (.gz) 归档审计日志文件。此设置在 FE 启动期间在 Log4jConfig.initLogging 中读取，并应用于审计日志的 RollingFile appender；它仅影响轮转/归档文件，而不影响活动审计日志。由于该值在启动时初始化，因此更改它需要重启 FE 才能生效。与审计日志轮转设置 (`audit_log_dir`、`audit_log_roll_interval`、`audit_roll_maxsize`、`audit_log_roll_num`) 一起使用。
 - 引入版本: 3.2.12
 
+### `audit_log_error_message_max_length`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: 字符
+- 是否可变: Yes
+- 描述: 语句执行失败时，审计日志中 `ErrorMessage` 字段记录的最大长度，按 UTF-16 code unit 计算，因此基本多文种平面之外的字符（例如 emoji）按两个计。超长的错误信息会被截断，并追加 `... /* truncated, audit_log_error_message_max_length=<value> */`，该后缀本身不计入上限。设置为 `0` 表示不再记录错误信息，此时审计记录中不会出现该字段。当 `enable_sql_desensitize_in_log` 为 `true`，或 `enable_audit_sql` 为 `false` 时，同样不记录错误信息，因为错误信息会引用导致语句失败的具体值和出错的 token。
+- 引入版本: 4.2.0
+
 ### `audit_log_json_format`
 
 - 默认值: false
