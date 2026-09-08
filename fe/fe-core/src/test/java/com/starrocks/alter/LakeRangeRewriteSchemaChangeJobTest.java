@@ -2711,6 +2711,50 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     /**
+     * The retry diagnostic must survive a leader failover, so it has to reach the journal - not just the
+     * live field. errMsg is written after this attempt's own persistStateChange calls, so if the set were
+     * not journaled a replay would restore the preceding snapshot and SHOW ALTER TABLE COLUMN would lose
+     * the reason the partition is stalled. Asserting on the captured snapshots rather than on getInfo is
+     * the whole point: getInfo reads the live field and would pass either way.
+     */
+    @Test
+    public void testRetryDiagnosticIsJournaledAndItsClearIsJournaledToo() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        List<String> loggedMsgs = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+                loggedMsgs.add(alterJob.errMsg);
+            }
+        };
+
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            if (attempts.incrementAndGet() == 1) {
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        });
+
+        job.runRunningJob();
+        Assertions.assertTrue(
+                loggedMsgs.stream().anyMatch(m -> m != null
+                        && m.contains(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)
+                        && m.contains(String.valueOf(physicalPartitionId))),
+                "the retry diagnostic must appear in a journaled snapshot, saw: " + loggedMsgs);
+
+        // The retry succeeds, which clears the diagnostic; that clear must be journaled as well,
+        // otherwise a failover during the publication wait would restore the stale failure message onto
+        // a partition whose rewrite actually succeeded.
+        loggedMsgs.clear();
+        job.runRunningJob();
+        Assertions.assertEquals(2, attempts.get(), "the failed partition must be re-attempted");
+        Assertions.assertTrue(loggedMsgs.stream().anyMatch(""::equals),
+                "the cleared diagnostic must appear in a journaled snapshot, saw: " + loggedMsgs);
+    }
+
+    /**
      * The retry diagnostic must be cleared once the partition's rewrite is observed published - and that
      * must not depend on the transient failure map, which is empty after a leader failover replays the
      * job. Simulated here by clearing the map (as replay leaves it) before the partition reaches DONE.

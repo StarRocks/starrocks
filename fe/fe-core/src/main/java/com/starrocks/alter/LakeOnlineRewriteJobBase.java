@@ -1233,7 +1233,7 @@ public abstract class LakeOnlineRewriteJobBase
         // Surface the stall in SHOW ALTER TABLE COLUMN's Msg column: getInfo emits errMsg regardless of
         // job state, and checkTableStable already reports a waiting job this way. It also means that if
         // the job is later cancelled for an unrelated reason, the operator has already seen the cause.
-        errMsg = retryDiagnosticPrefix(physicalPartitionId) + error;
+        setRetryDiagnostic(retryDiagnosticPrefix(physicalPartitionId) + error);
         LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}, retrying on a later tick "
                         + "({}s of the {}s budget used): {}",
                 jobId, physicalPartitionId, elapsedMs / 1000, budgetMs / 1000, error);
@@ -1283,13 +1283,36 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     /**
+     * Publish the retry diagnostic through {@code errMsg} and journal it, so the reason a partition is
+     * stalled survives a leader failover. {@code errMsg} is written after this attempt's own
+     * {@code persistStateChange} calls, so without journaling it here a replay would restore the
+     * preceding snapshot and {@code SHOW ALTER TABLE COLUMN} would lose the reason.
+     *
+     * <p>Journals only when the message actually changes, so a partition failing the same way on every
+     * tick costs one write rather than one per tick, and a job with no failures costs none.
+     */
+    private void setRetryDiagnostic(String diagnostic) {
+        if (diagnostic.equals(errMsg)) {
+            return;
+        }
+        errMsg = diagnostic;
+        persistStateChange(this, JobState.RUNNING);
+    }
+
+    /**
      * Drop the retry diagnostic iff it is the one this partition published. Clearing unconditionally
      * would erase a sibling partition's active retry message and hide that partition's stall.
      * Null-safe: a replayed {@code errMsg} can be null if the journal carried an explicit JSON null.
+     *
+     * <p>The clear is journaled for the same reason the set is: otherwise a failover during the
+     * publication wait would restore the stale failure message onto a partition whose rewrite actually
+     * succeeded. The prefix guard already makes this fire only when there is something to clear, so it
+     * costs exactly one write per clear.
      */
     private void clearRetryDiagnostic(long physicalPartitionId) {
         if (errMsg != null && errMsg.startsWith(retryDiagnosticPrefix(physicalPartitionId))) {
             errMsg = "";
+            persistStateChange(this, JobState.RUNNING);
         }
     }
 
