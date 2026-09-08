@@ -42,7 +42,7 @@
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
         <io.netty.version>4.1.137.Final</io.netty.version>
-        <protobuf-java.version>3.25.5</protobuf-java.version>
+        <protobuf-java.version>4.30.2</protobuf-java.version>
         <nimbusds.version>9.37.4</nimbusds.version>
         <commons-io.version>2.17.0</commons-io.version>
         <gcs.connector.version>4.0.0</gcs.connector.version>
