@@ -31,14 +31,9 @@
 
 namespace starrocks::parquet {
 namespace {
-Status validate_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake,
+Status validate_scan(const std::vector<tparquet::SchemaElement>& elements, const TIcebergSchema* lake,
                      const std::vector<FormatColumnInfo>& columns, bool case_sensitive,
                      const std::vector<ColumnAccessPathPtr>* paths = nullptr) {
-    tparquet::SchemaElement root;
-    root.__set_name("root");
-    root.__set_num_children(schema.get_fields_size());
-    std::vector<tparquet::SchemaElement> elements{root};
-    for (const auto& field : schema.get_parquet_fields()) elements.push_back(field.schema_element);
     tparquet::FileMetaData thrift;
     thrift.__set_schema(elements);
     FileMetaData metadata;
@@ -50,6 +45,17 @@ Status validate_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake,
                 .prepare_read_columns(columns, paths, read_columns, names);
     }
     return ParquetMetaHelper(&metadata, case_sensitive).prepare_read_columns(columns, paths, read_columns, names);
+}
+
+Status validate_scan(const SchemaDescriptor& schema, const TIcebergSchema* lake,
+                     const std::vector<FormatColumnInfo>& columns, bool case_sensitive,
+                     const std::vector<ColumnAccessPathPtr>* paths = nullptr) {
+    tparquet::SchemaElement root;
+    root.__set_name("root");
+    root.__set_num_children(schema.get_fields_size());
+    std::vector<tparquet::SchemaElement> elements{root};
+    for (const auto& field : schema.get_parquet_fields()) elements.push_back(field.schema_element);
+    return validate_scan(elements, lake, columns, case_sensitive, paths);
 }
 
 tparquet::SchemaElement geo_element(bool geography = true) {
@@ -426,6 +432,156 @@ TEST(GeoMetadataTest, MissingAndNoIdColumnsKeepExistingMatching) {
     lake.fields[0].geo_metadata.__set_crs("EPSG:4326");
     EXPECT_TRUE(validate_scan(by_name, &lake, {{0, &slot, true}}, false).ok());
     EXPECT_TRUE(validate_scan(by_name, &lake, {}, false).ok());
+}
+
+TEST(GeoMetadataTest, NestedGeoUsesSelectedFieldTraversal) {
+    // Binary slots exercise the metadata contract without enabling native GEO in FE.
+    const auto binary = TypeDescriptor::create_varbinary_type(1024);
+    for (bool geography : {true, false}) {
+        for (int container = 0; container < 3; ++container) {
+            SCOPED_TRACE(::testing::Message() << "geography=" << geography << ", container=" << container);
+            auto shape = geo_element(geography);
+            auto id = shape;
+            id.__set_name("id");
+            id.__set_field_id(2);
+            id.__set_type(tparquet::Type::INT32);
+            id.__isset.logicalType = false;
+            auto record = shape;
+            record.__set_name("payload");
+            record.__set_field_id(4);
+            record.__set_num_children(2);
+            record.__isset.type = false;
+            record.__isset.logicalType = false;
+            auto root = record;
+            root.__set_name("root");
+            root.__set_num_children(1);
+            root.__isset.field_id = false;
+            root.__isset.repetition_type = false;
+
+            auto source_shape = geography ? lake_geo() : lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR");
+            source_shape.__set_name("renamed_shape");
+            TIcebergSchemaField source_id;
+            source_id.__set_field_id(2);
+            source_id.__set_name("id");
+            TIcebergSchemaField source_record;
+            source_record.__set_field_id(4);
+            source_record.__set_name("payload");
+            source_record.__set_children({source_id, source_shape});
+            auto selected =
+                    TypeDescriptor::create_struct_type({"id", "renamed_shape"}, {TypeDescriptor(TYPE_INT), binary});
+            auto pruned = TypeDescriptor::create_struct_type({"id"}, {TypeDescriptor(TYPE_INT)});
+            auto source = source_record;
+            std::vector<tparquet::SchemaElement> elements{root, record, id, shape};
+            if (container != 0) {
+                const bool array = container == 1;
+                auto outer = record;
+                outer.__set_field_id(5);
+                outer.__set_num_children(1);
+                outer.__set_converted_type(array ? tparquet::ConvertedType::LIST : tparquet::ConvertedType::MAP);
+                auto repeated = record;
+                repeated.__set_name(array ? "list" : "key_value");
+                repeated.__set_repetition_type(tparquet::FieldRepetitionType::REPEATED);
+                repeated.__set_num_children(array ? 1 : 2);
+                repeated.__isset.field_id = false;
+                record.__set_name(array ? "element" : "value");
+                source_record.__set_name(record.name);
+                source.__set_field_id(5);
+                elements = {root, outer, repeated};
+                if (array) {
+                    source.__set_children({source_record});
+                    selected = TypeDescriptor::create_array_type(selected);
+                    pruned = TypeDescriptor::create_array_type(pruned);
+                } else {
+                    auto key = id;
+                    key.__set_name("key");
+                    key.__set_field_id(6);
+                    key.__set_repetition_type(tparquet::FieldRepetitionType::REQUIRED);
+                    elements.push_back(key);
+                    auto source_key = source_id;
+                    source_key.__set_field_id(6);
+                    source_key.__set_name("key");
+                    source.__set_children({source_key, source_record});
+                    selected = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), selected);
+                    pruned = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), pruned);
+                }
+                elements.insert(elements.end(), {record, id, shape});
+            }
+            TIcebergSchema lake;
+            lake.__set_fields({source});
+            SlotDescriptor slot(1, "payload", selected);
+            auto status = validate_scan(elements, &lake, {{0, &slot, true}}, true);
+            ASSERT_TRUE(status.ok()) << status;
+
+            auto& nested_source = container == 0 ? lake.fields[0] : lake.fields[0].children[container - 1];
+            nested_source.children[1].geo_metadata.__set_crs("EPSG:4326");
+            // The readable INT sibling must not short-circuit the GEO comparison.
+            EXPECT_TRUE(validate_scan(elements, &lake, {{0, &slot, true}}, true).is_invalid_argument());
+            SlotDescriptor projected_id(1, "payload", pruned);
+            EXPECT_TRUE(validate_scan(elements, &lake, {{0, &projected_id, true}}, true).ok());
+            EXPECT_TRUE(validate_scan(elements, &lake, {}, true).ok());
+            if (container == 2) {
+                SlotDescriptor keys_only(
+                        1, "payload",
+                        TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_UNKNOWN)));
+                EXPECT_TRUE(validate_scan(elements, &lake, {{0, &keys_only, true}}, true).ok());
+            }
+
+            auto complex_elements = elements;
+            complex_elements.back().__isset.type = false;
+            complex_elements.back().__isset.logicalType = false;
+            complex_elements.back().__set_num_children(1);
+            auto child = id;
+            child.__set_field_id(7);
+            complex_elements.push_back(child);
+            EXPECT_TRUE(validate_scan(complex_elements, &lake, {{0, &slot, true}}, true).is_invalid_argument());
+            EXPECT_TRUE(validate_scan(complex_elements, &lake, {{0, &projected_id, true}}, true).ok());
+
+            // A genuinely absent nested field remains eligible for schema-evolution defaults.
+            elements.pop_back();
+            elements[elements.size() - 2].__set_num_children(1);
+            EXPECT_TRUE(validate_scan(elements, &lake, {{0, &slot, true}}, true).ok());
+        }
+    }
+}
+
+TEST(GeoMetadataTest, GeoSourceCannotBeDiscardedAsMissingWhenFileContainsGroup) {
+    auto group = geo_element();
+    group.__isset.type = false;
+    group.__isset.logicalType = false;
+    group.__set_num_children(1);
+    auto child = geo_element();
+    child.__set_field_id(2);
+    child.__set_name("child");
+    auto elements = schema_of(group);
+    elements.push_back(child);
+    TIcebergSchema lake;
+    lake.__set_fields({lake_geo()});
+    SlotDescriptor slot(1, "shape", TypeDescriptor::create_varbinary_type(1024));
+    EXPECT_TRUE(validate_scan(elements, &lake, {{0, &slot, true}}, true).is_invalid_argument());
+
+    // Exercise FileReader's error path even when there are no row-group readers.
+    tparquet::FileMetaData metadata;
+    metadata.__set_version(1);
+    metadata.__set_schema(elements);
+    metadata.__set_num_rows(0);
+    metadata.__set_row_groups({});
+    auto footer = compact_bytes(metadata);
+    std::string bytes = "PAR1" + footer;
+    put_fixed32_le(&bytes, footer.size());
+    bytes += "PAR1";
+    const auto size = bytes.size();
+    RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(bytes)), "geo-group.parquet");
+    FormatScannerStats stats;
+    FormatScanContext context;
+    context.stats = &stats;
+    context.lake_schema = &lake;
+    context.materialized_columns = {{0, &slot, true}};
+    FileReader reader(1024, &file, size);
+    auto status = reader.init(&context);
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_TRUE(context.not_existed_slots.empty());
+    EXPECT_EQ(0, stats.statistics_tried_counter);
+    EXPECT_EQ(0, stats.bloom_filter_tried_counter);
 }
 
 TEST(GeoMetadataTest, ProjectionMappingPreservesPhysicalNamesAndIds) {

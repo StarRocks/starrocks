@@ -233,10 +233,14 @@ void LakeMetaHelper::_init_field_mapping() {
     }
 }
 
-bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
-                                    const TypeDescriptor* type_descriptor) const {
-    // only check for complex type now
-    // if complex type has none valid subfield, we will treat this struct type as invalid type.
+StatusOr<bool> LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field,
+                                              const TIcebergSchemaField* field_schema,
+                                              const TypeDescriptor* type_descriptor) const {
+    // Check source/file agreement in the existing selected-field traversal, before
+    // an incompatible field can be treated as missing. FE owns source validation.
+    if (field_schema->__isset.geo_metadata) {
+        RETURN_IF_ERROR(validate_geo_field(*parquet_field, field_schema));
+    }
     if (!parquet_field->is_complex_type()) {
         return true;
     }
@@ -256,11 +260,11 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
             return false;
         }
         for (size_t idx = 0; idx < required_children; idx++) {
-            if (_is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
-                               &type_descriptor->children[idx])) {
-                has_valid_child = true;
-                break;
-            }
+            // MAP readers do not materialize an UNKNOWN (pruned) key or value.
+            if (parquet_field->type == ColumnType::MAP && type_descriptor->children[idx].is_unknown_type()) continue;
+            ASSIGN_OR_RETURN(bool valid, _is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
+                                                        &type_descriptor->children[idx]));
+            has_valid_child |= valid;
         }
     } else if (parquet_field->type == ColumnType::STRUCT) {
         if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
@@ -291,10 +295,8 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
                 continue;
             }
 
-            if (_is_valid_type(&child_parquet_field, it->second, it_td->second)) {
-                has_valid_child = true;
-                break;
-            }
+            ASSIGN_OR_RETURN(bool valid, _is_valid_type(&child_parquet_field, it->second, it_td->second));
+            has_valid_child |= valid;
         }
     }
 
@@ -327,15 +329,10 @@ Status LakeMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>&
         if (field_idx < 0) continue;
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_id(field_id);
-        // Validate declared source semantics at the existing scalar field match.
-        // This is not a native-type enablement/unsupported-read guard.
-        if (lake_it->second->__isset.geo_metadata && !parquet_field->is_complex_type()) {
-            RETURN_IF_ERROR(validate_geo_field(*parquet_field, lake_it->second));
-        }
-        // check is type is invalid
-        if (!extended_variant_binding.has_value() &&
-            !_is_valid_type(parquet_field, lake_it->second, &materialized_column.slot_desc->type())) {
-            continue;
+        if (!extended_variant_binding.has_value()) {
+            ASSIGN_OR_RETURN(bool valid,
+                             _is_valid_type(parquet_field, lake_it->second, &materialized_column.slot_desc->type()));
+            if (!valid) continue;
         }
 
         auto parquet_type = parquet_field->physical_type;

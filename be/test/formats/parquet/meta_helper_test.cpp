@@ -100,7 +100,9 @@ protected:
     static bool is_valid_type(const TIcebergSchema& schema, const ParquetField& field,
                               const TIcebergSchemaField& top_field, const TypeDescriptor& type) {
         LakeMetaHelper helper(/*file_metadata=*/nullptr, /*case_sensitive=*/false, &schema);
-        return helper._is_valid_type(&field, &top_field, &type);
+        auto result = helper._is_valid_type(&field, &top_field, &type);
+        EXPECT_TRUE(result.ok()) << result.status();
+        return result.ok() && result.value();
     }
 };
 

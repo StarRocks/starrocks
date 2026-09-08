@@ -22,6 +22,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "common/statusor.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -107,8 +108,8 @@ private:
     friend class LakeMetaHelperTest;
 
     void _init_field_mapping();
-    bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
-                        const TypeDescriptor* type_descriptor) const;
+    StatusOr<bool> _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
+                                  const TypeDescriptor* type_descriptor) const;
     const TIcebergSchema* _lake_schema = nullptr;
     // field name has already been formatted
     std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_lake_field;
