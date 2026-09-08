@@ -345,7 +345,10 @@ ALTER TABLE cd_base SET ('enable_change_data_capture' = 'true');
 function: wait_alter_table_finish()
 INSERT INTO cd_base VALUES (4,40);
 REFRESH MATERIALIZED VIEW mv_cd WITH SYNC MODE;
-SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
+-- Compared rather than checked for emptiness: a non-empty check would pass just as well if the
+-- frontend narrowed the tablet the backend named down to the wrong base table.
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON,
+       LAST_REFRESH_MODE_REASON_TABLE = concat('default_catalog.', database(), '.cd_base') AS names_base
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cd';
 SELECT k, v FROM mv_cd ORDER BY k;
 SELECT k, v FROM cd_base ORDER BY k;

@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -32,8 +33,11 @@ import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
+import com.starrocks.scheduler.mv.ivm.TvrTableSnapshotInfo;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
+import com.starrocks.sql.ast.KeysType;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 
@@ -140,8 +144,9 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
             }
             logger.warn("Incremental refresh for mv {} was rejected by the backend ({}), falling back to pct " +
                     "for this run", mv.getName(), reason.get(), e);
-            // The backend reports a tablet, not a table, so no single base table is attributable.
-            recordRefreshModeReason(reason.get(), null);
+            recordRefreshModeReason(reason.get(),
+                    reason.get() == MaterializedView.RefreshModeReason.CHANGE_CAPTURE_DISABLED
+                            ? soleCaptureCandidate(snapshotBaseTables.values()) : null);
             try {
                 ProcessExecPlan pctPlan = switchToPCTRefresh(taskRunContext);
                 if (pctPlan.state() == Constants.TaskRunState.SKIPPED) {
@@ -183,6 +188,37 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
             return Optional.of(MaterializedView.RefreshModeReason.CHANGE_CAPTURE_DISABLED);
         }
         return Optional.of(MaterializedView.RefreshModeReason.UNKNOWN);
+    }
+
+    /**
+     * The base table to blame for a capture-disabled rejection, or null when more than one could be. The
+     * backend's check only fires for a primary-key table whose changes this run had to read, so one such
+     * base table is the only place it can have come from. The capture property is deliberately not
+     * consulted: this rejection means the window spanned versions published while capture was off, which
+     * the operator may well have turned back on before the refresh ran. Typed with instanceof rather than
+     * cast because a snapshot of another shape should cost the label, not the refresh it is labelling.
+     */
+    @VisibleForTesting
+    static String soleCaptureCandidate(Collection<BaseTableSnapshotInfo> snapshots) {
+        String candidate = null;
+        for (BaseTableSnapshotInfo snapshotInfo : snapshots) {
+            if (!(snapshotInfo.getBaseTable() instanceof OlapTable)
+                    || ((OlapTable) snapshotInfo.getBaseTable()).getKeysType() != KeysType.PRIMARY_KEYS) {
+                continue;
+            }
+            if (!(snapshotInfo instanceof TvrTableSnapshotInfo)) {
+                continue;
+            }
+            TvrVersionRange delta = ((TvrTableSnapshotInfo) snapshotInfo).getTvrSnapshot();
+            if (delta == null || delta.isEmpty()) {
+                continue;
+            }
+            if (candidate != null) {
+                return null;
+            }
+            candidate = snapshotInfo.getBaseTableInfo().getReadableString();
+        }
+        return candidate;
     }
 
     @Override

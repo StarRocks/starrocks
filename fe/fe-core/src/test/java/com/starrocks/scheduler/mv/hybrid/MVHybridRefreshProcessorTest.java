@@ -14,12 +14,20 @@
 
 package com.starrocks.scheduler.mv.hybrid;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedView.RefreshMode;
 import com.starrocks.catalog.MaterializedView.RefreshModeReason;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshParams;
+import com.starrocks.scheduler.mv.ivm.TvrTableSnapshotInfo;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
+import com.starrocks.sql.ast.KeysType;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -29,6 +37,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MVHybridRefreshProcessorTest {
@@ -127,5 +136,61 @@ public class MVHybridRefreshProcessorTest {
         assertTrue(reasonFor(new RuntimeException("get database write lock timeout")).isEmpty());
         assertTrue(reasonFor(new RuntimeException(
                 "INCREMENTAL materialized views do not support non-append-only base changes")).isEmpty());
+    }
+
+    private static BaseTableSnapshotInfo pkSnapshot(String name, Long from, Long to) {
+        BaseTableInfo info = Mockito.mock(BaseTableInfo.class);
+        Mockito.when(info.getReadableString()).thenReturn("default_catalog.db1." + name);
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getKeysType()).thenReturn(KeysType.PRIMARY_KEYS);
+        TvrTableSnapshotInfo snapshot = new TvrTableSnapshotInfo(info, table);
+        if (from != null) {
+            snapshot.setTvrSnapshot(TvrTableDelta.of(from, to));
+        }
+        return snapshot;
+    }
+
+    private static BaseTableSnapshotInfo dupSnapshot(String name) {
+        BaseTableInfo info = Mockito.mock(BaseTableInfo.class);
+        Mockito.when(info.getReadableString()).thenReturn("default_catalog.db1." + name);
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getKeysType()).thenReturn(KeysType.DUP_KEYS);
+        TvrTableSnapshotInfo snapshot = new TvrTableSnapshotInfo(info, table);
+        snapshot.setTvrSnapshot(TvrTableDelta.of(1L, 2L));
+        return snapshot;
+    }
+
+    @Test
+    public void theOnlyPrimaryKeyBaseThatChangedIsNamed() {
+        assertEquals("default_catalog.db1.pk_a", MVHybridRefreshProcessor.soleCaptureCandidate(
+                Lists.newArrayList(pkSnapshot("pk_a", 1L, 2L), dupSnapshot("dup_b"))));
+    }
+
+    @Test
+    public void aChangedDuplicateKeyBaseIsNotACandidate() {
+        assertNull(MVHybridRefreshProcessor.soleCaptureCandidate(
+                Lists.newArrayList(dupSnapshot("dup_b"), dupSnapshot("dup_c"))));
+    }
+
+    @Test
+    public void anUnchangedPrimaryKeyBaseIsNotACandidate() {
+        assertNull(MVHybridRefreshProcessor.soleCaptureCandidate(
+                Lists.newArrayList(pkSnapshot("pk_a", 1L, 1L), pkSnapshot("pk_b", null, null))));
+    }
+
+    /** Naming either would be a guess, and the wrong table sends the operator to the wrong fix. */
+    @Test
+    public void twoChangedPrimaryKeyBasesNameNeither() {
+        assertNull(MVHybridRefreshProcessor.soleCaptureCandidate(
+                Lists.newArrayList(pkSnapshot("pk_a", 1L, 2L), pkSnapshot("pk_b", 3L, 4L))));
+    }
+
+    @Test
+    public void aSnapshotWithoutDeltaInformationIsNotACandidate() {
+        BaseTableInfo info = Mockito.mock(BaseTableInfo.class);
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getKeysType()).thenReturn(KeysType.PRIMARY_KEYS);
+        assertNull(MVHybridRefreshProcessor.soleCaptureCandidate(
+                Lists.newArrayList(new PCTTableSnapshotInfo(info, table))));
     }
 }
