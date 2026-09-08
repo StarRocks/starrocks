@@ -89,14 +89,14 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && timeout 60 git pull >/dev/null || echo "git pull timeout, using cached ci-tool"
 
-          # The CD anti-loop is no longer enforced by this step's `if` -- run-repo-sync.sh
-          # owns it via SKIP_CD. That script is fetched at run time and the `git pull` above
-          # deliberately tolerates failure, so a stale /var/lib/ci-tool checkout would run a
-          # pre-contract script that ignores SKIP_CD and pushes cd-contributed changes back
-          # to CelerData (ping-pong: the new CD PR carries no `sr-synced`, so TSP's reverse
-          # sync picks it up again). Assert the contract instead of trusting merge order.
-          # Failing loudly beats looping silently -- silence is what cost mirrorship three
-          # weeks of changes in the first place.
+          # The anti-loop is no longer enforced by this step's `if` -- run-repo-sync.sh owns
+          # it via SKIP_CD / SKIP_MS. That script is fetched at run time and the `git pull`
+          # above deliberately tolerates failure, so a stale /var/lib/ci-tool checkout, or
+          # this workflow landing before StarRocks/ci-tool#5248, would run a pre-contract
+          # script that ignores both flags and dispatches back to the downstream the change
+          # came from -- a redundant sync PR there, and no signal that the anti-loop was
+          # bypassed. Assert the contract rather than trust merge order: failing loudly
+          # beats skipping silently, which is what cost mirrorship three weeks of changes.
           if [[ ! -f ./scripts/run-repo-sync.sh ]]; then
             echo "::error::ci-tool checkout failed on this runner (no ./scripts/run-repo-sync.sh); the cp/cd above is swallowed by the || echo."
             exit 1
