@@ -527,7 +527,7 @@ This topic introduces the following types of FE configurations:
 
 ### `lake_local_first_write_max_nodes`
 
-- Default: 16
+- Default: 6
 - Type: Int
 - Unit: -
 - Is mutable: Yes

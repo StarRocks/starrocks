@@ -528,7 +528,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `lake_local_first_write_max_nodes`
 
-- 默认值: 16
+- 默认值: 6
 - 类型: Int
 - 单位: -
 - 是否可变: Yes

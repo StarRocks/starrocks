@@ -1375,7 +1375,7 @@ public class Config extends ConfigBase {
             "writer and produces its own segments, so a very wide warehouse would split one load into many small " +
             "segments. Nodes beyond this bound still run their sink instance -- their rows go over the network " +
             "instead of staying local, which is the pre-existing behaviour. <= 0 means no bound (every alive node).")
-    public static int lake_local_first_write_max_nodes = 16;
+    public static int lake_local_first_write_max_nodes = 6;
 
     /**
      * The thrift server max worker threads
