@@ -89,8 +89,7 @@ public:
             // TConnectedClient::run() handle (and log) them as before.
             throw;
         } catch (const std::exception& e) {
-            LOG(WARNING) << "Uncaught exception while processing a thrift RPC, closing the connection: "
-                         << e.what();
+            LOG(WARNING) << "Uncaught exception while processing a thrift RPC, closing the connection: " << e.what();
             return false;
         } catch (...) {
             LOG(WARNING) << "Uncaught non-standard exception while processing a thrift RPC, closing the connection";
