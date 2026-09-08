@@ -1026,7 +1026,8 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
 
     std::vector<uint32_t> column_ids{3};
     ASSERT_OK(SegmentRewriter::rewrite_auto_increment(file_name, dst_file_name, tablet_schema,
-                                                      auto_increment_partial_update_state, column_ids, &write_columns));
+                                                      /*flat_json_config=*/nullptr, auto_increment_partial_update_state,
+                                                      column_ids, &write_columns));
 
     auto segment = *Segment::open(fs, FileInfo{dst_file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
@@ -1092,7 +1093,8 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementReadErrorTest) {
     SyncPoint::GetInstance()->SetCallBack("SegmentRewriter::rewrite_auto_increment:get_next",
                                           [](void* arg) { *(Status*)arg = Status::Corruption("injected read error"); });
     auto st = SegmentRewriter::rewrite_auto_increment(file_name, dst_file_name, tablet_schema,
-                                                      auto_increment_partial_update_state, column_ids, &write_columns);
+                                                      /*flat_json_config=*/nullptr, auto_increment_partial_update_state,
+                                                      column_ids, &write_columns);
     SyncPoint::GetInstance()->ClearCallBack("SegmentRewriter::rewrite_auto_increment:get_next");
     SyncPoint::GetInstance()->DisableProcessing();
     ASSERT_FALSE(st.ok()) << "rewrite_auto_increment must not swallow a partial-segment read error";
@@ -1157,7 +1159,8 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementRowCountMismatchTest) {
     SyncPoint::GetInstance()->SetCallBack("SegmentRewriter::rewrite_auto_increment:read_chunk",
                                           [](void* arg) { ((Chunk*)arg)->reset(); });
     auto st = SegmentRewriter::rewrite_auto_increment(file_name, dst_file_name, tablet_schema,
-                                                      auto_increment_partial_update_state, column_ids, &write_columns);
+                                                      /*flat_json_config=*/nullptr, auto_increment_partial_update_state,
+                                                      column_ids, &write_columns);
     SyncPoint::GetInstance()->ClearCallBack("SegmentRewriter::rewrite_auto_increment:read_chunk");
     SyncPoint::GetInstance()->DisableProcessing();
     ASSERT_FALSE(st.ok()) << "rewrite_auto_increment must reject a short partial-segment read";

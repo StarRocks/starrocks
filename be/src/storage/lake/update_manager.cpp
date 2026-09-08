@@ -58,6 +58,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
+#include "storage_primitive/flat_json_config.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -882,6 +883,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                 static_cast<size_t>(std::max<int32_t>(1, config::column_mode_partial_update_insert_batch_size));
 
         SegmentWriterOptions wopts;
+        // The inserted rows are written as a full-schema segment (writer.init() below takes every
+        // column), so a JSON column's physical form is re-derived here. |metadata| is the
+        // version-pinned publish metadata, so this is the table's own config, not a cache probe.
+        if (metadata->has_flat_json_config()) {
+            wopts.flat_json_config = std::make_shared<FlatJsonConfig>();
+            wopts.flat_json_config->update(metadata->flat_json_config());
+        }
         WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         if (config::enable_transparent_data_encryption) {
             ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());

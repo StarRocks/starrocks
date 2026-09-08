@@ -274,6 +274,9 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
     context.tablet_schema_hash = cur_tablet->schema_hash();
     context.rowset_path_prefix = cur_tablet->schema_hash_path();
     context.tablet_schema = tablet_schema;
+    // The destination tablet is unambiguous here: this converts an external push load's data into
+    // rowsets of cur_tablet itself, so its own table-level config applies.
+    context.flat_json_config = cur_tablet->flat_json_config();
     context.rowset_state = PREPARED;
     context.txn_id = _request.transaction_id;
     context.load_id = load_id;

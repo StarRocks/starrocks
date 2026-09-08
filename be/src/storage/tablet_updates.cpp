@@ -2091,6 +2091,11 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
     context.tablet_schema_hash = _tablet.schema_hash();
     context.rowset_path_prefix = _tablet.schema_hash_path();
     context.tablet_schema = cur_tablet_schema;
+    // Primary key compaction re-derives the physical form of every JSON column it merges. This is
+    // the only compaction path a primary key table has (CompactionUtils::construct_output_rowset_writer
+    // covers the others), so leaving it on the be.conf globals means a background compaction quietly
+    // undoes the table's flat_json properties with no user action at all -- and never heals.
+    context.flat_json_config = _tablet.flat_json_config();
     context.rowset_state = COMMITTED;
     context.segments_overlap = NONOVERLAPPING;
     context.max_rows_per_segment =
@@ -4292,6 +4297,10 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.tablet_schema_hash = _tablet.schema_hash();
         writer_context.rowset_path_prefix = _tablet.schema_hash_path();
         writer_context.tablet_schema = _tablet.tablet_schema();
+        // Base tablet, for the same reason as SchemaChangeHandler::_convert_historical_rowsets: the
+        // new tablet has no flat_json_config until ReportHandler reconciles it, long after this
+        // conversion has rewritten every rowset.
+        writer_context.flat_json_config = base_tablet->flat_json_config();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -4554,6 +4563,8 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.tablet_schema_hash = _tablet.schema_hash();
         writer_context.rowset_path_prefix = _tablet.schema_hash_path();
         writer_context.tablet_schema = tschema;
+        // Base tablet; see convert_from above.
+        writer_context.flat_json_config = base_tablet->flat_json_config();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
         writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();

@@ -44,6 +44,7 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/flat_json_config.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -660,6 +661,19 @@ Status RowsetUpdateState::_widen_rewrite_columns_for_cross_publish(const RowsetU
     return Status::OK();
 }
 
+// The table-level flat JSON config the rewritten segment must be written with. It is read from the
+// version-pinned publish metadata, not from TabletManager's metadata cache: a cache miss there would
+// silently fall back to the be.conf globals and undo the table's own flat_json properties. Returns
+// nullptr for a table that carries no config, which is what SegmentWriter reads as "use the globals".
+static std::shared_ptr<FlatJsonConfig> rewrite_flat_json_config(const RowsetUpdateStateParams& params) {
+    if (params.metadata == nullptr || !params.metadata->has_flat_json_config()) {
+        return nullptr;
+    }
+    auto config = std::make_shared<FlatJsonConfig>();
+    config->update(params.metadata->flat_json_config());
+    return config;
+}
+
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, SegmentFileInfo>* replace_segments,
                                           std::vector<FileMetaPB>* orphan_files) {
@@ -748,15 +762,17 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     MutableColumns* rewrite_write_columns =
             widened_write_columns.empty() ? &_partial_update_states[segment_id].write_columns : &widened_write_columns;
 
+    auto flat_json_config = rewrite_flat_json_config(params);
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         SegmentFileInfo file_info;
         file_info.path = params.tablet->segment_location(dest_path);
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
-                src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
-                unmodified_column_ids, has_partial_update_state(params) ? rewrite_write_columns : nullptr,
-                params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids));
+                src, &file_info, params.tablet_schema, flat_json_config,
+                _auto_increment_partial_update_states[segment_id], unmodified_column_ids,
+                has_partial_update_state(params) ? rewrite_write_columns : nullptr, params.tablet,
+                std::move(vector_index_opts), &file_info.vector_index_ids));
         file_info.path = dest_path;
         stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
@@ -766,9 +782,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         file_info.path = params.tablet->segment_location(dest_path);
 
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
-                src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, segment_id,
-                partial_rowset_footer, {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
-                &file_info.vector_index_ids));
+                src, &file_info, params.tablet_schema, flat_json_config, unmodified_column_ids, *rewrite_write_columns,
+                segment_id, partial_rowset_footer, {root_path, std::to_string(rowset_meta.id())},
+                std::move(vector_index_opts), &file_info.vector_index_ids));
         file_info.path = dest_path;
 
         // Sync indexes on the *updated* columns are not rebuilt by the rewrite (their data is

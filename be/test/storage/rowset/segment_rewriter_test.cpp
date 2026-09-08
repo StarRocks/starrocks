@@ -124,8 +124,9 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     }
 
     FileInfo file_info{.path = dst_file_name};
-    ASSERT_OK(SegmentRewriter::rewrite_partial_update(src_file_info, &file_info, tablet_schema, read_column_ids,
-                                                      write_columns, partial_segment->id(), partial_rowset_footer));
+    ASSERT_OK(SegmentRewriter::rewrite_partial_update(src_file_info, &file_info, tablet_schema,
+                                                      /*flat_json_config=*/nullptr, read_column_ids, write_columns,
+                                                      partial_segment->id(), partial_rowset_footer));
 
     auto segment = *Segment::open(_fs, FileInfo{.path = dst_file_name, .encryption_meta = file_info.encryption_meta}, 0,
                                   tablet_schema);

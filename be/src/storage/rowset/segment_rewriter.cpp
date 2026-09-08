@@ -44,6 +44,7 @@ static void record_rewrite_vector_index_ids(const SegmentWriter& writer, std::ve
 
 Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                                const std::shared_ptr<const TabletSchema>& tschema,
+                                               const std::shared_ptr<FlatJsonConfig>& flat_json_config,
                                                std::vector<uint32_t>& column_ids, MutableColumns& columns,
                                                uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
                                                SegmentFileMark segment_file_mark,
@@ -90,6 +91,11 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 
     SegmentWriterOptions opts;
     opts.segment_file_mark = std::move(segment_file_mark);
+    // The columns this rewrite writes are the ones the partial update did NOT carry -- they are
+    // backfilled from the previous version and go through fresh column writers, so a JSON column
+    // among them has its physical form re-derived here. Carry the table's own config in, or that
+    // derivation silently uses the be.conf globals.
+    opts.flat_json_config = flat_json_config;
     // Direct how vector indexes on the rewritten columns are produced. Shared-data sync mode
     // passes location-provider-resolved .vi paths so the SegmentWriter writes them at the
     // reader-visible path (instead of the empty-segment_file_mark IndexDescriptor fallback, which
@@ -123,6 +129,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 // increment column, and rewrite the full segment file through SegmentWriter.
 Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                                const TabletSchemaCSPtr& tschema,
+                                               const std::shared_ptr<FlatJsonConfig>& flat_json_config,
                                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                                std::vector<uint32_t>& column_ids, MutableColumns* columns,
                                                SegmentFileMark segment_file_mark) {
@@ -209,6 +216,9 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
 
     SegmentWriterOptions opts;
     opts.segment_file_mark = std::move(segment_file_mark);
+    // Writes the whole schema (writer.init below takes every column), so any JSON column's physical
+    // form is re-derived here and needs the table's own config rather than the be.conf globals.
+    opts.flat_json_config = flat_json_config;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(full_column_ids, true));
 
@@ -227,6 +237,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
 // increment column, and rewrite the full segment file through SegmentWriter.
 Status SegmentRewriter::rewrite_auto_increment_lake(
         const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
+        const std::shared_ptr<FlatJsonConfig>& flat_json_config,
         starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
         const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
         const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts,
@@ -313,6 +324,9 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     // column writers here, so unlike rewrite_partial_update the inline (sync) vector index build
     // covers the whole schema; see RewriteVectorIndexOptions for the shared-data/-nothing split.
     SegmentWriterOptions opts;
+    // ... which is also why a JSON column's physical form is re-derived here and needs the table's
+    // own config rather than the be.conf globals.
+    opts.flat_json_config = flat_json_config;
     opts.vector_index_file_paths = std::move(vector_index_opts.file_paths);
     opts.defer_vector_index_build = vector_index_opts.defer_build;
     opts.vector_index_build_threshold = vector_index_opts.build_threshold;

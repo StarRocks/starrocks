@@ -1066,6 +1066,13 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.tablet_schema_hash = new_tablet->schema_hash();
         writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
         writer_context.tablet_schema = new_tablet->tablet_schema();
+        // Take the flat JSON config from the BASE tablet, not the new one. Both are the same table,
+        // so the table-level config is identical -- but FE does not put flat_json_config in the
+        // create-tablet request for the shadow tablet this job writes into, so the new tablet only
+        // receives one from the ~60s ReportHandler reconciliation. A schema change finishes in
+        // seconds, so new_tablet->flat_json_config() is still nullptr while these rowsets are
+        // rewritten, and reading it would leave the rewrite on the be.conf globals.
+        writer_context.flat_json_config = base_tablet->flat_json_config();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = sc_params.rowsets_to_change[i]->version();
         writer_context.segments_overlap = sc_params.rowsets_to_change[i]->rowset_meta()->segments_overlap();
