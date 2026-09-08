@@ -49,6 +49,39 @@ TEST(JsonValueTest, Parse) {
     ASSERT_FALSE(oversized_json.ok());
 }
 
+TEST(JsonValueTest, ParseInvalidJsonReportsVelocypackError) {
+    // Invalid JSON must come back as a status (never an exception escaping parse()) and keep the
+    // velocypack error message, whichever parser API is in use.
+    struct Case {
+        std::string input;
+        std::string expected_message;
+    };
+    std::vector<Case> cases = {
+            {R"({"a":1)", "Expecting ',' or '}'"},
+            {R"({"a":1,)", "Expecting '\"' or '}'"},
+            {R"([1,2)", "Expecting ',' or ']'"},
+            {R"({"a" 1})", "Expecting ':'"},
+            {R"("abc)", "Unfinished string"},
+            {R"({"a":tru})", "Expecting 'true'"},
+            {R"({"a":1} x)", "Expecting EOF"},
+            {R"([1e999])", "Number out of range"},
+            {std::string("[\"ctrl\x01char\"]"), "Unexpected control character"},
+    };
+    for (const auto& c : cases) {
+        auto res = JsonValue::parse(c.input);
+        ASSERT_FALSE(res.ok()) << c.input;
+        ASSERT_EQ(TStatusCode::DATA_QUALITY_ERROR, res.status().code()) << res.status();
+        ASSERT_NE(res.status().message().find(c.expected_message), std::string::npos)
+                << c.input << " -> " << res.status();
+    }
+    // A prefix of a document is not accepted either, and valid documents still parse.
+    std::string doc = R"({"id":42,"name":"x","tags":["a","b"],"nums":[1,2.5,-3e2],"obj":{"t":true,"n":null}})";
+    for (size_t len = 1; len < doc.size(); ++len) {
+        ASSERT_FALSE(JsonValue::parse(doc.substr(0, len)).ok()) << doc.substr(0, len);
+    }
+    ASSERT_TRUE(JsonValue::parse(doc).ok());
+}
+
 TEST(JsonValueTest, ToString) {
     auto maybe_json = JsonValue::parse(R"( {"a": "a"} )");
     ASSERT_TRUE(maybe_json.ok());

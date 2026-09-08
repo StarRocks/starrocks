@@ -732,6 +732,8 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+        # non-throwing Parser::tryParse()/tryFromJson() for invalid JSON input
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
         touch $PATCHED_MARK
     fi
     cd -
