@@ -442,8 +442,7 @@ protected:
         return rowset;
     }
 
-    std::vector<TabletMetadataPtr> merge_fixture_sources(const std::vector<TabletMetadataPtr>& sources,
-                                                         bool normalize_missing_segment_num_rows = true) {
+    std::vector<TabletMetadataPtr> merge_fixture_sources(const std::vector<TabletMetadataPtr>& sources) {
         const bool assign_ranges =
                 std::all_of(sources.begin(), sources.end(), [](const auto& source) { return !source->has_range(); });
         std::vector<int64_t> ids;
@@ -452,16 +451,6 @@ protected:
         std::vector<TabletMetadataPtr> result;
         for (const auto& source : sources) {
             auto copy = std::make_shared<TabletMetadataPB>(*source);
-            if (normalize_missing_segment_num_rows) {
-                for (auto& rowset : *copy->mutable_rowsets()) {
-                    for (auto& segment : *rowset.mutable_segment_metas()) {
-                        // Existing synthetic fixtures predate MERGE's strict segment-count
-                        // contract. Keep their old default-zero behavior; malformed-input
-                        // tests opt out of this fixture-only normalization.
-                        if (!segment.has_num_rows()) segment.set_num_rows(0);
-                    }
-                }
-            }
             if (assign_ranges) {
                 if (copy->has_schema() && copy->schema().column_size() == 0) {
                     auto* column = copy->mutable_schema()->add_column();
@@ -505,11 +494,8 @@ protected:
     Status publish_resharding_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet,
                                     int64_t base_version, int64_t new_version, int64_t txn_id,
                                     std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
-                                    const std::function<void()>& before_merge = {},
-                                    bool normalize_missing_segment_num_rows = true) {
-        for (const auto& source : merge_fixture_sources(sources, normalize_missing_segment_num_rows)) {
-            RETURN_IF_ERROR(put_tablet_metadata(source));
-        }
+                                    const std::function<void()>& before_merge = {}) {
+        for (const auto& source : merge_fixture_sources(sources)) RETURN_IF_ERROR(put_tablet_metadata(source));
         if (before_merge) before_merge();
         ReshardingTabletInfoPB resharding_tablet;
         auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -576,8 +562,7 @@ protected:
     }
 
     StatusOr<TabletMetadataPtr> publish_allocator_merge(
-            const std::vector<std::shared_ptr<TabletMetadataPB>>& mutable_sources,
-            bool normalize_missing_segment_num_rows = true) {
+            const std::vector<std::shared_ptr<TabletMetadataPB>>& mutable_sources) {
         if (mutable_sources.empty()) return Status::InvalidArgument("allocator merge fixture has no source");
         const int64_t target_id = next_id();
         prepare_tablet_dirs(target_id);
@@ -589,8 +574,7 @@ protected:
         }
         std::unordered_map<int64_t, TabletMetadataPtr> published;
         RETURN_IF_ERROR(publish_resharding_merge(sources, target_id, /*base_version=*/1, /*new_version=*/2,
-                                                 /*txn_id=*/next_id(), published, {},
-                                                 normalize_missing_segment_num_rows));
+                                                 /*txn_id=*/next_id(), published));
         auto target = published.find(target_id);
         if (target == published.end()) return Status::InternalError("allocator merge target was not published");
         return target->second;
@@ -788,8 +772,7 @@ protected:
 
     StatusOr<MutableTabletMetadataPtr> merge_with_phase_counts(const std::vector<TabletMetadataPtr>& sources,
                                                                int64_t target_tablet_id, int64_t target_version,
-                                                               MergePhaseCounts* counts,
-                                                               bool normalize_missing_segment_num_rows = true) {
+                                                               MergePhaseCounts* counts) {
         auto* sync = SyncPoint::GetInstance();
         sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { ++counts->materialize; });
         sync->SetCallBack("merge_dcg_meta:after_write_cols", [&](void*) { ++counts->dcg_writes; });
@@ -809,7 +792,7 @@ protected:
 
         ReshardingTabletInfoPB resharding;
         auto* merging = resharding.mutable_merging_tablet_info();
-        for (const auto& source : merge_fixture_sources(sources, normalize_missing_segment_num_rows)) {
+        for (const auto& source : merge_fixture_sources(sources)) {
             RETURN_IF_ERROR(_tablet_manager->put_tablet_metadata(source));
             merging->add_old_tablet_ids(source->id());
         }
@@ -826,12 +809,11 @@ protected:
     }
 
     Status expect_physical_preflight_rejection(const std::vector<TabletMetadataPtr>& sources, int64_t target_tablet_id,
-                                               int64_t target_version, MergePhaseCounts* counts,
-                                               bool normalize_missing_segment_num_rows = true) {
+                                               int64_t target_version, MergePhaseCounts* counts) {
         std::vector<std::string> source_pbs;
         std::map<int64_t, std::set<std::string>> segment_inventories;
         std::map<int64_t, std::set<std::string>> metadata_inventories;
-        for (const auto& source : merge_fixture_sources(sources, normalize_missing_segment_num_rows)) {
+        for (const auto& source : merge_fixture_sources(sources)) {
             CHECK_OK(_tablet_manager->put_tablet_metadata(source));
         }
         for (const auto& source : sources) {
@@ -851,8 +833,7 @@ protected:
         set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::ENABLE);
         DeferOp restore_delvec_failpoint(
                 [&] { set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::DISABLE); });
-        auto merged = merge_with_phase_counts(sources, target_tablet_id, target_version, counts,
-                                              normalize_missing_segment_num_rows);
+        auto merged = merge_with_phase_counts(sources, target_tablet_id, target_version, counts);
 
         EXPECT_TRUE(merged.status().is_corruption()) << merged.status();
         EXPECT_EQ(0, counts->materialize);
@@ -991,6 +972,7 @@ protected:
             auto* segment = rowset->add_segment_metas();
             segment->set_filename(segment_filename);
             segment->set_size(100);
+            segment->set_num_rows(10);
             segment->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, segment_filenames.front());
@@ -4482,8 +4464,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_invalid_segment_num_rows_rejec
             if (reverse_sources) std::reverse(sources.begin(), sources.end());
 
             MergePhaseCounts counts;
-            expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts,
-                                                /*normalize_missing_segment_num_rows=*/false);
+            expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
         }
     }
 }
@@ -9480,6 +9461,7 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(segment_name);
             sm->set_size(1);
+            sm->set_num_rows(1);
         }
         set_range(rowset->mutable_range(), lower, upper);
     };
@@ -9563,6 +9545,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_then_merge) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -9713,6 +9696,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_mixed
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         return meta;
@@ -9772,6 +9756,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_none)
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         return meta;
@@ -9837,6 +9822,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_segment_union_preserves_ownershi
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
             sm->set_segment_idx(0);
             sm->set_encryption_meta("enc_shared");
@@ -9845,6 +9831,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_segment_union_preserves_ownershi
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(private_seg);
             sm->set_size(50);
+            sm->set_num_rows(10);
             sm->set_shared(false);
             sm->set_segment_idx(private_idx);
             sm->set_encryption_meta("enc_" + private_seg);
@@ -9943,6 +9930,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_multi_level_disjoint_all_shared_
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(segment_name);
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
             sm->set_segment_idx(segment_idx);
         }
@@ -9999,6 +9987,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_bundled_segments_union_offsets) 
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("bundle.dat"); // same physical file for every slice
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_bundle_file_offset(off);
         sm->set_shared(true);
         sm->set_segment_idx(idx);
@@ -10090,6 +10079,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_multi_level_unequal_count_all_sh
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(segment_names[i]);
             sm->set_size(50);
+            sm->set_num_rows(10);
             sm->set_shared(true);
             sm->set_segment_idx(segment_indexes[i]);
         }
@@ -10155,6 +10145,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_num_dels) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -10218,6 +10209,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
         auto* sm = shared_a->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(shared_a, "shared_seg.dat"); // same uid across siblings => dedup
@@ -10231,6 +10223,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
         auto* sm = local_a->add_segment_metas();
         sm->set_filename("local_a_seg.dat");
         sm->set_size(50);
+        sm->set_num_rows(10);
     }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
@@ -10248,6 +10241,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
         auto* sm = shared_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(shared_b, "shared_seg.dat"); // same uid across siblings => dedup
@@ -10261,6 +10255,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
         auto* sm = local_b->add_segment_metas();
         sm->set_filename("local_b_seg.dat");
         sm->set_size(30);
+        sm->set_num_rows(10);
     }
 
     ASSERT_OK(put_merge_sources(meta_a, meta_b));
@@ -10325,6 +10320,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_compaction) {
         auto* sm = compacted_a->add_segment_metas();
         sm->set_filename("compacted_a.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
     }
     // not shared - this is the compaction output
 
@@ -10343,6 +10339,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_compaction) {
         auto* sm = shared_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
 
@@ -10400,6 +10397,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_rowset_on_non_first_chi
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("local_a.dat");
         sm->set_size(50);
+        sm->set_num_rows(5);
     }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
@@ -10415,6 +10413,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_rowset_on_non_first_chi
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
 
@@ -10526,6 +10525,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_different_split_families) {
         auto* sm = rowset_c->add_segment_metas();
         sm->set_filename("family_a_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
 
@@ -10542,6 +10542,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_different_split_families) {
         auto* sm = rowset_d->add_segment_metas();
         sm->set_filename("family_e_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
 
@@ -10595,6 +10596,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_publish_different_id) {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("cross_pub.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     // Cross-publish: the same write txn log is applied to both children, so both
@@ -10614,6 +10616,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_publish_different_id) {
         auto* sm = rowset_b->add_segment_metas(); // Same segment
         sm->set_filename("cross_pub.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "cross_pub.dat"); // same uid as A (cross-publish)
@@ -10668,6 +10671,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_fail_fast) {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_a, "shared_seg.dat"); // same uid across siblings => dedup
@@ -10687,6 +10691,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_fail_fast) {
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "shared_seg.dat"); // same uid across siblings => dedup
@@ -10797,6 +10802,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_dcg_dedup) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -11776,6 +11782,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_independent_delete) {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_a, "shared_seg.dat"); // same uid across siblings => dedup
@@ -11796,6 +11803,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_independent_delete) {
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "shared_seg.dat"); // same uid across siblings => dedup
@@ -11895,12 +11903,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_multi_target_union) {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg1.dat");
         sm->set_size(100);
+        sm->set_num_rows(5);
         sm->set_shared(true);
     }
     {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg2.dat");
         sm->set_size(100);
+        sm->set_num_rows(5);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_a, "shared_seg1.dat"); // same uid across siblings => dedup
@@ -11942,12 +11952,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_multi_target_union) {
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg1.dat");
         sm->set_size(100);
+        sm->set_num_rows(5);
         sm->set_shared(true);
     }
     {
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg2.dat");
         sm->set_size(100);
+        sm->set_num_rows(5);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "shared_seg1.dat"); // same uid across siblings => dedup
@@ -12075,6 +12087,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_three_way_union) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -12160,6 +12173,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_no_independent_delete) 
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_a, "shared_seg.dat"); // same uid across siblings => dedup
@@ -12180,6 +12194,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_no_independent_delete) 
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "shared_seg.dat"); // same uid across siblings => dedup
@@ -13377,6 +13392,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_disjoint_columns) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -13454,6 +13470,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         // Matching uid across siblings so the rowsets dedup at merge — without this
@@ -13522,6 +13539,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_same_column_conflict) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -13581,6 +13599,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_partial_overlap) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -13637,6 +13656,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_missing_shape) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
     }
     // Use legacy add_dcg (no unique_column_ids/versions)
     add_dcg(meta_a.get(), 1, "malformed.cols");
@@ -13684,6 +13704,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_duplicate_column_uid) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
     }
     // Build a malformed DCG with overlapping column UIDs across entries
     add_dcg_with_columns(meta_a.get(), 1, "first.cols", {1, 2}, 1);
@@ -14092,6 +14113,7 @@ RowsetMetadataPB* add_shared_rowset(TabletMetadataPB* metadata, uint32_t rowset_
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(segment_filename);
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset, segment_filename);
@@ -15827,8 +15849,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_segment_declaration_co
             break;
         }
         }
-        auto result = publish_allocator_merge({selected_source, duplicate_source},
-                                               /*normalize_missing_segment_num_rows=*/false);
+        auto result = publish_allocator_merge({selected_source, duplicate_source});
         EXPECT_TRUE(result.status().is_corruption()) << result.status();
     }
 }
@@ -17083,6 +17104,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_two_children_same_
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(shared_segment_name);
             sm->set_size(base_segment_size);
+            sm->set_num_rows(kNumRows);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset,
@@ -17197,6 +17219,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup_consistency_fa
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same UID across siblings => one canonical rowset
@@ -17260,6 +17283,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_missing_uid_falls_
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same UID across siblings => one canonical rowset
@@ -17354,6 +17378,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_cleanup_on_failure
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(good_segment);
             sm->set_size(good_seg_size);
+            sm->set_num_rows(kNumRows);
             sm->set_shared(true);
         }
         *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
@@ -17371,6 +17396,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_cleanup_on_failure
             auto* sm = bad_rowset->add_segment_metas();
             sm->set_filename(bad_segment);
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         *bad_rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
@@ -17477,6 +17503,7 @@ inline std::shared_ptr<TabletMetadataPB> make_shared_child(int64_t tablet_id, in
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across shared siblings => dedup
@@ -18227,6 +18254,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_canonical_range_extends_for_du
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -18457,6 +18485,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_idg_dedup) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
         add_idg_with_key(meta.get(), 1, "shared.idx", /*col_uid=*/5, BITMAP, 1);
@@ -18513,6 +18542,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_unions_divergent_tombstone
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         add_idg_with_key(meta.get(), 1, "shared.idx", /*col_uid=*/5, BITMAP, 1);
@@ -18568,6 +18598,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_drops_fully_tombstoned) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         add_idg_with_key(meta.get(), 1, "shared.idx", /*col_uid=*/5, BITMAP, 1);
@@ -18625,6 +18656,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_global_tombstone_orphans_w
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("same_base.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         lake::tablet_reshard_helper::set_rowset_uid(rowset); // distinct uid per child => both kept
         add_idg_with_key(meta.get(), 1, "same.idx", /*col_uid=*/5, BITMAP, 1);
         if (tombstone) add_idg_dropped_key(meta.get(), 1, /*col_uid=*/5, BITMAP);
@@ -18686,6 +18718,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_derives_shared_from_segmen
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_shared.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true); // shared segment
         stamp_physical_identity_uid(rowset, "seg_shared.dat");
     }
@@ -18705,6 +18738,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_derives_shared_from_segmen
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_b.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         stamp_physical_identity_uid(rowset, "seg_b.dat");
     }
 
@@ -18763,6 +18797,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_skips_stale_source_entry) 
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_a.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         stamp_physical_identity_uid(rowset, "seg_a.dat");
     }
     // Stale idg keyed at rssid 2 -- child_a has NO segment there.
@@ -18781,6 +18816,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_skips_stale_source_entry) 
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_b.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         stamp_physical_identity_uid(rowset, "seg_b.dat"); // distinct uid => not deduped
     }
 
@@ -18832,6 +18868,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_remaps_private_segments) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(seg);
         sm->set_size(100);
+        sm->set_num_rows(10);
         stamp_physical_identity_uid(rowset, seg); // distinct seed per child => distinct uid
         // Exclusive (private) segment => its .idx is shared_file=false, as split's
         // propagate_pruned would have marked it. merge must PRESERVE this (not force true).
@@ -19731,6 +19768,7 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_dcg_cols) {
                 auto* sm = rowset->add_segment_metas();
                 sm->set_filename(shared_segment_name);
                 sm->set_size(base_segment_size);
+                sm->set_num_rows(kNumRows);
                 sm->set_shared(true);
             }
             stamp_physical_identity_uid(rowset, shared_segment_name);
