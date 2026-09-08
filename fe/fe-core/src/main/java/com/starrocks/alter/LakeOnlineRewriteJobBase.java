@@ -1247,11 +1247,11 @@ public abstract class LakeOnlineRewriteJobBase
      * {@link #retryPartitionRewrite} would never be consulted again, and the partition would stall until
      * the transaction's own timeout instead of retrying.
      *
-     * <p>Unlike {@link #cancelImpl}'s abort loop - which also aborts COMMITTED, since a cancel means the
-     * whole job is being torn down - this deliberately leaves COMMITTED alone: a committed rewrite here is
-     * the deliberate publication wait, and the lake publisher will still carry it to VISIBLE, at which
-     * point {@link #classifyRewrite} reports DONE. Aborting it would throw away a rewrite that actually
-     * succeeded.
+     * <p>Only PREPARE/PREPARED are aborted here. A COMMITTED rewrite is the deliberate publication wait:
+     * the lake publisher still carries it to VISIBLE, and {@link #classifyRewrite} then reports it DONE,
+     * so there is nothing to abort. Skipping the call for COMMITTED also avoids the transaction manager's
+     * rejection - it refuses to abort a COMMITTED/VISIBLE transaction and logs a WARN - which would
+     * otherwise repeat on every retry tick while that partition waits to publish.
      */
     private void abortUncommittedRewriteTxn(long physicalPartitionId, long txnId, String reason) {
         TransactionState txnState =

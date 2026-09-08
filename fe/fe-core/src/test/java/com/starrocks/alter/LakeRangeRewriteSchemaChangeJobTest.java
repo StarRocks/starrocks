@@ -2467,7 +2467,8 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     /**
      * The complement: a COMMITTED rewrite txn must NOT be aborted when its partition is retried. It is
      * the deliberate publication wait - the lake publisher will still carry it to VISIBLE, at which point
-     * classifyRewrite reports DONE. Aborting it would throw away a rewrite that actually succeeded.
+     * classifyRewrite reports DONE, so there is nothing to abort. Proves the abort call itself is
+     * skipped, not merely that the transaction manager would reject it.
      */
     @Test
     public void testRetryLeavesACommittedRewriteTxnAlone() throws Exception {
