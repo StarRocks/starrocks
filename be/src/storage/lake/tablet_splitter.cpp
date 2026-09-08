@@ -1875,6 +1875,13 @@ static Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, co
         std::vector<Rowset::LoadedSegment> loaded_segments; // keeps the Segments alive for this rowset's scope
         Schema rowset_schema;
         std::vector<uint32_t> sort_key_idxes;
+        std::unordered_set<int> zero_row_segment_positions;
+        for (int meta_pos = 0; meta_pos < rowset_meta.segment_metas_size(); ++meta_pos) {
+            const auto& segment_meta = rowset_meta.segment_metas(meta_pos);
+            if (segment_meta.has_num_rows() && segment_meta.num_rows() == 0) {
+                zero_row_segment_positions.insert(meta_pos);
+            }
+        }
 
         // Two cheap protobuf-only gates, evaluated BEFORE constructing the Rowset or
         // touching the loader:
@@ -1888,7 +1895,12 @@ static Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, co
         if (tablet_manager != nullptr && rowset_has_sampleless_segment(rowset_meta) &&
             rowset_schema_resolves_to_valid_id(*tablet_metadata, rowset_meta.id())) {
             Rowset rowset(tablet_manager, tablet_metadata, rowset_index, /*compaction_segment_limit=*/0);
-            if (rowset.load_segments(&loaded_segments, /*fill_cache=*/false).ok()) {
+            SegmentReadOptions read_options;
+            read_options.lake_io_opts.fill_data_cache = false;
+            read_options.lake_io_opts.fill_metadata_cache = false;
+            read_options.lake_io_opts.buffer_size = -1;
+            const auto* skip_positions = zero_row_segment_positions.empty() ? nullptr : &zero_row_segment_positions;
+            if (rowset.load_segments(&loaded_segments, read_options, nullptr, skip_positions).ok()) {
                 if (auto historical_schema = rowset.tablet_schema(); historical_schema != nullptr) {
                     rowset_schema = ChunkHelper::convert_schema(historical_schema);
                     const auto& idxes = historical_schema->sort_key_idxes();

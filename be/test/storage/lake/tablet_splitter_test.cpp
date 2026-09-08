@@ -2186,6 +2186,65 @@ TEST_F(BuildSegmentsFromRowsetsLoaderTest, RealFullKeySegmentPopulatesSamplesVia
     EXPECT_EQ(100, segments[0].sort_key_sample_row_interval);
 }
 
+TEST_F(BuildSegmentsFromRowsetsLoaderTest, MissingZeroRowFileDoesNotDiscardLiveFullKeySamples) {
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    DeferOp restore([&] { config::enable_full_sort_key_index = old_enable; });
+
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const int64_t num_rows = 250;
+    const std::string live_name = "live-full-key.dat";
+    const uint64_t live_size = write_int_key_segment(tablet_id, live_name, num_rows);
+
+    auto make_metadata = [&] {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        set_int_key_schema(metadata.get());
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(live_size);
+        auto* live = rowset->add_segment_metas();
+        live->set_filename(live_name);
+        live->set_size(live_size);
+        live->set_num_rows(num_rows);
+        make_int32_tuple(0).to_proto(live->mutable_sort_key_min());
+        make_int32_tuple(static_cast<int32_t>(num_rows - 1)).to_proto(live->mutable_sort_key_max());
+        return metadata;
+    };
+
+    auto control = make_metadata();
+    std::vector<SegmentSplitInfo> control_segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), control, &control_segments));
+    ASSERT_EQ(1, control_segments.size());
+    ASSERT_EQ(2, control_segments[0].sort_key_samples.size()) << "the live full-key fixture must be usable";
+    EXPECT_EQ(100, control_segments[0].sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, control_segments[0].sort_key_samples[1][0].value().get_int32());
+
+    auto mixed = make_metadata();
+    auto* rowset = mixed->mutable_rowsets(0);
+    SegmentMetadataPB live(rowset->segment_metas(0));
+    live.set_segment_idx(1);
+    rowset->clear_segment_metas();
+    auto* empty = rowset->add_segment_metas();
+    empty->set_filename("intentionally-absent-empty.dat");
+    empty->set_segment_idx(0);
+    empty->set_size(37);
+    empty->set_num_rows(0);
+    *rowset->add_segment_metas() = live;
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), mixed, &segments));
+    ASSERT_EQ(1, segments.size());
+    ASSERT_EQ(2, segments[0].sort_key_samples.size())
+            << "the absent zero-row file must not downgrade the live segment to coarse geometry";
+    EXPECT_EQ(100, segments[0].sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, segments[0].sort_key_samples[1][0].value().get_int32());
+    EXPECT_EQ(100, segments[0].sort_key_sample_row_interval);
+}
+
 // Tablet split is NOT read-config-gated: with config::enable_full_sort_key_index_read = false,
 // build_segments_from_rowsets must STILL populate samples from a present + usable full page (the
 // read config gates only query seek paths, never split-boundary precision).
