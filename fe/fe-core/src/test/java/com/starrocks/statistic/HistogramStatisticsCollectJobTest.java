@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -51,7 +50,8 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
                 db, table, Lists.newArrayList(columnName), Lists.newArrayList(IntegerType.BIGINT),
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
-        VelocityContext context = Deencapsulation.invoke(job, "buildBaseContext", db, table, columnName);
+        VelocityContext context = HistogramStatisticsUtils.buildBaseContext(
+                db, table, job.getCatalogName(), columnName);
         assertSqlLiteralRoundTrips(columnName, (String) context.get("columnNameStr"));
     }
 
@@ -122,13 +122,15 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
                         ORDER BY `v2` LIMIT 10000000
                     ) t
                     """.formatted(fixture.db.getId(), fixture.table.getId());
+            // v7 is VARCHAR, so its MCV query carries the fork-local oversized-value guard (#59167);
+            // v2 is BIGINT and stays unfiltered. See testOversizedVarcharValuesAreExcludedFromCollection.
             String expectedV7McvSql = """
                     select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT),
                     cast(column_key as varchar), cast(column_value as varchar) from (
                         SELECT 2 as version, %d as db_id, %d as table_id, `v7` as column_key,
                         count(`v7`) as column_value
                         FROM `test`.`t0_stats` SAMPLE('percent'='10')
-                        WHERE `v7` is not null
+                        WHERE `v7` is not null and LENGTH(`v7`) <= 1048576
                         GROUP BY `v7`
                         ORDER BY count(`v7`) desc limit 100
                     ) t
@@ -202,18 +204,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     }
 
     @Test
-    public void testUsesLegacyInsertWhenBatchDisabled() throws Exception {
-        try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.disableBatch();
-
-            fixture.collect();
-
-            Assertions.assertTrue(fixture.batchInsertSql().isEmpty());
-            Assertions.assertEquals(2, fixture.legacyInsertCount(), "one legacy INSERT per column");
-        }
-    }
-
-    @Test
     public void testBatchInsertCreatesFreshStatementForRetry() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
             fixture.enableBatch(20L * 1024 * 1024);
@@ -222,6 +212,189 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
             Assertions.assertEquals(1, fixture.batchInsertSql().size());
             Assertions.assertNotSame(fixture.firstBatchInsertStatement(), fixture.firstRetryBatchInsertStatement());
         }
+    }
+
+    @Test
+    public void testParseNdvModeNone() {
+        // Given analyze properties carrying a recognised histogram_collect_bucket_ndv_mode
+        // CASE WHEN the mode is "none" THEN NONE WHEN "sample" THEN SAMPLE WHEN "hll" THEN HLL
+        //      ELSE warn and fall back to NONE END
+
+        String ndvModeProperty = "none";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.NONE;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeSample() {
+        // Given analyze properties carrying a recognised histogram_collect_bucket_ndv_mode
+        // CASE WHEN the mode is "none" THEN NONE WHEN "sample" THEN SAMPLE WHEN "hll" THEN HLL
+        //      ELSE warn and fall back to NONE END
+
+        String ndvModeProperty = "sample";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode =
+                StatsConstants.HistogramCollectBucketNdvMode.SAMPLE;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeHll() {
+        // Given analyze properties carrying a recognised histogram_collect_bucket_ndv_mode
+        // CASE WHEN the mode is "none" THEN NONE WHEN "sample" THEN SAMPLE WHEN "hll" THEN HLL
+        //      ELSE warn and fall back to NONE END
+
+        String ndvModeProperty = "hll";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.HLL;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeIgnoresCase() {
+        // Given analyze properties whose histogram_collect_bucket_ndv_mode is a mode name in upper case
+        // CASE WHEN the mode matches a known name ignoring case THEN that mode
+        //      ELSE warn and fall back to NONE END
+
+        String ndvModeProperty = "HLL";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.HLL;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeUnrecognised() {
+        // Given analyze properties whose histogram_collect_bucket_ndv_mode names no known mode
+        // CASE WHEN the mode matches a known name ignoring case THEN that mode
+        //      ELSE warn and fall back to NONE, so an unusable property cannot fail the analyze job END
+
+        String ndvModeProperty = "bogus";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.NONE;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeAbsent() {
+        // Given analyze properties that carry no histogram_collect_bucket_ndv_mode at all, so the
+        // raw property value is null
+        // CASE WHEN the mode matches a known name ignoring case THEN that mode
+        //      ELSE warn and fall back to NONE, so a missing property cannot fail the analyze job END
+
+        String ndvModeProperty = null;
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.NONE;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testOversizedVarcharValuesAreExcludedFromCollection() throws Exception {
+        // Fork-local (#59167, VARCHAR up to 2 GiB): oversized values are excluded from histogram
+        // collection, because retaining them blows up the aggregation state.
+        //
+        // Driven through collect() rather than a SQL builder, so that a refactor which drops the
+        // filter fails here instead of silently changing what gets collected. The external flavour
+        // deliberately has no such filter, so only the native path is asserted.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t0_stats");
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
+        properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
+        properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
+        properties.put(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none");
+        HistogramStatisticsCollectJob job = new HistogramStatisticsCollectJob(
+                db, table, Lists.newArrayList("v2", "v7"),
+                Lists.newArrayList(IntegerType.BIGINT, VarcharType.VARCHAR),
+                StatsConstants.ScheduleType.ONCE, properties);
+
+        List<String> statisticsQueries = new ArrayList<>();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
+                statisticsQueries.add(sql);
+                TStatisticData data = new TStatisticData();
+                if (sql.toLowerCase().contains("group by")) {
+                    data.columnName = "1";
+                    data.histogram = "10";
+                } else {
+                    data.histogram = "[[\"1\",\"2\",\"3\",\"4\"]]";
+                }
+                return Lists.newArrayList(data);
+            }
+        };
+        new MockUp<HistogramStatisticsCollectJob>() {
+            @Mock
+            public void collectStatisticSync(Supplier<StatementBase> statementSupplier, ConnectContext ctx,
+                                             AnalyzeStatus status) {
+            }
+        };
+
+        job.collect(connectContext, new NativeAnalyzeStatus());
+
+        String varcharMcvQuery = statisticsQueries.stream()
+                .filter(sql -> sql.contains("`v7`") && sql.toLowerCase().contains("group by"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no MCV query was issued for the VARCHAR column"));
+        Assertions.assertTrue(varcharMcvQuery.contains("LENGTH(`v7`) <= 1048576"), varcharMcvQuery);
+
+        Assertions.assertTrue(
+                statisticsQueries.stream().filter(sql -> sql.contains("`v2`")).noneMatch(sql -> sql.contains("LENGTH(")),
+                "the guard applies to VARCHAR columns only");
+    }
+
+    @Test
+    public void testOversizedVarcharGuardOnBucketQueries() {
+        // The bucket queries below are unreachable for VARCHAR under the current dispatch, which sends
+        // every char-family column down the placeholder-bucket path. The filter is asserted anyway so
+        // that the guard is already in place if that dispatch rule changes - matching the pre-refactor
+        // behaviour of #59167.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t0_stats");
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
+        properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
+        properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
+        properties.put(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none");
+        HistogramStatisticsCollectJob job = new HistogramStatisticsCollectJob(
+                db, table, Lists.newArrayList("v7"), Lists.newArrayList(VarcharType.VARCHAR),
+                StatsConstants.ScheduleType.ONCE, properties);
+        NativeHistogramTraits traits = new NativeHistogramTraits(job, new HistogramCollectParams(properties));
+        String lengthFilter = "LENGTH(`v7`) <= 1048576";
+
+        Assertions.assertTrue(traits.buildMcvQuery("v7").contains(lengthFilter));
+        Assertions.assertTrue(traits.buildHistogramQuery(
+                0.1, 64L, Maps.newHashMap(), "v7", VarcharType.VARCHAR, false).contains(lengthFilter));
+        Assertions.assertTrue(traits.buildBucketBoundariesQuery(
+                0.1, 64L, Maps.newHashMap(), "v7", VarcharType.VARCHAR).contains(lengthFilter));
+        Assertions.assertTrue(traits.buildHllNdvQuery("[]", "v7", VarcharType.VARCHAR)
+                .contains("WHERE `v7` is not null and " + lengthFilter));
+
+        // A non-VARCHAR column keeps the unfiltered SQL.
+        Assertions.assertFalse(traits.buildHistogramQuery(
+                0.1, 64L, Maps.newHashMap(), "v2", IntegerType.BIGINT, false).contains("LENGTH("));
     }
 
     private static class NativeHistogramBatchFixture implements AutoCloseable {
@@ -240,8 +413,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         private final List<StatementBase> batchInsertStatements = new ArrayList<>();
         private final List<StatementBase> retryBatchInsertStatements = new ArrayList<>();
         private final List<String> capturedBatchInsertSql = new ArrayList<>();
-        private final List<String> legacyInsertSql = new ArrayList<>();
-        private final boolean originalEnableBatch = Config.enable_batch_insert_histogram_statistics;
         private final long originalBufferSize = Config.histogram_batch_insert_buffer_size;
 
         private NativeHistogramBatchFixture(ConnectContext context) {
@@ -295,21 +466,11 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
                     retryBatchInsertStatements.add(statementSupplier.get());
                     capturedBatchInsertSql.add(statement.getOrigStmt().getOrigStmt());
                 }
-
-                @Mock
-                public void collectStatisticSync(String sql, ConnectContext ctx, AnalyzeStatus status) {
-                    legacyInsertSql.add(sql);
-                }
             };
         }
 
         private void enableBatch(long bufferSize) {
-            Config.enable_batch_insert_histogram_statistics = true;
             Config.histogram_batch_insert_buffer_size = bufferSize;
-        }
-
-        private void disableBatch() {
-            Config.enable_batch_insert_histogram_statistics = false;
         }
 
         private void returnEmptyV2Histogram() {
@@ -346,10 +507,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
             return statisticsQueries;
         }
 
-        private int legacyInsertCount() {
-            return legacyInsertSql.size();
-        }
-
         private StatementBase firstBatchInsertStatement() {
             return batchInsertStatements.get(0);
         }
@@ -360,7 +517,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
 
         @Override
         public void close() {
-            Config.enable_batch_insert_histogram_statistics = originalEnableBatch;
             Config.histogram_batch_insert_buffer_size = originalBufferSize;
         }
     }
