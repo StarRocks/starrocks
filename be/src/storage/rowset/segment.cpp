@@ -857,6 +857,9 @@ void Segment::update_cache_size() {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);
         }
+    } else {
+        // Only used by share-nothing rowsets. The last reader release consumes this flag.
+        _lazy_mem_update.store(true, std::memory_order_release);
     }
 }
 
