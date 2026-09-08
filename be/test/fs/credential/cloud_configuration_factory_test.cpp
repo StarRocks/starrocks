@@ -38,6 +38,37 @@ TEST_F(CloudConfigurationFactoryTest, test_create_aws_web_identity) {
     EXPECT_FALSE(cred.use_aws_sdk_default_behavior);
 }
 
+TEST_F(CloudConfigurationFactoryTest, test_create_aws_sse_c) {
+    TCloudConfiguration t_cloud_configuration;
+    t_cloud_configuration.__set_cloud_type(TCloudType::AWS);
+
+    {
+        // SSE-C enabled: type/key/md5 parsed and sse_c_enabled() reflects it.
+        std::map<std::string, std::string> properties;
+        properties.emplace(AWS_S3_SSE_TYPE, "sse-c");
+        properties.emplace(AWS_S3_SSE_KEY, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+        properties.emplace(AWS_S3_SSE_KEY_MD5, "bXktbWQ1LWRpZ2VzdA==");
+        t_cloud_configuration.__set_cloud_properties(properties);
+
+        const auto& cloud_configuration = CloudConfigurationFactory::create_aws(t_cloud_configuration);
+        EXPECT_TRUE(cloud_configuration.sse_c_enabled());
+        EXPECT_STREQ(cloud_configuration.sse_type.c_str(), "sse-c");
+        EXPECT_STREQ(cloud_configuration.sse_key.c_str(), "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+        EXPECT_STREQ(cloud_configuration.sse_key_md5.c_str(), "bXktbWQ1LWRpZ2VzdA==");
+    }
+
+    {
+        // No SSE-C properties: disabled and fields empty.
+        std::map<std::string, std::string> properties;
+        properties.emplace(AWS_S3_ACCESS_KEY, "ak");
+        t_cloud_configuration.__set_cloud_properties(properties);
+
+        const auto& cloud_configuration = CloudConfigurationFactory::create_aws(t_cloud_configuration);
+        EXPECT_FALSE(cloud_configuration.sse_c_enabled());
+        EXPECT_TRUE(cloud_configuration.sse_key.empty());
+    }
+}
+
 TEST_F(CloudConfigurationFactoryTest, test_create_azure) {
     TCloudConfiguration t_cloud_configuration;
     t_cloud_configuration.__set_cloud_type(TCloudType::AZURE);
