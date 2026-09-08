@@ -546,6 +546,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             ? String.valueOf(processStartTime) : "0");
         }
         TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
