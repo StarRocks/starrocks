@@ -151,6 +151,28 @@ public class StreamLoadMultiStmtTaskTest {
     }
 
     @Test
+    public void testBeginTxnUsesTaskTimeoutForTransaction() throws Exception {
+        StreamLoadMultiStmtTask task = new StreamLoadMultiStmtTask(3L, db, "label_timeout", "u", "127.0.0.1",
+                7_200_000L, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                // beginStmt sizes the transaction timeout from the context, so it must carry the
+                // task's HTTP timeout rather than the session default query_timeout.
+                Assertions.assertEquals(7200, ctx.getExecTimeout());
+                ctx.setTxnId(43L);
+            }
+        };
+        TransactionResult resp = new TransactionResult();
+        task.beginTxn(resp);
+        Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals(43L, task.getTxnId());
+    }
+
+    @Test
     public void testCheckNeedRemoveAndDurable() throws Exception {
         Assertions.assertFalse(multiTask.checkNeedRemove(System.currentTimeMillis(), false));
         StreamLoadTask sub = new StreamLoadTask(2L, db, new OlapTable(), "label_sub", "u",

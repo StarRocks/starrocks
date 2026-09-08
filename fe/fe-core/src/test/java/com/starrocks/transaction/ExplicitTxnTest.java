@@ -842,6 +842,29 @@ public class ExplicitTxnTest {
     }
 
     @Test
+    public void testRollbackWithoutItemsReportsAbortFailure() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990001L;
+        TransactionState state = addExplicitState(mgr, txnId, "rollback-abort-fails", 60_000L);
+        // Registered with a database by a load that produced no item.
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) throws StarRocksException {
+                throw new StarRocksException("abort failed for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+        // The explicit state is cleared as for any rollback, but the failure is reported instead of ABORTED.
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("abort failed for test"));
+    }
+
+    @Test
     public void testRollbackWithLostTransactionState() {
         // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
         // rollbackStmt should report an error instead of silently succeeding.

@@ -413,9 +413,15 @@ public class TransactionStmtExecutor {
             // activateTable), so the transaction may be registered although no load produced an
             // item (every load failed or was cancelled). Abort it there as well; otherwise it stays
             // PREPARE until the transaction timeout and keeps its tables against schema changes.
-            abortRegisteredTransaction(transactionState, "rollback transaction by user");
+            String abortError = abortRegisteredTransaction(transactionState, "rollback transaction by user");
             globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
             context.setTxnId(0);
+            if (abortError != null) {
+                // Same contract as the branch below: the explicit state is gone, the failure is
+                // reported to the user, and the transaction timeout checker bounds the remainder.
+                context.getState().setError(abortError);
+                return;
+            }
             context.getState().setOk(0, 0, buildMessage(transactionState.getLabel(),
                     TransactionStatus.ABORTED, transactionState.getTransactionId(), -1));
             return;
@@ -475,10 +481,13 @@ public class TransactionStmtExecutor {
     /**
      * Abort the transaction in the database transaction manager it was registered with, if any. A transaction
      * that already reached a final state (aborted by a failed load or by the timeout checker) is left alone.
+     *
+     * @return null when the transaction is aborted, was never registered or is already final; otherwise the
+     *         error message of the failed abort
      */
-    private static void abortRegisteredTransaction(TransactionState transactionState, String reason) {
+    private static String abortRegisteredTransaction(TransactionState transactionState, String reason) {
         if (transactionState.getDbId() == 0 || !transactionState.isRunning()) {
-            return;
+            return null;
         }
         try {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
@@ -487,7 +496,9 @@ public class TransactionStmtExecutor {
             LOG.debug("txn {} already reached a final state before rollback", transactionState.getTransactionId());
         } catch (StarRocksException e) {
             LOG.warn("errors when abort txn {} without items", transactionState.getTransactionId(), e);
+            return e.getMessage();
         }
+        return null;
     }
 
     public static String buildMessage(String label, TransactionStatus txnStatus, long transactionId, long databaseId) {

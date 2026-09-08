@@ -136,6 +136,8 @@ public class StreamLoadMultiStmtTaskAutoPartitionTest {
         Assertions.assertSame(txnMgr.getExplicitTxnState(txnId).getTransactionState(), txnState);
         Assertions.assertEquals(TransactionStatus.PREPARE, txnState.getTransactionStatus());
         Assertions.assertEquals(db.getId(), txnState.getDbId());
+        // the transaction timeout is the task's, not the session default query_timeout
+        Assertions.assertEquals(60_000L, txnState.getTimeoutMs());
         Assertions.assertEquals(List.of(table.getId()), txnState.getTableIdList());
 
         // The BE asks the FE for the partition of a row it cannot place while it is still writing.

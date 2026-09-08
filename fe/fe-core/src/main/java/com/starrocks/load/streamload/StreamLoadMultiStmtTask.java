@@ -384,6 +384,12 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
             context.setCurrentWarehouseId(computeResource.getWarehouseId());
         }
         context.setCurrentComputeResource(computeResource);
+        // The transaction's timeout is the task's (the HTTP "timeout" header), as for a classic
+        // stream load: TransactionStmtExecutor.beginStmt takes it from context.getExecTimeout(),
+        // i.e. the session's query_timeout, and the transaction is visible to the transaction
+        // timeout checker from the first load. commitStmt's lock and publish waits follow the
+        // same value. Set it after the warehouse binding, which replaces the session variables.
+        context.getSessionVariable().setQueryTimeoutS((int) Math.max(1L, timeoutMs / 1000L));
 
         TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO),
                 TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, label);
