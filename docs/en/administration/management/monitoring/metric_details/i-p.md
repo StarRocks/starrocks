@@ -553,6 +553,27 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: Count
 - Description: Cumulative number of driver scheduling times for pipeline executors in the BE.
 
+## `starrocks_fe_pipe_failed_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `db_id`, `pipe_type` (`FILE`)
+- Description: Total size of the files that PIPE load failed to ingest. Incremented when a pipe subtask exhausts its retries, by the combined size of that subtask's files. See `starrocks_fe_pipe_failed_files` for how these counters relate to `information_schema.pipe_files`.
+
+## `starrocks_fe_pipe_failed_files`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `db_id`, `pipe_type` (`FILE`)
+- Description: Total number of files that PIPE load failed to ingest. Incremented when a pipe subtask exhausts its retries, by the number of files in that subtask, so a file is counted once per terminal failure rather than once per retry attempt. Each increment matches the rows that `information_schema.pipe_files` gains with a `LOAD_STATE` of `ERROR`. Because this is a cumulative counter, it is not a running total of those rows: `ALTER PIPE ... RETRY ALL` returns them to `UNLOADED` while the counter keeps its value, and a later terminal failure of the same files adds them again. Alert on the rate of this metric, and query `information_schema.pipe_files` for the current backlog.
+
+## `starrocks_fe_pipe_failed_tasks`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `db_id`, `pipe_type` (`FILE`)
+- Description: Total number of PIPE load subtasks that exhausted their retries. One subtask carries a variable number of files, so use `starrocks_fe_pipe_failed_files` to measure how much data failed. This metric counts only the subtasks that gave up, whereas `starrocks_fe_pipe_complete_tasks` with a `done_status` of `ERROR` counts every failed attempt, including the failed attempts of a subtask that later succeeds.
+
 ## `pipe_poller_block_queue_len`
 
 - Unit: Count

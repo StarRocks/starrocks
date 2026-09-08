@@ -185,6 +185,60 @@ public class PipeMetricMgrTest {
     }
 
     @Test
+    public void testFailureMetrics() {
+        long dbId = getNextRandomId();
+
+        // The guard rejects a negative delta before the counter is ever created.
+        PipeMetricMgr.incPipeFailedFiles(dbId, "FILE", -1);
+        Assertions.assertNull(getCounterMetric("pipe_failed_files", dbId, "pipe_type", "FILE"));
+
+        PipeMetricMgr.incPipeFailedTasks(dbId, "FILE", 1);
+        LongCounterMetric failedTasks = getCounterMetric("pipe_failed_tasks", dbId, "pipe_type", "FILE");
+        Assertions.assertNotNull(failedTasks);
+        Assertions.assertEquals(1L, failedTasks.getValue());
+
+        PipeMetricMgr.incPipeFailedFiles(dbId, "FILE", 7);
+        LongCounterMetric failedFiles = getCounterMetric("pipe_failed_files", dbId, "pipe_type", "FILE");
+        Assertions.assertNotNull(failedFiles);
+        Assertions.assertEquals(7L, failedFiles.getValue());
+
+        PipeMetricMgr.incPipeFailedBytes(dbId, "FILE", 2048);
+        LongCounterMetric failedBytes = getCounterMetric("pipe_failed_bytes", dbId, "pipe_type", "FILE");
+        Assertions.assertNotNull(failedBytes);
+        Assertions.assertEquals(2048L, failedBytes.getValue());
+
+        // Failure counters are partitioned by pipe_type, like the loaded counters.
+        PipeMetricMgr.incPipeFailedFiles(dbId, "KAFKA", 3);
+        Assertions.assertEquals(7L, getCounterMetric("pipe_failed_files", dbId, "pipe_type", "FILE").getValue());
+        Assertions.assertEquals(3L, getCounterMetric("pipe_failed_files", dbId, "pipe_type", "KAFKA").getValue());
+    }
+
+    @Test
+    public void testFailureMetricsExpiration() throws InterruptedException {
+        long dbId = getNextRandomId();
+        int originalExpireMinutes = Config.pipe_metric_expire_minutes;
+
+        try {
+            PipeMetricMgr.incPipeFailedFiles(dbId, "FILE", 4);
+            PipeMetricMgr.incPipeFailedBytes(dbId, "FILE", 4096);
+            PipeMetricMgr.incPipeFailedTasks(dbId, "FILE", 1);
+            Assertions.assertNotNull(getCounterMetric("pipe_failed_files", dbId, "pipe_type", "FILE"));
+
+            Config.pipe_metric_expire_minutes = 0;
+            Thread.sleep(10); // ensure time advances past lastAccessTime
+            PipeMetricMgr.cleanupExpiredMetrics();
+
+            // Failure counters go through the same expiry path as every other pipe counter, so an
+            // inactive database does not retain them.
+            Assertions.assertNull(getCounterMetric("pipe_failed_files", dbId, "pipe_type", "FILE"));
+            Assertions.assertNull(getCounterMetric("pipe_failed_bytes", dbId, "pipe_type", "FILE"));
+            Assertions.assertNull(getCounterMetric("pipe_failed_tasks", dbId, "pipe_type", "FILE"));
+        } finally {
+            Config.pipe_metric_expire_minutes = originalExpireMinutes;
+        }
+    }
+
+    @Test
     public void testRefreshPipeStateGaugesNoPipes() {
         // When there are no pipes (or PipeManager is not available), refreshPipeStateGauges should not throw
         // This tests the error handling path

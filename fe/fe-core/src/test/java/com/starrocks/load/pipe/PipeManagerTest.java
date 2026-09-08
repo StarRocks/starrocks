@@ -26,6 +26,10 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricLabel;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterPipeLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
@@ -75,6 +79,10 @@ import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.AfterAll;
@@ -569,6 +577,238 @@ public class PipeManagerTest {
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
             Assertions.assertEquals(1, unloadedFiles.size());
         }
+    }
+
+    /**
+     * Sum of every {@code name} counter series carrying the given db_id and label pairs, or 0 when
+     * no such series exists yet. Metrics are process-global, so callers compare deltas.
+     */
+    private static long counterValue(String name, long dbId, String... labelKeyValues) {
+        List<Metric> metrics = MetricRepo.getMetricsByName(name);
+        return metrics.stream()
+                .filter(m -> hasLabel(m, "db_id", String.valueOf(dbId)))
+                .filter(m -> {
+                    for (int i = 0; i < labelKeyValues.length; i += 2) {
+                        if (!hasLabel(m, labelKeyValues[i], labelKeyValues[i + 1])) {
+                            return false;
+                        }
+                    }
+                    return true;
+                })
+                .mapToLong(m -> ((LongCounterMetric) m).getValue())
+                .sum();
+    }
+
+    private static boolean hasLabel(Metric metric, String key, String value) {
+        return metric.getLabels().stream().anyMatch(
+                l -> ((MetricLabel) l).getKey().equals(key) && ((MetricLabel) l).getValue().equals(value));
+    }
+
+    /**
+     * Regression test for the per-file failure counters.
+     *
+     * <p>A task that finally gives up passes through {@code PipeTaskDesc.isError()} once per failed
+     * attempt, {@code FAILED_TASK_THRESHOLD + 1} times in total. The file counters must therefore be
+     * accounted at the terminal point, so that a piece of N files reports N failed files rather than
+     * N * (FAILED_TASK_THRESHOLD + 1). This pins both semantics at once: the failure counters count
+     * the piece once, while pipe_complete_tasks{done_status=ERROR} keeps counting attempts.</p>
+     */
+    @Test
+    public void testFailedFileMetricsCountOncePerTerminalFailure() throws Exception {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        mockRepoExecutor();
+
+        final String pipeName = "p_failed_files";
+        Pipe pipe = preparePipe(pipeName);
+        long dbId = pipe.getPipeId().getDbId();
+
+        new mockit.Expectations(taskManager) {
+            {
+                taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
+                SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+                FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
+                submit.setFuture(future);
+                future.run();
+                result = submit;
+            }
+        };
+
+        long failedFilesBefore = counterValue("pipe_failed_files", dbId, "pipe_type", "FILE");
+        long failedBytesBefore = counterValue("pipe_failed_bytes", dbId, "pipe_type", "FILE");
+        long failedTasksBefore = counterValue("pipe_failed_tasks", dbId, "pipe_type", "FILE");
+        long errorAttemptsBefore =
+                counterValue("pipe_complete_tasks", dbId, "pipe_type", "FILE", "done_status", "ERROR");
+
+        // Drive the single task to a terminal failure. Deliberately not pipeRetryFailedTask(), which
+        // ends by retrying the files back out of the ERROR state we need to inspect.
+        for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
+            pipe.schedule(); // submit -> RUNNING
+            pipe.schedule(); // execution failed -> ERROR
+            pipe.schedule(); // clear the error -> RUNNABLE
+        }
+        pipe.schedule();
+        pipe.schedule();
+        Assertions.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, pipe.getFailedTaskExecutionCount());
+        Assertions.assertEquals(Pipe.State.ERROR, pipe.getState());
+
+        List<PipeFileRecord> errorFiles =
+                pipe.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.ERROR, 0);
+        Assertions.assertEquals(1, errorFiles.size(), "the fixture stages exactly one file");
+        long expectedFiles = errorFiles.size();
+        long expectedBytes = errorFiles.stream().mapToLong(PipeFileRecord::getFileSize).sum();
+
+        // The counters reconcile with information_schema.pipe_files WHERE LOAD_STATE = 'ERROR'.
+        Assertions.assertEquals(expectedFiles,
+                counterValue("pipe_failed_files", dbId, "pipe_type", "FILE") - failedFilesBefore,
+                "pipe_failed_files must count each failed file exactly once");
+        Assertions.assertEquals(expectedBytes,
+                counterValue("pipe_failed_bytes", dbId, "pipe_type", "FILE") - failedBytesBefore,
+                "pipe_failed_bytes must match the size of the failed files");
+        Assertions.assertEquals(1,
+                counterValue("pipe_failed_tasks", dbId, "pipe_type", "FILE") - failedTasksBefore,
+                "pipe_failed_tasks must count the task that gave up exactly once");
+
+        // pipe_complete_tasks{done_status=ERROR} keeps its original per-attempt meaning. Pinned here
+        // so that changing either counter is visible instead of silent.
+        Assertions.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1,
+                counterValue("pipe_complete_tasks", dbId, "pipe_type", "FILE", "done_status", "ERROR")
+                        - errorAttemptsBefore,
+                "pipe_complete_tasks{done_status=ERROR} counts attempts, not tasks");
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * Collects the rendered message of every PIPE_TASK_FAILED record, so a test can assert on the
+     * text an operator's log pipeline actually receives rather than on the format arguments.
+     */
+    private static class PipeTaskFailedAppender extends AbstractAppender {
+        private final List<String> records = Lists.newArrayList();
+
+        PipeTaskFailedAppender() {
+            super("pipe-task-failed-collector", null, null);
+        }
+
+        @Override
+        public void append(LogEvent event) {
+            if (event.getLevel() != Level.WARN) {
+                return;
+            }
+            String message = event.getMessage().getFormattedMessage();
+            if (message.startsWith("PIPE_TASK_FAILED")) {
+                records.add(message);
+            }
+        }
+    }
+
+    /**
+     * Pins the shape of the PIPE_TASK_FAILED record.
+     *
+     * <p>The record is documented as the thing log-based alerting matches on, which makes its
+     * rendered text an interface. The counter assertions elsewhere in this class cannot see it: they
+     * pass regardless of how the record formats, so a value that breaks tokenization ships
+     * unnoticed. Every field here must therefore be a single whitespace-free token, with the sole
+     * exception of the quoted error text at the end.</p>
+     */
+    @Test
+    public void testTerminalFailureLogRecordShape() throws Exception {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        mockRepoExecutor();
+
+        final String pipeName = "p_failed_log_record";
+        Pipe pipe = preparePipe(pipeName);
+
+        new Expectations(taskManager) {
+            {
+                taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
+                SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+                FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
+                submit.setFuture(future);
+                future.run();
+                result = submit;
+            }
+        };
+
+        PipeTaskFailedAppender appender = new PipeTaskFailedAppender();
+        org.apache.logging.log4j.core.Logger pipeLogger =
+                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(Pipe.class);
+        appender.start();
+        pipeLogger.addAppender(appender);
+        try {
+            for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
+                pipe.schedule();
+                pipe.schedule();
+                pipe.schedule();
+            }
+            pipe.schedule();
+            pipe.schedule();
+        } finally {
+            pipeLogger.removeAppender(appender);
+            appender.stop();
+        }
+
+        Assertions.assertEquals(1, appender.records.size(),
+                "exactly one PIPE_TASK_FAILED record per task that gave up");
+        String record = appender.records.get(0);
+
+        Assertions.assertFalse(record.contains("\n") || record.contains("\r"),
+                "the record must stay on one line: " + record);
+
+        // pipe_id must be the bare numeric id. Logging the PipeId object instead renders
+        // "PipeId{dbId=1, id=2}", which a logfmt parser splits into a truncated pipe_id plus a
+        // spurious "id" key, and which no `pipe_id=<n>` alert rule can match.
+        Assertions.assertFalse(record.contains("PipeId{"),
+                "pipe_id must not be the PipeId object's toString(): " + record);
+        Assertions.assertTrue(record.matches(".*\\bpipe_id=" + pipe.getPipeId().getId() + "\\b.*"),
+                "pipe_id must be the bare numeric pipe id: " + record);
+
+        // Every field up to the trailing quoted error is a single key=value token.
+        String beforeError = record.substring(0, record.indexOf(" error="));
+        for (String token : beforeError.split(" ")) {
+            if (token.equals("PIPE_TASK_FAILED")) {
+                continue;
+            }
+            Assertions.assertTrue(token.matches("[a-z_]+=[^\\s]+"),
+                    "unparseable token '" + token + "' in record: " + record);
+        }
+
+        Assertions.assertTrue(record.contains("pipe=" + pipeName), record);
+        Assertions.assertTrue(record.contains("db_id=" + pipe.getPipeId().getDbId()), record);
+        Assertions.assertTrue(record.contains("failed_files=1"), record);
+        Assertions.assertTrue(record.contains(" error=\""), record);
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * The collapse and the cap get no coverage from the end-to-end failure path, because the error
+     * text that reaches the record there is a short single-line placeholder. Cover them directly.
+     */
+    @Test
+    public void testSingleLineError() {
+        Assertions.assertEquals("", Pipe.singleLineError(null));
+        Assertions.assertEquals("", Pipe.singleLineError(""));
+
+        // Newlines and runs of whitespace collapse to single spaces, and the result is trimmed, so
+        // a stack trace cannot break the record onto more than one line.
+        Assertions.assertEquals("failed to get file schema: bad magic number",
+                Pipe.singleLineError("  failed to get file schema:\n\tbad   magic\r\nnumber\n"));
+
+        // Embedded double quotes would close the record's error="..." field early.
+        Assertions.assertEquals("cannot read 'a.parquet'",
+                Pipe.singleLineError("cannot read \"a.parquet\""));
+
+        // Over-long messages are capped and marked as truncated. 512 matches the width of
+        // information_schema.pipe_files.ERROR_MSG.
+        String longError = Strings.repeat("x", 600);
+        String capped = Pipe.singleLineError(longError);
+        Assertions.assertEquals(512 + "...".length(), capped.length());
+        Assertions.assertTrue(capped.endsWith("..."));
+        Assertions.assertEquals(Strings.repeat("x", 512), capped.substring(0, 512));
+
+        // A message exactly at the limit is not truncated.
+        String atLimit = Strings.repeat("y", 512);
+        Assertions.assertEquals(atLimit, Pipe.singleLineError(atLimit));
     }
 
     private Pipe preparePipe(String pipeName) throws Exception {

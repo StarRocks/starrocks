@@ -82,6 +82,10 @@ public class Pipe implements GsonPostProcessable {
     public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
+    // Cap the error text embedded in a PIPE_TASK_FAILED log record. Matches the width of
+    // information_schema.pipe_files.ERROR_MSG so the two stay comparable.
+    private static final int ERROR_MSG_LOG_LIMIT = 512;
+
     private static final String TASK_PROPERTY_PREFIX = "task.";
 
     @SerializedName(value = "name")
@@ -318,11 +322,19 @@ public class Pipe implements GsonPostProcessable {
                 .filter(x -> x.loadState == FileListRepo.PipeFileState.FINISHED)
                 .collect(Collectors.toList());
 
+        // These files are resolved outside the task lifecycle, so they never reach finalizeTasks().
+        // Account them here: without this, every file in flight across a leader change is missing
+        // from both counters. No task counters (there is no task) and no rows (getTotalRows() is a
+        // stub).
         if (CollectionUtils.isNotEmpty(failedFiles)) {
             pipeSource.getFileListRepo().updateFileState(failedFiles, FileListRepo.PipeFileState.ERROR, null);
+            PipeMetricMgr.incPipeFailedFiles(dbId, type.name(), failedFiles.size());
+            PipeMetricMgr.incPipeFailedBytes(dbId, type.name(), totalFileSize(failedFiles));
         }
         if (CollectionUtils.isNotEmpty(loadedFiles)) {
             pipeSource.getFileListRepo().updateFileState(loadedFiles, FileListRepo.PipeFileState.FINISHED, null);
+            PipeMetricMgr.incPipeLoadedFiles(dbId, type.name(), loadedFiles.size());
+            PipeMetricMgr.incPipeLoadedBytes(dbId, type.name(), totalFileSize(loadedFiles));
         }
 
         LOG.info("{} pipe recovered to state {}, failed-files: {}, loaded-files: {}",
@@ -408,6 +420,13 @@ public class Pipe implements GsonPostProcessable {
                     removeTaskId.add(task.getId());
                     pipeSource.finishPiece(task);
                     changedLoadStatus.loadingFiles -= task.getPiece().getNumFiles();
+                    if (task.tooManyErrors()) {
+                        // finishPiece() has just marked every file of the piece as ERROR, so this is
+                        // the only point at which the failure is final. Do not move this into the
+                        // task.isError() branch below: that state is re-entered once per failed
+                        // attempt, so it would count the same files FAILED_TASK_THRESHOLD + 1 times.
+                        recordTerminalTaskFailure(task);
+                    }
                 }
                 if (task.isError()) {
                     PipeMetricMgr.incPipeCompleteTasks(getPipeId().getDbId(), type.name(), "ERROR", 1);
@@ -452,6 +471,59 @@ public class Pipe implements GsonPostProcessable {
             }
             LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
         }
+    }
+
+    /**
+     * Account a task that has exhausted its retries: the failure counters plus one structured log
+     * record carrying the pipe identity and the error text.
+     *
+     * <p>The log record exists because per-pipe identity does not belong in a metric label. Pipes
+     * can be created and dropped in quick succession, so a {@code pipe_name} label would accumulate
+     * dead series for {@link Config#pipe_metric_expire_minutes}. A log event carries no time-series
+     * cardinality cost, and it can carry the error message, which a counter cannot.</p>
+     */
+    private void recordTerminalTaskFailure(PipeTaskDesc task) {
+        FilePipePiece piece = task.getPiece();
+        long dbId = getPipeId().getDbId();
+        long failedFiles = piece.getNumFiles();
+        long failedBytes = piece.getTotalBytes();
+
+        PipeMetricMgr.incPipeFailedTasks(dbId, type.name(), 1);
+        PipeMetricMgr.incPipeFailedFiles(dbId, type.name(), failedFiles);
+        PipeMetricMgr.incPipeFailedBytes(dbId, type.name(), failedBytes);
+
+        // Keep this record on one line and keep its shape stable: it is meant to be matched by
+        // log-based alerting, which is what gives per-pipe granularity without a metric label.
+        // Every value has to stay a single token, so pipe_id emits the bare numeric id rather
+        // than the PipeId object, whose toString() renders as "PipeId{dbId=1, id=2}" and would
+        // split across two tokens under a logfmt parser, one of them a spurious "id" key.
+        LOG.warn("PIPE_TASK_FAILED pipe={} pipe_id={} db_id={} task={} failed_files={} "
+                        + "failed_bytes={} error=\"{}\"",
+                name, id.getId(), dbId, task.getUniqueTaskName(), failedFiles, failedBytes,
+                singleLineError(task.getErrorMsg()));
+    }
+
+    private static long totalFileSize(List<PipeFileRecord> files) {
+        return files.stream().mapToLong(PipeFileRecord::getFileSize).sum();
+    }
+
+    /**
+     * Collapse an error message onto a single line so a PIPE_TASK_FAILED record stays parseable by
+     * log-based alerting, and bound its length.
+     *
+     * <p>Worth testing directly: the messages that actually reach this method today are short and
+     * already single-line, because {@link #checkTaskExecutionResult} substitutes a placeholder when
+     * the task run is missing from the history. The collapse and the cap therefore get no coverage
+     * from the end-to-end failure path.</p>
+     */
+    @VisibleForTesting
+    static String singleLineError(String error) {
+        if (StringUtils.isEmpty(error)) {
+            return "";
+        }
+        String flat = error.replaceAll("\\s+", " ").replace('"', '\'').trim();
+        return flat.length() <= ERROR_MSG_LOG_LIMIT
+                ? flat : flat.substring(0, ERROR_MSG_LOG_LIMIT) + "...";
     }
 
     private void recordTaskError(PipeTaskDesc task, Throwable e) {

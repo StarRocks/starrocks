@@ -41,6 +41,9 @@ import java.util.TimerTask;
  *    <li>Lifecycle counters: `creation`, `drop`, `alter` track user DDL operations.</li>
  *    <li>Runtime metrics: `schedule` tracks the schedule frequency.</li>
  *    <li>Data metrics: `loaded_files`, `loaded_bytes`, `loaded_rows` track total throughput.</li>
+ *    <li>Failure metrics: `failed_tasks`, `failed_files`, `failed_bytes` track terminal load
+ *        failures. See {@link #incPipeFailedTasks} for why these are accounted at a
+ *        different point than `complete_tasks`.</li>
  * </ul>
  *
  * <p>2. LEADER-ONLY Metrics:</p>
@@ -309,6 +312,70 @@ public class PipeMetricMgr {
         }
         getOrCreateCounter("loaded_rows", "pipe_loaded_rows", "total loaded rows",
                 MetricUnit.ROWS, dbId, LABEL_PIPE_TYPE, pipeType)
+                .increase(delta);
+    }
+
+    // --- Failure State ---
+
+    /**
+     * Terminal load failures: a task that has exhausted its retries.
+     *
+     * <p>These are accounted at the point where
+     * {@link com.starrocks.load.pipe.FilePipeSource#finishPiece} marks every file of the piece as
+     * ERROR in the file list. They deliberately do <b>not</b> follow
+     * {@code PipeTaskDesc.isError()}: that is a retryable state which a task re-enters once per
+     * failed attempt, so a piece that finally gives up passes through it
+     * {@code FAILED_TASK_THRESHOLD + 1} times, and counting there would multiply the reported file
+     * count by the same factor.</p>
+     *
+     * <p>Counting at the terminal point makes each increment reconcilable with the rows
+     * {@code information_schema.pipe_files WHERE LOAD_STATE = 'ERROR'} gains at that moment. These
+     * are cumulative event counters, not a running total of the ERROR rows: the two agree only
+     * until the files are retried. {@code ALTER PIPE ... RETRY ALL} resets those rows to UNLOADED
+     * while the counter keeps its value, and a second terminal failure of the same files adds them
+     * again. Alert on the rate of these counters; query {@code pipe_files} for the current
+     * backlog.</p>
+     *
+     * <p>{@code pipe_complete_tasks{done_status="ERROR"}} keeps its original per-attempt meaning,
+     * so the two are complementary: attempts that failed vs. tasks that gave up.</p>
+     *
+     * <p>There is deliberately no failed-rows counter, because
+     * {@code FilePipePiece.getTotalRows()} is still a stub that returns 1 per piece.</p>
+     */
+    public static void incPipeFailedTasks(long dbId, String pipeType, long delta) {
+        if (delta < 0) {
+            return;
+        }
+        getOrCreateCounter("failed_tasks", "pipe_failed_tasks", "number of pipe subtasks that gave up",
+                MetricUnit.REQUESTS, dbId, LABEL_PIPE_TYPE, pipeType)
+                .increase(delta);
+    }
+
+    /**
+     * @see #incPipeFailedTasks for when this is accounted. A file counted here may later also be
+     *         counted by {@link #incPipeLoadedFiles}: the pipe retry path
+     *         ({@link com.starrocks.load.pipe.FilePipeSource#retryErrorFiles}) resets ERROR files
+     *         to UNLOADED, so a retried-then-loaded file appears in both. That is expected for
+     *         monotonic counters.
+     */
+    public static void incPipeFailedFiles(long dbId, String pipeType, long delta) {
+        if (delta < 0) {
+            return;
+        }
+        getOrCreateCounter("failed_files", "pipe_failed_files", "total failed files",
+                MetricUnit.NOUNIT, dbId, LABEL_PIPE_TYPE, pipeType)
+                .increase(delta);
+    }
+
+    /**
+     * @see #incPipeFailedTasks for when this is accounted.
+     */
+    public static void incPipeFailedBytes(long dbId, String pipeType, long delta) {
+        if (delta < 0) {
+            return;
+        }
+        getOrCreateCounter("failed_bytes", "pipe_failed_bytes", "total failed bytes",
+                MetricUnit.BYTES, dbId, LABEL_PIPE_TYPE, pipeType)
                 .increase(delta);
     }
 

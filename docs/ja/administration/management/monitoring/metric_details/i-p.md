@@ -553,6 +553,27 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: BEのパイプラインエグゼキュータのドライバーのスケジューリング時間の累積数。
 
+## `starrocks_fe_pipe_failed_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- ラベル: `db_id`、`pipe_type` (`FILE`)
+- 説明: PIPE ロードが取り込みに失敗したファイルの合計サイズ。PIPE のサブタスクがリトライを使い切った時点で、そのサブタスクに含まれるファイルの合計サイズを加算します。これらのメトリクスと `information_schema.pipe_files` の関係については `starrocks_fe_pipe_failed_files` を参照してください。
+
+## `starrocks_fe_pipe_failed_files`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `db_id`、`pipe_type` (`FILE`)
+- 説明: PIPE ロードが取り込みに失敗したファイルの合計数。PIPE のサブタスクがリトライを使い切った時点で、そのサブタスクに含まれるファイル数を加算するため、1 つのファイルはリトライごとではなく最終的な失敗ごとに 1 回だけカウントされます。加算される値は、`information_schema.pipe_files` に新たに追加される `LOAD_STATE` が `ERROR` の行数と一致します。ただし累積カウンターであるため、現在の `ERROR` 行数の合計とは一致しません。`ALTER PIPE ... RETRY ALL` は対象行を `UNLOADED` に戻しますがメトリクス値は変わらず、同じファイルが再び最終的に失敗すると再度加算されます。このメトリクスは増加率で監視し、現在の滞留量は `information_schema.pipe_files` を参照してください。
+
+## `starrocks_fe_pipe_failed_tasks`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `db_id`、`pipe_type` (`FILE`)
+- 説明: リトライを使い切った PIPE ロードのサブタスクの合計数。1 つのサブタスクが扱うファイル数は一定ではないため、失敗したデータ量を測るには `starrocks_fe_pipe_failed_files` を使用してください。このメトリクスは最終的に断念したサブタスクのみを数えます。一方 `starrocks_fe_pipe_complete_tasks` の `done_status` が `ERROR` の系列は、後に成功するサブタスクの失敗分も含め、失敗した試行をすべて数えます。
+
 ## `pipe_poller_block_queue_len`
 
 - 単位: カウント

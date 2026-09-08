@@ -553,6 +553,27 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：BE 中管道执行器驱动程序调度的累计次数。
 
+## `starrocks_fe_pipe_failed_bytes`
+
+- 单位：字节
+- 类型：累积值
+- 标签：`db_id`、`pipe_type`（`FILE`）
+- 描述：PIPE 导入失败的文件总大小。当某个 PIPE 子任务重试耗尽时，按该子任务所含文件的总大小累加。这些指标与 `information_schema.pipe_files` 的对应关系参见 `starrocks_fe_pipe_failed_files`。
+
+## `starrocks_fe_pipe_failed_files`
+
+- 单位：计数
+- 类型：累积值
+- 标签：`db_id`、`pipe_type`（`FILE`）
+- 描述：PIPE 导入失败的文件总数。当某个 PIPE 子任务重试耗尽时，按该子任务所含文件数累加，因此每个文件在一次最终失败中只计一次，而不是每次重试都计一次。每次累加的数值与 `information_schema.pipe_files` 中新增的 `LOAD_STATE` 为 `ERROR` 的行数一致。由于该指标是累积计数器，它并不等于当前 `ERROR` 行的总数：`ALTER PIPE ... RETRY ALL` 会将这些行重置为 `UNLOADED`，而指标值保持不变；若同一批文件再次最终失败，会被再次累加。建议对该指标的增长速率告警，并通过查询 `information_schema.pipe_files` 获取当前积压。
+
+## `starrocks_fe_pipe_failed_tasks`
+
+- 单位：计数
+- 类型：累积值
+- 标签：`db_id`、`pipe_type`（`FILE`）
+- 描述：重试耗尽的 PIPE 导入子任务总数。一个子任务包含的文件数不固定，因此衡量失败数据量请使用 `starrocks_fe_pipe_failed_files`。该指标仅统计最终放弃的子任务；而 `starrocks_fe_pipe_complete_tasks` 中 `done_status` 为 `ERROR` 的序列统计的是每一次失败的尝试，包括后续成功的子任务的失败尝试。
+
 ## `pipe_poller_block_queue_len`
 
 - 单位：计数
