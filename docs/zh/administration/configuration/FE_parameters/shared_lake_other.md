@@ -648,7 +648,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 存算分离模式下 Range 分布表的在线数据重写在某个分区的重写 `INSERT` 失败后，持续重试该分区的时长上限，超过该时长才取消整个作业。在线数据重写（Range 排序键 Schema Change、Range Rollup、物化视图排序键重写）按 Alter 调度周期逐个分区重建数据，因此某个 Compute Node 在 `INSERT` 执行期间重启或崩溃时，只会导致该分区失败。在该时长内，作业只会在后续调度周期重跑失败的那个分区，并保留已经重写完成的所有分区；该时长耗尽后，作业被取消并报告最后一次重写错误。该时长从分区首次失败时起计算，且仅在后续重试失败时才会被检查；分区因等待而非失败所消耗的时间——例如没有可用的 Compute Node 执行重写，或重写已 `COMMITTED` 但仍在等待 publish——则由 `alter_table_timeout_second` 限制。该值应大于 Compute Node 恢复可用所需的时间，同时应远小于 `alter_table_timeout_second`，因为在线数据重写运行期间该表的 Compaction 会被推迟。设置为 `0` 表示首次失败即取消作业。
+- 描述: 存算分离模式下 Range 分布表的在线数据重写在某个分区的重写 `INSERT` 失败后，持续重试该分区的时长上限，超过该时长才取消整个作业。在线数据重写（Range 排序键 Schema Change、Range Rollup、物化视图排序键重写）按 Alter 调度周期逐个分区重建数据，因此某个 Compute Node 在 `INSERT` 执行期间重启或崩溃时，只会导致该分区失败。在该时长内，作业只会在后续调度周期重跑失败的那个分区，并保留已经重写完成的所有分区；该时长耗尽后，作业被取消并报告最后一次重写错误。该时长会按 Alter 调度周期换算成重试次数施加（每个调度周期最多重试一次），因此分区因等待而非失败所消耗的时间——例如没有可用的 Compute Node 执行重写，或重写已 `COMMITTED` 但仍在等待 publish——不会消耗该时长；此类等待由 `alter_table_timeout_second` 限制。该值应大于 Compute Node 恢复可用所需的时间，同时应远小于 `alter_table_timeout_second`，因为在线数据重写运行期间该表的 Compaction 会被推迟。设置为 `0` 表示首次失败即取消作业。
 - 引入版本: v4.2.0
 
 ## 数据湖

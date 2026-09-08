@@ -126,12 +126,21 @@ public abstract class LakeOnlineRewriteJobBase
     // stable for the job's lifetime. Not serialized; re-resolved after replay on first tick.
     private transient String cachedDbName;
 
-    // Transient: when each physical partition's rewrite INSERT first failed, kept only while its
-    // failures are consecutive (a successful attempt drops the entry). Drives the bounded retry in
-    // runPartitionRewrite. Not serialized: the job's absolute deadline (createTimeMs + timeoutMs) is
-    // already durable, so a replayed job simply starts its retry budget over - which is the right
-    // behavior, since a failover re-runs the partition anyway.
-    private final transient Map<Long, Long> firstRewriteFailureTimeMs = Maps.newHashMap();
+    // Transient: how many consecutive failed attempts each physical partition's rewrite INSERT has made
+    // (a successful attempt, or the partition publishing, drops the entry). Drives the bounded retry in
+    // runPartitionRewrite.
+    //
+    // Counted in ATTEMPTS rather than wall-clock time deliberately. runRunningJob returns at the first
+    // partition that is not DONE, so a partition is only attempted on ticks that actually reach it; with
+    // elapsed time, waiting for a SIBLING partition to publish would spend this partition's budget and
+    // cancel the whole job after a single real retry. The configured window is converted to a number of
+    // ticks instead, which is the same thing whenever the job is working on this partition and degrades
+    // to "this many retries" when it is busy elsewhere.
+    //
+    // Not serialized: the job's absolute deadline (createTimeMs + timeoutMs) is already durable, so a
+    // replayed job simply starts its budget over - which is the right behavior, since a failover re-runs
+    // the partition anyway.
+    private final transient Map<Long, Integer> consecutiveRewriteFailures = Maps.newHashMap();
 
     @Override
     protected void resetTransientState() {
@@ -141,7 +150,7 @@ public abstract class LakeOnlineRewriteJobBase
         // enabling graceful in-place demotion for shared-data mode, audit the remaining transient state
         // here (cachedDbName is self-healing, but the per-partition rewrite bookkeeping in
         // partitionStates and any unlogged state transitions need the OptimizeJobV2-style reset).
-        firstRewriteFailureTimeMs.clear();
+        consecutiveRewriteFailures.clear();
     }
 
     /**
@@ -262,7 +271,8 @@ public abstract class LakeOnlineRewriteJobBase
 
     @VisibleForTesting
     public Set<Long> getPartitionIdsForTest() {
-        return partitionStates.keySet();
+        // A copy, not the live keySet: callers iterate it while the scheduler may touch partitionStates.
+        return Set.copyOf(partitionStates.keySet());
     }
 
     // ---- Abstract hooks: the rewrite-flavor specifics ---------------------------------------------
@@ -963,7 +973,7 @@ public abstract class LakeOnlineRewriteJobBase
                     // must be cleared on observed progress, not off the transient map that replay
                     // leaves empty. clearRetryDiagnostic only clears THIS partition's message, so a
                     // sibling partition that is still retrying keeps reporting its stall.
-                    firstRewriteFailureTimeMs.remove(plan.physicalPartitionId);
+                    consecutiveRewriteFailures.remove(plan.physicalPartitionId);
                     clearRetryDiagnostic(plan.physicalPartitionId);
                     continue;
                 case IN_FLIGHT:
@@ -1155,40 +1165,38 @@ public abstract class LakeOnlineRewriteJobBase
 
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 String error = context.getState().getErrorMessage();
-                if (actualTxnId == DmlStmt.INVALID_TXN_ID) {
-                    // The attempt failed before it begun a transaction, so the id journaled above is
-                    // only peekNextTransactionId()'s prediction and a concurrent load may take it.
-                    // Leaving it journaled would make classifyRewrite report that stranger's txn as
-                    // IN_FLIGHT - stalling this partition past its retry budget - and would make a
-                    // later cancel abort an unrelated load. Drop it: a null id classifies as NEEDS_RUN.
-                    stateOf(plan.physicalPartitionId).rewriteTxnId = null;
-                    persistStateChange(this, JobState.RUNNING);
+                // Settle the attempt's transaction FIRST, so both the decision below and the next tick's
+                // classifyRewrite see its real state rather than a transient one. Returns whether the
+                // partition was actually left for a later tick to retry.
+                if (!settleFailedAttemptTxn(plan.physicalPartitionId, actualTxnId, error)) {
+                    // Not retryable: the rewrite committed and is waiting to publish, or its transaction
+                    // could not be aborted. Either way the next tick sees IN_FLIGHT and will not retry, so
+                    // do not claim a retry, and do not let the wait count against this partition's budget.
+                    consecutiveRewriteFailures.remove(plan.physicalPartitionId);
+                    LOG.warn("online rewrite job {}: rewrite INSERT reported an error for partition {}, but "
+                                    + "its transaction is not in a retryable state; waiting instead: {}",
+                            jobId, plan.physicalPartitionId, error);
+                    return;
                 }
                 if (retryPartitionRewrite(plan.physicalPartitionId, error)) {
-                    if (actualTxnId != DmlStmt.INVALID_TXN_ID) {
-                        // The attempt did begin a transaction; classifyRewrite must see it leave PREPARE
-                        // before the next tick, or it reports IN_FLIGHT forever and the retry budget above
-                        // is never consulted again. Do this BEFORE journaling the diagnostic below: the
-                        // transaction reaching a terminal state is what makes the partition retryable,
-                        // so it must not sit behind a journal write that only records why we are retrying.
-                        abortUncommittedRewriteTxn(plan.physicalPartitionId, actualTxnId, error);
-                    }
-                    // Now that the partition is retryable, record why, for SHOW ALTER TABLE COLUMN's Msg
-                    // column: getInfo emits errMsg regardless of job state, and checkTableStable already
-                    // reports a waiting job this way. It also means that if the job is later cancelled for
-                    // an unrelated reason, the operator has already seen the cause.
+                    // The partition is retryable, so record why, for SHOW ALTER TABLE COLUMN's Msg column:
+                    // getInfo emits errMsg regardless of job state, and checkTableStable already reports a
+                    // waiting job this way.
                     setRetryDiagnostic(retryDiagnosticPrefix(plan.physicalPartitionId) + error);
                     // Leave the partition in NEEDS_RUN and yield the tick: runRunningJob returns right
                     // after this call, so the next tick re-classifies this attempt's txn and re-runs just
                     // this partition, with every published partition still skipped as DONE.
                     return;
                 }
-                throw new AlterCancelException(error);
+                // Name the partition in the cancel reason: cancelImpl overwrites errMsg with this message,
+                // so without the id the operator loses the only thing that said which partition failed.
+                throw new AlterCancelException("rewrite INSERT failed for partition "
+                        + plan.physicalPartitionId + ": " + error);
             }
             // The attempt reached the executor without error: end any failure streak for this partition
             // and drop the retry diagnostic it published, so the message does not outlive the failure
             // through the publication wait.
-            firstRewriteFailureTimeMs.remove(plan.physicalPartitionId);
+            consecutiveRewriteFailures.remove(plan.physicalPartitionId);
             clearRetryDiagnostic(plan.physicalPartitionId);
         } catch (AlterCancelException e) {
             throw e;
@@ -1204,16 +1212,19 @@ public abstract class LakeOnlineRewriteJobBase
      * Decide whether a failed rewrite INSERT for one partition should be retried on a later scheduler
      * tick instead of cancelling the whole job.
      *
-     * <p>Every failure is retryable, deliberately: one physical cause - a compute node going away
+     * <p>Failures are not classified, deliberately: one physical cause - a compute node going away
      * mid-INSERT - reaches this point as several different error codes and messages, sometimes with no
-     * error code at all, so the budget is a time window rather than an error classification. The sibling
-     * jobs make the same choice by counting failures rather than inspecting them (see
+     * error code at all, so the budget is a bounded number of attempts rather than an error predicate.
+     * The sibling jobs make the same choice by counting failures rather than inspecting them (see
      * {@link LakeTableSchemaChangeJob#runRunningJob}, which cancels only after a task has failed three
      * times). A genuinely broken rewrite still fails the job, just a budget later, and the job's own
-     * deadline ({@link #isTimeout()}) remains the absolute bound.
+     * deadline ({@link #isTimeout()}) remains the absolute bound. Note this covers failures the executor
+     * reports through the {@code ConnectContext}; a throw that escapes it is still terminal, which is why
+     * the surrounding {@code catch} converts one straight to {@link AlterCancelException}.
      *
-     * <p>The window is per partition and starts at its first consecutive failure, because one job can
-     * legitimately meet several independent node restarts; a successful attempt clears it.
+     * <p>The budget is per partition and counts CONSECUTIVE failed attempts, reset by a successful
+     * attempt or by the partition publishing, because one job can legitimately meet several independent
+     * node restarts.
      *
      * <p>Retrying is safe: an aborted attempt publishes nothing into the shadow index. The flip anchors
      * only the journaled txn id of the attempt that committed, and post-watershed double-writes are
@@ -1222,56 +1233,88 @@ public abstract class LakeOnlineRewriteJobBase
      * @return true when the caller should return and let a later tick retry, false when it should cancel
      */
     private boolean retryPartitionRewrite(long physicalPartitionId, String error) {
-        long budgetMs = Config.lake_online_rewrite_partition_retry_timeout_second * 1000L;
-        if (budgetMs <= 0) {
+        if (Config.lake_online_rewrite_partition_retry_timeout_second <= 0) {
             LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} and retrying is "
                     + "disabled: {}", jobId, physicalPartitionId, error);
             return false;
         }
-        long nowMs = System.currentTimeMillis();
-        long firstFailureMs = firstRewriteFailureTimeMs.computeIfAbsent(physicalPartitionId, id -> nowMs);
-        long elapsedMs = nowMs - firstFailureMs;
-        if (elapsedMs > budgetMs) {
-            LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} and the {}s retry "
-                            + "budget is spent after {}s, cancelling the job: {}",
-                    jobId, physicalPartitionId, budgetMs / 1000, elapsedMs / 1000, error);
+        int maxFailures = maxConsecutiveRewriteFailures();
+        int failures = consecutiveRewriteFailures.merge(physicalPartitionId, 1, Integer::sum);
+        if (failures > maxFailures) {
+            LOG.warn("online rewrite job {}: rewrite INSERT failed {} consecutive times for partition {}, "
+                            + "exhausting the {}s retry window, cancelling the job: {}",
+                    jobId, failures, physicalPartitionId,
+                    Config.lake_online_rewrite_partition_retry_timeout_second, error);
             return false;
         }
         LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}, retrying on a later tick "
-                        + "({}s of the {}s budget used): {}",
-                jobId, physicalPartitionId, elapsedMs / 1000, budgetMs / 1000, error);
+                        + "(consecutive failure {} of {}): {}",
+                jobId, physicalPartitionId, failures, maxFailures, error);
         return true;
     }
 
     /**
-     * Abort a rewrite attempt's transaction before its partition is retried, if the attempt left it
-     * uncommitted. Without this, an attempt that reported ERR after reaching PREPARE would still be seen
-     * by {@link #classifyRewrite} as IN_FLIGHT on every later tick - the retry budget in
-     * {@link #retryPartitionRewrite} would never be consulted again, and the partition would stall until
-     * the transaction's own timeout instead of retrying.
-     *
-     * <p>Only PREPARE/PREPARED are aborted here. A COMMITTED rewrite is the deliberate publication wait:
-     * the lake publisher still carries it to VISIBLE, and {@link #classifyRewrite} then reports it DONE,
-     * so there is nothing to abort. Skipping the call for COMMITTED also avoids the transaction manager's
-     * rejection - it refuses to abort a COMMITTED/VISIBLE transaction and logs a WARN - which would
-     * otherwise repeat on every retry tick while that partition waits to publish.
+     * How many consecutive failed attempts one partition's rewrite gets before the job is cancelled: the
+     * configured retry window expressed in scheduler ticks, because a RUNNING job makes at most one
+     * attempt per tick for the partition it is working on. Converting the window this way keeps the
+     * config meaning "how long we keep retrying this partition" while making the budget immune to time
+     * the job spends waiting on a different partition.
      */
-    private void abortUncommittedRewriteTxn(long physicalPartitionId, long txnId, String reason) {
+    private static int maxConsecutiveRewriteFailures() {
+        long budgetMs = Config.lake_online_rewrite_partition_retry_timeout_second * 1000L;
+        long tickMs = Math.max(1L, Config.alter_scheduler_interval_millisecond);
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, budgetMs / tickMs));
+    }
+
+    /**
+     * Settle a failed attempt's transaction so the next tick's {@link #classifyRewrite} sees a state it
+     * can act on, and report whether the partition was left for a later tick to RETRY.
+     *
+     * <p>Four outcomes, and the distinction matters because the caller must neither claim a retry nor
+     * spend the retry budget on a partition that is not going to be retried:
+     * <ul>
+     *   <li>no transaction was begun - the id journaled before the INSERT is only
+     *       {@code peekNextTransactionId()}'s prediction and a concurrent load may take it, so it is
+     *       cleared and re-journaled; a null id classifies as NEEDS_RUN. Retryable.</li>
+     *   <li>PREPARE/PREPARED - aborted here, so the next tick sees ABORTED rather than IN_FLIGHT.
+     *       Retryable, unless the abort itself fails, in which case the partition waits for the
+     *       transaction's own timeout and is NOT retryable now.</li>
+     *   <li>COMMITTED - the deliberate publication wait: the lake publisher carries it to VISIBLE and
+     *       {@link #classifyRewrite} then reports DONE, so there is nothing to abort and nothing to
+     *       retry. Skipping the call also avoids the transaction manager refusing to abort a COMMITTED
+     *       transaction, and the WARN that refusal logs, on every tick of the publication wait.</li>
+     *   <li>already terminal - ABORTED is retryable; VISIBLE means the partition is in fact DONE.</li>
+     * </ul>
+     *
+     * @return true iff a later tick will re-run this partition's rewrite
+     */
+    private boolean settleFailedAttemptTxn(long physicalPartitionId, long actualTxnId, String reason) {
+        if (actualTxnId == DmlStmt.INVALID_TXN_ID) {
+            stateOf(physicalPartitionId).rewriteTxnId = null;
+            persistStateChange(this, JobState.RUNNING);
+            return true;
+        }
         TransactionState txnState =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, actualTxnId);
         if (txnState == null) {
-            return;
+            return true;
         }
         TransactionStatus status = txnState.getTransactionStatus();
+        if (status.isFinalStatus()) {
+            return status == TransactionStatus.ABORTED;
+        }
         if (status != TransactionStatus.PREPARE && status != TransactionStatus.PREPARED) {
-            return;
+            return false;
         }
         try {
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, reason);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .abortTransaction(dbId, actualTxnId, reason);
+            return true;
         } catch (Exception e) {
             LOG.warn("online rewrite job {}: failed to abort rewrite txn {} for partition {} before "
-                            + "retrying: {}",
-                    jobId, txnId, physicalPartitionId, e.getMessage());
+                            + "retrying, so it waits for the transaction timeout instead: {}",
+                    jobId, actualTxnId, physicalPartitionId, e.getMessage());
+            return false;
         }
     }
 
@@ -1291,8 +1334,10 @@ public abstract class LakeOnlineRewriteJobBase
      * {@code persistStateChange} calls, so without journaling it here a replay would restore the
      * preceding snapshot and {@code SHOW ALTER TABLE COLUMN} would lose the reason.
      *
-     * <p>Journals only when the message actually changes, so a partition failing the same way on every
-     * tick costs one write rather than one per tick, and a job with no failures costs none.
+     * <p>Journals only when the message actually changes. That saves a write when a partition fails
+     * identically on consecutive ticks, but many error strings embed a txn or query id, so a stalled
+     * partition should be expected to journal roughly once per tick for the length of its budget; a job
+     * with no failures costs nothing.
      */
     private void setRetryDiagnostic(String diagnostic) {
         if (diagnostic.equals(errMsg)) {
