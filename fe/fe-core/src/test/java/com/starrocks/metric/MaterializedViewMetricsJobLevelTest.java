@@ -15,18 +15,15 @@
 package com.starrocks.metric;
 
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-
-import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -155,14 +152,22 @@ public class MaterializedViewMetricsJobLevelTest extends MVTestBase {
             MaterializedView mv = getMv("test", "mjl_multi_mv1");
 
             // Batch 1: IS_TEST=true so the spawned next-run is stored in nextTaskRun, not submitted.
+            // Pin processStartTime so the terminal duration can be shown to use the first run's start
+            // without looking up task-run history.
             TaskRun taskRun1 = buildMVTaskRun(mv, "test");
-            initAndExecuteTaskRun(taskRun1);
+            taskRun1.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+            long firstProcessStart = System.currentTimeMillis() - 30_000L;
+            taskRun1.getStatus().setProcessStartTime(firstProcessStart);
+            taskRun1.executeTaskRun();
 
             MVPCTRefreshProcessor processor1 = getPartitionBasedRefreshProcessor(taskRun1);
             TaskRun taskRun2 = processor1.getNextTaskRun();
 
             Assertions.assertNotNull(taskRun2,
                     "expected a second batch task run for 2-partition MV with partition_refresh_number=1");
+            Assertions.assertEquals(String.valueOf(firstProcessStart),
+                    taskRun2.getProperties().get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                    "the successor run must carry the first run's process start");
 
             IMaterializedViewMetricsEntity iEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
@@ -174,20 +179,8 @@ public class MaterializedViewMetricsJobLevelTest extends MVTestBase {
             Assertions.assertEquals(0, metrics.histRefreshJobDuration.getCount(),
                     "duration must not be sampled after an intermediate batch");
 
-            // Mirror production: the scheduler always adds batch N to history before dispatching batch N+1.
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunHistory().addHistory(taskRun1.getStatus());
-
-            // Regression: Database.getFullName() is unqualified while a stored TaskRunStatus keeps the
-            // "default_cluster:" prefix; matchByTaskName compares against the stripped getDbName(), so the
-            // roll-up must still find earlier in-memory batches (not only archived ones) via the plain db name.
-            String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-            boolean foundEarlierBatch = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunHistory()
-                    .lookupLastJobOfTasks(DB_NAME, Collections.singleton(mvTaskName))
-                    .stream().anyMatch(s -> taskRun1.getStatus().getQueryId().equals(s.getQueryId()));
-            Assertions.assertTrue(foundEarlierBatch,
-                    "duration roll-up must find the earlier in-memory batch via the unqualified db name");
-
-            // Batch 2: terminal run (no more partitions left).
+            // Batch 2: terminal run (no more partitions left). Do not add batch 1 to history:
+            // duration must come from the propagated property, not lookupLastJobOfTasks.
             initAndExecuteTaskRun(taskRun2);
 
             MVPCTRefreshProcessor processor2 = getPartitionBasedRefreshProcessor(taskRun2);
@@ -200,6 +193,8 @@ public class MaterializedViewMetricsJobLevelTest extends MVTestBase {
                     "multi-batch job must record exactly one success");
             Assertions.assertEquals(1, metrics.histRefreshJobDuration.getCount(),
                     "multi-batch job must record exactly one duration sample");
+            Assertions.assertTrue(metrics.histRefreshJobDuration.getSnapshot().getMax() >= 25_000L,
+                    "duration must use the first run's process start, not only the terminal run");
         } finally {
             starRocksAssert.dropMaterializedView("mjl_multi_mv1");
             starRocksAssert.dropTable("mjl_multi_t1");
@@ -261,6 +256,52 @@ public class MaterializedViewMetricsJobLevelTest extends MVTestBase {
         } finally {
             starRocksAssert.dropMaterializedView("mjl_reject_mv1");
             starRocksAssert.dropTable("mjl_reject_t1");
+        }
+    }
+
+    @Test
+    public void zeroJobProcessStartTimeSkipsDurationMetric() throws Exception {
+        assertInvalidJobProcessStartTimeSkipsDuration("mjl_zero_t1", "mjl_zero_mv1", "0");
+    }
+
+    @Test
+    public void nonNumericJobProcessStartTimeSkipsDurationMetric() throws Exception {
+        assertInvalidJobProcessStartTimeSkipsDuration("mjl_nan_t1", "mjl_nan_mv1", "not-a-number");
+    }
+
+    private void assertInvalidJobProcessStartTimeSkipsDuration(String table, String mvName, String raw)
+            throws Exception {
+        String partitionTable = "CREATE TABLE " + table + " (dt date, v int)\n" +
+                "PARTITION BY date_trunc('day', dt)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition(table, "p1", "2024-04-01", "2024-04-02");
+
+        String mvSql = "CREATE MATERIALIZED VIEW " + mvName + " " +
+                "PARTITION BY date_trunc('day', dt) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\"partition_refresh_number\"=\"-1\") " +
+                "AS SELECT dt, sum(v) FROM " + table + " GROUP BY dt";
+        starRocksAssert.withMaterializedView(mvSql);
+        executeInsertSql("insert into " + table + " partition(p1) values('2024-04-01', 1)");
+
+        try {
+            MaterializedView mv = getMv("test", mvName);
+            TaskRun taskRun = buildMVTaskRun(mv, "test");
+            taskRun.getProperties().put(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME, raw);
+            initAndExecuteTaskRun(taskRun);
+
+            IMaterializedViewMetricsEntity iEntity =
+                    MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
+            Assertions.assertInstanceOf(MaterializedViewMetricsEntity.class, iEntity);
+            MaterializedViewMetricsEntity metrics = (MaterializedViewMetricsEntity) iEntity;
+
+            Assertions.assertEquals(1, metrics.counterRefreshJobSuccessTotal.getValue(),
+                    "invalid duration property must not skip the job-success counter");
+            Assertions.assertEquals(0, metrics.histRefreshJobDuration.getCount(),
+                    "invalid " + TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME + " must skip the duration sample");
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropTable(table);
         }
     }
 }

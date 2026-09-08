@@ -18,7 +18,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -36,7 +35,6 @@ import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryState;
-import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
@@ -58,9 +56,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -501,38 +496,43 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         return status == null ? "" : status.getWarehouseName();
     }
 
-    // Records the job's wall-clock duration once, on the terminal run, reusing the exact roll-up the
-    // materialized_view_refresh_jobs system table uses so the metric and the table never diverge.
+    // Records the job's wall-clock duration once, on the terminal run.
+    // Start: MV_REFRESH_JOB_PROCESS_START_TIME when present and valid, otherwise this run's
+    // processStartTime (falling back to createTime). End: finishTime if set, otherwise now(),
+    // because the terminal run has not persisted finishTime yet. Matches
+    // materialized_view_refresh_jobs.DURATION_TIME without looking up task-run history.
     private void recordRefreshJobDuration(IMaterializedViewMetricsEntity metricsEntity) {
         try {
             if (mvTaskRunContext == null || mvTaskRunContext.getStatus() == null) {
                 return;
             }
-            String jobId = mvTaskRunContext.getStatus().getStartTaskRunId();
-            if (Strings.isNullOrEmpty(jobId)) {
+            TaskRunStatus status = mvTaskRunContext.getStatus();
+            if (Strings.isNullOrEmpty(status.getStartTaskRunId())) {
                 return;
             }
-            List<TaskRunStatus> batch = Lists.newArrayList();
-            // Include archived runs: a long multi-batch refresh may have had early batches archived out of
-            // in-memory history before this terminal run, and the system table's roll-up also reads archived history.
-            String dbName = db == null ? null : db.getFullName();
-            if (dbName != null) {
-                String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-                for (TaskRunStatus s : GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunHistory()
-                        .lookupLastJobOfTasks(dbName, Collections.singleton(mvTaskName))) {
-                    if (jobId.equals(s.getStartTaskRunId()) && s.getState() != Constants.TaskRunState.MERGED) {
-                        batch.add(s);
-                    }
+            Map<String, String> properties = mvTaskRunContext.getProperties();
+            String raw = properties == null ? null : properties.get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME);
+            long startBasis;
+            if (raw != null) {
+                long parsed;
+                try {
+                    parsed = Long.parseLong(raw);
+                } catch (NumberFormatException e) {
+                    logger.warn("skip refresh job duration metric for mv {}: {} is not a timestamp: {}",
+                            mv.getName(), TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME, raw);
+                    return;
                 }
+                if (parsed <= 0) {
+                    logger.warn("skip refresh job duration metric for mv {}: {} is not a positive timestamp: {}",
+                            mv.getName(), TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME, raw);
+                    return;
+                }
+                startBasis = parsed;
+            } else {
+                startBasis = status.getProcessStartTime() > 0
+                        ? status.getProcessStartTime() : status.getCreateTime();
             }
-            batch.add(mvTaskRunContext.getStatus());
-            // fromTaskRuns picks first/last by createTime — sort the same way.
-            batch.sort(Comparator.comparingLong(TaskRunStatus::getCreateTime));
-            ShowMaterializedViewStatus.RefreshJobStatus rjs = ShowMaterializedViewStatus.fromTaskRuns(batch);
-            long startBasis = rjs.getMvRefreshProcessTime() > 0
-                    ? rjs.getMvRefreshProcessTime() : rjs.getMvRefreshStartTime();
-            // The terminal run's finishTime may not be persisted yet; fall back to now().
-            long endMs = rjs.getMvRefreshEndTime() > 0 ? rjs.getMvRefreshEndTime() : System.currentTimeMillis();
+            long endMs = status.getFinishTime() > 0 ? status.getFinishTime() : System.currentTimeMillis();
             long wallMs = Math.max(0L, endMs - startBasis);
             metricsEntity.updateRefreshDuration(wallMs);
             MaterializedViewMetricsRegistry.updateGlobalRefreshDuration(wallMs, runWarehouse(mvTaskRunContext));

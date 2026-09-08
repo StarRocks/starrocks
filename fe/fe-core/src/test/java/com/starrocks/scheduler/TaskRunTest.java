@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
@@ -121,6 +123,45 @@ public class TaskRunTest {
         assertEquals("PARTITION_START", TaskRun.PARTITION_START);
         assertEquals("PARTITION_END", TaskRun.PARTITION_END);
         assertEquals("FORCE", TaskRun.FORCE);
+        assertEquals("MV_REFRESH_JOB_PROCESS_START_TIME", TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME);
+        assertFalse(TaskRun.MV_UNCOPYABLE_PROPERTIES.contains(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                "must copy to the next batch or the duration start never reaches the terminal run");
+        assertFalse(TaskRun.MV_COMPARABLE_PROPERTIES.contains(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                "must not participate in pending-run merge equality");
+    }
+
+    @Test
+    public void seedRefreshJobProcessStartTimeWritesPositiveTimestamp() {
+        Map<String, String> newProperties = new HashMap<>();
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProcessStartTime(1718000000123L);
+
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, status);
+
+        assertEquals("1718000000123", newProperties.get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME));
+    }
+
+    @Test
+    public void seedRefreshJobProcessStartTimeSkipsUnknownZero() {
+        Map<String, String> newProperties = new HashMap<>();
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProcessStartTime(0L);
+
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, status);
+
+        assertFalse(newProperties.containsKey(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME));
+    }
+
+    @Test
+    public void seedRefreshJobProcessStartTimeDoesNotOverwrite() {
+        Map<String, String> newProperties = new HashMap<>();
+        newProperties.put(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME, "111");
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProcessStartTime(1718000000123L);
+
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, status);
+
+        assertEquals("111", newProperties.get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME));
     }
 
     @Test
