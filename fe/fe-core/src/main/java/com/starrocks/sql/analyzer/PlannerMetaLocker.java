@@ -103,6 +103,10 @@ public class PlannerMetaLocker {
         return true;
     }
 
+    public boolean isEmpty() {
+        return tables.isEmpty();
+    }
+
     public void lock() {
         Locker locker = new Locker(queryId);
         for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
