@@ -1406,14 +1406,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
     }
 
+    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
+        return getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite, null);
+    }
+
     /**
      * Get the updated partition names of the external base table of the materialized view.
      *
      * @param baseTable:      the external base table of the materialized view to check the updated partition names
      * @param isQueryRewrite: whether it's for query rewrite or not
+     * @param pinnedVersionRange: the frozen snapshot to compare against, null to compare against the live table
      * @return: the updated partition names of the external base table
      */
-    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
+    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite,
+                                                               TvrVersionRange pinnedVersionRange) {
         Set<String> result = Sets.newHashSet();
         // NOTE: For query dump replay, ignore updated partition infos only to check mv can rewrite query or not.
         // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
@@ -1421,7 +1427,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return result;
         }
 
-        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(this, baseTable);
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(this, baseTable, pinnedVersionRange);
         traits.setQueryMVRewrite(isQueryRewrite);
         return traits.getUpdatedPartitionNames(
                 this.getBaseTableInfos(),

@@ -142,12 +142,17 @@ public abstract class ConnectorPartitionTraits {
      * operations (currently Iceberg) will use the pinned snapshot instead of the live one.
      * Other connectors store the range but ignore it in their partition methods.
      */
-    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
-        ConnectorPartitionTraits traits = build(table);
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table,
+                                                 TvrVersionRange pinnedVersionRange) {
+        ConnectorPartitionTraits traits = build(mv, table);
         if (pinnedVersionRange != null) {
             traits.setPinnedVersionRange(pinnedVersionRange);
         }
         return traits;
+    }
+
+    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
+        return build(null, table, pinnedVersionRange);
     }
 
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {

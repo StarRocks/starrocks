@@ -68,7 +68,8 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
-            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, queryRewriteParams);
+            MvBaseTableUpdateInfo mvBaseTableUpdateInfo =
+                    getMvBaseTableUpdateInfo(mv, table, true, queryRewriteParams, /* pinnedVersionRange */ null);
             if (mvBaseTableUpdateInfo == null) {
                 logMVPrepare(mv, "Non-partitioned base table update info is unknown, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
@@ -80,7 +81,7 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             }
 
             // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, tableInfo, table)) {
+            if (hasDeletedPartitions(mv, tableInfo, table, /* pinnedVersionRange */ null)) {
                 logMVPrepare(mv, "Non-partitioned base table has deleted partitions, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
             }

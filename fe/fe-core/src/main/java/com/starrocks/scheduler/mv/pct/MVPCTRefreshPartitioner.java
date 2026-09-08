@@ -27,6 +27,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -436,7 +437,7 @@ public abstract class MVPCTRefreshPartitioner {
 
             // check the updated partition names in the ref base table
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    false, queryRewriteParams);
+                    false, queryRewriteParams, pinnedRangeFor(baseTable));
             if (mvBaseTableUpdateInfo == null) {
                 throw new DmlException(String.format("Find the updated partition info of ref base table %s of mv " +
                         "%s failed, current mv partitions:%s", baseTable.getName(), mv.getName(), toRefreshPartitions));
@@ -486,7 +487,8 @@ public abstract class MVPCTRefreshPartitioner {
             if (tableColumnMap.containsKey(snapshotTable)) {
                 continue;
             }
-            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams,
+                    pinnedRangeFor(snapshotTable))) {
                 return true;
             }
         }
@@ -499,23 +501,28 @@ public abstract class MVPCTRefreshPartitioner {
      * - its base table has updated.
      * - its base table has deleted partitions.
      */
-    public static boolean isNonPartitionedMVNeedToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                          MaterializedView mv,
-                                                          MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+    public boolean isNonPartitionedMVNeedToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
             Table snapshotTable = snapshotInfo.getBaseTable();
             if (!isPartitionRefreshSupported(snapshotTable)) {
                 return true;
             }
-            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
+            TvrVersionRange pinnedRange = pinnedRangeFor(snapshotTable);
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams,
+                    pinnedRange)) {
                 return true;
             }
             // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
+            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, pinnedRange)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** The snapshot the scan reads: a pinned run must answer base-state questions from it, not from live. */
+    private TvrVersionRange pinnedRangeFor(Table baseTable) {
+        return mvContext.getRefreshRuntimeState().getPinnedRange(baseTable);
     }
 
     public void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {

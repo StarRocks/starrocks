@@ -21,6 +21,7 @@ import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -43,8 +44,10 @@ public class MvRefreshArbiter {
     private static final Logger LOG = LogManager.getLogger(MvRefreshArbiter.class);
 
     public static boolean needsToRefreshTable(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
-                                              MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
-        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, baseTableInfo, table, true, queryRewriteParams);
+                                              MVTimelinessArbiter.QueryRewriteParams queryRewriteParams,
+                                              TvrVersionRange pinnedVersionRange) {
+        Optional<Boolean> needsToRefresh =
+                needsToRefreshTable(mv, baseTableInfo, table, true, queryRewriteParams, pinnedVersionRange);
         if (needsToRefresh.isPresent()) {
             return needsToRefresh.get();
         }
@@ -122,7 +125,8 @@ public class MvRefreshArbiter {
                                                          BaseTableInfo baseTableInfo,
                                                          Table baseTable,
                                                          boolean withMv,
-                                                         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+                                                         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams,
+                                                         TvrVersionRange pinnedVersionRange) {
         if (baseTable.isView()) {
             // do nothing
             return Optional.of(false);
@@ -151,7 +155,7 @@ public class MvRefreshArbiter {
             return Optional.of(false);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
-                    queryRewriteParams.isQueryRewrite());
+                    queryRewriteParams.isQueryRewrite(), pinnedVersionRange);
             if (baseUpdatedPartitionNames == null) {
                 return Optional.empty();
             }
@@ -164,12 +168,14 @@ public class MvRefreshArbiter {
      * @param baseTable: the table to check
      * @param withMv: whether to check the materialized view if it's a materialized view
      * @param queryRewriteParams: whether this caller is query rewrite or not
+     * @param pinnedVersionRange: the frozen snapshot to answer from, null to answer from the live table
      * @return MvBaseTableUpdateInfo: the update info of the base table
      */
     public static MvBaseTableUpdateInfo getMvBaseTableUpdateInfo(MaterializedView mv,
                                                                  Table baseTable,
                                                                  boolean withMv,
-                                                                 MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+                                                                 MVTimelinessArbiter.QueryRewriteParams queryRewriteParams,
+                                                                 TvrVersionRange pinnedVersionRange) {
         MvBaseTableUpdateInfo baseTableUpdateInfo = new MvBaseTableUpdateInfo();
         if (baseTable.isView()) {
             // do nothing
@@ -196,7 +202,7 @@ public class MvRefreshArbiter {
             baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
-                    queryRewriteParams.isQueryRewrite());
+                    queryRewriteParams.isQueryRewrite(), pinnedVersionRange);
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
@@ -214,9 +220,11 @@ public class MvRefreshArbiter {
      * @param mv the materialized view
      * @param baseTableInfo the base table info
      * @param table the base table
+     * @param pinnedVersionRange the frozen snapshot to answer from, null to answer from the live table
      * @return true if partitions have been deleted from the base table, false otherwise
      */
-    public static boolean hasDeletedPartitions(MaterializedView mv, BaseTableInfo baseTableInfo, Table table) {
+    public static boolean hasDeletedPartitions(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
+                                               TvrVersionRange pinnedVersionRange) {
         // Only check for external tables (Iceberg, Hive, etc.)
         if (table.isNativeTableOrMaterializedView()) {
             return false;
@@ -224,7 +232,7 @@ public class MvRefreshArbiter {
 
         try {
             // Get current partitions from the base table
-            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table);
+            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table, pinnedVersionRange);
             Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
                     traits.getPartitionNameWithPartitionInfo();
 
