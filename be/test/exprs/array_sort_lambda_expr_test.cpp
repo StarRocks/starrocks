@@ -25,10 +25,13 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
+#include "exprs/arithmetic_expr.h"
+#include "exprs/array_map_expr.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
+#include "exprs/function_call_expr.h"
 #include "exprs/lambda_function.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
@@ -210,6 +213,130 @@ TEST_F(ArraySortLambdaExprTest, invalid_comparator_error_is_not_cached) {
         ASSERT_TRUE(result.status().is_invalid_argument()) << result.status();
         ASSERT_NE(std::string::npos, result.status().message().find("irreflexivity")) << result.status();
     }
+    ExprExecutor::close(ctxs, &_runtime_state);
+}
+
+// Same defect as ArrayMapExpr::get_slot_ids, in ArraySortLambdaExpr: a comparator lambda whose
+// body contains a nested array_map that captures the comparator argument. The nested array_map
+// extracts array_length(x) as a common expression under a synthetic slot id, which used to leak
+// through the comparator lambda's captured slots and be looked up via Chunk::get_column_by_slot_id
+// on the input chunk, crashing the BE. Reachable from SQL as
+//   array_sort(arr_of_arrays, (x, y) -> array_length(array_map(z -> array_length(x) + z, x)) < array_length(y))
+// Must not crash.
+TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
+    const SlotId kZ = 100002;                         // inner array_map argument
+    TypeDescriptor int_arr = array_type(TYPE_INT);    // array<int>  (comparator element type: x, y)
+    TypeDescriptor int_arr_arr = array_type(int_arr); // array<array<int>> (sorted array)
+
+    // Sorted array column: 2 rows, each an array<array<int>> = [[4,4],[1],[3,3,3]].
+    auto array = ColumnHelper::create_column(int_arr_arr, false);
+    for (size_t i = 0; i < 2; ++i) {
+        array->append_datum(DatumArray{Datum(DatumArray{Datum((int32_t)4), Datum((int32_t)4)}),
+                                       Datum(DatumArray{Datum((int32_t)1)}),
+                                       Datum(DatumArray{Datum((int32_t)3), Datum((int32_t)3), Datum((int32_t)3)})});
+    }
+    TExprNode arr_node;
+    arr_node.__set_node_type(TExprNodeType::INT_LITERAL);
+    arr_node.__set_num_children(0);
+    arr_node.__set_type(int_arr_arr.to_thrift());
+    auto* array_expr = _pool.add(new FakeConstExpr(arr_node));
+    array_expr->_column = std::move(array);
+
+    auto slot_ref = [&](SlotId id, const TypeDescriptor& type) {
+        TExprNode n;
+        n.node_type = TExprNodeType::SLOT_REF;
+        n.type = type.to_thrift();
+        n.num_children = 0;
+        n.__isset.slot_ref = true;
+        n.slot_ref.slot_id = id;
+        n.slot_ref.tuple_id = 0;
+        n.__set_is_nullable(true);
+        return _pool.add(new ColumnRef(n));
+    };
+    auto array_length = [&](Expr* child) {
+        TExprNode n;
+        n.node_type = TExprNodeType::FUNCTION_CALL;
+        n.type = gen_type_desc(TPrimitiveType::INT);
+        n.num_children = 1;
+        n.__isset.fn = true;
+        n.fn.name.function_name = "array_length";
+        n.fn.fid = 150000;
+        n.fn.__isset.fid = true;
+        n.fn.binary_type = TFunctionBinaryType::BUILTIN;
+        auto* e = _pool.add(new VectorizedFunctionCallExpr(n));
+        e->add_child(child);
+        return e;
+    };
+
+    // nested array_map(z -> array_length(x) + z, x) capturing the comparator arg x (kArgX).
+    TExprNode add_node;
+    add_node.opcode = TExprOpcode::ADD;
+    add_node.child_type = TPrimitiveType::INT;
+    add_node.node_type = TExprNodeType::BINARY_PRED;
+    add_node.num_children = 2;
+    add_node.__isset.opcode = true;
+    add_node.__isset.child_type = true;
+    add_node.type = gen_type_desc(TPrimitiveType::INT);
+    auto* add_expr = _pool.add(VectorizedArithmeticExprFactory::from_thrift(add_node));
+    add_expr->add_child(array_length(slot_ref(kArgX, int_arr)));
+    add_expr->add_child(slot_ref(kZ, TypeDescriptor(TYPE_INT)));
+
+    TExprNode tlambda_inner;
+    tlambda_inner.opcode = TExprOpcode::ADD;
+    tlambda_inner.child_type = TPrimitiveType::INT;
+    tlambda_inner.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
+    tlambda_inner.num_children = 2;
+    tlambda_inner.__isset.opcode = true;
+    tlambda_inner.__isset.child_type = true;
+    tlambda_inner.type = gen_type_desc(TPrimitiveType::INT);
+    auto* inner_lambda = _pool.add(new LambdaFunction(tlambda_inner));
+    inner_lambda->add_child(add_expr);
+    inner_lambda->add_child(slot_ref(kZ, TypeDescriptor(TYPE_INT)));
+
+    auto* inner_map = _pool.add(new ArrayMapExpr(int_arr));
+    inner_map->clear_children();
+    inner_map->add_child(inner_lambda);
+    inner_map->add_child(slot_ref(kArgX, int_arr));
+
+    // comparator body: array_length(inner_map) < array_length(y)
+    TExprNode lt_node;
+    lt_node.node_type = TExprNodeType::BINARY_PRED;
+    lt_node.opcode = TExprOpcode::LT;
+    lt_node.child_type = TPrimitiveType::INT;
+    lt_node.num_children = 2;
+    lt_node.__isset.opcode = true;
+    lt_node.__isset.child_type = true;
+    lt_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    auto* lt = _pool.add(VectorizedBinaryPredicateFactory::from_thrift(lt_node));
+    lt->add_child(array_length(inner_map));
+    lt->add_child(array_length(slot_ref(kArgY, int_arr)));
+
+    TExprNode lambda_node;
+    lambda_node.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
+    lambda_node.num_children = 3; // body + 2 args
+    lambda_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    auto* comparator = _pool.add(new LambdaFunction(lambda_node));
+    comparator->add_child(lt);
+    comparator->add_child(slot_ref(kArgX, int_arr));
+    comparator->add_child(slot_ref(kArgY, int_arr));
+
+    auto* expr = _pool.add(new ArraySortLambdaExpr(int_arr_arr));
+    expr->add_child(array_expr);
+    expr->add_child(comparator);
+
+    ExprContext ctx(expr);
+    std::vector<ExprContext*> ctxs = {&ctx};
+    ASSERT_OK(ExprExecutor::prepare(ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctxs, &_runtime_state));
+
+    auto chunk = std::make_shared<Chunk>();
+    auto rows = Int32Column::create();
+    rows->append(0);
+    rows->append(1);
+    chunk->append_column(std::move(rows), 1);
+    ColumnPtr result = expr->evaluate(&ctx, chunk.get()); // must not crash
+    ASSERT_EQ(2, result->size());
+
     ExprExecutor::close(ctxs, &_runtime_state);
 }
 
