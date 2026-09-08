@@ -661,6 +661,7 @@ public class GlobalStateMgr {
                 new SystemHandler());
         this.lakeAlterPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                 Config.lake_publish_version_max_threads, "alter-publish", false);
+        this.lakeAlterPublishExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
