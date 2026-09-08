@@ -378,6 +378,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                             && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
+<<<<<<< HEAD
         TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
         // Seeded by the first run only, later runs carry it via the property copy above.
         if (!newProperties.containsKey(TaskRun.MV_NON_REF_TABLE_FINGERPRINT)) {
@@ -389,6 +390,9 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                 newProperties.put(TaskRun.MV_NON_REF_TABLE_FINGERPRINT, fingerprint);
             }
         }
+=======
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
+>>>>>>> 3bbab2120ae... [Enhancement] Record MV refresh job duration without querying task-run history (#62162)
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
