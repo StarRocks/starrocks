@@ -1409,7 +1409,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        new MockUp<ClusterSnapshotMgrEPack>() {
+        new MockUp<ClusterSnapshotMgr>() {
             @Mock
             public boolean isMaterializedIndexInClusterSnapshotInfo(
                     long ignoredDbId, long ignoredTableId, long ignoredPartId,
