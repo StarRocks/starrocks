@@ -59,7 +59,10 @@ public class LogUtil {
                 .setFeIp(FrontendOptions.getLocalHostAddress())
                 .setDb(authPacket == null ? "null" : authPacket.getDb())
                 .setState(ctx.getState().toString())
-                .setErrorCode(ctx.getState().getErrorMessage());
+                // Connection audit has always reported the message in ErrorCode; keep doing so
+                // for the users already reading that field, collapsed so it cannot break the record.
+                .setErrorCode(AuditEvent.collapseSeparators(ctx.getState().getErrorMessage()))
+                .setErrorMessage(ctx.getState().getErrorMessage());
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(builder.build());
 
         QueryDetail queryDetail = new QueryDetail();
