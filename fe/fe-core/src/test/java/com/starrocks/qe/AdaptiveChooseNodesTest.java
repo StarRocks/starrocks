@@ -14,7 +14,7 @@
 
 package com.starrocks.qe;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.scheduler.assignment.RemoteFragmentAssignmentStrategy;

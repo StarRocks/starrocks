@@ -950,6 +950,12 @@ under the License.
             <artifactId>url-connection-client</artifactId>
         </dependency>
 
+        <!-- Hadoop 3.4's S3A client still links the AWS SDK Apache 4 HTTP implementation. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-storage-blob</artifactId>

@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.common;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.profile.Tracers;

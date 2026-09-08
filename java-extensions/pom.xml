@@ -32,10 +32,10 @@
         <hikaricp.version>3.4.5</hikaricp.version>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
-        <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
+        <aws-v2-sdk.version>2.52.0</aws-v2-sdk.version>
         <hadoop.version>3.4.3</hadoop.version>
         <iceberg.version>1.9.1</iceberg.version>
-        <log4j2.version>2.25.4</log4j2.version>
+        <log4j2.version>2.25.5</log4j2.version>
         <junit.version>5.10.3</junit.version>
         <hive-apache.version>3.1.2-23</hive-apache.version>
         <jni-connector.version>1.0.0</jni-connector.version>
@@ -45,10 +45,10 @@
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <nimbusds.version>9.37.4</nimbusds.version>
         <commons-io.version>2.17.0</commons-io.version>
-        <gcs.connector.version>hadoop3-2.2.27</gcs.connector.version>
+        <gcs.connector.version>4.0.0</gcs.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
-        <arrow.version>17.0.0</arrow.version>
-        <jackson.version>2.21.4</jackson.version>
+        <arrow.version>18.3.0</arrow.version>
+        <jackson.version>2.21.5</jackson.version>
         <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <guava.version>32.0.1-jre</guava.version>
@@ -61,7 +61,7 @@
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
         <kryo.version>4.0.2</kryo.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
-        <lz4-java.version>1.10.1</lz4-java.version>
+        <lz4-java.version>1.11.1</lz4-java.version>
         <zookeeper.version>3.8.6</zookeeper.version>
         <httpcore5.version>5.4.3</httpcore5.version>
         <bouncycastle.version>1.84</bouncycastle.version>

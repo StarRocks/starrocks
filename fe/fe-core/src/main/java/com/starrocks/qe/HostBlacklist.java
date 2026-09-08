@@ -14,9 +14,9 @@
 
 package com.starrocks.qe;
 
-import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;

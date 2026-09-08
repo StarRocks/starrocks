@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;

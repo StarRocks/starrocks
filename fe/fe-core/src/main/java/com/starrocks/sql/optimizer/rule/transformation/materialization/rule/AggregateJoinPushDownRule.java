@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Predicate;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.MaterializationContext;

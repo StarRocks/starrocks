@@ -13,10 +13,10 @@
 // limitations under the License.
 package com.starrocks.catalog.combinator;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.AggregateFunction;

@@ -14,7 +14,7 @@
 
 package com.starrocks.catalog.system.information;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.InternalCatalog;

@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.join;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptimizerContext;
 

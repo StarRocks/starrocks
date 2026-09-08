@@ -14,12 +14,12 @@
 
 package com.starrocks.system;
 
-import com.google.api.client.util.Sets;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;

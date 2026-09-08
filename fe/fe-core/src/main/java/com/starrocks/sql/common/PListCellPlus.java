@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.common;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 
 import java.util.List;
 import java.util.Objects;

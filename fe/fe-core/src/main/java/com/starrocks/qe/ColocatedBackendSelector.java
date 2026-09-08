@@ -14,10 +14,10 @@
 
 package com.starrocks.qe;
 
-import com.google.api.client.util.Sets;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;

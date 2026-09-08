@@ -14,7 +14,7 @@
 
 package com.starrocks.catalog;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;

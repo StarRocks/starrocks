@@ -42,14 +42,14 @@ under the License.
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
-        <log4j.version>2.25.4</log4j.version>
-        <jackson.version>2.21.4</jackson.version>
+        <log4j.version>2.25.5</log4j.version>
+        <jackson.version>2.21.5</jackson.version>
         <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.8</spark.version>
         <parquet.version>1.15.2</parquet.version>
         <hadoop.version>3.4.3</hadoop.version>
-        <gcs.connector.version>hadoop3-2.2.27</gcs.connector.version>
+        <gcs.connector.version>4.0.0</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>1.2.0</hudi.version>
         <hive-apache.version>3.1.2-23</hive-apache.version>
@@ -60,11 +60,11 @@ under the License.
         <kudu.version>1.17.1</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.9.2</kafka-clients.version>
-        <arrow.version>18.0.0</arrow.version>
+        <arrow.version>18.3.0</arrow.version>
         <grpc.version>1.76.0</grpc.version>
         <io.netty.version>4.1.137.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
-        <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
+        <aws-v2-sdk.version>2.52.0</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
         <dnsjava.version>3.6.3</dnsjava.version>
         <nimbusds.version>9.37.4</nimbusds.version>
@@ -82,7 +82,7 @@ under the License.
         <async-profiler.version>4.0</async-profiler.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>3.0.0</hbase.version>
-        <lz4-java.version>1.10.1</lz4-java.version>
+        <lz4-java.version>1.11.1</lz4-java.version>
         <bouncycastle.version>1.84</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
         <httpcore5.version>5.4.3</httpcore5.version>
@@ -275,7 +275,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.4.4</version>
+                <version>5.6.3</version>
             </dependency>
 
             <dependency>
@@ -1187,7 +1187,7 @@ under the License.
             <dependency>
                 <groupId>org.mariadb.jdbc</groupId>
                 <artifactId>mariadb-java-client</artifactId>
-                <version>3.3.2</version>
+                <version>3.3.5</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->

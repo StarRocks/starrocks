@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;

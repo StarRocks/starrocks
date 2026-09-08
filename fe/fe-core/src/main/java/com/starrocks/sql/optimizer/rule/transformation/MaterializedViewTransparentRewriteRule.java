@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.api.client.util.Preconditions;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;

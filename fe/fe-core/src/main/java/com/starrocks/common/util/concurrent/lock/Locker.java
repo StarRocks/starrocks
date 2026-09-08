@@ -14,10 +14,10 @@
 
 package com.starrocks.common.util.concurrent.lock;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;

@@ -85,7 +85,7 @@ public class MVPartitionExprResolver {
         private final List<Expr> exprs;
 
         public Exprs() {
-            exprs = com.google.api.client.util.Lists.newArrayList();
+            exprs = com.google.common.collect.Lists.newArrayList();
         }
 
         public Exprs(List<Expr> exprs) {

@@ -14,9 +14,9 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;

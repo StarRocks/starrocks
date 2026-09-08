@@ -14,7 +14,7 @@
 
 package com.starrocks.qe;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;

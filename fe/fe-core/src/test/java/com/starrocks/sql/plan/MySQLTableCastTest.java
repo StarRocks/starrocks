@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import org.junit.jupiter.api.BeforeAll;

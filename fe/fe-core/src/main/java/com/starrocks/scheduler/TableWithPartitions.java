@@ -14,7 +14,7 @@
 
 package com.starrocks.scheduler;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PRangeCell;

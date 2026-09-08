@@ -13,8 +13,8 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
