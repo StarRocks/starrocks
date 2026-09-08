@@ -17570,7 +17570,8 @@ inline void set_pk_int_key_schema(TabletMetadataPB* metadata, int64_t schema_id)
 inline std::shared_ptr<TabletMetadataPB> make_pk_shared_child_with_real_segment(int64_t tablet_id, int64_t base_version,
                                                                                 uint32_t shared_id, int tablet_lower,
                                                                                 int tablet_upper,
-                                                                                uint64_t segment_size) {
+                                                                                uint64_t segment_size,
+                                                                                int physical_num_rows) {
     auto meta = std::make_shared<TabletMetadataPB>();
     meta->set_id(tablet_id);
     meta->set_version(base_version);
@@ -17587,7 +17588,7 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_shared_child_with_real_segment(
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(segment_size);
-        sm->set_num_rows(tablet_upper - tablet_lower);
+        sm->set_num_rows(physical_num_rows);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across shared siblings => dedup
@@ -17657,7 +17658,7 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
                                                    fmt::format("compacted_{}.dat", i));                                \
             } else {                                                                                                   \
                 metas[i] = make_pk_shared_child_with_real_segment(child_ids[i], base_version, /*shared_id=*/10, lower, \
-                                                                  upper, segment_size);                                \
+                                                                  upper, segment_size, /*physical_num_rows=*/kNumRows); \
             }                                                                                                          \
             EXPECT_OK(put_tablet_metadata(metas[i]));                                                                  \
         }                                                                                                              \
@@ -17719,11 +17720,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_gap_promotion
         }
         const uint64_t segment_size =
                 write_two_column_segment(merged_tablet, "shared_seg.dat", 30, [](int value) { return value * 10; });
-        auto left = make_pk_shared_child_with_real_segment(child_left, kBaseVersion, kSharedRssid, 0, 10, segment_size);
+        auto left = make_pk_shared_child_with_real_segment(child_left, kBaseVersion, kSharedRssid, 0, 10, segment_size,
+                                                           /*physical_num_rows=*/30);
         auto compacted =
                 make_pk_compacted_child(child_gap, kBaseVersion, /*compacted_id=*/11, 10, 20, "compacted_gap.dat");
         auto right =
-                make_pk_shared_child_with_real_segment(child_right, kBaseVersion, kSharedRssid, 20, 30, segment_size);
+                make_pk_shared_child_with_real_segment(child_right, kBaseVersion, kSharedRssid, 20, 30, segment_size,
+                                                       /*physical_num_rows=*/30);
         DelVector source_delvec;
         const uint32_t deleted = 0;
         source_delvec.init(/*version=*/10, &deleted, 1);
@@ -17812,7 +17815,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_synthesized_delvec_survives_la
     // sstable_meta carries a shared sstable with shared_rssid=10 (A's R0
     // namespace) and NO has_delvec on source — exercising the §5.2.4 path.
     auto meta_a = make_pk_shared_child_with_real_segment(child_a, base_version, /*shared_id=*/10, /*lower=*/0,
-                                                         /*upper=*/10, segment_size);
+                                                         /*upper=*/10, segment_size, /*physical_num_rows=*/20);
     meta_a->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
     auto* sst_a = meta_a->mutable_sstable_meta()->add_sstables();
     sst_a->set_filename("shared.sst");
